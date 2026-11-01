@@ -1,6 +1,7 @@
 # Fuentes físicas y protección de cola
 
-Incremento web entregado en `b88da5c9b1ea9b8c`. R81/R82 core y R83/R85 registro/main tienen aprobación limitada; R84 final doce grupos PASS. No se permite retirar archivos con este incremento. La reserva para una revisión futura empieza aparte en R86 y todavía no está integrada.
+Protección de fuentes entregada en `b88da5c9b1ea9b8c`; reserva documental y guardas de admisión verificadas en la entrega posterior `3899d01ac792b938`. R86/R87 core y R88/R90 root tienen aceptación focal. No se permite retirar archivos con este incremento. Núcleo e interfaz de retirada explícita empiezan aparte en R91/R92, aún sin integrar.
+
 
 Un assetId identifica una ficha de almacenamiento y puede seguir existiendo después de reparar su archivo. Para decidir si una copia está en uso hace falta conocer la generación física realmente entregada al reproductor: backend, clave, revisión, hash, longitud y los demás campos del manifiesto. Consultar el asset después de crear una URL no demuestra qué bytes usó esa URL.
 
@@ -30,3 +31,13 @@ Reserva en desarrollo posterior a la entrega b88: R86 añade reserve/hasReservat
 
 
 Validación root pendiente: R89 detectó un callback antiguo de guardado manual de letras que conservaba permiso; R88 confirmó una escritura real en IDB durante la reserva con datos sintéticos. Root añadió `captureWriteCurrent` al panel, con guarda de época capturada al renderizar, permiso vigente y comprobación antes de Activity/mutador, también para ausencia y borrador de archivo. Seis probes de lógica y tipos/lint PASS; nuevo navegador R88 y revisión R90 siguen PENDIENTES. El RED nativo y freeze anterior se conservan; no nueva entrega sobre estos cambios hasta cerrarlos.
+
+
+R88 final: once grupos Chromium154 sandbox PASS sobre diez fuentes congeladas, incluidos dos controles de main sin transformar. La regresión nativa de callbacks antiguos guardar/ausencia/importar letras pasa durante y después de la reserva, mientras un gesto nuevo posterior sí guarda. RED original conservado y separado. Revisión R90 y nuevo build/checks de producto PENDIENTES; la entrega b88 sigue vigente. Esto valida admisión documental, todavía sin interfaz reservadora ni retiro de archivos.
+
+
+## Cierre web de reserva y guardas · 2026-11-01
+
+R90 cierra R89-P2-01 con seis grupos propios de lógica Node; el GREEN nativo corresponde a los once grupos finales de R88, cotejados con freeze10. RED original nativo conservado. No suma de etapas como suite única. Build `3899d01ac792b938`, checks de assets IDB/OPFS, teclado6, licencias3/shelloffline y actualización normal desde b88 PASS. Padre coteja134src/public/dist y12recibos separados, luego35archivos de la copia HTTPS autorizada con assets previos conservados. Smoke propio PASS: un Audio, importación/portada/tags propios, rescan sin cambios con audio activo, biblioteca/mini, playlist/lote, letras locales, backupv2, copias por segundo gesto y handoff a nueva owner pausada. Transporte privado Blob8/24MiB; offline privado sigue pendiente.
+
+`sourceReview` queda privado en root: puede reservar una generación sin pausar la reproducción y conserva exclusión hasta su release, aun si pierde vigencia. Todavía no hay interfaz de reservar o retirar en esta entrega. R91 implementa el núcleo con consentimiento y journal; R92 prepara presentación controlada; su integración, revisión y pruebas siguen pendientes. Resumen: `docs/evidence-source-reservation-web.json`.

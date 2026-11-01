@@ -168,3 +168,8 @@ iPhone/Safari/Chrome/Inicio, VoiceOver, zoom real, 10 pistas/30min bloqueados y 
 ### 2026-11-01 · Fuentes físicas y cola protegida, entrega web b88
 
 `b88da5c9b1ea9b8c` entregado al mismo acceso privado autorizado tras R81/R82 y R83/R85 favorables limitados, R84 doce grupos y checks de producto de transporte, teclado, licencias y actualización normal8cfb→b88. Smoke HTTPS propio PASS, sin iPhone físico. Fuentes registradas por generación y pending/retained explícitos; no retirada implementada. Transporte privado Blob8/24MiB y offline privado pendiente. Evidencia y etapas separadas en `docs/evidence-source-protection-web.json`; siguiente reserva R86 aún en desarrollo, no aceptación P0/T12.
+
+
+### 2026-11-01 · Reserva y guardas de letras, entrega3899
+
+`3899d01ac792b938` al mismo acceso privado tras coreR86/R87 y raízR88/R90 favorables limitados. Once grupos browser finales incluyen callbacks React antiguos de letras denegados durante/después de reserva; el RED nativo se conserva. Build/checks transporte, teclado6, licencias3 y updateb88→3899 PASS; smoke HTTPS propio PASS. No interfaz/ejecutor de retirada en esa entrega. Privado Blob8/24MiB/offlinependiente, iPhoneaplazado. Etapas separadas y límites en `docs/evidence-source-reservation-web.json`; nuevo núcleo R91/UIR92 en desarrollo.

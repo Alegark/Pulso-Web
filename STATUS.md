@@ -2,9 +2,9 @@
 
 Proyecto independiente en desarrollo. El objetivo completo P0-W todavía no está aceptado. `PULSO-WEB-README.md` y `doc/SPEC.md` conservan el handoff original; README.md y SPEC.md siguen enlazados a ellos. Las instrucciones posteriores y la evidencia de implementación se registran en `odd/tasks/` y `docs/`.
 
-La última entrega de prueba verificada es `b88da5c9b1ea9b8c`: importación local, biblioteca/playlists, cola, portadas y letras incrustadas, organización v2, reinspección explícita de etiquetas y fuentes físicas registradas en el reproductor. Es un resultado web; iPhone, VoiceOver, zoom real, reproducción bloqueada sostenida y otros gates siguen pendientes. El propietario retiró los editores de canciones del alcance de la interfaz; se conservan los datos históricos.
+La última entrega de prueba verificada es `3899d01ac792b938`: importación local, biblioteca/playlists, cola, portadas y letras incrustadas, organización v2, reinspección explícita de etiquetas y fuentes físicas registradas con reserva documental de admisión. Es un resultado web; iPhone, VoiceOver, zoom real, reproducción bloqueada sostenida y otros gates siguen pendientes. El propietario retiró los editores de canciones del alcance de la interfaz; se conservan los datos históricos.
 
-La rama principal puede contener incrementos posteriores en validación. En particular, las fuentes físicas y su registro se han verificado en el incremento entregado; la reserva para revisar una retirada se desarrolla por separado. No hay función de borrado habilitada ni proveedor externo o Telegram real activados.
+La rama principal puede contener incrementos posteriores en validación. En particular, las fuentes físicas, la reserva documental y sus guardas se han verificado; el núcleo y la interfaz de retirada explícita se desarrollan por separado. No hay función de borrado habilitada ni proveedor externo o Telegram real activados.
 
 Comandos del proyecto:
 

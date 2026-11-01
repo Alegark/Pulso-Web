@@ -1,0 +1,53 @@
+{
+  "project": "Pulso-Web",
+  "status": "DELIVERED_WEB_PREREQUISITE_NOT_P0_ACCEPTANCE",
+  "entry": "/releases/3899d01ac792b938.html",
+  "stages": {
+    "R86": {
+      "coreBrowserGroups": 8,
+      "unitTests": 18
+    },
+    "R87": {
+      "review": "limited favorable",
+      "ownBrowserProbes": 6
+    },
+    "rootAdmission": {
+      "unitTests": 5,
+      "combinedUnitCountWithR86": 23
+    },
+    "R89": {
+      "status": "withheld",
+      "nodeProbesPassed": 5,
+      "nodeProbesFailed": 1,
+      "defect": "retained local lyrics callback admitted a write during reservation"
+    },
+    "R88": {
+      "browserGroups": 11,
+      "status": "PASS",
+      "nativeRedPreserved": true,
+      "untransformedMainControls": 2
+    },
+    "R90": {
+      "review": "limited favorable, R89-P2-01 closed",
+      "ownNodeGroups": 6
+    }
+  },
+  "productChecks": {
+    "build": "PASS",
+    "assetsIDBOPFS": "PASS",
+    "keyboard6": "PASS",
+    "licenses3": "PASS",
+    "normalUpdate": "b88->3899 PASS",
+    "privateHttpsSmoke": "PASS"
+  },
+  "parentReceipt": ".local/evidence/source-reservation-delivery-parent-verification.json",
+  "limits": [
+    "Document-local reservation and admission only; no user-facing removal UI, executor or journal in this delivered build",
+    "No destructive authority from an inventory or serialized snapshot",
+    "Private transport bounded Blob8MiB/file24MiB/queue, offline private unverified",
+    "Physical iPhone/Safari acceptance deferred",
+    "No aggregate total across historical stages"
+  ],
+  "USD": 0,
+  "P0Accepted": false
+}
