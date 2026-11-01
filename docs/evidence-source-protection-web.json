@@ -1,0 +1,71 @@
+{
+  "project": "Pulso-Web",
+  "status": "CANDIDATE_CHECKS_PASS_REVIEW_PENDING_NOT_DELIVERED",
+  "candidate": "/releases/b88da5c9b1ea9b8c.html",
+  "delivered": false,
+  "sourceReadbackFiles": 133,
+  "stages": {
+    "R81": {
+      "browserGroups": 10,
+      "scope": "core transport IDB/OPFS/SW/Blob"
+    },
+    "R82": {
+      "review": "limited favorable",
+      "ownProbes": 4
+    },
+    "R83": {
+      "unitTests": 10,
+      "scope": "root registry/main"
+    },
+    "R84": {
+      "browserGroups": 12,
+      "untransformedMainControls": 2,
+      "labelledTestObservations": 10
+    },
+    "R85": {
+      "review": "PENDING"
+    }
+  },
+  "checks": {
+    "assets": {
+      "passed": true,
+      "file": ".local/evidence/source-protection-product-assets.json",
+      "bytes": 1037,
+      "sha256": "4a6c44018cf96def8f3d23bbf32fdeba3a25845e6e4ecdb47213cce4cc2e49b5",
+      "groups": 2
+    },
+    "keyboard": {
+      "passed": true,
+      "file": ".local/evidence/source-protection-product-keyboard.json",
+      "bytes": 1206,
+      "sha256": "8b09660286cbad3fe6890209ff09561d82d0c7cfeca5158d0435704b6e094ce0",
+      "groups": 6
+    },
+    "licenses": {
+      "passed": true,
+      "file": ".local/evidence/source-protection-product-licenses.json",
+      "bytes": 1167,
+      "sha256": "1665aef1c9027ff1ed661736be5c8fc4c09601efc1c1b72ada2b91c0e34b5a6b",
+      "groups": 3
+    },
+    "update": {
+      "passed": true,
+      "file": ".local/evidence/source-protection-product-update.json",
+      "bytes": 421,
+      "sha256": "d5e6db06866e07e9ca3427a499a7af7ea4c598ed7ec45119cafcf5c639fca836",
+      "groups": null
+    }
+  },
+  "currentProductUnitTests": 180,
+  "unitTestsRunFor": "initial GitHub snapshot; not rerun after docs-only changes",
+  "limits": [
+    "No copy removal implemented or authorized by this prerequisite",
+    "Physical iPhone/Safari acceptance deferred",
+    "No private HTTPS/offline check for this candidate yet",
+    "Asset offline test keeps its loopback server running; license shell test stops its origin",
+    "No aggregate sum of historical and final cases",
+    "No heap or sustained physical audio guarantee"
+  ],
+  "USD": 0,
+  "fullProjectAccepted": false
+}
