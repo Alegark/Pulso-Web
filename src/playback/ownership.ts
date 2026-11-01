@@ -9,6 +9,7 @@ export class Activity {
   constructor(private changed: () => void = () => {}) {}
   get admitted() { return this.accepting; }
   get idle() { return this.active.size === 0 && this.unresolved.size === 0; }
+  get resolved() { return this.unresolved.size === 0; }
   scope() { const generation=this.generation; return () => generation===this.generation; }
   get count() { return this.active.size; }
   open() { ++this.generation; this.accepting = true; this.changed(); }

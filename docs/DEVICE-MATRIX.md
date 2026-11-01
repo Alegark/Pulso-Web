@@ -180,3 +180,10 @@ iPhone/Safari/Chrome/Inicio, VoiceOver, zoom real, 10 pistas/30min bloqueados y 
 Chromium154 Linux sandbox: R104 final22/22 integrado en contextos propios IDB/OPFS y Service Worker real; build final supera assets/rangos dos backends, teclado6, licencias3, update normal3899→51c9 y smoke nativo de producción. Son fixtures propias, con faults/barreras TESTONLY declarados en los casos correspondientes; no se infiere borrado físico/crash/purga ni heap. Sourcefreeze107 cotejado y35 archivos de entrega verificados.
 
 HTTPS privado existente: smoke amplio propio PASS con unAudio/organización/exportación/cesión pausada. Transporte observado boundedBlob8MiB/archivo24MiB/cola, sin controlador SW. La retirada se bloquea por runtimeunknown; generación, organización y audio conservados. No hay PASS de retirada positiva ni offline privado. iPhone físico/VoiceOver/zoom real/avance bloqueado sostenido permanecen APLAZADOS/PENDIENTES. Evidencia evidence-local-copy-removal-web.json y .local/evidence/copy-removal-delivery-parent-verification.json.
+
+
+## 2026-11-01 · Inserción continua de cola, entrega34de
+
+Chromium154/Linux/sandbox: R110 selección actual18/18PASS, dos controles main sin transformar IDB/OPFS y barreras TESTONLY declaradas. R109 y R111 favorables en alcances separados; condiciones final browser cumplidas. Unitarias seleccionadas actuales63/63PASS. Verificación SHA antes del pinSW, scanBlob único, FIFO y presupuesto8/24MiB acumulado; integridad dañada rechazada íntegramente. Assetsdosbackends/teclado6/licencias3/update51c9→34de y smoke distSW2PASS. Matrices históricas y fallos de arnés conservados, no agregados como suite única.
+
+HTTPS privado existente: smoke amplioPASS y cola2PASS con boundedBlob sincontroller, Audio continuo al añadir next/end, persistencia/reopen pausado. No demuestra offline privado ni habilita retirada positiva en ese acceso. iPhone/VoiceOver/zoom real/heap físico no acreditados. docs/evidence-queue-insertion-web.json y recibo raíz correlacionan hashes. Trabajo pausado por el propietario al concluir este incremento.

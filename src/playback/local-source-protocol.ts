@@ -2,7 +2,7 @@ import {validAsset,type LocalAsset} from '../library/library';
 export const LOCAL_SOURCE_LIMIT=1000;
 export const ASSET_FIELDS=['id','namespace','storageKey','bytes','sha256','mime','chunks','state','revision','chunkSize','retention','backend'] as const;
 export type PreparedLocalSource={readonly url:string;readonly protection:'pinned';readonly asset:Readonly<LocalAsset>}|{readonly url:string;readonly protection:'unknown';readonly asset:null};
-export interface PreparedLocalSources {readonly sources:readonly PreparedLocalSource[];/** Best effort resource cleanup; never certifies reader/data retraction. */release():Promise<void>}
+export interface PreparedLocalSources {readonly sources:readonly PreparedLocalSource[];/** Cleans only this bundle. New accounted producers reject unacknowledged cleanup; legacy wrappers may be best effort. Never certifies reader/data retraction. */release():Promise<void>}
 export const sourceUUID=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9-]{36}$/.test(value);
 export const sourceProof=(value:unknown):value is string=>typeof value==='string'&&/^pulso-web:local:owner:[a-f0-9-]{36}$/.test(value);
 export function dataObject(value:unknown):Record<string,unknown>|null {
@@ -65,3 +65,43 @@ export function copySourceReply(value:unknown,type:SourceReply['type'],requestId
  const tokens=copySourceTokens(m.tokens),assets=copySourceAssets(m.assets);
  return closedObject(m,['version','type','requestId','tokens','assets'])&&tokens&&assets&&tokens.length===assets.length?{version:1,type,requestId,tokens,assets}:null;
 }
+
+// Queue composition contracts. These types carry no authority when serialized.
+import type {Entry} from './player';
+import type {QueueStructure,InsertionRequest,InsertionPlan,InsertResult} from './queue-insertion';
+import type {FailureV1} from '../errors/app-failure';
+declare const bindingBrand:unique symbol;
+declare const creditBrand:unique symbol;
+export type SourceBinding=Readonly<{[bindingBrand]:true}>;
+export type BlobCredit=Readonly<{[creditBrand]:true;current():boolean}>;
+export type SourceAllocation=Readonly<{sourceIndex:number;allocationId:string;kind:'blob'|'sw';bytes:number}>;
+export type NewSourceBundle=Readonly<{bundle:PreparedLocalSources;allocations:readonly SourceAllocation[]}>;
+export type SourceRouting=Readonly<{
+ bindings:readonly (SourceBinding|null)[];
+ missing:readonly Readonly<LocalAsset>[];
+ missingIndexByOccurrence:readonly (number|null)[];
+}>;
+export interface InsertionPlayer {
+ readonly queueRevision:number;readonly queueEpoch:number;
+ structure():QueueStructure;
+ insertQueue(request:InsertionRequest,beforeEmit:(plan:InsertionPlan)=>boolean):InsertResult;
+}
+export type InsertionPreparation=Readonly<{
+ setPlanned(trackIds:readonly string[]):boolean;
+ reserveSources(expectedByOccurrence:readonly Readonly<LocalAsset>[]):SourceRouting;
+ reserveBlob(expectedUnique:readonly Readonly<LocalAsset>[]):BlobCredit|null;
+ stageNew(prepared:NewSourceBundle):boolean;
+ getSources():readonly PreparedLocalSource[]|null;
+ bindEntries(entries:readonly Entry[]):boolean;
+ commitInsertion(request:InsertionRequest,player:InsertionPlayer):InsertResult;
+ cancel():void;settle():Promise<void>;
+}>;
+export type SourcePreparationControl=Readonly<{
+ signal:AbortSignal;current():boolean;deadlineAt:number;
+ reserveBlob(expectedUnique:readonly Readonly<LocalAsset>[]):BlobCredit|null;
+}>;
+export type SourcePreparationResult=
+ | {kind:'prepared';prepared:NewSourceBundle}
+ | {kind:'failed';failure:FailureV1;resourceState:'settled'|'settling'|'uncertain'}
+ | {kind:'cancelled';resourceState:'settled'|'settling'|'uncertain'};
+export type LocalSourcePreparation=Readonly<{result:Promise<SourcePreparationResult>;settled:Promise<void>;cancel():void}>;

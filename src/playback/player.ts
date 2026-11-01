@@ -1,3 +1,5 @@
+import {planQueueInsertion, type QueueStructure, type InsertionRequest, type InsertionPlan, type InsertResult} from './queue-insertion';
+export type {Placement, QueueStructure, InsertionRequest, InsertionPlan, PlanResult, InsertResult} from './queue-insertion';
 export interface Entry { id: string; trackId: string; title: string; src: string }
 export type PlayerFailureCode = 'autoplay-denied'|'media-aborted'|'media-network'|'media-decode'|'media-unsupported'|'media-unknown'|'unknown';
 export type FailureObserver = (phase:'play'|'read') => ((code:PlayerFailureCode)=>void)|undefined;
@@ -15,6 +17,11 @@ export class Player {
   state: State = 'idle';
   error = '';
   generation = 0;
+  private revision = 0;
+  private epoch = 0;
+  private inserting = false;
+  get queueRevision() { return this.revision; }
+  get queueEpoch() { return this.epoch; }
   repeat: 'off'|'one'|'all' = 'off';
   shuffleOrder: string[]|null = null;
   private listeners: [string, EventListener][] = [];
@@ -26,17 +33,56 @@ export class Player {
     let used=false;return (code:PlayerFailureCode)=>{if(used)return;used=true;try{notify?.(code);}catch{/* diagnostics cannot affect engine */}};
   }
   suspend() {
+    if (this.inserting) return;
+    ++this.epoch;
     this.suspended = true; this.invalidate(); this.audio.pause();
     this.audio.src = ''; this.audio.load(); this.state = 'paused'; this.emit();
   }
-  private get allowed() { return !this.suspended && this.admitted(); }
+  private get allowed() { return !this.inserting && !this.suspended && this.admitted(); }
   subscribe = (fn: () => void) => { this.subscribers.add(fn); return () => { this.subscribers.delete(fn); }; };
   private emit() { this.subscribers.forEach(fn => fn()); }
   get current() { return this.entries[this.index]; }
   setQueue(entries: Entry[]) {
-    if (!this.admitted()) return; this.suspended = false;
+    if (this.inserting || !this.admitted()) return; this.suspended = false;
+    ++this.revision; ++this.epoch;
     this.invalidate(); this.audio.pause(); this.entries = entries.map(e => ({...e}));
     this.index = -1; this.shuffleOrder=null; this.state = 'idle'; this.emit();
+  }
+  structure():QueueStructure {
+    return Object.freeze({queueRevision:this.revision,queueEpoch:this.epoch,
+      entries:Object.freeze(this.entries.map(e=>Object.freeze({...e}))),
+      currentEntryId:this.current?.id??null,
+      shuffleOrder:this.shuffleOrder===null?null:Object.freeze([...this.shuffleOrder])});
+  }
+  /** Private root/registry hook: synchronous, no external reentry, no UI or IO.
+   * Validate before assigning the resource map; false/throw must leave that map intact.
+   * After a true return only prepared Player assignments precede the single emission.
+   */
+  insertQueue(request:InsertionRequest,beforeEmit:(plan:InsertionPlan)=>boolean):InsertResult {
+    if(this.inserting)return {kind:'rejected',reason:'protection-rejected'};
+    const allowed=()=>{try{return this.allowed;}catch{return false;}};
+    if(!allowed())return {kind:'rejected',reason:'not-admitted'};
+    const revision=this.revision,epoch=this.epoch;
+    const result=planQueueInsertion({queueRevision:revision,queueEpoch:epoch,entries:this.entries,
+      currentEntryId:this.current?.id??null,shuffleOrder:this.shuffleOrder},request);
+    if(result.kind==='rejected')return result;
+    const {plan}=result;
+    if(plan.expectedQueueRevision!==this.revision||plan.expectedQueueEpoch!==this.epoch)
+      return {kind:'rejected',reason:'stale-queue'};
+    if(typeof beforeEmit!=='function')return {kind:'rejected',reason:'invalid-input'};
+    const entries=[...plan.entries],order=plan.shuffleOrder===null?null:[...plan.shuffleOrder];
+    if(!allowed())return {kind:'rejected',reason:'not-admitted'};
+    // Admission is injected code; perform CAS again at the commit frontier.
+    if(revision!==this.revision||epoch!==this.epoch)return {kind:'rejected',reason:'stale-queue'};
+    this.inserting=true;
+    try {
+      if(beforeEmit(plan)!==true)return {kind:'rejected',reason:'protection-rejected'};
+      this.entries=entries;this.index=plan.index;this.shuffleOrder=order;++this.revision;
+      if(plan.currentEntryId===null)this.state='paused';
+    } catch {return {kind:'rejected',reason:'protection-rejected'};}
+    finally {this.inserting=false;}
+    const inserted:InsertResult={kind:'inserted',queueRevision:this.revision,queueEpoch:this.epoch,addedEntryIds:plan.addedEntryIds};
+    this.emit();return inserted;
   }
   private invalidate() {
     ++this.generation;
@@ -75,7 +121,7 @@ export class Player {
     try { await this.audio.play(); if (generation !== this.generation && !this.allowed) this.audio.pause(); }
     catch (error) { if (this.allowed && generation === this.generation && this.audio.src===src) { let denied=false;try{denied=error instanceof Error&&error.name==='NotAllowedError';}catch{/* unknown */}failed(denied?'autoplay-denied':'unknown');this.state = 'error'; this.error = denied ? 'Toca Reproducir para continuar; el navegador requiere una interacción.' : 'El navegador no pudo abrir este audio. Prueba otra pista o vuelve a preparar la cola.'; this.emit(); } }
   }
-  pause() { this.audio.pause(); this.state = 'paused'; this.emit(); }
+  pause() { if(this.inserting)return; this.audio.pause(); this.state = 'paused'; this.emit(); }
   following() {
     const order=this.shuffleOrder??this.entries.map(e=>e.id);const position=order.indexOf(this.current?.id??'');
     const next=order[position+1]??(this.repeat==='all'?order[0]:undefined);
@@ -89,26 +135,37 @@ export class Player {
   }
   setRepeat(mode:'off'|'one'|'all'){ if (!this.allowed) return;this.repeat=mode;this.emit();}
   setShuffle(enabled:boolean,random= Math.random){ if (!this.allowed) return;
-    if(!enabled){this.shuffleOrder=null;this.emit();return;}
+    if(!enabled){if(this.shuffleOrder!==null)++this.revision;this.shuffleOrder=null;this.emit();return;}
     const ids=this.entries.filter(e=>e.id!==this.current?.id).map(e=>e.id);
     for(let i=ids.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[ids[i],ids[j]]=[ids[j],ids[i]];}
-    this.shuffleOrder=this.current?[this.current.id,...ids]:ids;this.emit();
+    const order=this.current?[this.current.id,...ids]:ids;
+    if(!this.sameOrder(order))++this.revision;
+    this.shuffleOrder=order;this.emit();
+  }
+  private sameOrder(order:readonly string[]|null) {
+    return order===null?this.shuffleOrder===null:this.shuffleOrder!==null&&order.length===this.shuffleOrder.length&&order.every((id,i)=>id===this.shuffleOrder![i]);
   }
   restoreModes(repeat:unknown,order:unknown){
+    if(this.inserting)return;
+    const previous=this.shuffleOrder;
     this.repeat=repeat==='one'||repeat==='all'?repeat:'off';
     this.shuffleOrder=null;
     if(Array.isArray(order)&&order.length===this.entries.length&&new Set(order).size===order.length&&order.every(id=>typeof id==='string'&&this.entries.some(e=>e.id===id)))this.shuffleOrder=[...order];
-    this.emit();
+    const restored=this.shuffleOrder;this.shuffleOrder=previous;
+    if(!this.sameOrder(restored))++this.revision;
+    this.shuffleOrder=restored;this.emit();
   }
   moveEntry(id:string,delta:-1|1){ if (!this.allowed) return;
     const current=this.current?.id;const i=this.entries.findIndex(e=>e.id===id);const j=i+delta;
     if(i<0||j<0||j>=this.entries.length)return;
+    ++this.revision;
     [this.entries[i],this.entries[j]]=[this.entries[j],this.entries[i]];this.index=this.entries.findIndex(e=>e.id===current);
     if(this.shuffleOrder){const x=this.shuffleOrder.indexOf(id);const y=x+delta;if(x>=0&&y>=0&&y<this.shuffleOrder.length)[this.shuffleOrder[x],this.shuffleOrder[y]]=[this.shuffleOrder[y],this.shuffleOrder[x]];}
     this.emit();
   }
   removeFuture(id:string){ if (!this.allowed) return;
     if(id===this.current?.id)return;const current=this.current?.id;
+    if(this.entries.some(e=>e.id===id))++this.revision;
     this.entries=this.entries.filter(e=>e.id!==id);this.index=this.entries.findIndex(e=>e.id===current);
     if(this.shuffleOrder)this.shuffleOrder=this.shuffleOrder.filter(e=>e!==id);this.emit();
   }

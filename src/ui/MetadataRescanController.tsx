@@ -17,6 +17,7 @@ export interface MetadataRescanControllerProps {
  track:Track|null;
  headingRef?:React.Ref<HTMLHeadingElement>;
  captureCurrent:()=>()=>boolean;
+ captureAdmission?:()=>()=>boolean;
  onBlocking:(blocked:boolean,current:()=>boolean)=>void;
  onCommitted:()=>Promise<void>;
  onClose:()=>void;
@@ -41,6 +42,9 @@ export function MetadataRescanController(props:MetadataRescanControllerProps){
  const [confirmAbandon,setConfirmAbandon]=React.useState(false);
  const active=React.useRef<{abort:AbortController;id:object}|null>(null);
  const mounted=React.useRef(true);
+ let admission:()=>boolean;
+ try{admission=props.captureAdmission?.()??(()=>true);}catch{admission=()=>false;}
+ const admitted=()=>{try{return mounted.current&&admission();}catch{return false;}};
  const scanning=React.useRef(false);
  const setRef=(value:MetadataRescanReference|null)=>{ref.current=value;setReference(value);};
  const remember=(value:MetadataRescanReference|null)=>{
@@ -82,7 +86,7 @@ export function MetadataRescanController(props:MetadataRescanControllerProps){
  }
  async function start(){
   const p=latest.current,track=p.track;
-  if(!scanned||!p.canUse||!p.canStart||!track||track.assetId===null||ref.current||invalidTracking||active.current)return;
+  if(!admitted()||!scanned||!p.canUse||!p.canStart||!track||track.assetId===null||ref.current||invalidTracking||active.current)return;
   const guard=p.captureCurrent();if(!guard())return;
   const token=p.activity.begin();if(!token)return;
   const run={id:{},abort:new AbortController()};active.current=run;
@@ -107,7 +111,7 @@ export function MetadataRescanController(props:MetadataRescanControllerProps){
   }
  }
  async function inspect(){
-  const p=latest.current;if(!p.canUse||active.current)return;
+  const p=latest.current;if(!admitted()||!p.canUse||active.current)return;
   if(!ref.current){if(!invalidTracking){setScanned(false);setView({...idle,state:'uncertain'});}return;}
   const guard=p.captureCurrent();if(!guard())return;
   const token=p.activity.begin();if(!token)return;
@@ -121,7 +125,7 @@ export function MetadataRescanController(props:MetadataRescanControllerProps){
   finally{token.end();if(active.current===run)active.current=null;if(mounted.current&&guard())p.onBlocking(unresolved,guard);}
  }
  function abandon(){
-  const p=latest.current,guard=p.captureCurrent();if(!p.canUse||active.current||!view.canAbandon||!confirmAbandon||!guard())return;
+  const p=latest.current,guard=p.captureCurrent();if(!admitted()||!p.canUse||active.current||!view.canAbandon||!confirmAbandon||!guard())return;
   // Archive only the reference and UNKNOWN. This does not assert rollback or
   // erase an audio file, receipt, incarnation or the unknown historical result.
   try{const raw=sessionStorage.getItem(historyKey);let old:unknown[]=[];if(raw&&raw.length<8192){const v:unknown=JSON.parse(raw);if(Array.isArray(v))old=v.slice(-7);}sessionStorage.setItem(historyKey,JSON.stringify([...old,{state:'unknown',reference:ref.current}]));sessionStorage.removeItem(trackingKey);}

@@ -10,6 +10,7 @@ export interface LocalBatchPanelProps {
   beginDiagnostic?: BeginPanelDiagnostic;
   playlist: Playlist | null;
   canStart: boolean;
+  captureWriteCurrent?:()=>()=>boolean;
   onStatus: (msg: string) => void;
 }
 
@@ -36,7 +37,7 @@ function uncertain(error: unknown): boolean {
   return !(error instanceof LocalBatchError) || error.code === 'storage' || error.code === 'worker';
 }
 
-export function LocalBatchPanel({activity, playlist, canStart, onStatus, beginDiagnostic}: LocalBatchPanelProps) {
+export function LocalBatchPanel({activity, playlist, canStart, captureWriteCurrent, onStatus, beginDiagnostic}: LocalBatchPanelProps) {
   const [jobs, setJobs] = useState<LocalBatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -51,6 +52,9 @@ export function LocalBatchPanel({activity, playlist, canStart, onStatus, beginDi
   const status = useRef(onStatus);
   status.current = onStatus;
   const allowed=useRef(canStart);allowed.current=canStart;
+  let writeGuard:()=>boolean;
+  try{writeGuard=captureWriteCurrent?.()??(()=>true);}catch{writeGuard=()=>false;}
+  const writeCurrent=()=>{try{return mounted.current&&allowed.current&&writeGuard();}catch{return false;}};
   const actionSequence=useRef(0);
   function begin(operation:PanelOperation,current:()=>boolean):PanelDiagnosticAttempt|null {
     try{const d=beginDiagnostic?.(operation,current);if(!d)return null;
@@ -121,7 +125,7 @@ export function LocalBatchPanel({activity, playlist, canStart, onStatus, beginDi
     }
   }
   async function action(kind: 'create' | 'run' | 'recover' | 'retry', job?: LocalBatch) {
-    if (!allowed.current || busy.current || active.current || (kind==='create'?!playlist:!job)) return;
+    if (!writeCurrent() || busy.current || active.current || (kind==='create'?!playlist:!job)) return;
     const operation = activity.begin(); if (!operation) return;
     busy.current = true;
     const sequence=++actionSequence.current;

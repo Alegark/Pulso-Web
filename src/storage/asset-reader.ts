@@ -25,15 +25,24 @@ export function verificationFailure(error:unknown,backend:LocalAsset['backend'])
  return {state:f.code==='asset-missing'?'missing':['length-mismatch','digest-mismatch','local-corrupt'].includes(f.code)?'corrupt':'unknown',failure:f};
 }
 // Lock lifetime belongs to the caller, including verification failures.
-export async function openAssetReader(asset:LocalAsset,current=true):Promise<AssetReader> {
- let unlock!:()=>void;let acquired!:()=>void;
- const ready=new Promise<void>(resolve=>{acquired=resolve;});
- const held=navigator.locks.request(generationLock(asset),{mode:'shared'},async()=>{acquired();await new Promise<void>(resolve=>{unlock=resolve;});});
- await atBoundary('open',asset.backend,()=>Promise.race([ready,held.then(()=>{fail('open','internal','unknown',asset.backend);})]));
+export async function openAssetReader(asset:LocalAsset,current=true,control?:{signal:AbortSignal}):Promise<AssetReader> {
+ let unlock:(()=>void)|undefined;
+ let acquired!:()=>void, rejected!:(error:unknown)=>void;
+ const ready=new Promise<void>((resolve,reject)=>{acquired=resolve;rejected=reject;});
+ // Only this request's pending acquisition is abortable. A delivered shared
+ // lock remains ours until release; cancelling never touches other readers.
+ const held=navigator.locks.request(generationLock(asset),{mode:'shared',...(control?{signal:control.signal}:{})},async()=>{
+  await new Promise<void>(resolve=>{unlock=resolve;acquired();});
+ });
+ void held.catch(rejected);
+ await atBoundary('open',asset.backend,()=>ready);
  let released=false;
- const release=()=>{if(!released){released=true;unlock();}};
+ const release=()=>{if(!released){released=true;unlock?.();}};
+ const checkSignal=()=>{if(control?.signal.aborted)fail('open','internal','cancelled',asset.backend);};
  try{
+ checkSignal();
  if(current){const now=await atBoundary('read','idb',()=>readRecord<LocalAsset>('assets',asset.id));if(!now||now.revision!==asset.revision||now.backend!==asset.backend||now.storageKey!==asset.storageKey)fail('open','integrity','asset-changed',asset.backend);}
+ checkSignal();
  let file:File|null=null;
  if(asset.backend==='opfs'){
  try{
@@ -43,6 +52,7 @@ export async function openAssetReader(asset:LocalAsset,current=true):Promise<Ass
  }
  catch(error){if(nativeDOMName(error)==='NotFoundError')throw missingAssetException();throw issuedFailure(error)?error:AppFailure.create(fromKnownError(error,{phase:'open',backend:asset.backend}));}
  }
+ checkSignal();
  const readRange=async(start:number,end:number)=>atBoundary('read',asset.backend,async()=>{
  if(released)fail('read','internal','input-invalid',asset.backend);
  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<=start||end>asset.bytes||end-start>65536)fail('read','internal','input-invalid',asset.backend);

@@ -30,6 +30,10 @@ const classificationLabels={'current-kept':'Copia conservada', 'previous-kept':'
 export function LocalCopiesController(props:LocalCopiesControllerProps) {
  const mounted=useRef(false),allowed=useRef(props.canUse);allowed.current=props.canUse;
  const latest=useRef(props);latest.current=props;
+ // A callback belongs to the render that exposed it; a later permission must
+ // not revive a callback captured before queue preparation or ownership change.
+ let admission:()=>boolean;
+ try{admission=props.captureCurrent();}catch{admission=()=>false;}
  const active=useRef<Attempt|null>(null),prepared=useRef<Prepared|null>(null);
  const cursors=useRef<(InventoryCursor|undefined)[]>([undefined]),pageIndex=useRef(0);
  // The API's undefined cursor starts a new snapshot. Keep only its first page
@@ -53,7 +57,7 @@ export function LocalCopiesController(props:LocalCopiesControllerProps) {
  },[]);
  useLayoutEffect(()=>{if(!props.canUse||prepared.current&&!safeCurrent(prepared.current.current))invalidate();},[props.canUse,props.scopeKey]);
  function begin(kind:CopyPanelOperation):Attempt|null {
-  if(!mounted.current||!allowed.current||active.current)return null;
+  if(!mounted.current||!allowed.current||active.current||!safeCurrent(admission))return null;
   const guard=latest.current.captureCurrent();if(!safeCurrent(guard))return null;
   const token=latest.current.activity.begin();if(!token)return null;
   const attempt:Attempt={token,controller:new AbortController(),current:()=>mounted.current&&active.current===attempt&&token.current()&&allowed.current&&safeCurrent(guard),diagnostic:null};

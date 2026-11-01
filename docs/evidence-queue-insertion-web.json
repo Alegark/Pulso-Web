@@ -1,0 +1,113 @@
+{
+  "project": "Pulso-Web",
+  "release": "34debfbc6be29b1e",
+  "previousRelease": "51c9bdf061455432",
+  "status": "FINAL_FOCAL_WEB_VERIFIED_NOT_P0",
+  "USD": 0,
+  "sources": 109,
+  "distFiles": 35,
+  "checks": {
+    "R106": {
+      "bytes": 17644,
+      "sha256": "4ec44ffa518d69e3e4b432d1c6811990ead08cf6720edd8268fc36ae31c52303",
+      "localReceipt": ".local/evidence/queue-insertion-player-r106.json"
+    },
+    "R107": {
+      "bytes": 10336,
+      "sha256": "57bf7b69f8e050cba216b3d3ddc6a5f6133bad77db34c7599d5c4ad6b4b50716",
+      "localReceipt": ".local/evidence/queue-source-composition-r107.json"
+    },
+    "R108": {
+      "bytes": 18616,
+      "sha256": "07bc9b7b591c24213c723b537ce5b69a3074f979c17e30007ad1de960311537a",
+      "localReceipt": ".local/evidence/queue-insertion-player-review-r108.json"
+    },
+    "R109": {
+      "bytes": 41848,
+      "sha256": "d024a6a876edd7cd4d3611cd18cf1e46736cea532232bc1025feb38f77a7f48b",
+      "localReceipt": ".local/evidence/queue-insertion-integrated-review-r109.json"
+    },
+    "R110": {
+      "bytes": 296736,
+      "sha256": "cae5a0c7d178b05c379a81a9a15ecb68e83ee73853bb0463fefb0d68d661998d",
+      "localReceipt": ".local/evidence/queue-insertion-main-r110.json"
+    },
+    "R111": {
+      "bytes": 13031,
+      "sha256": "de866404d4042a1118cde4bccf16f67ed09aad76715ae8ffa176df35cfad11bf",
+      "localReceipt": ".local/evidence/queue-insertion-sw-integrity-review-r111.json"
+    },
+    "assets": {
+      "bytes": 1037,
+      "sha256": "4a6c44018cf96def8f3d23bbf32fdeba3a25845e6e4ecdb47213cce4cc2e49b5",
+      "localReceipt": ".local/queue-insertion-root/assets-final-product.json"
+    },
+    "keyboard": {
+      "bytes": 1206,
+      "sha256": "8b09660286cbad3fe6890209ff09561d82d0c7cfeca5158d0435704b6e094ce0",
+      "localReceipt": ".local/queue-insertion-root/keyboard-final-product.json"
+    },
+    "licenses": {
+      "bytes": 1167,
+      "sha256": "fd3afa67811b5c4091d9b03df91d17287be1f88f70340972be9c9ce7b8de0fd9",
+      "localReceipt": ".local/queue-insertion-root/licenses-final-product.json"
+    },
+    "update": {
+      "bytes": 421,
+      "sha256": "52b3bd1c175d26012e0242d4a8c90d1aaa88a078a7de71452ebb6dccd0e6eb42",
+      "localReceipt": ".local/queue-insertion-root/update-final-product.json"
+    },
+    "production": {
+      "bytes": 693,
+      "sha256": "74f4fded434b3e932aca623a05bd1c303ae83c8ae21a67c2e6bf4ac019177420",
+      "localReceipt": ".local/evidence/queue-insertion-production.json"
+    },
+    "privateQueue": {
+      "bytes": 691,
+      "sha256": "3b0e366a8a62a32325fbf361af480211b956ec06e07bc997a3d1f06e2e2bbdbc",
+      "localReceipt": ".local/evidence/queue-insertion-production-private.json"
+    },
+    "privateGeneral": {
+      "bytes": 1533,
+      "sha256": "55ac469ca022c9cb489daa4bf9f6e1f34c349c4bab6ad609733cc50b6fb445d3",
+      "localReceipt": ".local/queue-insertion-root/private-general-final.json"
+    },
+    "unit63": {
+      "bytes": 14998,
+      "sha256": "c4cc1e726e7dd454a9c79bcce995475b57db9ef9004b171b90f8aeac3c0d50ff",
+      "localReceipt": ".local/queue-insertion-root/units-final-current.tap"
+    }
+  },
+  "privateDelivery": {
+    "existingAuthorizedCopy": true,
+    "filesVerifiedByBytesAndSHA256": 35,
+    "oldVersionedAssetsRetained": 14,
+    "transport": "bounded-blob",
+    "controller": false,
+    "queueInsertionPositive": true,
+    "copyRemoval": "safely-blocked-runtime-unknown",
+    "offlineAccepted": false
+  },
+  "conditions": {
+    "R109SatisfiedByR110AndReviewedR111Delta": true,
+    "R111SatisfiedByR110Final18Current": true
+  },
+  "nonBlockingP3": "Equivalent direct API snapshots with differently ordered own properties can cause repeated SHA; no integrity or publication bypass. Root-issued identical snapshots deduplicate.",
+  "pauseRequestedAfterCurrentIncrement": true,
+  "newIncrementStarted": false,
+  "iphoneVerified": false,
+  "P0Accepted": false,
+  "acceptance": {
+    "unit": "63/63 selected current PASS",
+    "integration": "R11018/18 current PASS, native + declared TESTONLY",
+    "review": "R109 favorable core/root; R111 favorable correction delta; both final browser conditions satisfied",
+    "standardBuild": "typecheck/lint/build + assetsIDB/OPFS + keyboard6 + licenses3/17 + update51c9→34de PASS",
+    "production": "native SW smoke2 + private Blob smoke2 + broad private smoke PASS",
+    "limitations": [
+      "iPhone, VoiceOver and real zoom not accepted",
+      "No private offline or heap guarantee",
+      "No Telegram or external provider enabled",
+      "P0-W/T13 not globally accepted"
+    ]
+  }
+}
