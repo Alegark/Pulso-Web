@@ -68,7 +68,7 @@ export function LocalCopiesPanel(props: LocalCopiesPanelProps) {
   const disabled = !props.canUse || props.pending;
   return <section className="local-copies" aria-labelledby="local-copies-heading">
     <h2 id="local-copies-heading">Copias locales</h2>
-    <p>Los originales importados y las copias conservadas están protegidos. Verifica cada copia de forma individual cuando lo necesites.</p>
+    <p>Las copias conservadas están protegidas. Verifica cada copia de forma individual cuando lo necesites.</p>
     <p>Los conteos reflejan la consulta del inventario; los cambios posteriores requieren actualizarlo.</p>
     <p>Identidad del almacenamiento: {props.identity === 'unknown' ? 'desconocida' : props.identity}.</p>
     <p>{props.partial ? 'Inventario parcial: pueden faltar copias en esta consulta.' : 'Inventario consultado.'} {props.referencesComplete ? 'Referencias consultadas.' : 'Referencias incompletas: los conteos pueden no incluir todas las relaciones.'}</p>

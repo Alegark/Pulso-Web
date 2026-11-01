@@ -1,0 +1,65 @@
+{
+  "project": "Pulso-Web",
+  "release": "c543e9f0a1a173d3",
+  "previous": "34debfbc6be29b1e",
+  "decision": "Telegram is the only product source of audio; no phone/computer audio import or sample loader in main UI.",
+  "status": "FOCAL_WEB_CHANGE_VERIFIED_NOT_TELEGRAM_ACCEPTANCE",
+  "checks": {
+    "local": {
+      "path": ".local/telegram-only-audio/browser-local.json",
+      "bytes": 594,
+      "sha256": "b3a17395fe6931b83790fa6e433e72e02709100dfdf320a74a178a1d4cc158f5"
+    },
+    "private": {
+      "path": ".local/telegram-only-audio/browser-private.json",
+      "bytes": 593,
+      "sha256": "3db192e9d661fecbc1a4226cdb58312d2ff7459c5d1b09693c8c5f87fa53ab91"
+    },
+    "assets": {
+      "path": ".local/telegram-only-audio/assets-current.json",
+      "bytes": 1037,
+      "sha256": "4a6c44018cf96def8f3d23bbf32fdeba3a25845e6e4ecdb47213cce4cc2e49b5"
+    },
+    "update": {
+      "path": ".local/telegram-only-audio/update.json",
+      "bytes": 421,
+      "sha256": "b5633d6a3e01f7267e85579e0fa95fffd20cadbacd0617abd79498078013b09c"
+    },
+    "units": {
+      "path": ".local/telegram-only-audio/units.tap",
+      "bytes": 14150,
+      "sha256": "13503eed3e32315261be8852f540e7422c270c216ccebbabfc1433c850bb50f2"
+    },
+    "types": {
+      "path": ".local/telegram-only-audio/typecheck.log",
+      "bytes": 45,
+      "sha256": "9c3d1e1b04daef5ef7378ddbf921f0c204668897c69198e8ebeaf9cb185a9314"
+    },
+    "lint": {
+      "path": ".local/telegram-only-audio/lint.log",
+      "bytes": 78,
+      "sha256": "9115c612f4c31d6ab637706d69432895db03337b27fb395cca045cdacbcb168b"
+    },
+    "build": {
+      "path": ".local/telegram-only-audio/build.log",
+      "bytes": 1441,
+      "sha256": "e807235cf0c69b0cbb74385ac720ad2197a677cbdf3a0e1f16b92992cbb61407"
+    }
+  },
+  "sourceFiles": 109,
+  "privateFilesVerified": 33,
+  "previousVersionedFilesRetained": 14,
+  "legacyDataPreserved": true,
+  "legacyTestAdjustment": {
+    "originalFailure": ".local/telegram-only-audio/assets.json",
+    "reason": "Historical setup used the removed audio file picker.",
+    "originalRunner": ".local/telegram-only-audio/check-local-assets-before.mjs",
+    "newSetup": "Native IDB/OPFS synthetic fixture, isolated persistent contexts. Range/hash/HEAD/403/restart/offline assertions unchanged.",
+    "timing": "Local3 and normal update passed before private update; adapted assets2 and private3 verified after update."
+  },
+  "TelegramSessionOrNetworkActivated": false,
+  "iPhoneVerified": false,
+  "P0Accepted": false,
+  "USD": 0,
+  "scope": "Removes product audio input and updates honest pending/restore messages. Backups and lyrics remain separate contracts; dev fixtures are not a product source."
+}

@@ -26,14 +26,13 @@ export interface HomeViewProps {
   recent: readonly HomeTrack[];
   playlists: readonly HomePlaylist[];
   empty: boolean;
-  canImport: boolean;
   canCreate: boolean;
   onOpenPlayer: (opener: HTMLButtonElement) => void;
   onPlay: () => void;
   onOpenLibrary: () => void;
   onOpenPlaylist: (id: string) => void;
   onPrepareTrack: (id: string) => void;
-  onImport: () => void;
+  onOpenSearch: () => void;
   onCreatePlaylist: () => void;
 }
 
@@ -82,9 +81,9 @@ export function HomeView(props: HomeViewProps) {
           </li>
         ))}</ul> : <p>No hay playlists todavía.</p>}
       </section>
-      {props.empty && <p>Importa audios o crea una playlist para empezar.</p>}
+      {props.empty && <p>Las canciones y los álbumes se añadirán desde Telegram. La conexión todavía no está disponible.</p>}
       <div className="home-view__actions">
-        <button type="button" disabled={!props.canImport} onClick={props.onImport}>Importar audios</button>
+        <button type="button" onClick={props.onOpenSearch}>Abrir búsqueda</button>
         {props.empty && <button type="button" disabled={!props.canCreate} onClick={props.onCreatePlaylist}>Crear playlist</button>}
         <button type="button" onClick={props.onOpenLibrary}>Ver biblioteca</button>
       </div>

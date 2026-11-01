@@ -17,7 +17,7 @@ export interface MetadataRescanPanelProps {
 }
 const messages:Record<RescanPanelReason,string>={
  limit:'La revisión admite archivos de hasta 8 MiB. Este archivo queda sin inspeccionar.',
- 'no-local-copy':'Esta ficha no tiene una copia local. Importa el original para recuperarla.',
+ 'no-local-copy':'Esta ficha no tiene una copia local. La descarga desde Telegram todavía no está disponible.',
  missing:'Falta el archivo local. Conservamos la ficha y su organización.',
  corrupt:'No se pudo verificar la integridad de la copia. Conserva tus originales.',
  'not-inspected':'No se pudieron inspeccionar las etiquetas de este archivo.',

@@ -9,16 +9,15 @@ import {readRecord,writeRecord,openExistingDatabase,admittedTransaction,request,
 import {transactionDone} from './storage/transaction-done';
 import {registerDatabaseRealmHost,beginWorkerAttempt,revokeDatabaseWorkerAttempts,activeDatabaseWorkerAttempts,type RealmAttempt} from './storage/database-realms';
 import {attachDatabaseTransportLifecycle,revalidateDatabaseTransport} from './playback/database-transport';
-import {demoMusic as fixtures} from './demo-music';
 import {prepareLocalSources,startLocalSourcePreparation,transportNotice} from './playback/transport';
 import {copySourceAsset,dataObject} from './playback/local-source-protocol';
 import {createQueueInsertionController,type SelectedOccurrence,type InsertionStatus} from './playback/queue-insertion-controller';
 import type {Placement} from './playback/queue-insertion';
 import {createLocalCopyProtection} from './playback/local-copy-protection';
 import {createSourceReviewAdmission} from './playback/source-review-admission';
-import {ArtworkPanel,artworkFailureText} from './ui/ArtworkPanel';
+import {ArtworkPanel} from './ui/ArtworkPanel';
 import {LocalBatchPanel} from './ui/LocalBatchPanel';
-import {LyricsPanel,lyricsImportWarningText} from './ui/LyricsPanel';
+import {LyricsPanel} from './ui/LyricsPanel';
 import {OrganizationPanel} from './ui/OrganizationPanel';
 import {LocalCopiesController,type CopyPanelOperation,type CopyPanelDiagnostic} from './ui/LocalCopiesController';
 import {groupArtists,groupAlbums,selectGroup,orderAlbumRows} from './library/groups';
@@ -37,8 +36,8 @@ import './ui/shell.css';
 import './style.css';
 import {createDiagnosticSession,type Handle} from './diagnostics/session';
 import {domFailure,failureText,result,type Operation,type Phase,type Result} from './diagnostics/contract';
-import {createResponseGate,copyWorkerRequest,type ImportRequest,type RecoveryRequest,type WorkerResponse} from './imports/import-protocol';
-import {workerFailureOutcome,makeOutcome,type OutcomeV1,type DetailedImportResult} from './imports/import-outcome';
+import {createResponseGate,type RecoveryRequest,type WorkerResponse} from './imports/import-protocol';
+import {workerFailureOutcome,makeOutcome,type OutcomeV1} from './imports/import-outcome';
 import {toDiagnosticResults} from './diagnostics/import-mapping';
 import {AppFailure,copyFailureV1,fromKnownError,makeFailure} from './errors/app-failure';
 import {copyFeatureObservation,panelFailure,type BeginPanelDiagnostic,type PanelDiagnosticAttempt,type PanelOperation} from './diagnostics/panel-mapping';
@@ -92,7 +91,7 @@ const control=new Ownership(()=>{owner=control.owner;if(control.state==='sin-con
  ++scopeId;diagnostics.resetScope();copyRemovalPending=true;copyRemovalStartup=null;metadataRescanBlocked=true;control.activity.block('metadata-rescan',true);
  if(databaseState!=='ready'){if(databaseReloadRequired())control.activity.invalidate();return;}
  suspendedSnapshot=undefined;configuring=true;player.suspend();sourceProtection.invalidateScope();player.setQueue([]);configuring=false;installMediaSession();const opening=control.activity.begin();const scope=scopeId,proof=control.proof;const current=()=>scope===scopeId&&proof===control.proof&&control.owner&&!!opening?.current();const diagnostic=beginDiagnostic('open-library');
- try{await sourceProtection.releaseUnused();if(!current())return;await refresh();if(!current())return;await readRemovalStartup(current);if(!current())return;status='Biblioteca local. Importa tus audios propios o autorizados.';
+ try{await sourceProtection.releaseUnused();if(!current())return;await refresh();if(!current())return;await readRemovalStartup(current);if(!current())return;status='Biblioteca local. La búsqueda y descarga desde Telegram todavía no están disponibles.';
  const raw=await readRecord<unknown>('settings','library-playback');
  if(!current())return;
  if(raw!==undefined){const normalized=normalizeSnapshot(raw);if(normalized){if(!copyRemovalPending&&normalized.snapshot.entries.length){deferredQueueRestore={saved:normalized.snapshot,warnings:normalized.warnings,current:captureRemovalRaw()};}else if(copyRemovalPending)status='Hay una retirada pendiente. La cola guardada se conserva sin prepararla ni reproducirla.';}else status='La cola guardada no es válida. Se conserva sin cambios; prepara una nueva selección para reproducir.';}
@@ -117,7 +116,6 @@ const databaseRecoverable=()=>databaseState==='blocked'||databaseState==='connec
 let metadataRescanBlocked=true;
 let owner=false;let busy=false;let status='Abriendo biblioteca…';let tracks:Track[]=[];let playlists:Playlist[]=[];
 const listeners=new Set<()=>void>();const emit=()=>{observeQueueAdmission();listeners.forEach(fn=>fn());};
-let worker:Worker|null=null;let operationId:string|null=null;let workerDispatched=false;
 let writes=Promise.resolve();let lastSave=0;let configuring=false;
 let queueSaveTokens=0,queueInsertionUncertain=false,insertionAdmissionEpoch=0,foreignMutationEpoch=0,lastInsertionAdmission='',lastForeignAdmission='',lastInsertionOccupied=false,observingInsertionAdmission=false,insertionCommitInProgress=false;
 const queueSaveTransactions=new Set<{tx:IDBTransaction;current:()=>boolean}>();
@@ -154,8 +152,6 @@ const recover=(...args:Parameters<typeof recoverWork>)=>admitted('recover-import
 const retainProblem=(...args:Parameters<typeof retainProblemWork>)=>admitted('recover-import',retainProblemWork,...args);
 const act=(...args:Parameters<typeof actWork>)=>admitted('edit-organization',actWork,...args);
 const queue=(...args:Parameters<typeof queueWork>)=>replaceQueue(...args);
-const importFiles=(...args:Parameters<typeof importFilesWork>)=>admitted('import-audio',importFilesWork,...args);
-const loadTestAudio=()=>admitted('import-audio',loadTestAudioWork);
 const importRecoveryPending=()=>unverifiedImportResponses.size>0||operations.some(job=>!terminal(job))||importProblems.some(issue=>!issue.retained);
 const importsBlocked=()=>databaseState!=='ready'||importRecoveryPending()||metadataRescanBlocked||sourceReview.hasReservation();
 const copyRemovalBlocked=()=>importsBlocked()||copyRemovalPending;
@@ -273,7 +269,7 @@ type DomainTerminal=Exclude<WorkerResponse,{type:'progress'}>;
 interface DomainSettlement {response:DomainTerminal|null;outcome:OutcomeV1}
 /** Keep the exact request receiver until a terminal receipt or observed transport
  * failure, even if lifecycle already invalidated business publication. */
-async function invokeDomainWorker(kind:'import'|'recovery',exactWorker:Worker,request:ImportRequest|RecoveryRequest,current:()=>boolean,onProgress?:(bytes:number)=>void):Promise<DomainSettlement>{
+async function invokeDomainWorker(kind:'recovery',exactWorker:Worker,request:RecoveryRequest,current:()=>boolean,onProgress?:(bytes:number)=>void):Promise<DomainSettlement>{
  let bridge:RealmAttempt|null=null,sendAttempted=false;
  let detachTransport:()=>void=()=>{};
  const id=request.operationId;
@@ -281,7 +277,6 @@ async function invokeDomainWorker(kind:'import'|'recovery',exactWorker:Worker,re
  try{
   bridge=await beginWorkerAttempt(kind,exactWorker,current);
   if(!bridge.current())throw AppFailure.create(makeFailure('admit','storage-unavailable','storage-unavailable','idb'));
-  if(request.type==='import'&&cancelled)return settle({response:null,outcome:makeOutcome({status:'cancelled',primary:makeFailure('admit','cancelled','cancelled','none'),cleanup:null,reconcile:null,writeState:'not-started',closeState:'not-applicable',recoveryRequired:false})});
   const gate=createResponseGate(request);
   return await new Promise<DomainSettlement>(resolve=>{
    let finished=false;
@@ -303,7 +298,7 @@ async function invokeDomainWorker(kind:'import'|'recovery',exactWorker:Worker,re
    if(!bridge!.current()){
     finish({response:null,outcome:makeOutcome({status:'failed',primary:makeFailure('admit','storage-unavailable','storage-unavailable','idb'),cleanup:null,reconcile:null,writeState:'not-started',closeState:'not-applicable',recoveryRequired:false})});return;
    }
-   try{sendAttempted=true;exactWorker.postMessage(request);if(worker===exactWorker)workerDispatched=true;}catch{failed('worker-failed');}
+   try{sendAttempted=true;exactWorker.postMessage(request);}catch{failed('worker-failed');}
   });
  }catch(error){
   const failure=fromKnownError(error,{phase:null,backend:'unknown'});
@@ -312,7 +307,6 @@ async function invokeDomainWorker(kind:'import'|'recovery',exactWorker:Worker,re
   exactWorker.onmessage=null;exactWorker.onerror=null;exactWorker.onmessageerror=null;
   detachTransport();
   if(bridge)bridge.closeAfterSettlement();else exactWorker.terminate();
-  if(worker===exactWorker){worker=null;workerDispatched=false;}
  }
 }
 async function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failurePhase?:'refresh'){
@@ -389,7 +383,7 @@ async function checkFiles(){
  catch{if(current()){status='No se pudo comprobar el almacenamiento. Conserva tus originales y vuelve a revisar el estado.';emit();}return;}
  finally{if(hadDatabaseBlock)databaseRetries.delete(current);}
 
- if(current()&&hadPending&&!unverifiedImportResponses.size){status='Los registros locales ya confirman el resultado. Revisa la biblioteca antes de volver a importar.';emit();}
+ if(current()&&hadPending&&!unverifiedImportResponses.size){status='Los registros locales ya confirman el resultado. Revisa la biblioteca antes de repetir una descarga.';emit();}
  else if(current()&&hadDatabaseBlock&&databaseState==='ready'&&!unverifiedImportResponses.size){status='Base local abierta y revisada. Comprueba las copias pendientes antes de continuar.';emit();}
 }
 async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[]){
@@ -426,7 +420,7 @@ async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[
  // A saved null selection unloads the old element before setQueue. Other
  // replacements select a new occurrence before releasing the old bundle.
  if(restored?.currentEntryId!==null)player.select(index>=0?index:0,false,index>=0?restored?.position??0:0);
- status='Cola lista y pausada. Pulsa Reproducir.'+(missing?` ${missing} entradas sin audio se omitieron. Vuelve a importar los originales para recuperarlas.`:'')+(restoreWarnings.length?' '+restoreWarnings.join(' '):'')+(transportNotice?' '+transportNotice:'');
+ status='Cola lista y pausada. Pulsa Reproducir.'+(missing?` ${missing} entradas sin audio se omitieron. Podrás volver a descargarlas cuando esté disponible la conexión a Telegram.`:'')+(restoreWarnings.length?' '+restoreWarnings.join(' '):'')+(transportNotice?' '+transportNotice:'');
  }catch(error){if(!current())return;const failure=known??localFailure(error,phase);diagnostics.complete(diagnostic,failure);status=(saved?'No se pudo recuperar toda la cola. Se conserva la cola guardada y tu organización. ':'')+failureText(failure)+' Vuelve a comprobar el almacenamiento o prepara otra selección.';}
  finally{
   // Record the primary error above before best-effort resource settlement.
@@ -537,72 +531,6 @@ registerDatabaseRealmHost({
 attachDatabaseTransportLifecycle(applyDatabaseLifecycle);
 void control.acquire();
 if(!control.supported){status='Este navegador no dispone de Web Locks. Reproducción y mutaciones bloqueadas.';void refresh();}
-async function importFilesWork(files:File[]){
- if(!owner||busy||copyRemovalBlocked()||queueForeignBlocked())return;const scope=scopeId,proof=control.proof;busy=true;player.pause();emit();
- let imported=0;let duplicates=0;let quotaStopped=false;const errors:string[]=[];const warnings=new Set<string>();
- try{
- for(const file of files){
- if(scope!==scopeId||!control.owner)break;
- const operation=control.activity.begin();if(!operation)break;
- const id=crypto.randomUUID(),diagnostic=beginDiagnostic('import-audio');operationId=id;status=`Importando ${imported+duplicates+errors.length+1} de ${files.length}…`;emit();
- const current=()=>scope===scopeId&&control.owner&&control.proof===proof&&operation.current();
- let capturedWorker:Worker|null=null,stop=false;
- try{
-  const request:ImportRequest={version:2,type:'import',operationId:id,file};
-  let response:{value:DetailedImportResult|null;outcome:OutcomeV1}|null;
-  if(!copyWorkerRequest(request)){
-   response={value:null,outcome:makeOutcome({status:'failed',primary:makeFailure('validate','internal',file.size>100*1024*1024?'limit-exceeded':'input-invalid','none'),cleanup:null,reconcile:null,writeState:'not-started',closeState:'not-applicable',recoveryRequired:false})};
-  }else{
-   worker=new Worker(new URL('./imports/import.worker.ts',import.meta.url),{type:'module'});workerDispatched=false;
-   capturedWorker=worker;
-   const settled=await invokeDomainWorker('import',capturedWorker,request,current,bytes=>{status=`Importando ${file.name}: ${Math.round(bytes/file.size*100)} %`;emit();});
-   response={value:settled.response?.type==='complete'?settled.response.result:null,outcome:settled.outcome};
-  }
-  if(!current()||!response)return;
-  const failure=outcomeDiagnostic(diagnostic,response.outcome);
-  if(response.value){
-   const value=response.value;if(value.duplicate)duplicates++;else imported++;
-   if(value.artworkWarning)warnings.add(artworkFailureText(value.artworkWarning));
-   if(value.lyricsWarning)warnings.add(lyricsImportWarningText(value.lyricsWarning));
-  }else if(failure)errors.push(failureText(failure));
-  if(response.outcome.primary?.family==='quota')quotaStopped=true;
-  if(response.outcome.recoveryRequired){unverifiedResponse(id);stop=true;}
-  if(response.outcome.status==='cancelled')stop=true;
- }catch{if(current()){outcomeDiagnostic(diagnostic,workerFailureOutcome('worker-failed',false));errors.push('No se pudo iniciar el proceso de importación. Conserva el original y vuelve a intentarlo.');stop=true;}}
- finally{
-  if(capturedWorker){capturedWorker.onmessage=null;capturedWorker.onerror=null;capturedWorker.onmessageerror=null;}
-  if(current())try{await refresh(false,true,diagnostic);}catch{if(current()){control.activity.block('import-state',true);errors.push('Las copias ya confirmadas se conservan. No se pudo actualizar la vista; vuelve a comprobar el almacenamiento antes de reintentar.');stop=true;}}
-  diagnostics.finish(diagnostic);operation.end();
- }
- if(scope!==scopeId)return;
- if(!control.owner||cancelled||quotaStopped||stop||copyRemovalBlocked())break;
- }
- if(scope!==scopeId)return;
- const wasCancelled=cancelled;status=`${imported} importadas, ${duplicates} ya existentes.${errors.length?' '+errors.join(' '):' Copias completas verificadas.'}${wasCancelled?' Lote cancelado; se conservan las importaciones ya confirmadas.':''}${quotaStopped?' Se detuvo el resto del lote por falta de espacio. Libera espacio fuera de Pulso o revisa tus copias antes de reintentar.':''}${warnings.size?' '+[...warnings].join(' '):''}`;
- }finally{if(scope===scopeId){operationId=null;busy=false;cancelled=false;artworkRefreshToken++;emit();}}
-}
-async function loadTestAudioWork(){
- if(!owner||busy||copyRemovalBlocked())return;const scope=scopeId,diagnostic=beginDiagnostic('import-audio');busy=true;status='Cargando tres fragmentos instrumentales originales…';emit();
- try{
- const files:File[]=[];
- for(const fixture of fixtures){
- const response=await fetch(fixture.file,{credentials:'same-origin'});
- if(!response.ok)throw new Error('No se pudieron cargar los audios de prueba. Recarga la página con conexión.');
- const bytes=await response.arrayBuffer();
- const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(x=>x.toString(16).padStart(2,'0')).join('');
- if(bytes.byteLength!==fixture.bytes||digest!==fixture.sha256)throw new Error('La copia de prueba está incompleta. Recarga para reintentar.');
- files.push(new File([bytes],`${fixture.id}.${fixture.mime==='audio/mp4'?'m4a':'mp3'}`,{type:fixture.mime}));
- }
- if(scope!==scopeId||!control.owner){busy=false;return;}
- busy=false;await importFiles(files);
- if(scope!==scopeId||!control.owner)return;
- const assets=await all<{id:string;sha256:string}>('assets');
- const demoTracks=fixtures.map(f=>tracks.find(t=>assets.some(a=>a.id===t.assetId&&a.sha256===f.sha256)));
- if(demoTracks.every((track):track is Track=>!!track)){await queue(demoTracks.map(t=>t.id));requestAnimationFrame(()=>{if(scope===scopeId&&control.owner)document.querySelector('#player')?.scrollIntoView({behavior:'auto',block:'start'});});}
- }catch(error){if(scope!==scopeId)return;busy=false;const failure=domFailure(error,'read');diagnostics.complete(diagnostic,failure);status=failureText(failure);emit();}finally{diagnostics.finish(diagnostic);}
-}
-let cancelled=false;
-function cancelImport(){if(control.owner&&operationId){cancelled=true;if(workerDispatched)worker?.postMessage({version:2,type:'cancel',operationId});}}
 function App(){
  const [,render]=React.useReducer(n=>n+1,0);React.useEffect(()=>{listeners.add(render);return()=>{listeners.delete(render);};},[]);
  const mutationCurrent=captureForeignMutationCurrent(),replacementCurrent=captureReplacementCurrent(),insertionCurrent=captureInsertionCurrent();
@@ -643,7 +571,7 @@ function App(){
   refresh:()=>refresh(true,false,null),changed:()=>{},
  }),[removalKey]);
  const routeHeading=React.useRef<HTMLHeadingElement>(null),playerHeading=React.useRef<HTMLHeadingElement>(null);
- const importInput=React.useRef<HTMLInputElement>(null),createInput=React.useRef<HTMLInputElement>(null);
+ const createInput=React.useRef<HTMLInputElement>(null);
  const [playerOpen,setPlayerOpen]=React.useState(false);
  const returnContext=React.useRef<{page:typeof page;scroll:number;opener:HTMLButtonElement}|null>(null);
  const navigationIntent=React.useRef(0);
@@ -801,11 +729,11 @@ function App(){
  return <main><header><p>PULSO WEB · BIBLIOTECA LOCAL</p><h1>Tu música, en este navegador</h1><nav className="shell-nav" aria-label="Principal">{(['inicio','buscar','biblioteca']as const).map(p=><button key={p} aria-current={page===p?'page':undefined} onClick={()=>navigate(p)}>{p==='inicio'?'Inicio':p==='buscar'?'Buscar':'Biblioteca'}</button>)}</nav></header>{updateReady&&<p role="status">Hay una versión nueva preparada. Cuando termines de escuchar, cierra las pestañas de Pulso y vuelve a abrir para actualizar.</p>}
  <section aria-label="Control de esta pestaña"><h2>Control de reproducción</h2><p role="status">{control.state}</p>{owner?<><button onClick={()=>void cede()}>Ceder control</button>{control.requests.length>0&&<div><p>{control.requests.length} pestañas solicitan el control. Recibir la petición no detiene el audio.</p><button onClick={()=>control.retain()}>Conservar control</button></div>}<p>{control.activity.count} operaciones activas. Para ceder, termina o resuelve las operaciones y confirma de nuevo.</p></>:<><button disabled={!control.supported||control.state!=='sin-control'||!control.messaging} onClick={()=>control.request()}>Solicitar control</button><button disabled={!control.supported||control.state!=='sin-control'} onClick={()=>void control.acquire()}>Comprobar disponible</button><p>Sin respuesta, conserva el bloqueo. Pilotos, muestras y versiones anteriores requieren cerrar esa entrada.{!control.messaging?' Los avisos entre pestañas no están disponibles: libera manualmente en la otra pestaña y comprueba aquí.':''}</p></>}</section>
  {databaseState!=='ready'&&<section aria-label="Estado de la base local"><h2>{databaseRecoverable()?'Apertura pendiente de revisión':'Es necesario volver a abrir Pulso'}</h2><p role="alert">{databaseState==='connection-closed'?'Se interrumpió el acceso al almacenamiento local. Reintenta la apertura antes de continuar.':databaseState==='blocked'?'Otra entrada de Pulso mantiene la base local ocupada. Ciérrala y reintenta la apertura.':databaseState==='version-incompatible'?'Esta versión de Pulso no admite la versión de la base local. Abre una versión actualizada para continuar.':'La base local cambió de versión. El acceso queda detenido hasta volver a abrir la aplicación.'}</p>{databaseRecoverable()?<button disabled={!owner||busy} onClick={()=>void admitted('refresh-library',checkFiles)}>Reintentar apertura</button>:<><button disabled={control.activity.count>0||activeDatabaseWorkerAttempts()>0} onClick={()=>{if(control.activity.count===0&&activeDatabaseWorkerAttempts()===0)location.assign('/open.html');}}>Abrir versión actual</button>{(control.activity.count>0||activeDatabaseWorkerAttempts()>0)&&<p>Espera a que termine la operación pendiente antes de volver a abrir.</p>}</>}</section>}
- <section aria-label="Importación"><p><a href="/samples.html">Escuchar Aurora, Brisa y Camino sin importar archivos</a></p><p>¿No tienes canciones? Carga tres fragmentos instrumentales originales de prueba. No necesitas seleccionar archivos.</p><button disabled={!canOrganize} onClick={()=>{if(mutationCurrent())void loadTestAudio();}}>Cargar música de prueba</button><label className="file-label">Importar audios propios o autorizados<input ref={importInput} aria-label="Importar audios" disabled={!canOrganize} type="file" accept="audio/mpeg,audio/mp4,audio/wav,.mp3,.m4a,.wav" multiple onChange={event=>{if(!mutationCurrent())return;const files=Array.from(event.target.files??[]);event.target.value='';void importFiles(files);}}/></label><button disabled={!operationId} onClick={cancelImport}>Cancelar importación</button><p role="status">{status}</p></section>
+ <section aria-label="Música de Telegram"><p>Las canciones y los álbumes se obtendrán desde las fuentes de Telegram que conectes. La conexión y la búsqueda en Telegram todavía no están disponibles en esta versión.</p><p role="status">{status}</p></section>
  <section aria-label="Almacenamiento"><h2>Archivos locales</h2><p>{storageEstimate&&Number.isFinite(storageEstimate.usage)&&Number.isFinite(storageEstimate.quota)?`${(storageEstimate.usage!/1048576).toFixed(1)} MiB usados de ${(storageEstimate.quota!/1048576).toFixed(1)} MiB estimados para este origen.`:'El navegador no informó una estimación de espacio.'} El espacio disponible y la conservación no están garantizados.</p><button disabled={!owner||busy} onClick={()=>void admitted('refresh-library',checkFiles)}>Comprobar archivos locales</button></section>
- {unverifiedImportResponses.size>0&&<section aria-label="Respuestas de importación pendientes"><h2>Hay respuestas sin confirmar</h2><p>No se pudo confirmar el resultado de una operación. Conservamos los datos y pausamos las importaciones y los cambios de organización. Revisaremos los registros locales sin volver a importar ni borrar archivos.</p><button disabled={!owner||busy} onClick={()=>void admitted('refresh-library',checkFiles)}>Revisar respuestas pendientes</button></section>}
- {importRecoveryPending()&&<section aria-label="Recuperación de importaciones"><h2>Hay copias pendientes de confirmar</h2><p>Las nuevas importaciones están en pausa. Puedes verificar una copia interrumpida o descartar únicamente su parcial; las canciones ya conservadas no se borran.</p><ul>{operations.filter(job=>!terminal(job)).map(job=><li key={job.operationId}><p>{job.state==='uncertain'||job.state==='publishing'?'Resultado por confirmar':job.state==='cleanup'?'Parcial pendiente':'Copia interrumpida'} · {Math.round(job.bytes/1024)} de {Math.round(job.expectedBytes/1024)} KiB copiados</p><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'||!job.asset||!job.track} onClick={()=>void viewRecover(job,'resume')}>Verificar y recuperar copia</button><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'} onClick={()=>setDiscardId(job.operationId)}>Descartar copia incompleta</button>{discardId===job.operationId&&<div><p>Se comprobará que esta copia no esté publicada ni en uso antes de descartar su parcial. La biblioteca y los archivos conservados permanecen.</p><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'} onClick={()=>{setDiscardId(null);void viewRecover(job,'discard');}}>Confirmar descarte del parcial</button><button onClick={()=>setDiscardId(null)}>Conservar copia</button></div>}</li>)}</ul>{importProblems.filter(issue=>!issue.retained).map((issue,i)=><div key={i}><p>{issue.kind==='legacy'?'Registro de importación anterior sin propiedad verificable.':'Registro de importación inválido o sin propiedad verificable.'} Conservaremos sus archivos; no se puede autorizar su limpieza ni dar la copia por completa.</p><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'} onClick={()=>void viewRetain(issue)}>Conservar esos archivos y continuar</button></div>)}</section>}
- <div hidden={page!=='inicio'}><HomeView continueSelection={player.current?{title:player.current.title,artist:trackIndex.get(player.current.trackId)?.artist??'Artista desconocido',stateText:!owner?'Sin control en esta pestaña':player.state+(player.error?` · ${player.error}`:''),positionSeconds:audio.currentTime,canPlay:owner&&!busy,playing:player.state==='playing'}:null} recent={recent.map(t=>({id:t.id,title:t.title,artist:t.artist??'Artista desconocido',availability:availabilityText(trackAvailability(t,availability)),canPrepare:owner&&!busy&&!copyRemovalBlocked()&&sourceReview.canPrepare()&&databaseState==='ready'&&trackAvailability(t,availability)==='available'}))} playlists={homeLists.map(l=>({id:l.id,name:l.name,count:l.entries.length}))} empty={!tracks.length} canImport={owner&&!busy&&!copyRemovalBlocked()} canCreate={canOrganize} onOpenPlayer={openPlayer} onPlay={play} onOpenLibrary={()=>navigate('biblioteca')} onOpenPlaylist={id=>{setViews(old=>({...old,biblioteca:{...emptyShellView(),listId:id}}));navigate('biblioteca');}} onPrepareTrack={id=>void viewQueue([id])} onImport={()=>importInput.current?.click()} onCreatePlaylist={()=>{const current=navigate('biblioteca');requestAnimationFrame(()=>{if(current())createInput.current?.focus();});}}/></div>
+ {unverifiedImportResponses.size>0&&<section aria-label="Respuestas de copias pendientes"><h2>Hay respuestas sin confirmar</h2><p>No se pudo confirmar el resultado de una operación. Conservamos los datos y pausamos las descargas y los cambios de organización. Revisaremos los registros locales sin repetir descargas ni borrar archivos.</p><button disabled={!owner||busy} onClick={()=>void admitted('refresh-library',checkFiles)}>Revisar respuestas pendientes</button></section>}
+ {importRecoveryPending()&&<section aria-label="Recuperación de copias"><h2>Hay copias pendientes de confirmar</h2><p>Las nuevas descargas están en pausa. Puedes verificar una copia interrumpida o descartar únicamente su parcial; las canciones ya conservadas no se borran.</p><ul>{operations.filter(job=>!terminal(job)).map(job=><li key={job.operationId}><p>{job.state==='uncertain'||job.state==='publishing'?'Resultado por confirmar':job.state==='cleanup'?'Parcial pendiente':'Copia interrumpida'} · {Math.round(job.bytes/1024)} de {Math.round(job.expectedBytes/1024)} KiB copiados</p><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'||!job.asset||!job.track} onClick={()=>void viewRecover(job,'resume')}>Verificar y recuperar copia</button><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'} onClick={()=>setDiscardId(job.operationId)}>Descartar copia incompleta</button>{discardId===job.operationId&&<div><p>Se comprobará que esta copia no esté publicada ni en uso antes de descartar su parcial. La biblioteca y los archivos conservados permanecen.</p><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'} onClick={()=>{setDiscardId(null);void viewRecover(job,'discard');}}>Confirmar descarte del parcial</button><button onClick={()=>setDiscardId(null)}>Conservar copia</button></div>}</li>)}</ul>{importProblems.filter(issue=>!issue.retained).map((issue,i)=><div key={i}><p>{issue.kind==='legacy'?'Registro de importación anterior sin propiedad verificable.':'Registro de importación inválido o sin propiedad verificable.'} Conservaremos sus archivos; no se puede autorizar su limpieza ni dar la copia por completa.</p><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'} onClick={()=>void viewRetain(issue)}>Conservar esos archivos y continuar</button></div>)}</section>}
+ <div hidden={page!=='inicio'}><HomeView continueSelection={player.current?{title:player.current.title,artist:trackIndex.get(player.current.trackId)?.artist??'Artista desconocido',stateText:!owner?'Sin control en esta pestaña':player.state+(player.error?` · ${player.error}`:''),positionSeconds:audio.currentTime,canPlay:owner&&!busy,playing:player.state==='playing'}:null} recent={recent.map(t=>({id:t.id,title:t.title,artist:t.artist??'Artista desconocido',availability:availabilityText(trackAvailability(t,availability)),canPrepare:owner&&!busy&&!copyRemovalBlocked()&&sourceReview.canPrepare()&&databaseState==='ready'&&trackAvailability(t,availability)==='available'}))} playlists={homeLists.map(l=>({id:l.id,name:l.name,count:l.entries.length}))} empty={!tracks.length}  canCreate={canOrganize} onOpenPlayer={openPlayer} onPlay={play} onOpenLibrary={()=>navigate('biblioteca')} onOpenPlaylist={id=>{setViews(old=>({...old,biblioteca:{...emptyShellView(),listId:id}}));navigate('biblioteca');}} onPrepareTrack={id=>void viewQueue([id])} onOpenSearch={()=>navigate('buscar')} onCreatePlaylist={()=>{const current=navigate('biblioteca');requestAnimationFrame(()=>{if(current())createInput.current?.focus();});}}/></div>
  <section hidden={page==='inicio'} aria-label="Colección"><h2 ref={routeHeading} tabIndex={-1}>{page==='buscar'?'Buscar en tu biblioteca':'Biblioteca'}</h2><label>Buscar por título, artista o álbum<input value={query} onChange={e=>setQuery(e.target.value)} type="search"/></label>
  <div hidden={page==='buscar'}><label>Solo favoritos<input type="checkbox" checked={favorites} onChange={e=>updateView({favorites:e.target.checked})}/></label><label>Solo copias presentes<input type="checkbox" checked={present} onChange={e=>updateView({present:e.target.checked})}/></label>
  <label>Vista<select value={listId} onChange={e=>{setListId(e.target.value);setDeleting(false);}}><option value="">Todas las canciones</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
@@ -814,7 +742,7 @@ function App(){
  <p>{visible.length} canciones · {tracks.length} en biblioteca</p><div className="controls"><button disabled={!canAppend||!visible.length} onClick={event=>addSelection(visible,'next',event)}>Añadir selección a continuación ({visible.length})</button><button disabled={!canAppend||!visible.length} onClick={event=>addSelection(visible,'end',event)}>Añadir selección al final ({visible.length})</button></div><p>Estas acciones añaden toda la selección filtrada, incluidas las otras páginas.</p><button disabled={!owner||busy||databaseState!=='ready'||(copyRemovalBlocked()||!sourceReview.canPrepare())||!visible.length} onClick={()=>void viewQueue(visible.map(({track})=>track.id))}>Preparar cola de esta selección</button>
  {page!=='buscar'&&selected&&<details><summary>Editar playlist</summary><form onSubmit={e=>{e.preventDefault();const value=new FormData(e.currentTarget).get('name');void viewAct(()=>changePlaylist(selected.id,selected.revision,{type:'rename',name:String(value)}));}}><label>Nombre de playlist<input name="name" defaultValue={selected.name} key={selected.id+selected.revision} required maxLength={100}/></label><button disabled={!canOrganize}>Renombrar</button></form><button disabled={!canOrganize} onClick={()=>setDeleting(true)}>Borrar playlist</button>{deleting&&<div><p>Se borrará solo la playlist. Canciones, archivos y cola se conservan.</p><button disabled={!canOrganize} onClick={()=>{void viewAct(()=>changePlaylist(selected.id,selected.revision,{type:'delete'}));setListId('');setDeleting(false);}}>Confirmar borrado de playlist</button><button onClick={()=>setDeleting(false)}>Conservar playlist</button></div>}</details>}
  {page!=='buscar'&&selected&&filteredPlaylist&&<p>Para reordenar la playlist completa, quita los filtros de búsqueda, favoritos, copias y agrupación.</p>}
- {!visible.length&&<p>No hay canciones en esta vista. El selector de importación sigue disponible arriba.</p>}
+ {!visible.length&&<p>No hay canciones en esta vista. La conexión para buscar y descargar desde Telegram todavía no está disponible.</p>}
  <label>Playlist de destino<select value={target} onChange={e=>setTarget(e.target.value)}><option value="">Elige una playlist</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
  <LibraryPagination {...pagination}/><ol className="tracks" start={pagination.start+1}>{pageRows.map(({track,key,playlistIndex})=>{const info=albumMetadata.get(track.id)!;return <li key={key}><ArtworkPanel key={control.proof+track.id} activity={control.activity} trackId={track.id} title={track.title} refreshToken={artworkRefreshToken}/><div><strong>{track.title}</strong><p>{track.artist??'Artista desconocido'} · {track.album??'Álbum desconocido'} · {track.duration.toFixed(0)} s</p><p>{availabilityText(trackAvailability(track,availability))}</p><AlbumMetadataInfo track={info.track.state==='known'?info.track.value:null} disc={info.disc.state==='known'?info.disc.value:null} albumArtist={info.albumArtist.state==='known'?info.albumArtist.value:null} compilation={info.compilation.state==='known'?info.compilation.value:null}/></div><div className="controls"><button disabled={!owner||busy||databaseState!=='ready'||(copyRemovalBlocked()||!sourceReview.canPrepare())} onClick={()=>void viewQueue([track.id])}>Escuchar {track.title}</button><button disabled={!canAppend||track.assetId===null} onClick={event=>addSelection([{key,track}],'next',event)}>Añadir a continuación {track.title}</button><button disabled={!canAppend||track.assetId===null} onClick={event=>addSelection([{key,track}],'end',event)}>Añadir al final {track.title}</button><button disabled={!canOrganize||!removalEligibleTracks.has(track.id)} onClick={event=>openRemoval(track,event.currentTarget)}>{`Revisar retirada de ${track.title}`}</button><button disabled={!canOrganize} aria-label={`Revisar datos del archivo de ${track.title}`} onClick={event=>openRescan(track.id,event.currentTarget)}>Revisar datos del archivo</button><button disabled={!canOrganize} aria-pressed={track.favorite} ref={button=>{if(button)favoriteButtons.current.set(key,button);else favoriteButtons.current.delete(key);}} onClick={event=>void toggleFavorite(track,key,event.currentTarget)}>{track.favorite?'Quitar favorito':'Favorito'}</button><button disabled={!canOrganize||!target||!!playlists.find(p=>p.id===target)?.entries.some(e=>e.trackId===track.id)} onClick={()=>{const list=playlists.find(p=>p.id===target);if(list)void viewAct(()=>changePlaylist(list.id,list.revision,{type:'add',trackId:track.id}));}}>Añadir a playlist</button>
  {page!=='buscar'&&selected&&<>{([-1,1]as const).map(delta=><button key={delta} ref={button=>{const id=`${delta}:${key}`;if(button)moveButtons.current.set(id,button);else moveButtons.current.delete(id);}} disabled={!canOrganize||filteredPlaylist||!moveAdjacent(key,delta)} aria-disabled={delta===-1?playlistIndex===0:playlistIndex===selected.entries.length-1} onClick={event=>void moveEntry(key,delta,event.currentTarget)}>{delta===-1?'Subir':'Bajar'} {track.title}</button>)}<button disabled={!canOrganize} onClick={()=>void viewAct(()=>changePlaylist(selected.id,selected.revision,{type:'remove',entryId:key}))}>Quitar de playlist</button></>}
@@ -827,6 +755,6 @@ function App(){
  <LocalCopiesController key={`copies:${control.proof}`} activity={control.activity} canUse={owner&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()} scopeKey={`${scopeId}:${control.proof}:${databaseState}`} captureCurrent={captureCopyCurrent} tracks={tracks} beginDiagnostic={beginCopyDiagnostic}/>
  <OrganizationPanel key={`organization:${control.proof}`} activity={control.activity} beginDiagnostic={beginPanelDiagnostic} canWrite={canOrganize} captureWriteCurrent={captureLyricsWriteCurrent} onStatus={text=>{status=text;emit();}} onCommitted={(attempt?:PanelDiagnosticAttempt)=>refresh(true,false,(attempt&&panelDiagnosticHandles.get(attempt))??null,'refresh')}/>
  {player.current&&<MiniPlayer title={player.current.title} artist={trackIndex.get(player.current.trackId)?.artist??'Artista desconocido'} stateText={!owner?'Sin control en esta pestaña':player.state+(player.error?` · ${player.error}`:'')} playing={player.state==='playing'} canPlay={owner&&!busy} canPause={owner&&!busy} onPlay={play} onPause={pause} onOpenPlayer={openPlayer} artwork={<MiniArtwork key={`${scopeId}:${control.proof}:${player.current.trackId}`} activity={control.activity} trackId={player.current.trackId} title={player.current.title} refreshToken={artworkRefreshToken}/>}/>}
- <details><summary>Ajustes y límites de esta fase</summary><DiagnosticsPanel session={diagnostics} capabilities={diagnosticCapabilities}/><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label><p>Sin conexión a Telegram. Audios copiados al almacenamiento de este origen; una limpieza del navegador puede eliminarlos. Conserva tus originales. Importación limitada a 100 MiB por archivo. En el modo compatible para archivos pequeños, la reproducción admite hasta 8 MiB por audio y 24 MiB por cola; importar un archivo mayor no garantiza poder reproducirlo en ese modo. Portadas locales PNG/JPEG/WebP de hasta 2 MiB; extracción incrustada de ID3v2.3/2.4 sencillo, M4A covr y WAV con ID3, con límites de recursos. Otros formatos conservan un estado de portada explícito.</p><p>iPhone físico: APLAZADO/PENDIENTE. Las pruebas web no demuestran iOS ni reproducción bloqueada.</p><a href="/pilot.html">Abrir piloto separado de fixtures</a></details></main>;
+ <details><summary>Ajustes y límites de esta fase</summary><DiagnosticsPanel session={diagnostics} capabilities={diagnosticCapabilities}/><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label><p>La conexión a Telegram todavía no está disponible. Las copias locales ya existentes se conservan en este navegador; una limpieza del navegador puede eliminarlas. En el modo compatible para archivos pequeños, la reproducción admite hasta 8 MiB por audio y 24 MiB por cola; las copias mayores pueden requerir otro transporte para reproducirse. Portadas locales PNG/JPEG/WebP de hasta 2 MiB; extracción incrustada de ID3v2.3/2.4 sencillo, M4A covr y WAV con ID3, con límites de recursos. Otros formatos conservan un estado de portada explícito.</p><p>iPhone físico: APLAZADO/PENDIENTE. Las pruebas web no demuestran iOS ni reproducción bloqueada.</p></details></main>;
 }
 createRoot(document.getElementById('root')!).render(<App/>);

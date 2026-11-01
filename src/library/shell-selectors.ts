@@ -7,7 +7,7 @@ export function trackAvailability(track:Track, cache:ReadonlyMap<string,Availabi
  return cache.get(track.id)?.state??'unknown';
 }
 export function availabilityText(state:AvailabilityState):string {
- return {available:'Copia local presente; se comprobará al reproducir.',missing:'Faltan los archivos. Vuelve a importar el original.',invalid:'Copia local inválida. Se conserva la ficha.',unknown:'Disponibilidad sin comprobar.', 'metadata-only':'Ficha sin audio. Importa el original para escuchar.'}[state];
+ return {available:'Copia local presente; se comprobará al reproducir.',missing:'Falta el audio. La descarga desde Telegram todavía no está disponible.',invalid:'Copia local inválida. Se conserva la ficha.',unknown:'Disponibilidad sin comprobar.', 'metadata-only':'Ficha sin audio. La descarga desde Telegram todavía no está disponible.'}[state];
 }
 export function recentTracks(tracks:readonly Track[]):Track[] {
  return [...tracks].sort((a,b)=>{const x=Date.parse(a.createdAt),y=Date.parse(b.createdAt);return (Number.isFinite(y)?y:-Infinity)-(Number.isFinite(x)?x:-Infinity)||a.id.localeCompare(b.id);}).slice(0,6);

@@ -25,19 +25,19 @@ try{
   let context,page;
   try{
    context=await launch();report.browserVersion=context.browser().version();
-   if(backend==='idb'){
-    // Simulate the same missing capability in both window and dedicated worker.
-    await context.addInitScript(()=>Object.defineProperty(StorageManager.prototype,'getDirectory',{configurable:true,value:undefined}));
-    await context.route(/\/assets\/import\.worker-[^/]+\.js$/,async route=>{
-     const response=await route.fetch();
-     await route.fulfill({response,body:"Object.defineProperty(StorageManager.prototype,'getDirectory',{configurable:true,value:undefined});\n"+await response.text()});
-    });
-   }
    page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.name));
    await page.goto(origin);
-   await page.waitForFunction(()=>{const input=document.querySelector('input[type=file]');return input instanceof HTMLInputElement&&!input.disabled;});
-   await page.getByLabel('Importar audios',{exact:true}).setInputFiles({name:'Local propio.wav',mimeType:'audio/wav',buffer:bytes});
-   await page.getByRole('status').filter({hasText:'1 importadas, 0 ya existentes.'}).waitFor();
+   await page.getByRole('button',{name:'Ceder control',exact:true}).waitFor();
+   // Product audio now comes exclusively from Telegram. Native storage setup
+   // here is an isolated fixture, not an import UI or download implementation.
+   await page.evaluate(async({backend,bytes,sha256})=>{
+    const id=crypto.randomUUID(),assetId=crypto.randomUUID(),storageKey=crypto.randomUUID();
+    const asset={id:assetId,namespace:'local',backend,storageKey,bytes:bytes.length,sha256,mime:'audio/wav',chunks:Math.ceil(bytes.length/65536),chunkSize:65536,state:'complete',revision:1,retention:'kept'};
+    if(backend==='opfs'){const directory=await(await navigator.storage.getDirectory()).getDirectoryHandle('pulso-assets-v1',{create:true}),file=await directory.getFileHandle(storageKey,{create:true}),stream=await file.createWritable();await stream.write(new Uint8Array(bytes));await stream.close();}
+    const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('pulso-web-local-v1');r.onupgradeneeded=()=>r.transaction.abort();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+    try{await new Promise((resolve,reject)=>{const tx=db.transaction(['tracks','assets','chunks'],'readwrite');tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);tx.objectStore('assets').put(asset,assetId);tx.objectStore('tracks').put({id,assetId,title:'Local propio',artist:null,album:null,duration:(bytes.length-44)/44100,favorite:false,revision:1,createdAt:'2026-11-01T00:00:00Z',manualOverrides:{}},id);if(backend==='idb')for(let i=0;i<asset.chunks;i++)tx.objectStore('chunks').put(new Uint8Array(bytes.slice(i*65536,(i+1)*65536)),[storageKey,i]);});}finally{db.close();}
+   },{backend,bytes:[...bytes],sha256:expectedHash});
+   await page.reload();
    await page.getByRole('button',{name:'Escuchar Local propio',exact:true}).click();
    await page.getByRole('status').filter({hasText:'Cola lista y pausada.'}).waitFor();
    const check=async()=>page.evaluate(async({backend,expectedHash})=>{
