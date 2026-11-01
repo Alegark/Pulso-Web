@@ -173,3 +173,10 @@ iPhone/Safari/Chrome/Inicio, VoiceOver, zoom real, 10 pistas/30min bloqueados y 
 ### 2026-11-01 · Reserva y guardas de letras, entrega3899
 
 `3899d01ac792b938` al mismo acceso privado tras coreR86/R87 y raízR88/R90 favorables limitados. Once grupos browser finales incluyen callbacks React antiguos de letras denegados durante/después de reserva; el RED nativo se conserva. Build/checks transporte, teclado6, licencias3 y updateb88→3899 PASS; smoke HTTPS propio PASS. No interfaz/ejecutor de retirada en esa entrega. Privado Blob8/24MiB/offlinependiente, iPhoneaplazado. Etapas separadas y límites en `docs/evidence-source-reservation-web.json`; nuevo núcleo R91/UIR92 en desarrollo.
+
+
+## 2026-11-01 · Retirada individual, entrega web51c9
+
+Chromium154 Linux sandbox: R104 final22/22 integrado en contextos propios IDB/OPFS y Service Worker real; build final supera assets/rangos dos backends, teclado6, licencias3, update normal3899→51c9 y smoke nativo de producción. Son fixtures propias, con faults/barreras TESTONLY declarados en los casos correspondientes; no se infiere borrado físico/crash/purga ni heap. Sourcefreeze107 cotejado y35 archivos de entrega verificados.
+
+HTTPS privado existente: smoke amplio propio PASS con unAudio/organización/exportación/cesión pausada. Transporte observado boundedBlob8MiB/archivo24MiB/cola, sin controlador SW. La retirada se bloquea por runtimeunknown; generación, organización y audio conservados. No hay PASS de retirada positiva ni offline privado. iPhone físico/VoiceOver/zoom real/avance bloqueado sostenido permanecen APLAZADOS/PENDIENTES. Evidencia evidence-local-copy-removal-web.json y .local/evidence/copy-removal-delivery-parent-verification.json.

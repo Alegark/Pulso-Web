@@ -1,0 +1,177 @@
+{
+  "project": "Pulso-Web",
+  "status": "DELIVERED_FOCAL_WEB_NOT_P0",
+  "release": "51c9bdf061455432",
+  "sourceFreezeFiles": 107,
+  "reviewedImplementation": {
+    "currentGenerationOnly": true,
+    "audioLimitBytes": 8388608,
+    "aliasLimit": 32,
+    "explicitDeclarationAndConfirmation": true,
+    "recoveryNeverDeletesAutomatically": true,
+    "organizationAndIdentitiesPreserved": true
+  },
+  "independentEvidence": {
+    "coreR91": {
+      "nativeGroups": 28,
+      "unit": 4,
+      "context": "synthetic trusted protection; native IDB/OPFS"
+    },
+    "coreReviewR99": {
+      "nativeProbes": 8,
+      "nodeProbes": 4
+    },
+    "runtimeReviewR96": {
+      "ownNativeProbes": 5
+    },
+    "rootFixReviewR101": {
+      "ownNode": 20,
+      "native": false
+    },
+    "exportGuardReviewR103": {
+      "ownNode": 35,
+      "negativeControl": 1,
+      "native": false
+    },
+    "integratedR104": {
+      "groups": 22,
+      "passed": 22,
+      "failed": 0,
+      "sourceHashesMatchProduction": true
+    }
+  },
+  "productionDelivery": {
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "build": "PASS",
+    "assetsBackends": [
+      "idb",
+      "opfs"
+    ],
+    "keyboardGroups": 6,
+    "licenseGroups": 3,
+    "normalUpdate": "3899d01ac792b938 -> 51c9bdf061455432",
+    "productionNative": {
+      "controlledRemoval": "PASS",
+      "nativeUncontrolledDenial": "PASS",
+      "exactReimportSameIdentity": "PASS",
+      "playingSourcePreservedDuringRemoval": true,
+      "explicitImportPausesByExistingContract": true
+    },
+    "privateHTTPS": {
+      "existingSameAccess": true,
+      "regressionSmoke": "PASS",
+      "transport": "bounded-blob",
+      "controller": false,
+      "removal": "blocked-runtime-unknown",
+      "storedDataPreserved": true
+    }
+  },
+  "readback": {
+    "privateBuildFiles": 35,
+    "oldVersionedFilesPreserved": 14,
+    "sourceDistFiles": 142
+  },
+  "closedFindings": [
+    "R95-P2-01",
+    "R97-P2-01",
+    "R97-P2-02",
+    "R97-P2-03",
+    "R102-P2-01"
+  ],
+  "historicalRedPreserved": [
+    "R98 paused native three defects",
+    "R102 final19/20 new old-export-callback mutation",
+    "Own production harness first three attempts, corrected only harness expectations/scheduling"
+  ],
+  "currentCode": {
+    "src/main.tsx": {
+      "bytes": 85584,
+      "sha256": "7984a205659d2af3cf34b5de417c2e1069210d015880c1f9856b6e0b09595dcb"
+    },
+    "src/ui/OrganizationPanel.tsx": {
+      "bytes": 20171,
+      "sha256": "6d1c6dee7f43d5cb059034e48777affd140c40724f4f6a130da602c130866a47"
+    },
+    "src/ui/local-copy-removal-state.ts": {
+      "bytes": 17951,
+      "sha256": "dca7ce9eb65021e2a3f3f72d8b5ff7b6001cfae9090933e9ab61f0bac614a555"
+    },
+    "src/library/local-copy-removal.ts": {
+      "bytes": 24907,
+      "sha256": "5b67a9a81f2d097496219a47241f84e1852ce3b0c8d85a93962936e96c3e20ad"
+    },
+    "src/playback/copy-removal-runtime.ts": {
+      "bytes": 4940,
+      "sha256": "14fec78bf4b05a02507c947ceac707db8ac0dfd4fdc500c34e587c93d6359b51"
+    }
+  },
+  "receipts": {
+    ".local/evidence/local-copy-removal-r91.json": {
+      "bytes": 80461,
+      "sha256": "825a444bdb3b479656baf837dea58dde5af3a9f3787f5e14ffce8c34b8977012"
+    },
+    ".local/evidence/copy-removal-core-review-r99.json": {
+      "bytes": 24370,
+      "sha256": "acac3740d39257fb3b8b26598399e02a0d2334d05d81c8ffb2c79975bd05ffde"
+    },
+    ".local/evidence/copy-removal-runtime-fix-review-r96.json": {
+      "bytes": 17638,
+      "sha256": "8c6b69c79c8b0aaac6997486be803b6ed0b030ab00009bdc97c2c1ef905c48eb"
+    },
+    ".local/evidence/copy-removal-root-fix-review-r101.json": {
+      "bytes": 64902,
+      "sha256": "2fdf94431360eb4c8e8012914cf4721cc8983fc801c42c82ccaa7278f3e86a65"
+    },
+    ".local/evidence/copy-removal-export-guard-review-r103.json": {
+      "bytes": 36268,
+      "sha256": "20da321a14695b580226c1754d774c2a0727da4d979c1f3f9b97f7b1c4c9ce09"
+    },
+    ".local/evidence/copy-removal-admission-main-r104.json": {
+      "bytes": 1502841,
+      "sha256": "691980d1ed1be78b5901c68844b294b0d3b72eb913d2be5b34b1d3df32442aa1"
+    },
+    ".local/copy-removal-delivery/assets.json": {
+      "bytes": 1891,
+      "sha256": "9123d2655239b8a7e51e6b5df724492cd1399c00d77794bd13a4c147033a8c60"
+    },
+    ".local/copy-removal-delivery/keyboard.json": {
+      "bytes": 1416,
+      "sha256": "e3685bbd873721200e54f6286a5d0678c61dbc7689f1309743253c475d604819"
+    },
+    ".local/copy-removal-delivery/licenses.json": {
+      "bytes": 1424,
+      "sha256": "f52bccccc9f88b723596439b62497fd93088a0fc12e48b84611f1303fa9c11d0"
+    },
+    ".local/copy-removal-delivery/update.json": {
+      "bytes": 495,
+      "sha256": "a821e7856338d4efe64240f095f045e8e4b53676fe50c0ff26b46a35f4a41fda"
+    },
+    ".local/copy-removal-delivery/production.json": {
+      "bytes": 1260,
+      "sha256": "0259b89f3ccf12db2528e81ac92bc4d633e0bc8a6db0a5dc49ff69adb4c43774"
+    },
+    ".local/copy-removal-delivery/private-regressions.json": {
+      "bytes": 1972,
+      "sha256": "8763a20955e9d20dacfb3454cb12908236e2ad48d8583a40f9957f8b68a02249"
+    },
+    ".local/copy-removal-delivery/private-removal.json": {
+      "bytes": 857,
+      "sha256": "519b25f8d85c1b05b2f498ce6ea388485a1ea4198a828b3de53894c74a11007c"
+    },
+    ".local/copy-removal-delivery/delivery-readback.json": {
+      "bytes": 5007,
+      "sha256": "8feecf1d0647fa33194bcd0de4cebdc07c144d8a4432ffb7cd8ca9828b3b0970"
+    }
+  },
+  "limits": [
+    "Desktop Chromium focal integration only; no complete P0/T12/iPhone acceptance",
+    "Private access remains bounded Blob 8MiB/file and24MiB/queue; removal safely blocked without actual controller",
+    "No private offline, physical crash/erase/purge or heap guarantee",
+    "No Telegram real or external providers activated",
+    "Local asset offline reopen used browser offline while origin available; license offline check stopped its loopback origin"
+  ],
+  "iphone": "APLAZADO/PENDIENTE",
+  "P0_W": "EN_CURSO/NO_COMPLETADO",
+  "USD": 0
+}

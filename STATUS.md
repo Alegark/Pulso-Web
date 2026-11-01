@@ -2,9 +2,9 @@
 
 Proyecto independiente en desarrollo. El objetivo completo P0-W todavía no está aceptado. `PULSO-WEB-README.md` y `doc/SPEC.md` conservan el handoff original; README.md y SPEC.md siguen enlazados a ellos. Las instrucciones posteriores y la evidencia de implementación se registran en `odd/tasks/` y `docs/`.
 
-La última entrega de prueba verificada es `3899d01ac792b938`: importación local, biblioteca/playlists, cola, portadas y letras incrustadas, organización v2, reinspección explícita de etiquetas y fuentes físicas registradas con reserva documental de admisión. Es un resultado web; iPhone, VoiceOver, zoom real, reproducción bloqueada sostenida y otros gates siguen pendientes. El propietario retiró los editores de canciones del alcance de la interfaz; se conservan los datos históricos.
+La última entrega de prueba verificada es `51c9bdf061455432`: importación local, biblioteca/playlists, cola, portadas y letras incrustadas, organización v2, reinspección explícita de etiquetas y fuentes físicas registradas, reserva de admisión y retirada explícita individual con recuperación. Es un resultado web; iPhone, VoiceOver, zoom real, reproducción bloqueada sostenida y otros gates siguen pendientes. El propietario retiró los editores de canciones del alcance de la interfaz; se conservan los datos históricos.
 
-La rama principal puede contener incrementos posteriores en validación. En particular, las fuentes físicas, la reserva documental y sus guardas se han verificado; el núcleo y la interfaz de retirada explícita se desarrollan por separado. No hay función de borrado habilitada ni proveedor externo o Telegram real activados.
+La retirada explícita se verificó en Chromium con transporte compatible, conserva las fichas y exige una declaración y confirmación nuevas por plan. En el acceso privado actual la reproducción usa Blob acotado y la retirada queda bloqueada por falta de controlador Service Worker verificable. Offline privado e iPhone no están aceptados. No hay proveedores externos ni Telegram real activados. La rama principal puede contener incrementos posteriores en validación; véase docs/LOCAL-COPY-REMOVAL.md para evidencia y límites.
 
 Comandos del proyecto:
 
