@@ -24,7 +24,7 @@ export function persistRemovalTracking(value:Tracking,store:()=>TrackingStorage=
  }catch{return false;}
 }
 export function clearRemovalTracking(value:Tracking,store:()=>TrackingStorage=storage):boolean{
- try{const read=readRemovalTracking(store);if(read.invalid)return false;if(!read.tracking)return true;if(!same(read.tracking,value))return false;
+ try{const read=readRemovalTracking(store);if(read.invalid||read.unavailable)return false;if(!read.tracking)return true;if(!same(read.tracking,value))return false;
  store().removeItem(COPY_REMOVAL_TRACKING_KEY);return store().getItem(COPY_REMOVAL_TRACKING_KEY)===null;
  }catch{return false;}
 }
@@ -67,7 +67,7 @@ export interface CopyRemovalHost {
 interface Run {
  abort:AbortController;raw:()=>boolean;token:ActivityToken|null;reservation:SourceReviewReservation|null;
  runtime:CopyRemovalRuntime|null;context:removal.RemovalContext|null;plan:removal.RemovalPlan|null;
- continuation:removal.RemovalContinuation|null;tracking:Tracking|null;settlement:Promise<unknown>|null;
+ continuation:removal.RemovalContinuation|null;tracking:Tracking|null;settlement:Promise<unknown>|null;settling:boolean;cleaned:boolean;
 }
 const empty:RemovalView={visible:false,state:'blocked',title:'Revisión de retirada anterior',reason:null,message:null,secondary:[],summary:null,outcome:null,revision:null,declaration:null,confirmed:false,working:false,canConfirm:false,canContinue:false,canInspect:false,pendingCount:0};
 const safe=(guard:()=>boolean)=>{try{return guard();}catch{return false;}};
@@ -77,12 +77,15 @@ const reason=(value:string):RemovalPanelReason=>({busy:'busy',limit:'limit',miss
 export function createCopyRemovalController(host:CopyRemovalHost,core:typeof removal=removal,prepareRuntime=prepareCopyRemovalRuntime,store:()=>TrackingStorage=storage){
  let view:RemovalView=empty,run:Run|null=null,disposed=false,unknown=true,pending:Tracking[]=[];
  let initialized=false;
- function publish(patch:Partial<RemovalView>){if(disposed)return;view=Object.freeze({...view,...patch,pendingCount:pending.length+(unknown?1:0)});host.changed();}
+ function publish(patch:Partial<RemovalView>){if(disposed)return;view=Object.freeze({...view,...patch,working:run?.settling?true:patch.working??view.working,pendingCount:pending.length+(unknown?1:0)});host.changed();}
  function gate(){if(!disposed)host.blocking(unknown||pending.length>0||run!==null,run===null&&(unknown||pending.length>0));}
  function own(r:Run){return !disposed&&run===r;}
  function live(r:Run){return own(r)&&!r.abort.signal.aborted&&safe(r.raw)&&(!r.reservation||r.reservation.current());}
- function fresh():Run{return {abort:new AbortController(),raw:host.captureRaw(),token:null,reservation:null,runtime:null,context:null,plan:null,continuation:null,tracking:null,settlement:null};}
+ function fresh():Run{return {abort:new AbortController(),raw:host.captureRaw(),token:null,reservation:null,runtime:null,context:null,plan:null,continuation:null,tracking:null,settlement:null,settling:true,cleaned:false};}
  function cleanup(r:Run){
+  // The outcome can be visible before its own refresh finishes. Neither a
+  // dismissal nor another inspection may release this run during that await.
+  if(r.settling||r.cleaned)return;r.cleaned=true;
   if(r.plan)core.releaseCopyRemovalPlan(r.plan);
   r.runtime?.release();r.reservation?.release();r.token?.end();
   if(run===r)run=null;gate();
@@ -146,13 +149,14 @@ export function createCopyRemovalController(host:CopyRemovalHost,core:typeof rem
    }catch{if(own(r))blocked(r,'database-unavailable');}
    finally{
     r.token?.end();r.token=null;
+    r.settling=false;if(own(r))publish({working:false});
     if(!live(r)){if(own(r))blocked(r,'changed',r.abort.signal.aborted?'Revisión detenida. No se ha autorizado una retirada nueva.':'La revisión dejó de estar vigente. Conserva la copia y vuelve a revisar.');cleanup(r);}
     else if(view.state!=='ready')cleanup(r);
    }
   })();r.settlement=work;await work;
  }
  async function inspect(){
-  if(disposed||!initialized||view.working||!host.canRecover())return;
+  if(disposed||!initialized||view.working||run?.settling||!host.canRecover())return;
   if(run){cleanup(run);}
   // Release ONLY this feature's inactive unresolved key before idle admission.
   host.blocking(true,false);
@@ -178,20 +182,20 @@ export function createCopyRemovalController(host:CopyRemovalHost,core:typeof rem
      publish({state:'result',outcome:inspected.outcome,summary:inspected.summary,revision:inspected.planRevision,declaration:null,confirmed:false,working:false,canContinue:true,canInspect:false,message:'La copia sigue pendiente. Continuar requiere una nueva declaración y confirmación.'});
     }else await result(r,inspected.outcome);
    }catch{if(own(r))publish({state:'uncertain',working:false,canInspect:true,message:'No se pudo comprobar el resultado. Conservamos el seguimiento.'});}
-   finally{r.token?.end();r.token=null;if(!r.continuation)cleanup(r);else gate();}
+   finally{r.token?.end();r.token=null;r.settling=false;if(own(r))publish({working:false});if(!r.continuation)cleanup(r);else gate();}
   })();r.settlement=work;await work;
  }
  async function dispatch(expected:RemovalView,consent:removal.RemovalConsent,continuing:boolean){
   const r=run;
-  if(view!==expected||!r||!live(r)||!r.context||view.working||!view.confirmed||!view.declaration||consent.declaration!==view.declaration||consent.planRevision!==view.revision||consent.confirmRemoveThisCopy!==true||!r.tracking)return;
+  if(view!==expected||!r||!live(r)||!r.context||view.working||r.settling||!view.confirmed||!view.declaration||consent.declaration!==view.declaration||consent.planRevision!==view.revision||consent.confirmRemoveThisCopy!==true||!r.tracking)return;
   if(continuing?!view.canContinue||!r.continuation:!view.canConfirm||!r.plan)return;
   if(!persistRemovalTracking(r.tracking,store)){
    publish({message:'No se puede guardar y comprobar el seguimiento en esta pestaña. No se ha enviado la retirada; puedes conservar la copia y cerrar la revisión.',canConfirm:false,canContinue:false});return;
   }
-  add(r.tracking);publish({state:'working',working:true,canConfirm:false,canContinue:false,declaration:null,confirmed:false});gate();
+  r.settling=true;add(r.tracking);publish({state:'working',working:true,canConfirm:false,canContinue:false,declaration:null,confirmed:false});gate();
   const work=(async()=>{try{const outcome=continuing?await core.continueCopyRemoval(r.continuation!,consent,r.context!):await core.confirmCopyRemoval(r.plan!,consent,r.context!);await result(r,outcome);}
    catch{if(own(r))publish({state:'uncertain',working:false,canInspect:true,message:'No se pudo confirmar el resultado. El seguimiento se conserva; revisa su estado.'});}
-   finally{if(own(r)&&view.working)publish({working:false,state:'uncertain',canInspect:true});if(disposed)cleanup(r);else gate();}
+   finally{r.settling=false;if(own(r))publish(view.state==='working'?{working:false,state:'uncertain',canInspect:true}:{working:false});if(disposed)cleanup(r);else gate();}
   })();r.settlement=work;await work;
  }
  async function cancel(expected:RemovalView){
@@ -214,7 +218,7 @@ export function createCopyRemovalController(host:CopyRemovalHost,core:typeof rem
    continue:(consent:removal.RemovalConsent)=>dispatch(expected,consent,true),
    cancel:()=>valid()?cancel(expected):Promise.resolve(),
    inspect:()=>valid()?inspect():Promise.resolve(),
-   close(){if(!valid()||view.working)return false;if(run)cleanup(run);publish({visible:false,canConfirm:false,canContinue:false,revision:null,declaration:null,confirmed:false});gate();return true;},
+   close(){if(!valid()||view.working||run?.settling)return false;if(run)cleanup(run);publish({visible:false,canConfirm:false,canContinue:false,revision:null,declaration:null,confirmed:false});gate();return true;},
    show(){if(valid())publish({visible:true});},
   };
  }

@@ -547,7 +547,7 @@ function App(){
  function focusRemoval(){
   const intent=removalFocus.current;if(!intent||!intent.current())return;
   const fallback=playerOpen?playerHeading.current:page==='inicio'?document.getElementById('home-heading'):routeHeading.current;
-  const dest=intent.kind==='open'?removalHeading.current:intent.opener?.isConnected&&intent.opener.getClientRects().length?intent.opener:fallback;
+  const dest=intent.kind==='open'?removalHeading.current:intent.opener?.isConnected&&!intent.opener.disabled&&intent.opener.getClientRects().length?intent.opener:fallback;
   if(!dest)return;removalFocus.current=null;dest.focus({preventScroll:true});dest.scrollIntoView({behavior:'auto',block:intent.kind==='open'?'start':'nearest',inline:'nearest'});
  }
  function closeRemoval(){removalFocus.current={kind:'close',current:rescanResponse(),opener:removalOpener.current};removalOpener.current=null;setRemovalRequest(null);requestAnimationFrame(focusRemoval);}
