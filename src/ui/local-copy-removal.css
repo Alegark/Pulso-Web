@@ -1,0 +1,15 @@
+.copy-removal-panel { box-sizing: border-box; min-width: 0; max-width: 48rem; overflow-wrap: anywhere; }
+.copy-removal-panel *, .copy-removal-panel *::before, .copy-removal-panel *::after { box-sizing: border-box; }
+.copy-removal-panel__title { font-weight: 700; }
+.copy-removal-panel__summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: .75rem; }
+.copy-removal-panel__summary div { min-width: 0; }
+.copy-removal-panel__summary dt { font-weight: 700; }
+.copy-removal-panel__summary dd { margin: .2rem 0 0; }
+.copy-removal-panel fieldset { min-width: 0; display: grid; gap: .5rem; margin: 1rem 0; }
+.copy-removal-panel label { display: flex; align-items: center; gap: .6rem; min-height: 44px; }
+.copy-removal-panel input { flex: 0 0 auto; width: 1.25rem; height: 1.25rem; }
+.copy-removal-panel__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.copy-removal-panel button { min-height: 44px; max-width: 100%; padding: .6rem 1rem; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.copy-removal-panel button:disabled { cursor: default; opacity: .6; }
+.copy-removal-panel__confirm { font-weight: 700; }
+.copy-removal-panel :focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }

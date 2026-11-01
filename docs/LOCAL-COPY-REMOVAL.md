@@ -1,0 +1,17 @@
+# Retirada explícita de una copia local
+
+Estado: implementación local congelada, pendiente de revisión independiente y pruebas de producto. La última entrega privada verificada sigue siendo `3899d01ac792b938`; todavía no se ha publicado esta función. Sólo se han empleado archivos sintéticos propios en contextos aislados.
+
+La primera unidad revisa una generación actual local de hasta 8 MiB y hasta32 fichas vinculadas. Conserva identidad de fichas, favoritos, playlists, correcciones históricas, datos de álbum, referencias de organización y huella de audio. Retirar audio no elimina las fichas. Reimportar bytes originales exactos puede volver a enlazarlas; título y artista no se usan para fusionar canciones.
+
+La revisión consulta el archivo y sus referencias, termina su lectura corta, reserva la generación y comprueba el transporte actual. La reserva incluye colas actuales, preparadas, pendientes y recursos retenidos; no se pausa el reproductor para hacer elegible una copia. El consentimiento exige una declaración sin preselección y una confirmación específica para ese plan. Descargar/exportar o pedir persistencia no demuestra que exista una copia externa.
+
+El journal distingue intención preparada, fichas desvinculadas, eliminación en curso, ausencia confirmada y operación no confirmada. Cancelar no revierte una fase ya comprometida ni una llamada nativa pendiente; se espera su cierre. Una inspección explícita puede asentar un recibo existente con exclusión y CAS, pero no borra, repite ni crea una operación. Continuar una retirada parcial exige revisar y confirmar otra vez. Una respuesta perdida, una lista de pendientes vacía o terminar el estado ocupado no demuestran que no hubo escritura.
+
+El arranque lee únicamente el prefijo propio de journals, después de abrir normalmente la base y antes de restaurar la cola. No escanea toda la biblioteca para comprobar si hay pendientes. Un seguimiento histórico no se elimina por ausencia de journal. Los resultados terminales pueden confirmarse sin exigir que metadatos ajenos posteriores sigan iguales; una anomalía física conserva la necesidad de revisión.
+
+El transporte exige controlador verificable con `physicalSources:1` e `idbLifecycle:1` cuando existe la API Service Worker. Una observación antigua de «no hay registro» no prueba su ausencia durante toda la operación: ese caso queda bloqueado. La ausencia real de la API mantiene la variante acotada, sin eludir una denegación del transporte. Esto no acredita bytes, manifiesto, permiso ni propiedad: son comprobaciones separadas.
+
+Pruebas previas separadas: coreR91 final28 casos nativos IDB/OPFS y4unitarias; runtime público actual9 grupos y revisiónR96 favorable con5probes propios; controladorR94 diezprobesNode con core/runtime simulados. R97 revisión raíz, R98 aplicación real y R99 revisión core están PENDIENTES. No se suman etapas ni se atribuye persistencia nativa a los probes simulados.
+
+El presupuesto de metadatos retenidos es estimado: no garantiza heap y el clon nativo de un registro puede ocupar más transitoriamente. No se implementa GC/LRU, generaciones antiguas ni borrado seguro de disco; no se garantiza espacio liberado. UI, root/runtime y almacenamiento deben superar sus gates de integración antes de entrega. iPhone físico sigue APLAZADO/PENDIENTE; P0-W/T12 no completos; USD0.
