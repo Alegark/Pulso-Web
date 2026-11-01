@@ -11,6 +11,8 @@ export interface LyricsPanelProps {
   title: string;
   timeSeconds: number;
   canEdit: boolean;
+  /** Root admission captured during render; retained callbacks keep that epoch. */
+  captureWriteCurrent?: () => () => boolean;
   onStatus: (message: string) => void;
   external?: Pick<RemoteLyricsPanelProps,'artist'|'album'|'durationSeconds'|'available'|'canRequest'|'captureCurrent'>;
 }
@@ -44,14 +46,23 @@ export function lyricsImportWarningText(code: ImportLyricsWarning): string {
   }
 }
 
-export function LyricsPanel({activity, trackId, title, timeSeconds, canEdit, onStatus, external}: LyricsPanelProps) {
+export function LyricsPanel({activity, trackId, title, timeSeconds, canEdit, captureWriteCurrent, onStatus, external}: LyricsPanelProps) {
   const generation = useRef(0);
   const identity = useRef(trackId);
   const mounted = useRef(false);
   const busyRef = useRef(false);
   const statusRef = useRef(onStatus);
+  const editableRef = useRef(canEdit);
+  editableRef.current = canEdit;
   statusRef.current = onStatus;
   if (identity.current !== trackId) { identity.current = trackId; generation.current++; busyRef.current = false; }
+  let writeGuard: () => boolean;
+  try { writeGuard = captureWriteCurrent?.() ?? (() => true); }
+  catch { writeGuard = () => false; }
+  const writeCurrent = () => {
+    try { return mounted.current && identity.current === trackId && editableRef.current && writeGuard(); }
+    catch { return false; }
+  };
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<LyricsRead | null>(null);
   const [draft, setDraft] = useState('');
@@ -82,7 +93,7 @@ export function LyricsPanel({activity, trackId, title, timeSeconds, canEdit, onS
   }, [trackId, open, reload]);
 
   async function importFile(file: File) {
-    if (!canEdit || busyRef.current) return;
+    if (!writeCurrent() || busyRef.current) return;
     const operation = activity.begin(); if (!operation) return;
     const current = generation.current;
     busyRef.current = true; setBusy(true); setMessage('');
@@ -92,11 +103,11 @@ export function LyricsPanel({activity, trackId, title, timeSeconds, canEdit, onS
       let text: string;
       try { text = new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer()); }
       catch { throw new LyricsError('unicode'); }
-      if (!operation.current() || !mounted.current || generation.current !== current) return;
+      if (!operation.current() || !writeCurrent() || generation.current !== current) return;
       if (text.length > LYRICS_LIMITS.bytes) throw new LyricsError('size');
       setDraft(text); setMessage('Archivo cargado como borrador. Elige el formato y guarda para aplicarlo.');
     } catch (error) {
-      if (mounted.current && generation.current === current) setMessage(errorText(error));
+      if (writeCurrent() && generation.current === current) setMessage(errorText(error));
     } finally {
       operation.end();
       if (operation.current() && mounted.current && generation.current === current) { busyRef.current = false; setBusy(false); }
@@ -104,7 +115,7 @@ export function LyricsPanel({activity, trackId, title, timeSeconds, canEdit, onS
   }
 
   async function save(text: string | null) {
-    if (!canEdit || busyRef.current || !result || (result.state === 'unavailable' && !result.repairToken)) return;
+    if (!writeCurrent() || busyRef.current || !result || (result.state === 'unavailable' && !result.repairToken)) return;
     const operation = activity.begin(); if (!operation) return;
     const current = generation.current;
     busyRef.current = true; setBusy(true); setMessage('');
@@ -112,15 +123,16 @@ export function LyricsPanel({activity, trackId, title, timeSeconds, canEdit, onS
       if (text !== null && parseLyrics(text, format).kind === 'absent') {
         setMessage('Para guardar la ausencia, usa «Sin letras».'); return;
       }
+      if (!operation.current() || !writeCurrent()) return;
       const value = await setManualLyrics(trackId, text, format, result.revision, result.state === 'unavailable' ? result.repairToken : undefined);
-      if (!operation.current() || !mounted.current || generation.current !== current) return;
+      if (!operation.current() || !writeCurrent() || generation.current !== current) return;
       setResult(value);
       if (value.state === 'ready') setDraft(value.lyrics.text);
       else if (value.state === 'absent') setDraft('');
       const notice = text === null ? 'Elección «Sin letras» guardada.' : 'Letras guardadas.';
       setMessage(notice); statusRef.current(notice);
     } catch (error) {
-      if (!operation.current() || !mounted.current || generation.current !== current) return;
+      if (!operation.current() || !writeCurrent() || generation.current !== current) return;
       const notice = errorText(error); setMessage(notice); statusRef.current(notice);
       if (error instanceof LyricsError && error.code === 'conflict') setResult(null);
     } finally {

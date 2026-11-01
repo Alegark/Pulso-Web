@@ -27,3 +27,6 @@ R86 siguiente: reserva opaca documental no destructiva y rechazo de preparacione
 
 
 Reserva en desarrollo posterior a la entrega b88: R86 añade reserve/hasReservation/canPrepare con ocho grupos y18unitarias PASS; R87 core favorable con seis probes propios. Root integra `source-review-admission.ts`, captura opaca privada y epoch de callbacks, token Activity propio, rechazo antes de pausar/preparar cola y bloqueo de mutaciones/persistencia de posición mientras esté ocupada. Lectura y reproducción continúan. Los23tests focales incluyen cinco nuevos del adaptador; tipos/lint PASS. R88 navegador de aplicación y R89 revisión root PENDIENTES, no nueva entrega. No botón ni executor/journal de retirada, y la reserva por sí sola no acredita presencia del archivo ni autoriza perder un original.
+
+
+Validación root pendiente: R89 detectó un callback antiguo de guardado manual de letras que conservaba permiso; R88 confirmó una escritura real en IDB durante la reserva con datos sintéticos. Root añadió `captureWriteCurrent` al panel, con guarda de época capturada al renderizar, permiso vigente y comprobación antes de Activity/mutador, también para ausencia y borrador de archivo. Seis probes de lógica y tipos/lint PASS; nuevo navegador R88 y revisión R90 siguen PENDIENTES. El RED nativo y freeze anterior se conservan; no nueva entrega sobre estos cambios hasta cerrarlos.
