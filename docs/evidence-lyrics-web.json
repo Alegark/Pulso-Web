@@ -1,0 +1,90 @@
+{
+  "status": "PASS for stated web cases only",
+  "browser": "Chromium 154.0.8037.57",
+  "sandbox": true,
+  "origin": "ephemeral loopback; private probe separately labelled",
+  "iphone": "APLAZADO/PENDIENTE",
+  "P0W": "INCOMPLETO",
+  "lockSHA256": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f",
+  "indexSHA256": "85cd7b210761ec40c35afb6d281d898fe1bbc48117566d06176cc7a4cb8af67d",
+  "swSHA256": "8f0fc66f61a599fc3a3977e1aea4f1652ba49813c9836abf6d9080c65b1addf1",
+  "unit": {
+    "passed": 6,
+    "source": "R1 implementation and independent R2 review; parser unchanged by parent"
+  },
+  "browserModel": {
+    "passedGroups": 12,
+    "pageErrors": 0,
+    "command": "INSTABOX_HEADLESS=1 npm run test:browser:run -- lyrics",
+    "source": "Parent run after R2 correction and two additional groups; initial R1 had 10",
+    "extraCases": [
+      "async transaction error reports quota; real transaction aborted; old choice preserved",
+      "100000-key corrupt object rejected before explicit full key sort; both read and CAS, maximum sorted keys <=32"
+    ],
+    "limitsOfInjection": "Quota is simulated at transaction error/abort boundary, not physical disk exhaustion. IDB materializes the value before JS can inspect it."
+  },
+  "productUI": {
+    "passed": true,
+    "cases": [
+      {
+        "name": "plain Unicode and hostile markup render inertly; save leaves one engine playing same source",
+        "passed": true
+      },
+      {
+        "name": "LRC is explicit draft until save; seek highlights all equal timestamps and none before first cue",
+        "passed": true
+      },
+      {
+        "name": "invalid LRC, oversized file and malformed UTF-8 preserve saved lyrics and playing audio",
+        "passed": true
+      },
+      {
+        "name": "selection change rejects stale File callbacks; tracks keep independent manual text and LRC",
+        "passed": true
+      },
+      {
+        "name": "dedup preserves manual lyrics; explicit absence survives reload; restored queue remains paused",
+        "passed": true
+      },
+      {
+        "name": "corrupt persisted version is repaired using observed token without pausing audio; repair survives reload",
+        "passed": true
+      }
+    ],
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "pageErrors": 0,
+    "cspViolations": 0
+  },
+  "privateHTTPSProbe": {
+    "status": "PASS",
+    "ownPngAndAudio": true,
+    "oneEngineStillPlaying": true,
+    "transport": "bounded-blob",
+    "cspViolations": 0,
+    "localBatchComplete": true,
+    "localLyricsReady": true,
+    "freshContext": true
+  },
+  "delivery": {
+    "entry": "/releases/85cd7b210761ec40.html",
+    "copiedFiles": 28,
+    "retainedOldAssets": true
+  },
+  "limits": {
+    "bytes": 131072,
+    "linesAndCues": 4000,
+    "lineCharacters": 8192,
+    "timestampsPerLine": 16,
+    "timeMs": 86400000,
+    "offsetMs": 600000
+  },
+  "limitations": [
+    "No lyrics provider enabled or queried",
+    "No commercial lyrics fixtures",
+    "Opaque revision protects API writers; no claim of detecting hostile external exact ABA rewrite",
+    "No physical iPhone acceptance",
+    "No private-origin offline start acceptance",
+    "No measured universal heap guarantee"
+  ]
+}

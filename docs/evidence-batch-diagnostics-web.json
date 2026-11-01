@@ -1,0 +1,83 @@
+{
+  "project": "Pulso-Web",
+  "increment": "T18 B2",
+  "status": "LIMITED_ACCEPTANCE_B2_DELIVERED_GROUPED_WITH_B3",
+  "USD": 0,
+  "coreEvidence": ".local/evidence/batch-diagnostics-r22.json",
+  "reportedValidation": {
+    "finalChromiumCases": 106,
+    "idb": 53,
+    "opfs": 53,
+    "additionalModes": 2,
+    "unit": 9,
+    "newFocalUnit": 3,
+    "selectedExistingUnit": 6,
+    "types": "PASS",
+    "lint": "PASS"
+  },
+  "parentReadback": {
+    "finalBrowserReceiptSHA256Verified": true,
+    "all106Passed": true,
+    "mainBridgeTypesLint": "PASS"
+  },
+  "mainBridge": {
+    "capturedAtBegin": [
+      "scope",
+      "proof",
+      "Activity.scope",
+      "panelCurrent",
+      "Session epoch/capture state"
+    ],
+    "handles": "private WeakMap in main, never worker payload",
+    "observations": "closed primitive Result primary/cleanup; refresh same handle and phase refresh",
+    "finish": "idempotent, admission token owned by panel",
+    "sourceSHA256": "e5fa3a7c57d55d61c5059ac6314e46a7f0c4beffe34aedacebf9a3cfdfbf079c"
+  },
+  "pending": [
+    "remaining global I.errors/T18/P0 and physical iPhone"
+  ],
+  "existingPrivateBuild": "6314ebda94d3dfd5, excludes B2",
+  "iPhone": "APLAZADO/PENDIENTE",
+  "P0Complete": false,
+  "independentReview": {
+    "decision": "CODE_FAVORABLE_LIMITED_MAIN_ACCEPTANCE_CONDITIONAL_ON_FINAL_R23",
+    "findingsP1P2": 0,
+    "ownNodeProbes": 4,
+    "mainAcceptance": "CONDITIONAL_ON_FINAL_UI_R23",
+    "evidence": ".local/evidence/batch-diagnostics-review-r24.json",
+    "sourceHashesMatchedByParent": true
+  },
+  "UIFinal": {
+    "receipt": ".local/evidence/batch-diagnostics-ui-r23.json",
+    "chromiumCases": 33,
+    "IDB": 23,
+    "OPFS": 10,
+    "pageErrors": 0,
+    "externalAttempts": 0,
+    "sourceCurrentAtReceipt": true,
+    "reviewedSourceHashesMatchedByParentBeforeB3": true,
+    "baseline": ".local/evidence/batch-b2-accepted-baseline.json"
+  },
+  "parentDecision": "B2 browser condition from r24 resolved against final r23 and same hashes before B3",
+  "B3Preparation": {
+    "organizationOwner": "r25",
+    "mainOnCommitted": "refresh(true,false,privateHandleOrNull,refreshPhase)",
+    "lateBegin": false,
+    "globalRefreshDefaultUnchangedForAB1B2": true,
+    "newMainSHA256": "a8daf0d8cd5ef5bd1450f5c36438d6647a4f3c8859d167c0f287d0ab15f9dc44"
+  },
+  "delivery": {
+    "entry": "/releases/41e21b4f8c921156.html",
+    "indexSHA256": "41e21b4f8c921156735e119af433a33c4f16470b97b80243ebb0d0e38b269ad6",
+    "swSHA256": "286fd65d52d272f2b57272bba8f4e74e9177d6a462603da100662a70b8e5b61d",
+    "copiedFiles": 33,
+    "sameExistingAuthorizedPrivateCopy": true,
+    "retainedOldAssets": true,
+    "HTTPSProbe": "PASS",
+    "transport": "bounded-blob",
+    "CSPViolations": 0,
+    "oneAudio": true,
+    "privateOffline": "PENDING_NOT_DEMONSTRATED",
+    "excludesMigrationR31": true
+  }
+}

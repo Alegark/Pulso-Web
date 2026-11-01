@@ -1,0 +1,156 @@
+{
+  "status": "PASS for stated Chromium web cases",
+  "browser": "154.0.8037.57",
+  "sandbox": true,
+  "origin": "temporary loopback except private probe explicitly stated",
+  "iphone": "APLAZADO/PENDIENTE",
+  "P0W": "INCOMPLETO",
+  "lockSHA256": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f",
+  "indexSHA256": "521caf0e9610874b7a93a8507def4e93269ea7efb6ea2da0bb11827ff9cc7d46",
+  "swSHA256": "49f105a2fbfacd2cfc3c6ec9734844b01f983fb0dc1ede8fcf518ff8c1ddeb7a",
+  "model": {
+    "passed": true,
+    "environment": "Chromium Linux headless with sandbox; ephemeral loopback; no iPhone evidence",
+    "cases": [
+      {
+        "name": "local-batches",
+        "passed": true,
+        "pageErrors": 0,
+        "results": [
+          "PASS dos backends reales: hash ready y cero copias/chunks/ficheros nuevos",
+          "PASS snapshot congela orden/repeticiones/labels; rename/reorder/add/delete no lo reescribe",
+          "PASS rechaza vacío/conflicto/relación inválida sin guardar queued parcial",
+          "PASS missing y corrupción reales conservan track/playlist/kept en ambos backends",
+          "PASS asset repair durante lectura devuelve changed y libera generation lock",
+          "PASS cancelación midverify conserva ready y counts/progreso de bytes reales",
+          "PASS cancelación precommit invalida complete; postcommit conserva complete",
+          "PASS AbortSignal ya cancelado y cancelación del consumidor no dejan verifying",
+          "PASS reopen tras worker terminado exige recover/retry explícito y reinicia desde cero",
+          "PASS otro owner lock bloquea run/recover/retry sin takeover",
+          "PASS mensajes viejos/malformados no cancelan ni publican; CAS rechaza revisión vieja",
+          "PASS listado settings por prefijo evita materializar covers; manifiesto inválido se rechaza",
+          "PASS done correlaciona terminal propio aunque retry ya haya guardado queued",
+          "PASS coherencia persistida: intentos/bytes/estados y dedup por asset, counts por ocurrencia",
+          "PASS cancelar primer chunk persiste 65536; reopen conserva y retry reinicia desde cero",
+          "PASS APIs normalizan fallos IDB de open/transaction/request con causa privada y mensaje seguro"
+        ]
+      }
+    ],
+    "browserVersion": "154.0.8037.57"
+  },
+  "productUI": {
+    "passed": true,
+    "cases": [
+      {
+        "name": "whole playlist verified despite empty visual filter; one engine continues playing",
+        "passed": true
+      },
+      {
+        "name": "explicit cancel persists; retry from zero works without selected playlist or audio interruption",
+        "passed": true
+      },
+      {
+        "name": "missing bytes are incomplete; reload preserves snapshot, playlist and track with paused engine",
+        "passed": true,
+        "backend": "opfs"
+      }
+    ],
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "pageErrors": 0
+  },
+  "quota": {
+    "beforeFix": {
+      "passed": false,
+      "cases": [
+        {
+          "backend": "opfs",
+          "state": {
+            "started": 3,
+            "tracks": 2,
+            "assets": 2,
+            "backend": "opfs",
+            "keptHashValid": true,
+            "jobStates": [
+              "discarded",
+              "sealed",
+              "sealed"
+            ]
+          },
+          "pageErrors": 0
+        }
+      ],
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57"
+    },
+    "afterFix": {
+      "passed": true,
+      "cases": [
+        {
+          "backend": "opfs",
+          "state": {
+            "started": 2,
+            "tracks": 1,
+            "assets": 1,
+            "backend": "opfs",
+            "keptHashValid": true,
+            "jobStates": [
+              "discarded",
+              "sealed"
+            ]
+          },
+          "pageErrors": 0
+        },
+        {
+          "backend": "idb",
+          "state": {
+            "started": 2,
+            "tracks": 1,
+            "assets": 1,
+            "backend": "idb",
+            "keptHashValid": true,
+            "jobStates": [
+              "discarded",
+              "sealed"
+            ]
+          },
+          "pageErrors": 0
+        }
+      ],
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57"
+    },
+    "command": "INSTABOX_HEADLESS=1 node tests/integration/check-import-quota.mjs",
+    "note": "Injected quota on second file write, kept first file; no physical disk exhaustion"
+  },
+  "cancelAfterCommitRegression": {
+    "command": "INSTABOX_HEADLESS=1 node tests/integration/check-import-cancel.mjs",
+    "status": "PASS",
+    "started": 1,
+    "completed": 1,
+    "secondFileStarted": false
+  },
+  "delivery": {
+    "entry": "/releases/521caf0e9610874b.html",
+    "copiedFiles": 28,
+    "retainedOldAssets": true,
+    "privateHTTPSProbe": {
+      "status": "PASS",
+      "browser": "Chromium 154.0.8037.57",
+      "freshContext": true,
+      "ownPngAndAudio": true,
+      "oneEngine": true,
+      "transport": "bounded-blob",
+      "cspViolations": 0,
+      "localBatchComplete": true
+    }
+  },
+  "pending": [
+    "real remote downloads",
+    "removal of kept and unique originals",
+    "physical storage pressure",
+    "iPhone",
+    "private offline start",
+    "complete P0-W acceptance"
+  ]
+}

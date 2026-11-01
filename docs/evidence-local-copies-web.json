@@ -1,0 +1,105 @@
+{
+  "project": "Pulso-Web",
+  "status": "DELIVERED_LIMITED_WEB_INCREMENT",
+  "USD": 0,
+  "delivered": true,
+  "currentPrivateEntry": "/releases/9a5944784009419c.html",
+  "includedInCurrentPrivateEntry": true,
+  "design": ".local/evidence/local-copies-design-r32.json",
+  "coreFinalReceipt": {
+    "path": ".local/evidence/local-copy-inventory-r37.json",
+    "sha256": "5fcf1e13743fb9e49004ac30f5b79c5ebb7ca60f7ab6100a26cb892f4e7e7a23",
+    "finalDeltaCases": 12,
+    "historicalCompleteMatrixCases": 84,
+    "unitCases": 6,
+    "admissionRegressionCases": 6,
+    "interpretation": "Final 12 cover changed IDB/OPFS observations and neighbors; historical84 are not relabeled as a final-source suite."
+  },
+  "uiImplementation": "R38 presentational; typecheck/lint PASS, no browser claim",
+  "parentWiringReceipt": ".local/evidence/local-copy-parent-wiring-checks.json",
+  "mainBrowser": {
+    "receipt": ".local/evidence/local-copies-ui-r40.json",
+    "sha256": "fa79c63de0684c91f0fc920c4141a5a160a3fefbc70a1d969c1942422fbc2ffd",
+    "passed": true,
+    "uniqueCases": 49,
+    "sourceScope": "Main/controller final sources; later read-only reader delta separately verified R43 and final release checks",
+    "R41SampleOnlyFinalAuditMetadataAppended": true
+  },
+  "independentReview": {
+    "R41": ".local/evidence/local-copies-review-r41.json",
+    "decision": "R41_P3_01_RESOLVED_LIMITED_APPROVAL",
+    "R43": ".local/evidence/local-copy-directory-review-r43.json",
+    "candidateCases": 6,
+    "openFindings": 0,
+    "globalAcceptance": false
+  },
+  "operations": [
+    "inventory with opaque snapshot references",
+    "individual SHA256 and exact length verification",
+    "explicit browser persistence request",
+    "individual audio export up to 8MiB with second-gesture link"
+  ],
+  "destructiveOperations": false,
+  "identity": "unknown; no authority for cleanup",
+  "queueCounts": "persisted snapshot only, not active Player/reader protection",
+  "limits": [
+    "data retained budget is not an 8MiB heap guarantee; native IDB clones one record before cursor callback",
+    "prepared Blob/anchor click does not confirm an externally saved backup",
+    "no private offline or physical acceptance by these local checks"
+  ],
+  "P0Complete": false,
+  "iphone": "APLAZADO/PENDIENTE",
+  "coreParentVerification": ".local/evidence/local-copy-core-parent-verification.json",
+  "uiFindings": [
+    {
+      "name": "First page reset the inventory snapshot",
+      "rootCause": "undefined first-page cursor means fresh inventory",
+      "fix": "Bounded first-page cache, same opaque refs, clear on explicit refresh/scope invalidation",
+      "browserStatus": "Resolved in final R40 49-case run; historical RED retained"
+    },
+    {
+      "name": "Cancellation after real worker result before controller continuation published success",
+      "provenance": "Explicit TESTONLY post-result barrier, not native timing claim",
+      "fix": "Publication gate additionally checks signal after await and before exposing URL; real prior failure retained; token settles and resources released",
+      "browserStatus": "Resolved in final R40 49-case run; historical RED retained"
+    }
+  ],
+  "readerFix": {
+    "finding": "R41-P3-01",
+    "rootCause": "Common reader opened the directory with create:true after the readonly preflight",
+    "fix": "Directory and file opened create:false under shared generation lock; writer helper unchanged",
+    "baselineRaceRED": 2,
+    "candidateRacesGREEN": 2,
+    "neighborAndACKChecks": 4,
+    "sourceSHA256": "750b92ba9a905ca2df5bc7dcefae1865b31b4defc22ac20ae03742163caecb34"
+  },
+  "delivery": {
+    "entry": "/releases/9a5944784009419c.html",
+    "previousEntry": "/releases/41ccf4e56306c684.html",
+    "files": 34,
+    "retainedOldAssets": true,
+    "newPort": false,
+    "newAccount": false,
+    "sourceBaseline": ".local/evidence/local-copies-release-source-baseline.json",
+    "parentVerification": ".local/evidence/local-copies-delivery-parent-verification.json",
+    "receipts": {
+      "local-assets": ".local/evidence/local-copies-local-assets.json",
+      "keyboard": ".local/evidence/local-copies-keyboard.json",
+      "licenses": ".local/evidence/local-copies-licenses.json",
+      "live-update": ".local/evidence/local-copies-live-update.json",
+      "private-copy": ".local/evidence/local-copies-private-copy.json",
+      "private-probe": ".local/evidence/local-copies-private-probe.json"
+    },
+    "privateSmoke": "OPFS inventory, individual SHA/length verification, actual second-gesture audio download with exact bytes/hash, own URL revoked on close/handoff; sole playback source preserved",
+    "privateOfflineDemonstrated": false,
+    "assetOfflineScope": "Chromium restarted with context offline; asset origin server kept running",
+    "noticesOfflineScope": "loopback server stopped; complete notices and shell served by SW"
+  },
+  "stillPending": [
+    "Safe explicit copy retirement/cleanup journal and consumer barriers",
+    "Cross-realm database lifecycle and full AC21",
+    "Remote Telegram auth/sources/search/download/bot/save requiring owner gates",
+    "Physical iPhone acceptance, private-origin offline, full accessibility/performance acceptance",
+    "All other outstanding SPEC requirements; P0-W remains incomplete"
+  ]
+}

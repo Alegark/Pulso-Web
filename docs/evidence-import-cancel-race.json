@@ -1,0 +1,13 @@
+{
+  "case": "Cancel batch after first durable commit before delivering worker complete to UI",
+  "command": "INSTABOX_HEADLESS=1 node tests/integration/check-import-cancel.mjs",
+  "environment": "Chromium 154.0.8037.57 Linux headless with sandbox, production bundle, ephemeral loopback, fresh context",
+  "fixtures": ["A.mp3", "B.m4a"],
+  "before": {"exitCode": 1, "started": 2, "completed": 2, "cancelled": true, "tracks": 2, "assets": 2, "pageErrors": 0},
+  "fix": "Preserve confirmed first result and check batch cancellation regardless of result type before starting another file",
+  "after": {"exitCode": 0, "started": 1, "completed": 1, "cancelled": true, "tracks": 1, "assets": 1, "allAssetsComplete": true, "pageErrors": 0},
+  "build": "npm run build PASS before passing execution",
+  "opfsVerified": false,
+  "iphoneVerified": false,
+  "privatePreviewUpdated": false
+}

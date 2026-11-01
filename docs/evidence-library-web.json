@@ -1,0 +1,16 @@
+{
+  "results": [
+    "PASS importa audio con copia propia verificada",
+    "PASS reimportación binaria no duplica pista ni asset publicado",
+    "PASS metadatos y favorito sobreviven reimportación",
+    "PASS rechaza MIME falso y cancelación sin publicar",
+    "PASS playlist evita duplicado y borrar no toca bytes ni pista",
+    "PASS asset permanece íntegro tras múltiples conexiones independientes",
+    "PASS reimportación repara bytes corruptos conservando identidad y corrección",
+    "PASS reimportación idéntica elimina solo su staging no publicado",
+    "PASS cancelación durante escritura no publica pista ni pierde original",
+    "PASS cuota simulada en copia no publica pista ni elimina bytes conservados"
+  ],
+  "passed": true,
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+}

@@ -1,0 +1,6 @@
+# MCP local propio de Pulso Web; no registra memoria global ni Cloud.
+[mcp_servers.engram_pulso_web]
+command = "/usr/bin/python3"
+args = ["/data/home/Proyectos/Pulso-Web/scripts/engram_local.py"]
+startup_timeout_sec = 20
+tool_timeout_sec = 30

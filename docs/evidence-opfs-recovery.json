@@ -1,0 +1,89 @@
+{
+  "recordedAt": "2026-10-31T07:33:39.865401+00:00",
+  "environment": {
+    "browser": "Chromium 154.0.8037.57",
+    "os": "Linux",
+    "headless": true,
+    "sandbox": true,
+    "origin": "ephemeral loopback",
+    "profiles": "test-only, deleted after complete Chromium restart"
+  },
+  "hashes": {
+    "package-lock.json": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f",
+    "dist/index.html": "841b0cc720719aab59300b45b840aab8dcb06ea896cd8ee8d02d0a2bdef55a62",
+    "dist/sw.js": "3c362fa3dc96f04c87e1f6707967d1bea64f4a081eb6d1e45cb5a21cb3df0c86",
+    "PULSO-WEB-README.md": "779d6f579c69a832dfde7d4c36255c30ebb798a279cfdeb4dc75ea3b1bbe685a",
+    "doc/SPEC.md": "a988f5a1b5ea09bb9f0e6adf49904db248e77f41931f8ae5a990effbce125473"
+  },
+  "implementation": "OPFS preferred + existing IDB preserved; shared reader; durable generation ownership; uncertain recovery; explicit preserve for legacy/invalid jobs",
+  "checks": [
+    {
+      "command": "typecheck/lint/build",
+      "passed": true
+    },
+    {
+      "command": "npx --no-install tsx --test tests/unit/blob-source.test.ts",
+      "passed": true,
+      "cases": 1
+    },
+    {
+      "command": "npm run test:browser:run -- opfs",
+      "source": "Sol medium delegated r4",
+      "passed": true,
+      "groups": 10
+    },
+    {
+      "command": "npm run test:browser:run -- library blob blob-opfs",
+      "passed": true,
+      "library": 10,
+      "blobIdb": 6,
+      "blobOpfs": 7,
+      "pageErrors": 0
+    },
+    {
+      "command": "node tests/integration/check-local-assets.mjs",
+      "passed": true,
+      "backends": [
+        "idb",
+        "opfs"
+      ],
+      "httpChecksPerBackend": 8,
+      "foreignClientStatus": 403,
+      "stopAllWorkersAcknowledged": true,
+      "subsequentFetchPassed": true,
+      "offlineAfterChromiumRestartPassed": true
+    },
+    {
+      "command": "node tests/integration/check-import-recovery.mjs",
+      "passed": true,
+      "cases": 2,
+      "workerUncertaintyStopsBatch": true,
+      "recoveredTracks": 1,
+      "legacyBytesPreserved": true
+    },
+    {
+      "command": "node tests/integration/check-import-cancel.mjs",
+      "passed": true,
+      "started": 1,
+      "completed": 1,
+      "tracks": 1,
+      "assets": 1,
+      "pageErrors": 0
+    }
+  ],
+  "corrections": [
+    "Blob rejects OPFS suffix bytes; protected 416 headers",
+    "Recovery shares dedup; published generations protected by durable ownership",
+    "Malformed/legacy jobs require explicit preserve review",
+    "Precommit abort and synchronous IDB exception abort paths tested"
+  ],
+  "iphoneVerified": false,
+  "privatePreviewUpdated": false,
+  "limits": [
+    "Physical iPhone gates pending",
+    "No real Telegram or remote acceptance",
+    "Quota failure simulated, no disk exhaustion",
+    "Large-file limits not fully stress tested",
+    "No physical audibility or 30-minute queue claim"
+  ]
+}

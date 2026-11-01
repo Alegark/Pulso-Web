@@ -1,0 +1,5 @@
+.artwork-image {object-fit:cover}
+.artwork-placeholder {width:88px;height:88px;display:grid;place-items:center;background:#ddd;color:#333}
+.artwork-panel input {display:block;min-height:44px}
+.artwork-panel summary,.artwork-panel button {min-height:44px}
+.artwork-panel summary {cursor:pointer}

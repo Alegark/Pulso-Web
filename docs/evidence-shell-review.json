@@ -1,0 +1,177 @@
+{
+  "status": "EN CURSO:2P2 confirmados antes de publicar",
+  "timestampUtc": "2026-10-31T11:37:41.622248+00:00",
+  "implementation": {
+    "source": ".local/evidence/functional-shell.json",
+    "unitPassed": 19,
+    "browserGroups": 20,
+    "defaultRoute": "biblioteca",
+    "miniArtwork": "Portada sin cargar",
+    "distInitiallyUnchanged": true
+  },
+  "review": {
+    "round": "pulso-t8-functional-shell-sol-review-r4",
+    "P1": 0,
+    "P2": [
+      {
+        "case": "568x320, font-size200%, title300chars",
+        "observed": "Mini194px plus nav84px leaves42px; focused search input66px cannot fit in visible area",
+        "scope": "Reserve padding does not solve insufficient visible viewport"
+      },
+      {
+        "case": "Open/return RAF held; Tab moves focus; release RAF",
+        "observed": "Callback steals later focus to player heading/opener despite valid route/scope/proof",
+        "scope": "Need user-focus intent invalidation as well as ownership/navigation"
+      }
+    ],
+    "evidence": ".local/t8-review-focal.json",
+    "runner": ".local/t8-review-focal.mjs",
+    "sourcesMatched": 9,
+    "memoryVerified": 14,
+    "browser": "Chromium154 sandbox temporary loopback",
+    "newBroadSuiteRun": false
+  },
+  "parentBuild": {
+    "passed": true,
+    "entry": "/releases/73d3a4d3335f1f78.html",
+    "published": false,
+    "checks": {
+      "typecheck": "PASS",
+      "lint": "PASS",
+      "unitPassed": 19,
+      "unitLog": ".local/evidence/shell-final-unit.tap",
+      "keyboardUI": {
+        "passed": true,
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "Enter prepares a paused queue and plays; Space pauses the sole audio element",
+            "passed": true
+          },
+          {
+            "name": "Keyboard slider changes position without autoplay; repeat and shuffle update through native keyboard controls",
+            "passed": true
+          },
+          {
+            "name": "Keyboard next/reorder/remove preserves selected occurrence, source and all library tracks",
+            "passed": true
+          },
+          {
+            "name": "Keyboard opens/closes lyrics and saves inert plain text without changing audio source",
+            "passed": true
+          },
+          {
+            "name": "Keyboard metadata save preserves current playback source and library size",
+            "passed": true
+          },
+          {
+            "name": "Keyboard export/download works; restore confirmation receives focus and Escape cancels confirmation without applying",
+            "passed": true
+          }
+        ],
+        "environment": "Chromium Linux sandbox, temporary loopback, own context, current production build",
+        "limits": [
+          "Targeted controls are focused explicitly before keyboard activation; not a complete Tab-order audit",
+          "Files supplied through the automation file input; OS picker not tested",
+          "No VoiceOver, real zoom or physical iPhone evidence"
+        ],
+        "browserVersion": "154.0.8037.57",
+        "pageErrors": 0,
+        "externalRequests": 0
+      },
+      "noticeOffline": {
+        "passed": true,
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "Production notice preserves all original package byte ranges and recorded SHA-256",
+            "passed": true
+          },
+          {
+            "name": "Release exposes the complete notice through the visible first-party link",
+            "passed": true
+          },
+          {
+            "name": "Shell and notice reopen offline with the loopback origin stopped; notice is served by SW with the same SHA-256",
+            "passed": true
+          }
+        ],
+        "environment": "Chromium Linux sandbox, own context and ephemeral loopback",
+        "packages": 17,
+        "noticeSHA256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88",
+        "browserVersion": "154.0.8037.57",
+        "offlineDiagnostic": {
+          "fromServiceWorker": true,
+          "headers": {
+            "cache-control": "no-cache",
+            "connection": "keep-alive",
+            "content-encoding": "gzip",
+            "content-type": "text/plain",
+            "date": "Sat, 31 Oct 2026 11:33:42 GMT",
+            "etag": "W/\"19833-1793446350720\"",
+            "keep-alive": "timeout=5",
+            "last-modified": "Sat, 31 Oct 2026 11:32:30 GMT",
+            "transfer-encoding": "chunked",
+            "vary": "Origin"
+          },
+          "protocolBodyBytes": 19830,
+          "originalBytes": 19833
+        },
+        "offlineRaw": {
+          "bytes": 19833,
+          "sha256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88"
+        },
+        "noticeTextMatches": true,
+        "pageErrors": 0,
+        "externalRequests": 0
+      },
+      "liveUpdate": {
+        "passed": true,
+        "iphoneVerified": false,
+        "browserVersion": "154.0.8037.57",
+        "result": {
+          "newVersionBypassesOldShell": true,
+          "stableLauncherSelectsCurrentBuild": true,
+          "waitingBeforeClosingClients": true,
+          "oldStillPlaying": true,
+          "newIsPaused": true,
+          "activatedAfterClientClosure": true,
+          "restoredPaused": true
+        }
+      },
+      "opfsSwOfflineFocal": {
+        "passed": true,
+        "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+        "backend": "opfs",
+        "transport": "sw",
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "A/B/A with missing B preserves second A, position, repeat and filtered shuffle",
+            "passed": true,
+            "offlineAndRanges": {
+              "range": {
+                "status": 206,
+                "bytes": [
+                  73,
+                  68
+                ],
+                "contentRange": "bytes 0-1/132832",
+                "head": 200,
+                "headBytes": 0,
+                "invalid": 416
+              },
+              "reopenedPausedWithoutNetwork": true,
+              "manualOfflinePlayback": true
+            }
+          }
+        ],
+        "browserVersion": "154.0.8037.57"
+      }
+    }
+  },
+  "fix": "pulso-t8-shell-layout-focus-sol-medium-fixes-r5 started with dedicated own tests; no PASS yet",
+  "privateCandidateUnchanged": "/releases/c97de0eb243dce01.html",
+  "physical": "No new iPhone observation; VoiceOver/real zoom/safe-area physical pending",
+  "P0W": "INCOMPLETO"
+}

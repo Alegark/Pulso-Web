@@ -1,0 +1,649 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {Ownership} from './playback/ownership';
+import {Player} from './playback/player';
+import {normalizeSnapshot,planQueueRestore,restoreAssetAvailable,type Snapshot} from './playback/queue-restore';
+import {all,createPlaylist,changePlaylist,editTrack,verifiedAssetDetailed,validAsset,type LocalAsset,type Track,type Playlist} from './library/library';
+import {importOperations,importIssues,retainImportIssue,terminal,type ImportOperation,type ImportIssue} from './storage/import-operations';
+import {readRecord,writeRecord,subscribeDatabaseLifecycle,registerDatabaseOpenGuard,registerDatabaseUseGuard,retireDatabaseRealm,type DatabaseLifecycleState} from './storage/database';
+import {registerDatabaseRealmHost,beginWorkerAttempt,revokeDatabaseWorkerAttempts,activeDatabaseWorkerAttempts,type RealmAttempt} from './storage/database-realms';
+import {attachDatabaseTransportLifecycle,revalidateDatabaseTransport} from './playback/database-transport';
+import {demoMusic as fixtures} from './demo-music';
+import {prepareLocalSources,transportNotice} from './playback/transport';
+import {createLocalCopyProtection} from './playback/local-copy-protection';
+import {ArtworkPanel,artworkFailureText} from './ui/ArtworkPanel';
+import {LocalBatchPanel} from './ui/LocalBatchPanel';
+import {LyricsPanel,lyricsImportWarningText} from './ui/LyricsPanel';
+import {OrganizationPanel} from './ui/OrganizationPanel';
+import {LocalCopiesController,type CopyPanelOperation,type CopyPanelDiagnostic} from './ui/LocalCopiesController';
+import {groupArtists,groupAlbums,selectGroup,orderAlbumRows} from './library/groups';
+import {resolveLocalAlbumMetadata} from './library/album-metadata';
+import {AlbumMetadataInfo} from './ui/AlbumMetadataInfo';
+import {MetadataRescanController} from './ui/MetadataRescanController';
+import {LibraryPagination,useLibraryPage} from './ui/LibraryPagination';
+import {LIBRARY_PAGE_SIZE} from './library/pagination';
+import {HomeView} from './ui/HomeView';
+import {MiniPlayer} from './ui/MiniPlayer';
+import {MiniArtwork} from './ui/MiniArtwork';
+import {emptyShellView,matchesShellTrack,recentTracks,homePlaylists,trackAvailability,availabilityText,type ShellView} from './library/shell-selectors';
+import './ui/shell.css';
+import './style.css';
+import {createDiagnosticSession,type Handle} from './diagnostics/session';
+import {domFailure,failureText,result,type Operation,type Phase,type Result} from './diagnostics/contract';
+import {createResponseGate,copyWorkerRequest,type ImportRequest,type RecoveryRequest,type WorkerResponse} from './imports/import-protocol';
+import {workerFailureOutcome,makeOutcome,type OutcomeV1,type DetailedImportResult} from './imports/import-outcome';
+import {toDiagnosticResults} from './diagnostics/import-mapping';
+import {AppFailure,copyFailureV1,fromKnownError,makeFailure} from './errors/app-failure';
+import {copyFeatureObservation,panelFailure,type BeginPanelDiagnostic,type PanelDiagnosticAttempt,type PanelOperation} from './diagnostics/panel-mapping';
+import type {Capabilities} from './diagnostics/export';
+import {DiagnosticsPanel} from './ui/DiagnosticsPanel';
+// Owner decision D08 remains pending. Preparing the UI does not enable external traffic.
+const externalLyricsAvailable=false;
+function captureLyricsCurrent(){const scope=scopeId,proof=control.proof,admission=databaseGeneration,current=control.activity.scope();return()=>scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&control.owner&&!busy&&databaseState==='ready'&&current();}
+const diagnostics=createDiagnosticSession();
+function diagnosticCurrent(){const scope=scopeId,current=control.activity.scope();return ()=>scope===scopeId&&current()&&control.activity.admitted;}
+function beginDiagnostic(operation:Operation){return diagnostics.begin(operation,diagnosticCurrent());}
+// Capabilities and their handles stay in this document. Features/workers only
+// receive closed observations, never a consent epoch, proof or correlation ID.
+const panelDiagnosticHandles=new WeakMap<PanelDiagnosticAttempt,Handle|null>();
+const panelOperations:readonly PanelOperation[]=['verify-batch','recover-batch','export-organization','preview-organization','apply-organization','inspect-organization','recover-organization'];
+const beginPanelDiagnostic:BeginPanelDiagnostic=(operation,currentGuard)=>{
+ let live=true;
+ const scope=scopeId,proof=control.proof,activityScope=control.activity.scope();
+ const current=()=>{try{return live&&scope===scopeId&&proof===control.proof&&control.owner&&activityScope()&&currentGuard();}catch{return false;}};
+ if(!panelOperations.includes(operation)||!current())return null;
+ try{
+ const handle=diagnostics.begin(operation,current);
+ const attempt:PanelDiagnosticAttempt=Object.freeze({
+ complete(value){try{if(!current())return;const observation=copyFeatureObservation(value);if(!observation)return;diagnostics.complete(handle,observation.primary);if(observation.cleanup)diagnostics.complete(handle,observation.cleanup,'cleanup');}catch{/* Diagnostics never own feature effects. */}},
+ refreshFailed(value){try{if(!current())return;const failure=copyFailureV1(value);if(failure)diagnostics.complete(handle,panelFailure({...failure,phase:'refresh'}),'refresh');}catch{/* Preserve the operation and its first cause. */}},
+ finish(){if(!live)return;live=false;panelDiagnosticHandles.delete(attempt);try{diagnostics.finish(handle);}catch{/* Idempotent observation cleanup only. */}},
+ });
+ panelDiagnosticHandles.set(attempt,handle);return attempt;
+ }catch{return null;}
+};
+const copyPanelOperations:readonly CopyPanelOperation[]=['inspect-local-copies','verify-local-copy','export-audio','request-persistence'];
+function captureRescanCurrent(){const scope=scopeId,proof=control.proof,admission=databaseGeneration,current=control.activity.scope();return()=>scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&current()&&control.owner&&databaseState==='ready';}
+function setMetadataRescanBlocking(blocked:boolean,current:()=>boolean){try{if(!current())return;}catch{return;}metadataRescanBlocked=blocked;control.activity.block('metadata-rescan',blocked);emit();}
+function captureCopyCurrent(){const scope=scopeId,proof=control.proof,current=control.activity.scope();return()=>scope===scopeId&&proof===control.proof&&current()&&control.owner&&!busy&&databaseState==='ready';}
+function beginCopyDiagnostic(operation:CopyPanelOperation,current:()=>boolean):CopyPanelDiagnostic|null {
+ if(!copyPanelOperations.includes(operation))return null;
+ const guard=captureCopyCurrent(),handle=diagnostics.begin(operation,()=>guard()&&current());
+ return {complete(failure,phase,partial=false){try{const f=failure===null?null:copyFailureV1(failure);if(failure!==null&&!f)return;diagnostics.complete(handle,{phase:f?.phase??phase,outcome:partial?'partial':f?.family==='cancelled'?'cancelled':f?'failed':'succeeded',family:f?.family??null,code:f?.code??'none',backend:f?.backend??'none',transport:'none',count:0});}catch{/* No product authority. */}},finish(){diagnostics.finish(handle);}};
+}
+// Passive presence only: no DB/network probes or estimates exported.
+const capability=(read:()=>unknown)=>{try{return read()?'available':'unavailable';}catch{return 'unknown';}};
+let diagnosticCapabilities:Capabilities=Object.freeze({indexedDbApi:capability(()=>typeof indexedDB!=='undefined'),webLocksApi:capability(()=>navigator.locks),broadcastChannelApi:capability(()=>typeof BroadcastChannel!=='undefined'),opfsApi:capability(()=>typeof navigator.storage?.getDirectory==='function'),serviceWorkerApi:capability(()=>navigator.serviceWorker),storageEstimateApi:capability(()=>typeof navigator.storage?.estimate==='function'),storageOperation:'not-observed',observedBackend:'unknown',observedTransport:'unknown'});
+
+const audio=new Audio();audio.preload='metadata';const player=new Player(audio,()=>control.owner,phase=>{
+ const handle=beginDiagnostic('play');return code=>{const failure=result(phase,code==='autoplay-denied'?'autoplay-blocked':code==='media-decode'?'integrity':code==='media-unsupported'?'unsupported-format':'internal',code);diagnostics.complete(handle,failure);diagnostics.finish(handle);};
+});
+let scopeId=0;
+let suspendedSnapshot:Snapshot|undefined;
+const control=new Ownership(()=>{owner=control.owner;if(control.state==='sin-control'&&status==='Abriendo biblioteca…')status='Otra pestaña tiene el control. Solicítalo o comprueba si está disponible. Para pilotos, muestras o versiones antiguas, cierra esa entrada.';emit();},async()=>{
+ ++scopeId;diagnostics.resetScope();metadataRescanBlocked=true;control.activity.block('metadata-rescan',true);
+ if(databaseState!=='ready'){if(databaseReloadRequired())control.activity.invalidate();return;}
+ suspendedSnapshot=undefined;configuring=true;player.suspend();sourceProtection.invalidateScope();player.setQueue([]);configuring=false;installMediaSession();const opening=control.activity.begin();const scope=scopeId,proof=control.proof;const current=()=>scope===scopeId&&proof===control.proof&&control.owner&&!!opening?.current();const diagnostic=beginDiagnostic('open-library');
+ try{await sourceProtection.releaseUnused();if(!current())return;await refresh();if(!current())return;status='Biblioteca local. Importa tus audios propios o autorizados.';
+ const raw=await readRecord<unknown>('settings','library-playback');
+ if(!current())return;
+ if(raw!==undefined){const normalized=normalizeSnapshot(raw);if(normalized)await queue([],normalized.snapshot,normalized.warnings);else status='La cola guardada no es válida. Se conserva sin cambios; prepara una nueva selección para reproducir.';}
+ }catch(error){if(current()){diagnostics.complete(diagnostic,localFailure(error,'open'));control.activity.block('opening',true);status='No se pudo abrir el almacenamiento. Cierra otras pestañas o reintenta recargando.';}}finally{diagnostics.finish(diagnostic);opening?.end();}if(current())emit();
+});
+let databaseState:'ready'|DatabaseLifecycleState='ready';
+let databaseGeneration=0;
+const sourceProtection=createLocalCopyProtection({
+ getPlayer:()=>({entries:player.entries,currentEntryId:player.current?.id??null,source:audio.getAttribute('src')?audio.src:null}),
+ captureCurrent:()=>{const scope=scopeId,proof=control.proof,admission=databaseGeneration,activityScope=control.activity.scope();return()=>scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&activityScope()&&control.owner&&databaseState==='ready';},
+});
+const databaseRetries=new Set<()=>boolean>();
+const databaseReloadRequired=()=>databaseState==='versionchange'||databaseState==='version-incompatible';
+const databaseRecoverable=()=>databaseState==='blocked'||databaseState==='connection-closed';
+let metadataRescanBlocked=true;
+let owner=false;let busy=false;let status='Abriendo biblioteca…';let tracks:Track[]=[];let playlists:Playlist[]=[];
+const listeners=new Set<()=>void>();const emit=()=>listeners.forEach(fn=>fn());
+let worker:Worker|null=null;let operationId:string|null=null;let workerDispatched=false;
+let writes=Promise.resolve();let lastSave=0;let configuring=false;
+let operations:ImportOperation[]=[];
+let importProblems:ImportIssue[]=[];
+// Routing identities stay private and never enter a diagnostic payload. A successful
+// refresh alone cannot dismiss a worker response whose result was not validated.
+const unverifiedImportResponses=new Set<string>();
+const availability=new Map<string,{generation:string;state:'available'|'missing'|'invalid'}>();
+let storageEstimate:{usage?:number;quota?:number}|null=null;
+let artworkRefreshToken=0;
+let updateReady=false;
+if('serviceWorker'in navigator)void navigator.serviceWorker.getRegistration().then(async registration=>{
+ if(!registration)return;
+ const inspect=()=>{if(registration.waiting){updateReady=true;emit();}};
+ const observe=()=>{registration.installing?.addEventListener('statechange',inspect);inspect();};
+ registration.addEventListener('updatefound',observe);observe();
+ await registration.update();inspect();
+}).catch(()=>{/* Optional update check; playback uses the verified transport contract. */});
+async function admitted<T extends unknown[]>(kind:Operation,work:(...args:T)=>Promise<void>,...args:T){
+ if(databaseState!=='ready'&&kind!=='refresh-library')return;
+ if(kind==='edit-organization'&&importsBlocked())return;
+ const operation=control.activity.begin();if(!operation)return;const diagnostic=beginDiagnostic(kind);
+ try{await work(...args);}catch(error){if(operation.current()){const failure=domFailure(error,'admit');diagnostics.complete(diagnostic,failure);status=failureText(failure);control.activity.block('operation-uncertain',true);emit();}}
+ finally{diagnostics.finish(diagnostic);operation.end();}
+}
+const recover=(...args:Parameters<typeof recoverWork>)=>admitted('recover-import',recoverWork,...args);
+const retainProblem=(...args:Parameters<typeof retainProblemWork>)=>admitted('recover-import',retainProblemWork,...args);
+const act=(...args:Parameters<typeof actWork>)=>admitted('edit-organization',actWork,...args);
+const queue=(...args:Parameters<typeof queueWork>)=>admitted('prepare-queue',queueWork,...args);
+const importFiles=(...args:Parameters<typeof importFilesWork>)=>admitted('import-audio',importFilesWork,...args);
+const loadTestAudio=()=>admitted('import-audio',loadTestAudioWork);
+const importRecoveryPending=()=>unverifiedImportResponses.size>0||operations.some(job=>!terminal(job))||importProblems.some(issue=>!issue.retained);
+const importsBlocked=()=>databaseState!=='ready'||importRecoveryPending()||metadataRescanBlocked;
+function outcomeDiagnostic(handle:Handle|null,outcome:OutcomeV1,operation:'import'|'recovery'='import'){
+ const projected=toDiagnosticResults(outcome,operation);
+ if(projected.primary)diagnostics.complete(handle,projected.primary);
+ if(projected.cleanup)diagnostics.complete(handle,projected.cleanup,'cleanup');
+ return projected.primary??projected.cleanup;
+}
+function localFailure(error:unknown,phase:Phase):Result {
+ const failure=fromKnownError(error,{phase,backend:'unknown'});
+ return {...result(failure.phase??phase,failure.family,failure.code),backend:failure.backend};
+}
+function unverifiedResponse(id:string){unverifiedImportResponses.add(id);control.activity.block('import-transport',true);}
+function verifiedResponse(id:string){unverifiedImportResponses.delete(id);control.activity.block('import-transport',unverifiedImportResponses.size>0);}
+type DomainTerminal=Exclude<WorkerResponse,{type:'progress'}>;
+interface DomainSettlement {response:DomainTerminal|null;outcome:OutcomeV1}
+/** Keep the exact request receiver until a terminal receipt or observed transport
+ * failure, even if lifecycle already invalidated business publication. */
+async function invokeDomainWorker(kind:'import'|'recovery',exactWorker:Worker,request:ImportRequest|RecoveryRequest,current:()=>boolean,onProgress?:(bytes:number)=>void):Promise<DomainSettlement>{
+ let bridge:RealmAttempt|null=null,sendAttempted=false;
+ let detachTransport:()=>void=()=>{};
+ const id=request.operationId;
+ const settle=(value:DomainSettlement)=>{if(value.outcome.recoveryRequired)unverifiedResponse(id);else if(value.response&&value.outcome.status==='confirmed')verifiedResponse(id);return value;};
+ try{
+  bridge=await beginWorkerAttempt(kind,exactWorker,current);
+  if(!bridge.current())throw AppFailure.create(makeFailure('admit','storage-unavailable','storage-unavailable','idb'));
+  if(request.type==='import'&&cancelled)return settle({response:null,outcome:makeOutcome({status:'cancelled',primary:makeFailure('admit','cancelled','cancelled','none'),cleanup:null,reconcile:null,writeState:'not-started',closeState:'not-applicable',recoveryRequired:false})});
+  const gate=createResponseGate(request);
+  return await new Promise<DomainSettlement>(resolve=>{
+   let finished=false;
+   const finish=(value:DomainSettlement)=>{if(finished)return;finished=true;resolve(settle(value));};
+   const failed=(code:'worker-failed'|'worker-protocol')=>finish({response:null,outcome:workerFailureOutcome(code,sendAttempted)});
+   exactWorker.onerror=event=>{event.preventDefault();failed('worker-failed');};
+   exactWorker.onmessageerror=()=>failed('worker-protocol');
+   exactWorker.onmessage=event=>{
+    const checked=gate(event.data);if(checked.kind==='ignored')return;
+    if(checked.kind==='protocol'){failed('worker-protocol');return;}
+    const m=checked.response;
+    if(m.type==='progress'){if(current()&&bridge?.current())onProgress?.(m.bytes);return;}
+    finish({response:m,outcome:m.outcome});
+   };
+   // The final bridge also observes failures on its private control port. Such
+   // failures may have no domain reply; record uncertainty before closing it.
+   detachTransport=bridge!.onTransportFailure(failed);
+   if(finished)return;
+   if(!bridge!.current()){
+    finish({response:null,outcome:makeOutcome({status:'failed',primary:makeFailure('admit','storage-unavailable','storage-unavailable','idb'),cleanup:null,reconcile:null,writeState:'not-started',closeState:'not-applicable',recoveryRequired:false})});return;
+   }
+   try{sendAttempted=true;exactWorker.postMessage(request);if(worker===exactWorker)workerDispatched=true;}catch{failed('worker-failed');}
+  });
+ }catch(error){
+  const failure=fromKnownError(error,{phase:null,backend:'unknown'});
+  return settle({response:null,outcome:makeOutcome({status:sendAttempted?'uncertain':'failed',primary:failure.code==='unknown'?makeFailure(null,'internal','worker-failed','unknown'):failure,cleanup:null,reconcile:null,writeState:sendAttempted?'unknown':'not-started',closeState:sendAttempted?'unknown':'not-applicable',recoveryRequired:sendAttempted})});
+ }finally{
+  exactWorker.onmessage=null;exactWorker.onerror=null;exactWorker.onmessageerror=null;
+  detachTransport();
+  if(bridge)bridge.closeAfterSettlement();else exactWorker.terminate();
+  if(worker===exactWorker){worker=null;workerDispatched=false;}
+ }
+}
+async function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failurePhase?:'refresh'){
+ const scope=scopeId,proof=control.proof,activityScope=control.activity.scope(),diagnostic=parent===undefined?beginDiagnostic('refresh-library'):parent;
+ const current=()=>scope===scopeId&&proof===control.proof&&activityScope();
+ try{
+ const nextTracks=(await all<Track>('tracks')).sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id));const nextPlaylists=await all<Playlist>('playlists');const nextOperations=await importOperations();const nextProblems=await importIssues();
+ const assets=new Map((await all<LocalAsset>('assets')).map(asset=>[asset.id,asset]));
+ const nextAvailability=new Map(availability);
+ for(const track of nextTracks){const asset=track.assetId===null?undefined:assets.get(track.assetId);const generation=validAsset(asset)?`${asset.backend}:${asset.storageKey}:${asset.revision}`:asset===undefined?'missing':'invalid';
+ if(force||availability.get(track.id)?.generation!==generation){
+ if(track.assetId===null)nextAvailability.set(track.id,{generation,state:'missing'});
+ else{const checked=await verifiedAssetDetailed(track.assetId);if(!current())return;if(checked.state==='unknown')throw AppFailure.create(checked.failure);
+ nextAvailability.set(track.id,{generation,state:checked.state==='valid'?'available':checked.state==='missing'?'missing':'invalid'});}
+ }}
+ let estimate;try{estimate=await navigator.storage.estimate();}catch{estimate=null;}
+ if(!current())return;
+ diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'succeeded'});
+ tracks=nextTracks;playlists=nextPlaylists;operations=nextOperations;importProblems=nextProblems;storageEstimate=estimate;
+ availability.clear();nextAvailability.forEach((value,key)=>availability.set(key,value));
+ if(force)artworkRefreshToken++;
+ control.activity.block('import-state',false);control.activity.block('opening',false);
+ if(updateQueueTitles)for(const entry of player.entries){const track=tracks.find(t=>t.id===entry.trackId);if(track)entry.title=track.title;}emit();
+ }catch(error){if(current()){diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'failed'});const failure=localFailure(error,'read');diagnostics.complete(diagnostic,failurePhase?{...failure,phase:failurePhase}:failure,parent===undefined?'primary':'refresh');}throw error;}finally{if(parent===undefined)diagnostics.finish(diagnostic);}
+}
+async function recoverWork(job:ImportOperation,action:'resume'|'discard'){
+ if(!owner||busy||databaseState!=='ready')return;
+ const operation=control.activity.begin();if(!operation)return;
+ const scope=scopeId,proof=control.proof,diagnostic=beginDiagnostic('recover-import');
+ const current=()=>scope===scopeId&&control.owner&&control.proof===proof&&operation.current();
+ busy=true;status='Revisando la copia local…';emit();
+ let recoveryWorker:Worker|null=null;
+ try{
+ recoveryWorker=new Worker(new URL('./imports/recovery.worker.ts',import.meta.url),{type:'module'});
+ const request:RecoveryRequest={version:2,type:'recover',requestId:crypto.randomUUID(),operationId:job.operationId,revision:job.revision,action};
+ const settled=await invokeDomainWorker('recovery',recoveryWorker,request,current);
+ const response={state:settled.response?.type==='recovered'?settled.response.state:null,outcome:settled.outcome};
+ if(!current()||!response)return;
+ const failure=outcomeDiagnostic(diagnostic,response.outcome,'recovery');
+ if(response.state){verifiedResponse(job.operationId);status=response.state==='sealed'?'Copia recuperada y verificada.':'Parcial descartado; tu biblioteca se conserva.';}
+ else{if(response.outcome.recoveryRequired)unverifiedResponse(job.operationId);status=failure?failureText(failure):'No se pudo confirmar la copia. Se conservan sus datos.';}
+ }
+ catch{if(current()){outcomeDiagnostic(diagnostic,workerFailureOutcome('worker-failed',false),'recovery');status='No se pudo iniciar la recuperación. Se conservan los datos; revisa la operación antes de reintentar.';}}
+ finally{
+  if(recoveryWorker){recoveryWorker.onmessage=null;recoveryWorker.onerror=null;recoveryWorker.onmessageerror=null;recoveryWorker.terminate();}
+  if(current())try{await refresh(true,true,diagnostic);}catch{if(current()){control.activity.block('import-state',true);status+=' No se pudo actualizar la vista; conserva tus originales y vuelve a comprobar el estado.';}}
+  diagnostics.finish(diagnostic);operation.end();if(scope===scopeId){busy=false;emit();}
+ }
+}
+async function retainProblemWork(issue:ImportIssue){
+ if(!owner||busy||databaseState!=='ready')return;busy=true;emit();
+ try{await retainImportIssue(issue);status='Registro revisado: se conservan todos sus archivos. No se ha confirmado ni eliminado esa copia.';}
+ catch{status='No se pudo revisar el registro; se conserva.';}
+ finally{try{await refresh();}catch{control.activity.block('import-state',true);status='No se pudo reabrir el almacenamiento. Recarga para revisar el estado.';}busy=false;emit();}
+}
+async function actWork(fn:()=>Promise<unknown>,onRefreshed?:()=>void){
+ if(!owner||busy||importsBlocked())return;const scope=scopeId,diagnostic=beginDiagnostic('edit-organization');
+ try{
+  try{await fn();}catch(error){if(scope===scopeId){const failure=domFailure(error,'write');diagnostics.complete(diagnostic,failure);status=failureText(failure);emit();}return;}
+  if(scope!==scopeId)return;
+  try{await refresh(false,true,diagnostic);if(scope===scopeId)onRefreshed?.();}
+  catch{if(scope===scopeId){status='Cambios guardados. No se pudo actualizar la vista; vuelve a comprobar el estado antes de editar.';emit();}}
+ }finally{diagnostics.finish(diagnostic);}
+}
+async function checkFiles(){
+ if(databaseReloadRequired())return;
+ const scope=scopeId,proof=control.proof,hadPending=unverifiedImportResponses.size>0,hadDatabaseBlock=databaseRecoverable();
+ const activityScope=control.activity.scope();
+ const current=()=>scope===scopeId&&proof===control.proof&&control.owner&&activityScope();
+ if(hadDatabaseBlock)databaseRetries.add(current);
+ try{await refresh(true);if(!current())return;await revalidateDatabaseTransport(proof,current);if(!current())return;if(databaseRecoverable()){databaseState='ready';control.activity.block('database',false);}for(const job of operations)if(terminal(job))verifiedResponse(job.operationId);
+ if(unverifiedImportResponses.size){status='La respuesta sigue sin poder confirmarse. Conserva los originales y revisa las copias pendientes; si no hay un registro verificable, cierra esta entrada y vuelve a abrir.';emit();}}
+ catch{if(current()){status='No se pudo comprobar el almacenamiento. Conserva tus originales y vuelve a revisar el estado.';emit();}return;}
+ finally{if(hadDatabaseBlock)databaseRetries.delete(current);}
+
+ if(current()&&hadPending&&!unverifiedImportResponses.size){status='Los registros locales ya confirman el resultado. Revisa la biblioteca antes de volver a importar.';emit();}
+ else if(current()&&hadDatabaseBlock&&databaseState==='ready'&&!unverifiedImportResponses.size){status='Base local abierta y revisada. Comprueba las copias pendientes antes de continuar.';emit();}
+}
+async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[]){
+ if(!owner||busy||databaseState!=='ready')return;const operation=control.activity.begin();if(!operation)return;
+ const scope=scopeId,proof=control.proof,admission=databaseGeneration;
+ const owns=()=>scope===scopeId&&proof===control.proof&&control.owner&&operation.current();
+ const current=()=>owns()&&databaseState==='ready'&&admission===databaseGeneration;
+ const preparation=sourceProtection.beginPreparation(saved?saved.entries.map(entry=>entry.trackId):ids,current);
+ const diagnostic=beginDiagnostic('prepare-queue');let phase:Phase='validate';let known:Result|undefined;busy=true;configuring=true;player.pause();status='Preparando cola…';emit();
+ try{
+ let restored=saved;let missing=0;
+ if(saved){
+ phase='read';const plan=await planQueueRestore(saved,async id=>{const track=tracks.find(t=>t.id===id);return !!track&&track.assetId!==null&&await restoreAssetAvailable(track.assetId);});
+ if(!current())return;restored=plan.snapshot;missing=plan.missing;
+ if(!restored.entries.length){known=result('verify','integrity','asset-missing');throw null;}
+ }
+ const planned=(restored?restored.entries.map(entry=>({track:tracks.find(t=>t.id===entry.trackId),entry})):ids.map(id=>({track:tracks.find(t=>t.id===id),entry:undefined}))).filter((p):p is {track:Track;entry:Snapshot['entries'][number]|undefined}=>!!p.track);
+ const selected=planned.map(p=>p.track);if(!preparation.setPlanned(selected.map(track=>track.id)))return;if(!selected.length){known=result('validate','internal','empty-selection');throw null;}phase='read';
+ if(!saved)for(const track of selected){
+ if(track.assetId===null)throw AppFailure.create(makeFailure('read','integrity','asset-missing','none'));
+ const checked=await verifiedAssetDetailed(track.assetId);if(!current())return;
+ if(checked.state!=='valid')throw AppFailure.create(checked.failure);
+ }
+ if(!current())return;
+ phase='transport';const bundle=await prepareLocalSources(selected.map(t=>{if(t.assetId===null)throw AppFailure.create(makeFailure('read','integrity','asset-missing','none'));return t.assetId;}),proof,current);
+ const entries=selected.map((t,i)=>({id:planned[i].entry?.id??crypto.randomUUID(),trackId:t.id,title:t.title,src:bundle.sources[i].url}));
+ preparation.stage(bundle,entries);
+ if(!current()||!preparation.publish())return;
+ suspendedSnapshot=undefined;installMediaSession();
+ player.setQueue(entries);if(restored)player.restoreModes(restored.repeat,restored.shuffleOrder);
+ const index=restored?entries.findIndex(e=>e.id===restored.currentEntryId):0;
+ // setQueue leaves the old element URL installed. Always select a new
+ // occurrence before releasing the replaced bundle, including a saved null ID.
+ player.select(index>=0?index:0,false,index>=0?restored?.position??0:0);
+ status='Cola lista y pausada. Pulsa Reproducir.'+(missing?` ${missing} entradas sin audio se omitieron. Vuelve a importar los originales para recuperarlas.`:'')+(restoreWarnings.length?' '+restoreWarnings.join(' '):'')+(transportNotice?' '+transportNotice:'');
+ }catch(error){if(!current())return;const failure=known??localFailure(error,phase);diagnostics.complete(diagnostic,failure);status=(saved?'No se pudo recuperar toda la cola. Se conserva la cola guardada y tu organización. ':'')+failureText(failure)+' Vuelve a comprobar el almacenamiento o prepara otra selección.';}
+ finally{
+  // Record the primary error above before best-effort resource settlement.
+  // Keep Activity admitted through cleanup; an old finally never clears a new scope.
+  await preparation.settle();
+  diagnostics.finish(diagnostic);if(owns()){busy=false;configuring=false;emit();}operation.end();
+ }
+}
+function snapshot():Snapshot|undefined{
+ if(suspendedSnapshot)return suspendedSnapshot;
+ if(!player.current)return;
+ return {version:1,entries:player.entries.map(({id,trackId})=>({id,trackId})),currentEntryId:player.current.id,position:Number.isFinite(audio.currentTime)?audio.currentTime:0,repeat:player.repeat,shuffleOrder:player.shuffleOrder?[...player.shuffleOrder]:null};
+}
+let saveFailureBurst=false;let saveFailureScope=diagnostics.scope();
+function savePosition(){
+ if(!control.owner||configuring||databaseState!=='ready')return;
+ const saved=snapshot();if(!saved)return;
+ const operation=control.activity.begin();if(!operation)return;
+ const diagnostic=beginDiagnostic('save-position'),diagnosticScope=diagnostics.scope();
+ writes=writes.then(()=>writeRecord('settings','library-playback',saved)).then(()=>{if(operation.current()&&diagnosticScope())saveFailureBurst=false;}).catch(error=>{
+ if(!operation.current())return;if(diagnosticScope()){if(!saveFailureScope()){saveFailureBurst=false;saveFailureScope=diagnostics.scope();}
+ if(!saveFailureBurst){diagnostics.complete(diagnostic,domFailure(error,'write'));saveFailureBurst=true;}}
+ status='No se pudo guardar la posición. Tu biblioteca se conserva.';emit();}).finally(()=>{diagnostics.finish(diagnostic);operation.end();});
+}
+player.subscribe(()=>{
+ sourceProtection.observePlayer();
+ if('mediaSession'in navigator&&owner){navigator.mediaSession.metadata=player.current?new MediaMetadata({title:player.current.title,artist:tracks.find(t=>t.id===player.current?.trackId)?.artist??'Artista desconocido'}):null;navigator.mediaSession.playbackState=player.state==='playing'?'playing':'paused';}
+ if(owner&&!configuring&&player.current&&(player.state!=='playing'||Date.now()-lastSave>2000)){lastSave=Date.now();savePosition();}
+ emit();
+});
+function clearMediaSession(){if('mediaSession'in navigator){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState='none';for(const action of ['play','pause','nexttrack','previoustrack','seekto']as const)try{navigator.mediaSession.setActionHandler(action,null);}catch{/* optional */}}}
+function installMediaSession(){if(!('mediaSession'in navigator))return;const scope=scopeId;
+ for(const [action,handler]of Object.entries({play:()=>void player.play(),pause:()=>player.pause(),nexttrack:()=>player.next(),previoustrack:()=>player.previous(),seekto:(d:MediaSessionActionDetails)=>{if(d.seekTime!==undefined)player.seek(d.seekTime);}}))try{navigator.mediaSession.setActionHandler(action as MediaSessionAction,(d)=>{if(scope===scopeId&&control.owner&&!busy)handler(d);});}catch{/* optional */}
+}
+async function prepareRelease(){
+ const saved=snapshot();suspendedSnapshot=saved;
+ ++scopeId;diagnostics.resetScope();player.suspend();clearMediaSession();
+ sourceProtection.invalidateScope();await sourceProtection.releaseUnused();
+ await writes;
+ if(saved)await writeRecord('settings','library-playback',saved);
+}
+function releaseBlocked(){let pending=true;try{pending=!!sessionStorage.getItem('pulso-web:organization:pending-operation');}catch{/* Unknown tracking remains blocked. */}return busy||importsBlocked()||pending;}
+async function cede(){try{
+ const released=await control.cede(prepareRelease,releaseBlocked);
+ status=released?'Control cedido. Los bytes ya entregados a un lector no se pueden retirar.':'No se puede ceder: termina las operaciones y resuelve los resultados pendientes. Después confirma de nuevo.';
+ }catch{status='No se pudo guardar la cola. Conservas el control, con el audio detenido. Reintenta Ceder control o prepara la cola de nuevo.';}emit();}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')savePosition();});
+window.addEventListener('pagehide',()=>{
+ diagnostics.resetScope();const saved=snapshot();suspendedSnapshot=saved;
+ control.hide(async()=>{await writes;if(saved)await writeRecord('settings','library-playback',saved);},releaseBlocked);
+ ++scopeId;player.suspend();clearMediaSession();sourceProtection.invalidateScope();void sourceProtection.releaseUnused();
+});
+window.addEventListener('pageshow',event=>{if(event.persisted){status='Página recuperada sin control. Comprueba la disponibilidad; si hay operaciones pendientes, cierra esta entrada y vuelve a abrir.';emit();}});
+// Realm-local native storage signals never authorize data cleanup or recovery.
+// A blocked open can be retried explicitly; version changes require a new document.
+const databaseAdmitted=()=>databaseState==='ready'||databaseRecoverable()&&[...databaseRetries].some(current=>current());
+registerDatabaseOpenGuard(databaseAdmitted);
+registerDatabaseUseGuard(databaseAdmitted);
+function applyDatabaseLifecycle(state:DatabaseLifecycleState){
+ if(databaseReloadRequired()||databaseState===state)return;
+ ++databaseGeneration;
+ databaseState=state;metadataRescanBlocked=true;control.activity.block('metadata-rescan',true);control.activity.block('database',true);
+ revokeDatabaseWorkerAttempts(state);
+ if(databaseRecoverable()){
+  retireDatabaseRealm();
+  status=state==='connection-closed'?'Se interrumpió el acceso a la base local. Reintenta la apertura para revisar los datos.':'La base local está bloqueada. Cierra las otras entradas de Pulso y reintenta la apertura.';
+  emit();return;
+ }
+ suspendedSnapshot=snapshot();configuring=true;++scopeId;
+ // Local native notification invalidates before close. A remote realm already
+ // revoked itself; this document invalidates synchronously on receipt.
+ control.activity.invalidate();player.suspend();clearMediaSession();
+ sourceProtection.invalidateScope();void sourceProtection.releaseUnused();busy=false;
+ retireDatabaseRealm();
+ diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'failed'});
+ status=state==='version-incompatible'?'Esta versión no admite la base local. Abre la versión actualizada para continuar.':'La base local cambió de versión. Abre la versión actual para revisar la biblioteca.';
+ emit();
+}
+subscribeDatabaseLifecycle(applyDatabaseLifecycle);
+registerDatabaseRealmHost({
+ capture(kind,callerCurrent){
+  if(!control.owner||databaseState!=='ready'||!callerCurrent()||((kind==='import'||kind==='batch')&&(importRecoveryPending()||metadataRescanBlocked)))return null;
+  const resource=control.activity.begin();if(!resource)return null;
+  const scope=scopeId,proof=control.proof;
+  return {current:()=>scope===scopeId&&proof===control.proof&&control.owner&&databaseState==='ready'&&resource.current()&&callerCurrent(),onLifecycle:applyDatabaseLifecycle,end:()=>resource.end()};
+ },
+ onLifecycle:applyDatabaseLifecycle,
+});
+attachDatabaseTransportLifecycle(applyDatabaseLifecycle);
+void control.acquire();
+if(!control.supported){status='Este navegador no dispone de Web Locks. Reproducción y mutaciones bloqueadas.';void refresh();}
+async function importFilesWork(files:File[]){
+ if(!owner||busy||importsBlocked())return;const scope=scopeId,proof=control.proof;busy=true;player.pause();emit();
+ let imported=0;let duplicates=0;let quotaStopped=false;const errors:string[]=[];const warnings=new Set<string>();
+ try{
+ for(const file of files){
+ if(scope!==scopeId||!control.owner)break;
+ const operation=control.activity.begin();if(!operation)break;
+ const id=crypto.randomUUID(),diagnostic=beginDiagnostic('import-audio');operationId=id;status=`Importando ${imported+duplicates+errors.length+1} de ${files.length}…`;emit();
+ const current=()=>scope===scopeId&&control.owner&&control.proof===proof&&operation.current();
+ let capturedWorker:Worker|null=null,stop=false;
+ try{
+  const request:ImportRequest={version:2,type:'import',operationId:id,file};
+  let response:{value:DetailedImportResult|null;outcome:OutcomeV1}|null;
+  if(!copyWorkerRequest(request)){
+   response={value:null,outcome:makeOutcome({status:'failed',primary:makeFailure('validate','internal',file.size>100*1024*1024?'limit-exceeded':'input-invalid','none'),cleanup:null,reconcile:null,writeState:'not-started',closeState:'not-applicable',recoveryRequired:false})};
+  }else{
+   worker=new Worker(new URL('./imports/import.worker.ts',import.meta.url),{type:'module'});workerDispatched=false;
+   capturedWorker=worker;
+   const settled=await invokeDomainWorker('import',capturedWorker,request,current,bytes=>{status=`Importando ${file.name}: ${Math.round(bytes/file.size*100)} %`;emit();});
+   response={value:settled.response?.type==='complete'?settled.response.result:null,outcome:settled.outcome};
+  }
+  if(!current()||!response)return;
+  const failure=outcomeDiagnostic(diagnostic,response.outcome);
+  if(response.value){
+   const value=response.value;if(value.duplicate)duplicates++;else imported++;
+   if(value.artworkWarning)warnings.add(artworkFailureText(value.artworkWarning));
+   if(value.lyricsWarning)warnings.add(lyricsImportWarningText(value.lyricsWarning));
+  }else if(failure)errors.push(failureText(failure));
+  if(response.outcome.primary?.family==='quota')quotaStopped=true;
+  if(response.outcome.recoveryRequired){unverifiedResponse(id);stop=true;}
+  if(response.outcome.status==='cancelled')stop=true;
+ }catch{if(current()){outcomeDiagnostic(diagnostic,workerFailureOutcome('worker-failed',false));errors.push('No se pudo iniciar el proceso de importación. Conserva el original y vuelve a intentarlo.');stop=true;}}
+ finally{
+  if(capturedWorker){capturedWorker.onmessage=null;capturedWorker.onerror=null;capturedWorker.onmessageerror=null;}
+  if(current())try{await refresh(false,true,diagnostic);}catch{if(current()){control.activity.block('import-state',true);errors.push('Las copias ya confirmadas se conservan. No se pudo actualizar la vista; vuelve a comprobar el almacenamiento antes de reintentar.');stop=true;}}
+  diagnostics.finish(diagnostic);operation.end();
+ }
+ if(scope!==scopeId)return;
+ if(!control.owner||cancelled||quotaStopped||stop||importsBlocked())break;
+ }
+ if(scope!==scopeId)return;
+ const wasCancelled=cancelled;status=`${imported} importadas, ${duplicates} ya existentes.${errors.length?' '+errors.join(' '):' Copias completas verificadas.'}${wasCancelled?' Lote cancelado; se conservan las importaciones ya confirmadas.':''}${quotaStopped?' Se detuvo el resto del lote por falta de espacio. Libera espacio fuera de Pulso o revisa tus copias antes de reintentar.':''}${warnings.size?' '+[...warnings].join(' '):''}`;
+ }finally{if(scope===scopeId){operationId=null;busy=false;cancelled=false;artworkRefreshToken++;emit();}}
+}
+async function loadTestAudioWork(){
+ if(!owner||busy||importsBlocked())return;const scope=scopeId,diagnostic=beginDiagnostic('import-audio');busy=true;status='Cargando tres fragmentos instrumentales originales…';emit();
+ try{
+ const files:File[]=[];
+ for(const fixture of fixtures){
+ const response=await fetch(fixture.file,{credentials:'same-origin'});
+ if(!response.ok)throw new Error('No se pudieron cargar los audios de prueba. Recarga la página con conexión.');
+ const bytes=await response.arrayBuffer();
+ const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(x=>x.toString(16).padStart(2,'0')).join('');
+ if(bytes.byteLength!==fixture.bytes||digest!==fixture.sha256)throw new Error('La copia de prueba está incompleta. Recarga para reintentar.');
+ files.push(new File([bytes],`${fixture.id}.${fixture.mime==='audio/mp4'?'m4a':'mp3'}`,{type:fixture.mime}));
+ }
+ if(scope!==scopeId||!control.owner){busy=false;return;}
+ busy=false;await importFiles(files);
+ if(scope!==scopeId||!control.owner)return;
+ const assets=await all<{id:string;sha256:string}>('assets');
+ const demoTracks=fixtures.map(f=>tracks.find(t=>assets.some(a=>a.id===t.assetId&&a.sha256===f.sha256)));
+ if(demoTracks.every((track):track is Track=>!!track)){await queue(demoTracks.map(t=>t.id));requestAnimationFrame(()=>{if(scope===scopeId&&control.owner)document.querySelector('#player')?.scrollIntoView({behavior:'auto',block:'start'});});}
+ }catch(error){if(scope!==scopeId)return;busy=false;const failure=domFailure(error,'read');diagnostics.complete(diagnostic,failure);status=failureText(failure);emit();}finally{diagnostics.finish(diagnostic);}
+}
+let cancelled=false;
+function cancelImport(){if(control.owner&&operationId){cancelled=true;if(workerDispatched)worker?.postMessage({version:2,type:'cancel',operationId});}}
+function App(){
+ const [,render]=React.useReducer(n=>n+1,0);React.useEffect(()=>{listeners.add(render);return()=>{listeners.delete(render);};},[]);
+ const [page,setPage]=React.useState<'inicio'|'buscar'|'biblioteca'>('biblioteca');
+ const [views,setViews]=React.useState({buscar:emptyShellView(),biblioteca:emptyShellView()});
+ const destination=page==='buscar'?'buscar':'biblioteca';
+ const {query,listId,groupMode,groupKey,favorites,present}=views[destination];
+ function updateView(patch:Partial<ShellView>){setViews(old=>({...old,[destination]:{...old[destination],...patch}}));}
+ const setQuery=(query:string)=>updateView({query});const setListId=(listId:string)=>updateView({listId});
+ const setGroupMode=(groupMode:ShellView['groupMode'])=>updateView({groupMode});const setGroupKey=(groupKey:string)=>updateView({groupKey});
+ const [name,setName]=React.useState('');const [target,setTarget]=React.useState('');const [deleting,setDeleting]=React.useState(false);const [theme,setTheme]=React.useState('system');
+ const [discardId,setDiscardId]=React.useState<string|null>(null);
+ const [rescanTrackId,setRescanTrackId]=React.useState<string|null>(null);
+ const rescanHeading=React.useRef<HTMLHeadingElement>(null);
+ const rescanOpener=React.useRef<HTMLButtonElement|null>(null),rescanIntent=React.useRef(0);
+ const rescanFocus=React.useRef<{kind:'open'|'close';current:()=>boolean;opener:HTMLButtonElement|null}|null>(null);
+ const routeHeading=React.useRef<HTMLHeadingElement>(null),playerHeading=React.useRef<HTMLHeadingElement>(null);
+ const importInput=React.useRef<HTMLInputElement>(null),createInput=React.useRef<HTMLInputElement>(null);
+ const [playerOpen,setPlayerOpen]=React.useState(false);
+ const returnContext=React.useRef<{page:typeof page;scroll:number;opener:HTMLButtonElement}|null>(null);
+ const navigationIntent=React.useRef(0);
+ const routeScroll=React.useRef({inicio:0,buscar:0,biblioteca:0});
+ // Only shell-delayed focus/scroll uses this generation; row commit focus has its own contract.
+ const shellInteraction=React.useRef(0);
+ React.useLayoutEffect(()=>{
+  const cancel=()=>{++shellInteraction.current;};
+  const key=(event:KeyboardEvent)=>{if(['Tab','ArrowDown','ArrowUp','PageDown','PageUp','Home','End',' '].includes(event.key))cancel();};
+  document.addEventListener('focusin',cancel,true);document.addEventListener('pointerdown',cancel,true);
+  document.addEventListener('keydown',key,true);window.addEventListener('blur',cancel);
+  window.addEventListener('wheel',cancel,{passive:true});window.addEventListener('touchmove',cancel,{passive:true});
+  return()=>{cancel();document.removeEventListener('focusin',cancel,true);document.removeEventListener('pointerdown',cancel,true);document.removeEventListener('keydown',key,true);window.removeEventListener('blur',cancel);window.removeEventListener('wheel',cancel);window.removeEventListener('touchmove',cancel);};
+ },[]);
+ function shellResponse(){
+  const intent=navigationIntent.current,interaction=shellInteraction.current,scope=scopeId,proof=control.proof,hadControl=control.owner;
+  return()=>intent===navigationIntent.current&&interaction===shellInteraction.current&&scope===scopeId&&proof===control.proof&&hadControl===control.owner;
+ }
+ function rescanResponse(){const current=shellResponse(),intent=rescanIntent.current,activity=control.activity.scope(),admission=databaseGeneration;return()=>intent===rescanIntent.current&&admission===databaseGeneration&&activity()&&current();}
+ function openRescan(trackId:string,opener:HTMLButtonElement){
+  if(!owner||busy||importsBlocked())return;
+  ++rescanIntent.current;rescanOpener.current=opener;rescanFocus.current={kind:'open',current:rescanResponse(),opener};setRescanTrackId(trackId);emit();
+ }
+ function closeRescan(){
+  ++rescanIntent.current;rescanFocus.current={kind:'close',current:rescanResponse(),opener:rescanOpener.current};rescanOpener.current=null;setRescanTrackId(null);emit();
+ }
+ React.useLayoutEffect(()=>{
+  const pending=rescanFocus.current;if(!pending)return;rescanFocus.current=null;if(!pending.current())return;
+  const opener=pending.opener;
+  const fallback=playerOpen?playerHeading.current:page==='inicio'?document.getElementById('home-heading'):routeHeading.current;
+  const destination=pending.kind==='open'?rescanHeading.current:opener?.isConnected&&opener.getClientRects().length?opener:fallback;
+  if(destination){destination.focus({preventScroll:true});destination.scrollIntoView({behavior:'auto',block:pending.kind==='open'?'start':'nearest',inline:'nearest'});}
+ });
+ function navigate(next:typeof page){++navigationIntent.current;const current=shellResponse();moveFocus.current=null;favoriteFocus.current=null;returnContext.current=null;setPlayerOpen(false);routeScroll.current[page]=window.scrollY;setPage(next);requestAnimationFrame(()=>{if(current())window.scrollTo(0,routeScroll.current[next]);});return current;}
+ function openPlayer(opener:HTMLButtonElement){++navigationIntent.current;const current=shellResponse();moveFocus.current=null;favoriteFocus.current=null;returnContext.current={page,scroll:window.scrollY,opener};setPlayerOpen(true);requestAnimationFrame(()=>{if(!current())return;playerHeading.current?.focus({preventScroll:true});playerHeading.current?.scrollIntoView({block:'start'});});}
+ function closePlayer(){++navigationIntent.current;const current=shellResponse();const context=returnContext.current;returnContext.current=null;setPlayerOpen(false);if(!context)return;setPage(context.page);requestAnimationFrame(()=>{if(!current())return;window.scrollTo(0,context.scroll);(context.opener.isConnected?context.opener:context.page==='inicio'?document.getElementById('home-heading'):routeHeading.current)?.focus({preventScroll:true});});}
+ const play=()=>{if(owner&&!busy&&player.current)void player.play();};const pause=()=>{if(owner&&!busy&&player.current)player.pause();};
+ React.useLayoutEffect(()=>{
+  const bars=[document.querySelector<HTMLElement>('.shell-nav'),document.querySelector<HTMLElement>('.mini-player')];
+  const measure=()=>bars.forEach((bar,i)=>document.documentElement.style.setProperty(i?'--mini-height':'--nav-height',`${bar&&getComputedStyle(bar).position==='fixed'?bar.getBoundingClientRect().height:0}px`));
+  measure();const observer=typeof ResizeObserver==='undefined'?null:new ResizeObserver(measure);const fallback=observer?null:new MutationObserver(measure);bars.forEach(bar=>{if(bar)fallback?.observe(bar,{subtree:true,childList:true,characterData:true});});bars.forEach(bar=>{if(bar)observer?.observe(bar);});window.addEventListener('resize',measure);
+  return()=>{observer?.disconnect();fallback?.disconnect();window.removeEventListener('resize',measure);};
+ },[!!player.current]);
+ React.useEffect(()=>{let mounted=true;void readRecord<string>('settings','theme').then(value=>{if(mounted&&databaseState==='ready'&&value&&['system','light','dark'].includes(value)){setTheme(value);document.documentElement.dataset.theme=value;}}).catch(()=>{/* Appearance is optional; storage lifecycle owns the blocking notice. */});return()=>{mounted=false;};},[]);
+ React.useEffect(()=>{setViews(old=>{let changed=false;const next={...old};for(const route of ['buscar','biblioteca']as const){if(old[route].listId&&!playlists.some(l=>l.id===old[route].listId)){next[route]={...old[route],listId:''};changed=true;}}return changed?next:old;});},[playlists]);
+ const selected=playlists.find(l=>l.id===listId);
+ const recent=React.useMemo(()=>recentTracks(tracks),[tracks]);const homeLists=React.useMemo(()=>homePlaylists(playlists),[playlists]);
+ const trackIndex=React.useMemo(()=>new Map(tracks.map(t=>[t.id,t])),[tracks]);
+ const baseRows=React.useMemo(()=>page!=='buscar'&&selected?selected.entries.flatMap((entry,index)=>{const track=trackIndex.get(entry.trackId);return track?[{track,key:entry.id,playlistIndex:index}]:[];}):tracks.map(track=>({track,key:track.id,playlistIndex:-1})),[selected,tracks,trackIndex,page]);
+ const baseTracks=React.useMemo(()=>baseRows.map(row=>row.track),[baseRows]);
+ const albumMetadata=React.useMemo(()=>new Map(tracks.map(t=>[t.id,resolveLocalAlbumMetadata(t)])),[tracks]);
+ const metadataScope=React.useMemo(()=>JSON.stringify(tracks.map(t=>{const info=albumMetadata.get(t.id)!;return [t.id,t.title,t.artist,t.album,info.track.state==='known'?info.track.value:null,info.disc.state==='known'?info.disc.value:null,info.albumArtist.state==='known'?info.albumArtist.value:null,info.compilation.state==='known'?info.compilation.value:null];})),[tracks,albumMetadata]);
+ const groups=React.useMemo(()=>groupMode==='artists'?groupArtists(baseTracks):groupMode==='albums'?groupAlbums(baseTracks):[],[groupMode,baseTracks]);
+ const activeGroup=selectGroup(groups,groupKey);
+ React.useEffect(()=>{if(groupKey&&!activeGroup)setGroupKey('');},[groupKey,activeGroup]);
+ const visible=React.useMemo(()=>{const ids=activeGroup?new Set(activeGroup.trackIds):null;const rows=baseRows.filter(({track:t})=>(!ids||ids.has(t.id))&&matchesShellTrack(t,views[destination],availability));return groupMode==='albums'&&activeGroup&&!activeGroup.unknown?orderAlbumRows(rows):rows;},[baseRows,activeGroup,views,destination,groupMode]);
+ const viewScope=JSON.stringify([page,listId,groupMode,groupKey,query,favorites,present,metadataScope]);
+ // Reconcile both namespaces on every data update, including while Inicio is open.
+ const routeTotals=React.useMemo(()=>{function routeSelection(route:'buscar'|'biblioteca'){
+  const v=views[route],list=route==='biblioteca'?playlists.find(l=>l.id===v.listId):undefined;
+  const rows=list?list.entries.flatMap(e=>{const t=trackIndex.get(e.trackId);return t?[t]:[];}):tracks;
+  const gs=v.groupMode==='artists'?groupArtists(rows):v.groupMode==='albums'?groupAlbums(rows):[];
+  const g=selectGroup(gs,v.groupKey),ids=g?new Set(g.trackIds):null;
+  return rows.filter(t=>(!ids||ids.has(t.id))&&matchesShellTrack(t,v,availability)).length;
+ }
+ return {biblioteca:routeSelection('biblioteca'),buscar:routeSelection('buscar')};},[views,playlists,tracks,trackIndex]);
+ const libraryPagination=useLibraryPage(routeTotals.biblioteca,JSON.stringify([views.biblioteca,metadataScope]));
+ const searchPagination=useLibraryPage(routeTotals.buscar,JSON.stringify([views.buscar,metadataScope]));
+ const pagination=destination==='buscar'?searchPagination:libraryPagination;
+ const pageRows=visible.slice(pagination.start,pagination.end);
+ const filteredPlaylist=!!query||!!groupKey||favorites||present||groupMode!=='tracks';
+ type MoveFocus={viewScope:string;page:number;scope:number;proof:string;source:HTMLButtonElement;entryId:string;delta:-1|1;listId:string;revision:number;entries:Playlist['entries'];verified:boolean};
+ const moveFocus=React.useRef<MoveFocus|null>(null);
+ type FavoriteIntent={source:HTMLButtonElement;viewScope:string;page:number;scope:number;proof:string;trackId:string;revision:number;keys:string[];index:number;verified:boolean};
+ const favoriteFocus=React.useRef<FavoriteIntent|null>(null),favoriteButtons=React.useRef(new Map<string,HTMLButtonElement>());
+ async function toggleFavorite(track:Track,key:string,source:HTMLButtonElement){
+  if(!owner||busy||importsBlocked())return;
+  const intent:FavoriteIntent={source,viewScope,page:pagination.page,scope:scopeId,proof:control.proof,trackId:track.id,revision:track.revision+1,keys:visible.filter(row=>row.track.id!==track.id).map(row=>row.key),index:visible.slice(0,visible.findIndex(row=>row.key===key)).filter(row=>row.track.id!==track.id).length,verified:false};
+  favoriteFocus.current=favorites&&track.favorite&&document.activeElement===source?intent:null;
+  await act(()=>editTrack(track.id,track.revision,{favorite:!track.favorite}),()=>{
+   const current=tracks.find(t=>t.id===track.id);
+   if(favoriteFocus.current===intent&&current?.revision===intent.revision&&!current.favorite){intent.verified=true;render();}
+  });
+  if(favoriteFocus.current===intent&&!intent.verified)favoriteFocus.current=null;
+ }
+ React.useLayoutEffect(()=>{
+  const intent=favoriteFocus.current;if(!intent)return;
+  if(intent.viewScope!==viewScope||intent.scope!==scopeId||intent.proof!==control.proof||!owner||busy||!document.hasFocus()||
+   (pagination.page!==intent.page&&pagination.page!==Math.max(0,Math.ceil(visible.length/LIBRARY_PAGE_SIZE)-1))||
+   (document.activeElement!==intent.source&&(intent.source.isConnected||document.activeElement!==document.body))){favoriteFocus.current=null;return;}
+  if(!intent.verified)return;
+  const current=tracks.find(t=>t.id===intent.trackId);
+  if(!current||current.favorite||current.revision!==intent.revision||visible.length!==intent.keys.length||visible.some((row,i)=>row.key!==intent.keys[i])){favoriteFocus.current=null;return;}
+  const targetIndex=Math.min(intent.index,visible.length-1),destination=Math.max(0,Math.floor(targetIndex/LIBRARY_PAGE_SIZE));
+  if(destination!==pagination.page){intent.page=destination;pagination.onPage(destination);return;}
+  favoriteFocus.current=null;
+  (favoriteButtons.current.get(visible[targetIndex]?.key)??routeHeading.current)?.focus();
+ });
+ const moveButtons=React.useRef(new Map<string,HTMLButtonElement>());
+ React.useEffect(()=>{
+  // A different focus destination is a new user intent, even if they later return.
+  const cancel=()=>{moveFocus.current=null;favoriteFocus.current=null;};
+  const focus=(event:FocusEvent)=>{if((moveFocus.current&&event.target!==moveFocus.current.source)||(favoriteFocus.current&&event.target!==favoriteFocus.current.source))cancel();};
+  const pointer=(event:PointerEvent)=>{if((moveFocus.current&&event.target!==moveFocus.current.source)||(favoriteFocus.current&&event.target!==favoriteFocus.current.source))cancel();};
+  const keyboard=(event:KeyboardEvent)=>{if(event.key==='Tab')cancel();};
+  document.addEventListener('focusin',focus);document.addEventListener('pointerdown',pointer);document.addEventListener('keydown',keyboard);
+  window.addEventListener('blur',cancel);
+  return()=>{cancel();document.removeEventListener('focusin',focus);document.removeEventListener('pointerdown',pointer);document.removeEventListener('keydown',keyboard);window.removeEventListener('blur',cancel);};
+ },[]);
+ React.useLayoutEffect(()=>{
+  const intent=moveFocus.current;if(!intent)return;
+  if(intent.viewScope!==viewScope||intent.page!==pagination.page||intent.scope!==scopeId||intent.proof!==control.proof||!owner||busy||!document.hasFocus()||
+   (document.activeElement!==intent.source&&(intent.source.isConnected||document.activeElement!==document.body))){moveFocus.current=null;return;}
+  if(!intent.verified)return;
+  const current=playlists.find(list=>list.id===intent.listId);
+  if(!current||current.revision!==intent.revision||current.entries.length!==intent.entries.length||current.entries.some((entry,i)=>entry.id!==intent.entries[i].id||entry.trackId!==intent.entries[i].trackId)){moveFocus.current=null;return;}
+  // Missing track records are omitted from visible rows, so absolute playlist indices cannot select a page.
+  const index=visible.findIndex(row=>row.key===intent.entryId);if(index<0){moveFocus.current=null;return;}
+  const destination=Math.floor(index/LIBRARY_PAGE_SIZE);
+  if(destination!==pagination.page){intent.page=destination;pagination.onPage(destination);return;}
+  moveFocus.current=null;
+  moveButtons.current.get(`${intent.delta}:${intent.entryId}`)?.focus();
+ });
+ function moveAdjacent(key:string,delta:-1|1){const index=visible.findIndex(row=>row.key===key),row=visible[index],neighbor=visible[index+delta];if(!row||!selected)return false;if(row.playlistIndex===0&&delta===-1||row.playlistIndex===selected.entries.length-1&&delta===1)return true;return !!neighbor&&neighbor.playlistIndex===row.playlistIndex+delta;}
+ async function moveEntry(entryId:string,delta:-1|1,source:HTMLButtonElement){
+  if(!selected||!owner||busy||importsBlocked()||filteredPlaylist||!moveAdjacent(entryId,delta))return;
+  const index=selected.entries.findIndex(entry=>entry.id===entryId),destination=index+delta;
+  if(index<0||destination<0||destination>=selected.entries.length)return;
+  const entries=[...selected.entries];[entries[index],entries[destination]]=[entries[destination],entries[index]];
+  const intent:MoveFocus={viewScope,page:pagination.page,scope:scopeId,proof:control.proof,source,entryId,delta,listId:selected.id,revision:selected.revision+1,entries,verified:false};
+  moveFocus.current=document.activeElement===source?intent:null;
+  await act(()=>changePlaylist(selected.id,selected.revision,{type:'move',entryId,delta}),()=>{
+   if(moveFocus.current!==intent)return;
+   // act catches failures; only this post-refresh callback can request navigation/focus.
+   intent.verified=true;render();
+  });
+  if(moveFocus.current===intent&&!intent.verified)moveFocus.current=null;
+ }
+ const canOrganize=owner&&!busy&&!importsBlocked();
+ const duration=Number.isFinite(audio.duration)?audio.duration:0;
+ return <main><header><p>PULSO WEB · BIBLIOTECA LOCAL</p><h1>Tu música, en este navegador</h1><nav className="shell-nav" aria-label="Principal">{(['inicio','buscar','biblioteca']as const).map(p=><button key={p} aria-current={page===p?'page':undefined} onClick={()=>navigate(p)}>{p==='inicio'?'Inicio':p==='buscar'?'Buscar':'Biblioteca'}</button>)}</nav></header>{updateReady&&<p role="status">Hay una versión nueva preparada. Cuando termines de escuchar, cierra las pestañas de Pulso y vuelve a abrir para actualizar.</p>}
+ <section aria-label="Control de esta pestaña"><h2>Control de reproducción</h2><p role="status">{control.state}</p>{owner?<><button onClick={()=>void cede()}>Ceder control</button>{control.requests.length>0&&<div><p>{control.requests.length} pestañas solicitan el control. Recibir la petición no detiene el audio.</p><button onClick={()=>control.retain()}>Conservar control</button></div>}<p>{control.activity.count} operaciones activas. Para ceder, termina o resuelve las operaciones y confirma de nuevo.</p></>:<><button disabled={!control.supported||control.state!=='sin-control'||!control.messaging} onClick={()=>control.request()}>Solicitar control</button><button disabled={!control.supported||control.state!=='sin-control'} onClick={()=>void control.acquire()}>Comprobar disponible</button><p>Sin respuesta, conserva el bloqueo. Pilotos, muestras y versiones anteriores requieren cerrar esa entrada.{!control.messaging?' Los avisos entre pestañas no están disponibles: libera manualmente en la otra pestaña y comprueba aquí.':''}</p></>}</section>
+ {databaseState!=='ready'&&<section aria-label="Estado de la base local"><h2>{databaseRecoverable()?'Apertura pendiente de revisión':'Es necesario volver a abrir Pulso'}</h2><p role="alert">{databaseState==='connection-closed'?'Se interrumpió el acceso al almacenamiento local. Reintenta la apertura antes de continuar.':databaseState==='blocked'?'Otra entrada de Pulso mantiene la base local ocupada. Ciérrala y reintenta la apertura.':databaseState==='version-incompatible'?'Esta versión de Pulso no admite la versión de la base local. Abre una versión actualizada para continuar.':'La base local cambió de versión. El acceso queda detenido hasta volver a abrir la aplicación.'}</p>{databaseRecoverable()?<button disabled={!owner||busy} onClick={()=>void admitted('refresh-library',checkFiles)}>Reintentar apertura</button>:<><button disabled={control.activity.count>0||activeDatabaseWorkerAttempts()>0} onClick={()=>{if(control.activity.count===0&&activeDatabaseWorkerAttempts()===0)location.assign('/open.html');}}>Abrir versión actual</button>{(control.activity.count>0||activeDatabaseWorkerAttempts()>0)&&<p>Espera a que termine la operación pendiente antes de volver a abrir.</p>}</>}</section>}
+ <section aria-label="Importación"><p><a href="/samples.html">Escuchar Aurora, Brisa y Camino sin importar archivos</a></p><p>¿No tienes canciones? Carga tres fragmentos instrumentales originales de prueba. No necesitas seleccionar archivos.</p><button disabled={!owner||busy||importsBlocked()} onClick={()=>void loadTestAudio()}>Cargar música de prueba</button><label className="file-label">Importar audios propios o autorizados<input ref={importInput} aria-label="Importar audios" disabled={!owner||busy||importsBlocked()} type="file" accept="audio/mpeg,audio/mp4,audio/wav,.mp3,.m4a,.wav" multiple onChange={event=>{const files=Array.from(event.target.files??[]);event.target.value='';void importFiles(files);}}/></label><button disabled={!operationId} onClick={cancelImport}>Cancelar importación</button><p role="status">{status}</p></section>
+ <section aria-label="Almacenamiento"><h2>Archivos locales</h2><p>{storageEstimate&&Number.isFinite(storageEstimate.usage)&&Number.isFinite(storageEstimate.quota)?`${(storageEstimate.usage!/1048576).toFixed(1)} MiB usados de ${(storageEstimate.quota!/1048576).toFixed(1)} MiB estimados para este origen.`:'El navegador no informó una estimación de espacio.'} El espacio disponible y la conservación no están garantizados.</p><button disabled={!owner||busy} onClick={()=>void admitted('refresh-library',checkFiles)}>Comprobar archivos locales</button></section>
+ {unverifiedImportResponses.size>0&&<section aria-label="Respuestas de importación pendientes"><h2>Hay respuestas sin confirmar</h2><p>No se pudo confirmar el resultado de una operación. Conservamos los datos y pausamos las importaciones y los cambios de organización. Revisaremos los registros locales sin volver a importar ni borrar archivos.</p><button disabled={!owner||busy} onClick={()=>void admitted('refresh-library',checkFiles)}>Revisar respuestas pendientes</button></section>}
+ {importRecoveryPending()&&<section aria-label="Recuperación de importaciones"><h2>Hay copias pendientes de confirmar</h2><p>Las nuevas importaciones están en pausa. Puedes verificar una copia interrumpida o descartar únicamente su parcial; las canciones ya conservadas no se borran.</p><ul>{operations.filter(job=>!terminal(job)).map(job=><li key={job.operationId}><p>{job.state==='uncertain'||job.state==='publishing'?'Resultado por confirmar':job.state==='cleanup'?'Parcial pendiente':'Copia interrumpida'} · {Math.round(job.bytes/1024)} de {Math.round(job.expectedBytes/1024)} KiB copiados</p><button disabled={!owner||busy||databaseState!=='ready'||!job.asset||!job.track} onClick={()=>void recover(job,'resume')}>Verificar y recuperar copia</button><button disabled={!owner||busy||databaseState!=='ready'} onClick={()=>setDiscardId(job.operationId)}>Descartar copia incompleta</button>{discardId===job.operationId&&<div><p>Se comprobará que esta copia no esté publicada ni en uso antes de descartar su parcial. La biblioteca y los archivos conservados permanecen.</p><button disabled={!owner||busy||databaseState!=='ready'} onClick={()=>{setDiscardId(null);void recover(job,'discard');}}>Confirmar descarte del parcial</button><button onClick={()=>setDiscardId(null)}>Conservar copia</button></div>}</li>)}</ul>{importProblems.filter(issue=>!issue.retained).map((issue,i)=><div key={i}><p>{issue.kind==='legacy'?'Registro de importación anterior sin propiedad verificable.':'Registro de importación inválido o sin propiedad verificable.'} Conservaremos sus archivos; no se puede autorizar su limpieza ni dar la copia por completa.</p><button disabled={!owner||busy||databaseState!=='ready'} onClick={()=>void retainProblem(issue)}>Conservar esos archivos y continuar</button></div>)}</section>}
+ <div hidden={page!=='inicio'}><HomeView continueSelection={player.current?{title:player.current.title,artist:trackIndex.get(player.current.trackId)?.artist??'Artista desconocido',stateText:!owner?'Sin control en esta pestaña':player.state+(player.error?` · ${player.error}`:''),positionSeconds:audio.currentTime,canPlay:owner&&!busy,playing:player.state==='playing'}:null} recent={recent.map(t=>({id:t.id,title:t.title,artist:t.artist??'Artista desconocido',availability:availabilityText(trackAvailability(t,availability)),canPrepare:owner&&!busy&&databaseState==='ready'&&trackAvailability(t,availability)==='available'}))} playlists={homeLists.map(l=>({id:l.id,name:l.name,count:l.entries.length}))} empty={!tracks.length} canImport={owner&&!busy&&!importsBlocked()} canCreate={canOrganize} onOpenPlayer={openPlayer} onPlay={play} onOpenLibrary={()=>navigate('biblioteca')} onOpenPlaylist={id=>{setViews(old=>({...old,biblioteca:{...emptyShellView(),listId:id}}));navigate('biblioteca');}} onPrepareTrack={id=>void queue([id])} onImport={()=>importInput.current?.click()} onCreatePlaylist={()=>{const current=navigate('biblioteca');requestAnimationFrame(()=>{if(current())createInput.current?.focus();});}}/></div>
+ <section hidden={page==='inicio'} aria-label="Colección"><h2 ref={routeHeading} tabIndex={-1}>{page==='buscar'?'Buscar en tu biblioteca':'Biblioteca'}</h2><label>Buscar por título, artista o álbum<input value={query} onChange={e=>setQuery(e.target.value)} type="search"/></label>
+ <div hidden={page==='buscar'}><label>Solo favoritos<input type="checkbox" checked={favorites} onChange={e=>updateView({favorites:e.target.checked})}/></label><label>Solo copias presentes<input type="checkbox" checked={present} onChange={e=>updateView({present:e.target.checked})}/></label>
+ <label>Vista<select value={listId} onChange={e=>{setListId(e.target.value);setDeleting(false);}}><option value="">Todas las canciones</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
+ <label>Agrupar por<select aria-label="Agrupación de biblioteca" value={groupMode} onChange={e=>{setGroupMode(e.target.value as 'tracks'|'artists'|'albums');setGroupKey('');}}><option value="tracks">Canciones</option><option value="artists">Artistas</option><option value="albums">Álbumes</option></select></label>
+ {groupMode!=='tracks'&&<div><label>{groupMode==='artists'?'Artista':'Álbum'}<select aria-label={groupMode==='artists'?'Grupo de artista':'Grupo de álbum'} value={activeGroup?.key??''} onChange={e=>setGroupKey(e.target.value)}><option value="">Todas las agrupaciones</option>{groups.map(group=><option key={group.key} value={group.key}>{group.label}{group.kind==='album'&&group.artist?` · ${group.artist}`:''} · {group.trackIds.length} pistas</option>)}</select></label><p>Agrupaciones locales por datos conservados y etiquetas del archivo. La identidad externa y la completitud de los álbumes no están verificadas.</p>{activeGroup&&<p>{activeGroup.unknown?'Sin metadatos suficientes para identificar esta agrupación.':`Datos: ${activeGroup.provenance.map(source=>source==='manual'?'correcciones manuales':'etiquetas del archivo').join(' y ')||'desconocidos'}.`} {activeGroup.kind==='album'?'Completitud desconocida.':''}</p>}{activeGroup?.kind==='album'&&!activeGroup.unknown&&<p>{activeGroup.criterion==='albumArtist'?'Agrupación por artista del álbum declarado en el archivo.':'Agrupación por el artista disponible en la biblioteca.'} Orden por disco y número de pista declarados; los números desconocidos quedan al final.</p>}</div>}
+ <p>{visible.length} canciones · {tracks.length} en biblioteca</p><button disabled={!owner||busy||databaseState!=='ready'||!visible.length} onClick={()=>void queue(visible.map(({track})=>track.id))}>Preparar cola de esta selección</button>
+ {page!=='buscar'&&selected&&<details><summary>Editar playlist</summary><form onSubmit={e=>{e.preventDefault();const value=new FormData(e.currentTarget).get('name');void act(()=>changePlaylist(selected.id,selected.revision,{type:'rename',name:String(value)}));}}><label>Nombre de playlist<input name="name" defaultValue={selected.name} key={selected.id+selected.revision} required maxLength={100}/></label><button disabled={!canOrganize}>Renombrar</button></form><button disabled={!canOrganize} onClick={()=>setDeleting(true)}>Borrar playlist</button>{deleting&&<div><p>Se borrará solo la playlist. Canciones, archivos y cola se conservan.</p><button disabled={!canOrganize} onClick={()=>{void act(()=>changePlaylist(selected.id,selected.revision,{type:'delete'}));setListId('');setDeleting(false);}}>Confirmar borrado de playlist</button><button onClick={()=>setDeleting(false)}>Conservar playlist</button></div>}</details>}
+ {page!=='buscar'&&selected&&filteredPlaylist&&<p>Para reordenar la playlist completa, quita los filtros de búsqueda, favoritos, copias y agrupación.</p>}
+ {!visible.length&&<p>No hay canciones en esta vista. El selector de importación sigue disponible arriba.</p>}
+ <label>Playlist de destino<select value={target} onChange={e=>setTarget(e.target.value)}><option value="">Elige una playlist</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+ <LibraryPagination {...pagination}/><ol className="tracks" start={pagination.start+1}>{pageRows.map(({track,key,playlistIndex})=>{const info=albumMetadata.get(track.id)!;return <li key={key}><ArtworkPanel key={control.proof+track.id} activity={control.activity} trackId={track.id} title={track.title} refreshToken={artworkRefreshToken}/><div><strong>{track.title}</strong><p>{track.artist??'Artista desconocido'} · {track.album??'Álbum desconocido'} · {track.duration.toFixed(0)} s</p><p>{availabilityText(trackAvailability(track,availability))}</p><AlbumMetadataInfo track={info.track.state==='known'?info.track.value:null} disc={info.disc.state==='known'?info.disc.value:null} albumArtist={info.albumArtist.state==='known'?info.albumArtist.value:null} compilation={info.compilation.state==='known'?info.compilation.value:null}/></div><div className="controls"><button disabled={!owner||busy||databaseState!=='ready'} onClick={()=>void queue([track.id])}>Escuchar {track.title}</button><button disabled={!canOrganize} aria-label={`Revisar datos del archivo de ${track.title}`} onClick={event=>openRescan(track.id,event.currentTarget)}>Revisar datos del archivo</button><button disabled={!canOrganize} aria-pressed={track.favorite} ref={button=>{if(button)favoriteButtons.current.set(key,button);else favoriteButtons.current.delete(key);}} onClick={event=>void toggleFavorite(track,key,event.currentTarget)}>{track.favorite?'Quitar favorito':'Favorito'}</button><button disabled={!canOrganize||!target||!!playlists.find(p=>p.id===target)?.entries.some(e=>e.trackId===track.id)} onClick={()=>{const list=playlists.find(p=>p.id===target);if(list)void act(()=>changePlaylist(list.id,list.revision,{type:'add',trackId:track.id}));}}>Añadir a playlist</button>
+ {page!=='buscar'&&selected&&<>{([-1,1]as const).map(delta=><button key={delta} ref={button=>{const id=`${delta}:${key}`;if(button)moveButtons.current.set(id,button);else moveButtons.current.delete(id);}} disabled={!canOrganize||filteredPlaylist||!moveAdjacent(key,delta)} aria-disabled={delta===-1?playlistIndex===0:playlistIndex===selected.entries.length-1} onClick={event=>void moveEntry(key,delta,event.currentTarget)}>{delta===-1?'Subir':'Bajar'} {track.title}</button>)}<button disabled={!canOrganize} onClick={()=>void act(()=>changePlaylist(selected.id,selected.revision,{type:'remove',entryId:key}))}>Quitar de playlist</button></>}
+ </div></li>;})}</ol>
+ <form onSubmit={e=>{e.preventDefault();void act(async()=>{const list=await createPlaylist(name);setTarget(list.id);setName('');});}}><label>Nueva playlist<input ref={createInput} value={name} onChange={e=>setName(e.target.value)} maxLength={100} required/></label><button disabled={!canOrganize}>Crear playlist</button></form></section>
+ <MetadataRescanController key={`metadata-rescan:${scopeId}:${control.proof}:${databaseGeneration}`} activity={control.activity} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} canUse={owner&&databaseState==='ready'} canStart={owner&&!busy&&databaseState==='ready'&&!importRecoveryPending()&&control.activity.idle} track={rescanTrackId?trackIndex.get(rescanTrackId)??null:null} headingRef={rescanHeading} captureCurrent={captureRescanCurrent} onBlocking={setMetadataRescanBlocking} onCommitted={()=>refresh(true,false,null)} onClose={closeRescan}/>
+ <LocalBatchPanel key={`local-batch:${control.proof}`} activity={control.activity} beginDiagnostic={beginPanelDiagnostic} playlist={selected??null} canStart={canOrganize} onStatus={text=>{status=text;emit();}}/>
+ <section id="player" aria-label="Reproductor">{playerOpen&&<button onClick={closePlayer}>Volver</button>}<h2 ref={playerHeading} tabIndex={-1}>{player.current?.title??'Sin selección'}</h2>{player.current&&<ArtworkPanel activity={control.activity} key={`artwork:${control.proof}:${player.current.trackId}`} trackId={player.current.trackId} title={player.current.title} refreshToken={artworkRefreshToken}/>}{player.current&&<LyricsPanel activity={control.activity} key={`lyrics:${control.proof}:${player.current.trackId}`} trackId={player.current.trackId} title={player.current.title} timeSeconds={audio.currentTime} canEdit={canOrganize} onStatus={text=>{status=text;emit();}} external={{artist:trackIndex.get(player.current.trackId)?.artist??null,album:trackIndex.get(player.current.trackId)?.album??null,durationSeconds:trackIndex.get(player.current.trackId)?.duration??0,available:externalLyricsAvailable,canRequest:owner&&!busy&&databaseState==='ready',captureCurrent:captureLyricsCurrent}}/>}<p role="status">{player.state}{player.error&&` · ${player.error}`}</p><div className="controls"><button disabled={!owner||busy||!player.current} onClick={()=>player.previous()}>Anterior</button><button disabled={!owner||busy||!player.current} onClick={play}>Reproducir</button><button disabled={!owner||busy||!player.current} onClick={pause}>Pausar</button><button disabled={!owner||busy||player.following()<0} onClick={()=>player.next()}>Siguiente</button></div><label>Posición: {audio.currentTime.toFixed(1)} / {duration.toFixed(1)} s<input aria-label="Posición en segundos" type="range" min="0" max={duration} step="0.1" value={Math.min(audio.currentTime,duration)} disabled={!owner||busy||!duration} onChange={e=>player.seek(Number(e.target.value))}/></label><label>Repetición<select value={player.repeat} disabled={!owner||busy} onChange={e=>player.setRepeat(e.target.value as 'off'|'one'|'all')}><option value="off">Desactivada</option><option value="one">Una pista</option><option value="all">Toda la cola</option></select></label><button disabled={!owner||busy} aria-pressed={!!player.shuffleOrder} onClick={()=>player.setShuffle(!player.shuffleOrder)}>Aleatorio</button><h3>Cola independiente</h3><ol>{player.entries.map((e,i)=><li key={e.id}><button aria-current={i===player.index?'true':undefined} disabled={!owner||busy} onClick={()=>player.select(i,true)}>{e.title}</button><button aria-label={`Subir en cola ${e.title}`} disabled={!owner||busy||i===0} onClick={()=>player.moveEntry(e.id,-1)}>Subir</button><button aria-label={`Bajar en cola ${e.title}`} disabled={!owner||busy||i===player.entries.length-1} onClick={()=>player.moveEntry(e.id,1)}>Bajar</button><button aria-label={`Quitar de cola ${e.title}`} disabled={!owner||busy||i===player.index} onClick={()=>player.removeFuture(e.id)}>Quitar</button></li>)}</ol></section>
+ <LocalCopiesController key={`copies:${control.proof}`} activity={control.activity} canUse={owner&&!busy&&databaseState==='ready'} scopeKey={`${scopeId}:${control.proof}:${databaseState}`} captureCurrent={captureCopyCurrent} tracks={tracks} beginDiagnostic={beginCopyDiagnostic}/>
+ <OrganizationPanel key={`organization:${control.proof}`} activity={control.activity} beginDiagnostic={beginPanelDiagnostic} canWrite={canOrganize} onStatus={text=>{status=text;emit();}} onCommitted={(attempt?:PanelDiagnosticAttempt)=>refresh(true,false,(attempt&&panelDiagnosticHandles.get(attempt))??null,'refresh')}/>
+ {player.current&&<MiniPlayer title={player.current.title} artist={trackIndex.get(player.current.trackId)?.artist??'Artista desconocido'} stateText={!owner?'Sin control en esta pestaña':player.state+(player.error?` · ${player.error}`:'')} playing={player.state==='playing'} canPlay={owner&&!busy} canPause={owner&&!busy} onPlay={play} onPause={pause} onOpenPlayer={openPlayer} artwork={<MiniArtwork key={`${scopeId}:${control.proof}:${player.current.trackId}`} activity={control.activity} trackId={player.current.trackId} title={player.current.title} refreshToken={artworkRefreshToken}/>}/>}
+ <details><summary>Ajustes y límites de esta fase</summary><DiagnosticsPanel session={diagnostics} capabilities={diagnosticCapabilities}/><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void act(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label><p>Sin conexión a Telegram. Audios copiados al almacenamiento de este origen; una limpieza del navegador puede eliminarlos. Conserva tus originales. Importación limitada a 100 MiB por archivo. En el modo compatible para archivos pequeños, la reproducción admite hasta 8 MiB por audio y 24 MiB por cola; importar un archivo mayor no garantiza poder reproducirlo en ese modo. Portadas locales PNG/JPEG/WebP de hasta 2 MiB; extracción incrustada de ID3v2.3/2.4 sencillo, M4A covr y WAV con ID3, con límites de recursos. Otros formatos conservan un estado de portada explícito.</p><p>iPhone físico: APLAZADO/PENDIENTE. Las pruebas web no demuestran iOS ni reproducción bloqueada.</p><a href="/pilot.html">Abrir piloto separado de fixtures</a></details></main>;
+}
+createRoot(document.getElementById('root')!).render(<App/>);

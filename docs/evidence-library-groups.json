@@ -1,0 +1,35 @@
+{
+  "environment": {
+    "browser": "Chromium 154.0.8037.57",
+    "host": "Linux",
+    "headless": true,
+    "sandbox": true,
+    "origin": "temporary loopback"
+  },
+  "lockSHA256": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f",
+  "candidateIndexSHA256": "bd16eb4b950475f55eab94e615e2025cd1ae7cd898fad94b49f1f227031b3239",
+  "iphone": "APLAZADO/PENDIENTE",
+  "P0W": "INCOMPLETO",
+  "status": "PASS for stated web cases",
+  "unit": {
+    "command": "npx --no-install tsx --test tests/unit/groups.test.ts",
+    "passed": 10
+  },
+  "integration": {
+    "command": "INSTABOX_HEADLESS=1 node tests/integration/check-library-groups.mjs",
+    "passed": 4,
+    "cases": [
+      "exact NFC identities and distinct variants; navigation leaves active engine/source/queue unchanged",
+      "playlist intersection; only explicit prepare changes queue",
+      "manual changes recompute groups; missing group resets selection",
+      "filtered reorder guarded; import visible; reload paused"
+    ]
+  },
+  "completeness": "always unknown; no remote album identity claimed",
+  "delivery": {
+    "copiedFiles": 27,
+    "versionedEntry": "/releases/bd16eb4b950475f5.html",
+    "privateHTTPSProbe": "PASS: grouping visible, own PNG and audio, one engine, bounded-blob, zero CSP violations",
+    "privateOffline": "PENDING"
+  }
+}

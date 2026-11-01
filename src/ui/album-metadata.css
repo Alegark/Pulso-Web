@@ -1,0 +1,27 @@
+.album-metadata-info {
+  min-width: 0;
+}
+
+.album-metadata-info p {
+  margin: 0 0 0.5rem;
+}
+
+.album-metadata-info dl {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.album-metadata-info dl > div {
+  min-width: 0;
+}
+
+.album-metadata-info dt {
+  font-weight: 600;
+}
+
+.album-metadata-info dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}

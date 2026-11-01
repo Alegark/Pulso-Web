@@ -1,0 +1,629 @@
+{
+  "status": "EN CURSO; CSS y teclado comprobados por separado, rendimiento posterior pendiente",
+  "timestampUtc": "2026-10-31T10:51:27.209204+00:00",
+  "baselineAudit": {
+    "fixture": "1000 pistas y 20 playlists propias; assetId y audioFingerprint null, sin IO de audio ni portadas",
+    "limits": [
+      "Chromium VM, no iPhone ni VoiceOver",
+      "font-size 200% aproximado, no zoom real",
+      "sin medición de heap ni garantía de 300 ms"
+    ],
+    "errors": [],
+    "external": [],
+    "measurements": {
+      "searchMs": [
+        2760.327867,
+        2093.9088229999998,
+        2258.8737950000013,
+        1922.4954460000008,
+        2392.0273239999988
+      ],
+      "navigationMs": [
+        2020.3887140000006,
+        1496.795680999996,
+        1842.1478330000027,
+        1756.8733439999996,
+        1317.3901909999986
+      ],
+      "playlistFilterMs": [
+        738.9765740000003,
+        2209.682096000004,
+        3028.1326039999913,
+        2264.5429000000004,
+        2922.5913310000033
+      ]
+    },
+    "failure": null,
+    "browser": "154.0.8037.57",
+    "seed": {
+      "tracks": 1000,
+      "playlists": 20,
+      "entriesPerPlaylist": 50
+    },
+    "layouts": [
+      {
+        "width": 320,
+        "height": 700,
+        "scale": 100,
+        "scrollWidth": 2724,
+        "clientWidth": 305,
+        "overflow": [
+          {
+            "tag": "STRONG",
+            "cls": "",
+            "text": "Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 2724
+          },
+          {
+            "tag": "BUTTON",
+            "cls": "",
+            "text": "Escuchar Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 2427
+          }
+        ]
+      },
+      {
+        "width": 320,
+        "height": 700,
+        "scale": 200,
+        "scrollWidth": 5375,
+        "clientWidth": 305,
+        "overflow": [
+          {
+            "tag": "STRONG",
+            "cls": "",
+            "text": "Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 5375
+          },
+          {
+            "tag": "BUTTON",
+            "cls": "",
+            "text": "Escuchar Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 4744
+          }
+        ]
+      },
+      {
+        "width": 390,
+        "height": 844,
+        "scale": 100,
+        "scrollWidth": 2724,
+        "clientWidth": 375,
+        "overflow": [
+          {
+            "tag": "STRONG",
+            "cls": "",
+            "text": "Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 2724
+          },
+          {
+            "tag": "BUTTON",
+            "cls": "",
+            "text": "Escuchar Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 2427
+          }
+        ]
+      },
+      {
+        "width": 390,
+        "height": 844,
+        "scale": 200,
+        "scrollWidth": 5375,
+        "clientWidth": 375,
+        "overflow": [
+          {
+            "tag": "STRONG",
+            "cls": "",
+            "text": "Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 5375
+          },
+          {
+            "tag": "BUTTON",
+            "cls": "",
+            "text": "Escuchar Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 4744
+          }
+        ]
+      },
+      {
+        "width": 844,
+        "height": 390,
+        "scale": 100,
+        "scrollWidth": 2730,
+        "clientWidth": 829,
+        "overflow": [
+          {
+            "tag": "STRONG",
+            "cls": "",
+            "text": "Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 2730
+          },
+          {
+            "tag": "BUTTON",
+            "cls": "",
+            "text": "Escuchar Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 2433
+          }
+        ]
+      },
+      {
+        "width": 844,
+        "height": 390,
+        "scale": 200,
+        "scrollWidth": 5375,
+        "clientWidth": 829,
+        "overflow": [
+          {
+            "tag": "STRONG",
+            "cls": "",
+            "text": "Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 5375
+          },
+          {
+            "tag": "BUTTON",
+            "cls": "",
+            "text": "Escuchar Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "right": 4744
+          }
+        ]
+      }
+    ],
+    "controls": [
+      {
+        "tag": "INPUT",
+        "role": null,
+        "name": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "role": null,
+        "name": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "role": null,
+        "name": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "role": null,
+        "name": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "role": null,
+        "name": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "role": null,
+        "name": "",
+        "disabled": false
+      },
+      {
+        "tag": "SELECT",
+        "role": null,
+        "name": "",
+        "disabled": false
+      },
+      {
+        "tag": "A",
+        "role": null,
+        "name": "",
+        "disabled": false
+      }
+    ],
+    "focus": [
+      {
+        "tag": "SELECT",
+        "text": "Todas las canciones\nLista propia 3\nLista propia 2\nLista propia 18\nLista propia 15\nLista propia 7\nLis",
+        "outline": "auto"
+      },
+      {
+        "tag": "SELECT",
+        "text": "Agrupación de biblioteca",
+        "outline": "auto"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Preparar cola de esta selección",
+        "outline": "solid"
+      },
+      {
+        "tag": "SELECT",
+        "text": "Elige una playlist\nLista propia 3\nLista propia 2\nLista propia 18\nLista propia 15\nLista propia 7\nList",
+        "outline": "auto"
+      },
+      {
+        "tag": "SUMMARY",
+        "text": "Editar portada",
+        "outline": "auto"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Escuchar Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+        "outline": "solid"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Quitar favorito",
+        "outline": "solid"
+      },
+      {
+        "tag": "SUMMARY",
+        "text": "Editar metadatos de Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+        "outline": "auto"
+      },
+      {
+        "tag": "INPUT",
+        "text": "Nueva playlist",
+        "outline": "auto"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Crear playlist",
+        "outline": "solid"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Actualizar historial",
+        "outline": "solid"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Pausar",
+        "outline": "solid"
+      },
+      {
+        "tag": "SELECT",
+        "text": "Desactivada\nUna pista\nToda la cola",
+        "outline": "auto"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Aleatorio",
+        "outline": "solid"
+      },
+      {
+        "tag": "SUMMARY",
+        "text": "Exportar e importar organización",
+        "outline": "auto"
+      },
+      {
+        "tag": "SUMMARY",
+        "text": "Ajustes y límites de esta fase",
+        "outline": "auto"
+      },
+      {
+        "tag": "BODY",
+        "text": "PULSO WEB · BIBLIOTECA LOCAL\n\nTu música, en este navegador\nInicio\nBuscar\nBiblioteca\nControl de repro",
+        "outline": "none"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Inicio",
+        "outline": "solid"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Buscar",
+        "outline": "solid"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Biblioteca",
+        "outline": "solid"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Ceder control",
+        "outline": "solid"
+      },
+      {
+        "tag": "A",
+        "text": "Escuchar Aurora, Brisa y Camino sin importar archivos",
+        "outline": "auto"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Cargar música de prueba",
+        "outline": "solid"
+      },
+      {
+        "tag": "INPUT",
+        "text": "Importar audios",
+        "outline": "auto"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Comprobar archivos locales",
+        "outline": "solid"
+      },
+      {
+        "tag": "INPUT",
+        "text": "Buscar por título, artista o álbum",
+        "outline": "auto"
+      },
+      {
+        "tag": "SELECT",
+        "text": "Todas las canciones\nLista propia 3\nLista propia 2\nLista propia 18\nLista propia 15\nLista propia 7\nLis",
+        "outline": "auto"
+      },
+      {
+        "tag": "SELECT",
+        "text": "Agrupación de biblioteca",
+        "outline": "auto"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Preparar cola de esta selección",
+        "outline": "solid"
+      },
+      {
+        "tag": "SELECT",
+        "text": "Elige una playlist\nLista propia 3\nLista propia 2\nLista propia 18\nLista propia 15\nLista propia 7\nList",
+        "outline": "auto"
+      },
+      {
+        "tag": "SUMMARY",
+        "text": "Editar portada",
+        "outline": "auto"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Escuchar Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+        "outline": "solid"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Quitar favorito",
+        "outline": "solid"
+      },
+      {
+        "tag": "SUMMARY",
+        "text": "Editar metadatos de Tema propio LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+        "outline": "auto"
+      },
+      {
+        "tag": "INPUT",
+        "text": "Nueva playlist",
+        "outline": "auto"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Crear playlist",
+        "outline": "solid"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Actualizar historial",
+        "outline": "solid"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Pausar",
+        "outline": "solid"
+      },
+      {
+        "tag": "SELECT",
+        "text": "Desactivada\nUna pista\nToda la cola",
+        "outline": "auto"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Aleatorio",
+        "outline": "solid"
+      },
+      {
+        "tag": "SUMMARY",
+        "text": "Exportar e importar organización",
+        "outline": "auto"
+      },
+      {
+        "tag": "SUMMARY",
+        "text": "Ajustes y límites de esta fase",
+        "outline": "auto"
+      },
+      {
+        "tag": "BODY",
+        "text": "PULSO WEB · BIBLIOTECA LOCAL\n\nTu música, en este navegador\nInicio\nBuscar\nBiblioteca\nControl de repro",
+        "outline": "none"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Inicio",
+        "outline": "solid"
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Buscar",
+        "outline": "solid"
+      }
+    ],
+    "preserved": {
+      "tracks": 1000,
+      "playlists": 20,
+      "entries": 1000,
+      "favorites": 91,
+      "revisionOne": true
+    }
+  },
+  "baselineBuild": {
+    "directory": ".local/releases/quality-before",
+    "entry": "/releases/7b973abc7dcf3ded.html",
+    "indexSHA256": "7b973abc7dcf3ded212d02c2331244ec804bd599630bf06315c9eb51b962a1c0"
+  },
+  "layoutFix": {
+    "change": "Wrap unbroken text with overflow-wrap:anywhere; bound button width/border-box and flex child min-width; no hidden overflow or text truncation",
+    "sourceStylesheet": "src/style.css",
+    "result": {
+      "passed": true,
+      "environment": "Chromium Linux sandbox, temporary loopback, frozen baseline plus current source CSS",
+      "iphoneVerified": false,
+      "cases": [
+        {
+          "width": 320,
+          "height": 700,
+          "textScale": 100,
+          "passed": true,
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": []
+        },
+        {
+          "width": 320,
+          "height": 700,
+          "textScale": 200,
+          "passed": true,
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": []
+        },
+        {
+          "width": 390,
+          "height": 844,
+          "textScale": 100,
+          "passed": true,
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "overflow": []
+        },
+        {
+          "width": 390,
+          "height": 844,
+          "textScale": 200,
+          "passed": true,
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "overflow": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "textScale": 100,
+          "passed": true,
+          "scrollWidth": 844,
+          "clientWidth": 844,
+          "overflow": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "textScale": 200,
+          "passed": true,
+          "scrollWidth": 844,
+          "clientWidth": 844,
+          "overflow": []
+        }
+      ],
+      "limits": [
+        "200% font-size approximates text enlargement, not Safari zoom",
+        "No VoiceOver, contrast acceptance or physical iPhone test",
+        "Current stylesheet is injected into the frozen baseline; final product integration is separate"
+      ],
+      "stylesheetSHA256": "91383fdf4951db2a5fb0c98a30e095111c18b0ff9d4c71e342473993ab81a22c",
+      "browserVersion": "154.0.8037.57",
+      "before": {
+        "scrollWidth": 3490,
+        "clientWidth": 390
+      },
+      "pageErrors": 0,
+      "externalRequests": 0
+    }
+  },
+  "keyboard": {
+    "passed": true,
+    "iphoneVerified": false,
+    "cases": [
+      {
+        "name": "Enter prepares a paused queue and plays; Space pauses the sole audio element",
+        "passed": true
+      },
+      {
+        "name": "Keyboard slider changes position without autoplay; repeat and shuffle update through native keyboard controls",
+        "passed": true
+      },
+      {
+        "name": "Keyboard next/reorder/remove preserves selected occurrence, source and all library tracks",
+        "passed": true
+      },
+      {
+        "name": "Keyboard opens/closes lyrics and saves inert plain text without changing audio source",
+        "passed": true
+      },
+      {
+        "name": "Keyboard metadata save preserves current playback source and library size",
+        "passed": true
+      },
+      {
+        "name": "Keyboard export/download works; restore confirmation receives focus and Escape cancels confirmation without applying",
+        "passed": true
+      }
+    ],
+    "environment": "Chromium Linux sandbox, temporary loopback, own context, frozen baseline + current CSS",
+    "limits": [
+      "Targeted controls are focused explicitly before keyboard activation; not a complete Tab-order audit",
+      "Files supplied through the automation file input; OS picker not tested",
+      "No VoiceOver, real zoom or physical iPhone evidence"
+    ],
+    "browserVersion": "154.0.8037.57",
+    "pageErrors": 0,
+    "externalRequests": 0
+  },
+  "namesInventory": "Audit candidates include hidden controls and need individual inspection; no confirmed accessible-name defect claimed",
+  "performance": {
+    "currentStatus": "Implementation/reread and browser-internal timing in progress via pulso-t18-library-render-sol-medium-r2, Sol6.1 medium/default",
+    "baselineE2E": {
+      "searchMs": [
+        2760.327867,
+        2093.9088229999998,
+        2258.8737950000013,
+        1922.4954460000008,
+        2392.0273239999988
+      ],
+      "navigationMs": [
+        2020.3887140000006,
+        1496.795680999996,
+        1842.1478330000027,
+        1756.8733439999996,
+        1317.3901909999986
+      ],
+      "playlistFilterMs": [
+        738.9765740000003,
+        2209.682096000004,
+        3028.1326039999913,
+        2264.5429000000004,
+        2922.5913310000033
+      ]
+    },
+    "warning": "Playwright overhead included; no 300 ms/iPhone/heap/IO guarantee"
+  },
+  "executionHistory": [
+    {
+      "test": "layout initial harness",
+      "result": "FAIL: inline style injection correctly blocked by CSP; repeated using same-origin stylesheet, without loosening CSP",
+      "log": ".local/web-layout-long-text.log"
+    },
+    {
+      "test": "keyboard initial harness",
+      "result": "FAIL: queue-ready wait timeout with browser serviceWorkers:block setting; repeated with explicit unsupported-worker API for bounded Blob test",
+      "log": ".local/web-keyboard.log"
+    }
+  ],
+  "limits": [
+    "These focused CSS/keyboard cases use frozen baseline plus current stylesheet; final paginated product integration is not tested yet",
+    "No new deployment; private candidate still7b973abc7dcf3ded",
+    "VoiceOver/iPhone/real zoom/contrast/reduced-motion/full Tab order remain pending",
+    "T18 and P0-W incomplete"
+  ],
+  "commands": [
+    "node tests/integration/check-web-quality-audit.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-web-layout.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-web-keyboard.mjs"
+  ]
+}

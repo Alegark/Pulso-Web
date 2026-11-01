@@ -1,0 +1,202 @@
+{
+  "project": "Pulso-Web",
+  "updatedUTC": "2026-10-31T18:18:58.798813+00:00",
+  "increment": "T18 B1a",
+  "parentDecision": "LIMITED_ACCEPTANCE_B1A_AFTER_FINAL_BROWSER_RECEIPTS_AND_BASELINE_HASHES",
+  "reviewHistory": {
+    "r19DecisionUnchanged": "FAVORABLE_CODE_REVIEW_WITH_BROWSER_ACCEPTANCE_PENDING",
+    "findings": [],
+    "ownNodeProbes": 2,
+    "browserConditionResolvedByParent": {
+      "core": ".local/evidence/reader-b1a-r17.json",
+      "UI": ".local/evidence/reader-queue-ui-r18.json",
+      "B1aReviewedSourcesVerifiedBeforeB1bDelegation": true
+    }
+  },
+  "validation": {
+    "coreChromium": 57,
+    "coreIDB": 27,
+    "coreOPFS": 30,
+    "UIChromium": 18,
+    "UIIDB": 12,
+    "UIOPFS": 6,
+    "existingUnitQueuePlayer": 20,
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "pageErrors": 0,
+    "externalAttempts": 0
+  },
+  "scope": [
+    "Detailed valid/missing/corrupt/unknown with fixed FailureV1",
+    "manifest identity and data-only validation",
+    "restore same detailed hash once, unknown rejects whole plan",
+    "main atomic refresh and conservative A/B/A restore",
+    "scope/proof/activity guards after awaits and at install/finally",
+    "diagnostic preserves issued failure phase/cause"
+  ],
+  "historicalHarnessFailuresPreserved": {
+    "core": "four async lock ifAvailable assertions, exclusive bounded request corrected; no reader A change",
+    "UI": {
+      "productBug": false,
+      "reason": "Earlier failures sampled Activity.count in a later browser task than the drain condition; paused media metadata/progress may admit save-position between them. Final runner captures the state object atomically with its count===0 condition. Previous attempt JSON/HTML preserved.",
+      "correction": "drainedState returns the exact snapshot satisfying count===0; real operation and guard assertions retained."
+    }
+  },
+  "sourceHashesB1aBaseline": {
+    "src/library/library.ts": {
+      "bytes": 7104,
+      "sha256": "c1bc254be045d042048819fec63674ce04677372b71113569fbc8cefe802128c"
+    },
+    "src/playback/queue-restore.ts": {
+      "bytes": 2703,
+      "sha256": "5d2e170a29060f1dc88c4b28dd44787a3bae49ba4e53ffa00d3faae23765b28f"
+    },
+    "src/main.tsx": {
+      "bytes": 62326,
+      "sha256": "cb33860800b1485852f34996c6559a6db6ce3be5af62b0cb38bfb71c636bbc24"
+    },
+    "src/storage/asset-reader.ts": {
+      "bytes": 4810,
+      "sha256": "f73fd32fecc082252545c9068ce7b984f800ba1dae61b3fa1aa32a2a6e0e0e18"
+    },
+    "src/errors/app-failure.ts": {
+      "bytes": 4984,
+      "sha256": "177cfc666556e119ebfb899e8e314782fbf20766b21c82cc2bbd2c86de38395c"
+    },
+    "src/playback/ownership.ts": {
+      "bytes": 6641,
+      "sha256": "5c7ade658ae1251f83506cf29852a38e5a6bfa7c7126b4890585f18e5e5ee5e8"
+    }
+  },
+  "B1bExpectedConcurrentSourceChanges": {
+    "src/playback/blob-source.ts": {
+      "B1a": "87c28ebfc305230a8c66d734fe38b81a1c61f5f5f068cd39b869afdb13b7b85a",
+      "B1bInProgress": "392e636fc199d0d222695156ba344a3e746b297735ddede46ad9852fa9345f7e"
+    },
+    "src/storage/asset-reader.ts": {
+      "B1a": "f73fd32fecc082252545c9068ce7b984f800ba1dae61b3fa1aa32a2a6e0e0e18",
+      "B1bInProgress": "5bfee5e0b6be30c214a2c673b4c2925f4ef2a8ec6e2b4472ff616bf12ff68fe9"
+    }
+  },
+  "parentRecordingAttempt": "Initial current-hash assertion stopped before writing docs when B1b edited Blob as assigned; corrected to preserve B1a baseline and report expected B1b separately. No product defect or history rewrite.",
+  "noProductionBuildForB1aYet": false,
+  "nextIncrement": "B2 batch typed observations/worker+panel, parent wiring after APIs; B3 backup after",
+  "limits": [
+    "Chromium Linux sandbox/source build, TESTONLY boundary faults and labeled synthetic ABA",
+    "no physical quota/eviction/iPhone/Safari acceptance",
+    "no new SW test in UI18; shared-reader SW regression before next release",
+    "not complete I.errors/T18/P0"
+  ],
+  "USD": 0,
+  "iPhone": "APLAZADO/PENDIENTE",
+  "P0Complete": false,
+  "B1b": {
+    "status": "LIMITED_APPROVAL_AND_PRODUCT_VALIDATION",
+    "evidence": ".local/evidence/reader-blob-b1b-r20.json",
+    "sources": [
+      {
+        "path": "src/storage/asset-reader.ts",
+        "bytes": 6153,
+        "sha256": "3cce2a576590e8035db797092e2375b1b09e64af3683f8bf4cb17d9d92bd064a"
+      },
+      {
+        "path": "src/playback/blob-source.ts",
+        "bytes": 3671,
+        "sha256": "6320e19e1809eb2ec58f6d5634a94dcb6cc3ce407f0633ec91d05f5682b27f7c"
+      }
+    ],
+    "reportedUniqueBackendCases": 84,
+    "reportedFocalExecutions": 134,
+    "selectedRegressions": 20,
+    "countingLimit": "Six selected runs across successive changes, not one final whole-suite84 run; receipts preserved separately. Independent review pending.",
+    "independentReview": {
+      "decision": "LIMITED_APPROVAL_B1B_NO_REPRODUCIBLE_P1_P2",
+      "ownChromiumCases": 8,
+      "P1P2": 0,
+      "receipt": ".local/evidence/reader-blob-review-r21.json",
+      "historicalCountLimitPreserved": true
+    },
+    "scanContract": {
+      "reader": "verifyDetailed(integrity=true,scan?:{check?:()=>void;onChunk?:(bytes:Uint8Array)=>void}):Promise<ReadVerificationV1>",
+      "blob": "boundedBlobSources(assetIds:string[],ownerProof:string,current:()=>boolean=()=>true):Promise<string[]>",
+      "scanFalse": "onChunk + integrity=false -> unknown/verify/input-invalid before hash/range; check-only preserves presence semantics (OPFS size only).",
+      "callbackContract": "Trusted synchronous internal callback, must not mutate bytes/reenter/return promises. Guard checks before/after readRange awaits, before consumption and at finish. Only issued cancelled/owner-unavailable control guards propagate; all other callback errors, including issued integrity/storage failures, are unknown, never evidence of corrupt/missing bytes. No diagnostic observer.",
+      "lifetime": "verifyDetailed never releases; caller finally owns generation lock through verification/consumption/materialization. OPFS uses already-open File size, no reopen.",
+      "blobSemantics": "Manifest data descriptors and id coherence validated before reader/backend. Preflight full occurrence budget, same-client ownerProof/playback; scan hashes precisely retained chunks; create Blob/URL only valid/current, current guards around awaits and after URL registry. Failed attempt revokes only URLs registered by that attempt.",
+      "failures": "Own admission/input/owner/missing/corrupt use accepted AppFailure pairs; read/verify IO typed at actual boundary. Blob/createObjectURL errors use transport/none, never audio corruption; hostile values not inspected. Native DOM brand checked only by existing foundation."
+    },
+    "parentVisibleNote": "Current bounded Blob8MiB/file24MiB/queue now stated in Settings, same existing budgets.",
+    "productionBuild": "PASS6314ebda94d3dfd5 grouped B1a+B1b"
+  },
+  "B1aValidationExistingBuild": "5f5ba1bfe2fd5ae2",
+  "productionBuildGroupedWithB1b": true,
+  "parentProductValidation": {
+    "types": "PASS",
+    "lint": "PASS",
+    "build": "PASS",
+    "chromium": "154.0.8037.57 sandbox",
+    "localAssetsBackends": [
+      "idb",
+      "opfs"
+    ],
+    "GETHashRangesHEADForeign403": "PASS",
+    "SWStopAndFetch": "PASS",
+    "offlineAfterChromiumRestart": "PASS, context offline; assets origin server not stopped",
+    "keyboardCases": 6,
+    "rawNoticesOfflineCases": 3,
+    "updateFrom": "5f5ba1bfe2fd5ae2",
+    "oldStillPlayingNewPausedRestoredPaused": true,
+    "receipts": {
+      "local-assets": {
+        "path": ".local/evidence/reader-b1-local-assets.json",
+        "SHA256": "4a6c44018cf96def8f3d23bbf32fdeba3a25845e6e4ecdb47213cce4cc2e49b5"
+      },
+      "keyboard": {
+        "path": ".local/evidence/reader-b1-keyboard.json",
+        "SHA256": "a053a7e72d83aeceb6824176e1d1259e4bdaca000dce3277afbaf3f39202c9a3"
+      },
+      "licenses": {
+        "path": ".local/evidence/reader-b1-licenses.json",
+        "SHA256": "4ea3aa0f90a2c6a45b28f33f43601094c673db833a3d186c4f7c51eb7bc20be3"
+      },
+      "live-update": {
+        "path": ".local/evidence/reader-b1-live-update.json",
+        "SHA256": "647c5a1dda8bbe41286c88b19f62e1c80b55eb593e38c52d282929580cbb65d4"
+      },
+      "private-copy": {
+        "path": ".local/evidence/reader-b1-private-copy.json",
+        "SHA256": "d6ea77a586f259614b50bd6ea38182411b979894e22b3b988241fc8adfe7a891"
+      },
+      "private-probe": {
+        "path": ".local/evidence/reader-b1-private-probe.json",
+        "SHA256": "31b3f61caab0a965aabf7824a5bbb9e45a284a70a3890d3a605f7e1df3a2306e"
+      }
+    }
+  },
+  "delivery": {
+    "entry": "/releases/6314ebda94d3dfd5.html",
+    "indexSHA256": "6314ebda94d3dfd5603c0f44e70ad75606f6116cc55cee0776a5f730e190d72d",
+    "swSHA256": "bbeaf4f07e8900518daf12fbf1657c1fb1cd713e1e630319f1f852a8871669b1",
+    "sameExistingAuthorizedPrivateCopy": true,
+    "copiedFiles": 33,
+    "retainedOldAssets": true,
+    "HTTPSProbe": "PASS",
+    "oneAudio": true,
+    "transport": "bounded-blob",
+    "CSPViolations": 0,
+    "privateOffline": "PENDING_NOT_DEMONSTRATED",
+    "newPortServiceAccount": false,
+    "excludesB2InProgress": true
+  },
+  "commands": [
+    "npm run typecheck",
+    "npm run lint",
+    "npm run build",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-local-assets.mjs",
+    "INSTABOX_HEADLESS=1 PULSO_QUALITY_PRODUCT=1 node tests/integration/check-web-keyboard.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-license-delivery.mjs",
+    "INSTABOX_HEADLESS=1 PULSO_UPDATE_BASELINE=.local/releases/reader-b1-before node tests/integration/check-live-update.mjs",
+    "python3 scripts/update_review_release.py",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-private-artwork.mjs"
+  ]
+}

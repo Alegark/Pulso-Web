@@ -1,0 +1,467 @@
+{
+  "status": "PASS solo incremento web y casos indicados; T13/P0-W incompletos",
+  "timestampUtc": "2026-10-31T10:44:10.618012+00:00",
+  "browser": "Chromium154.0.8037.57 Linux sandbox headless",
+  "finalChecks": {
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "unit": {
+      "passed": 22,
+      "failed": 0,
+      "command": "npx tsx --test tests/unit/ownership.test.ts tests/unit/player.test.ts tests/unit/queue-restore.test.ts tests/unit/blob-source.test.ts",
+      "log": ".local/evidence/handoff-final-unit.tap"
+    },
+    "build": "PASS"
+  },
+  "initialHandoffCases": {
+    "phase": "r4 before definitive batch error classification fix",
+    "result": {
+      "passed": true,
+      "environment": "Chromium Linux, sandbox enabled, own contexts and loopback, isolated build",
+      "iphoneVerified": false,
+      "cases": [
+        {
+          "name": "request/rejection do not pause owner; requester remains blocked",
+          "passed": true
+        },
+        {
+          "name": "silence keeps requester blocked without timeout takeover",
+          "passed": true
+        },
+        {
+          "name": "forged/stale ACK cannot grant ownership while real lock is held",
+          "passed": true
+        },
+        {
+          "name": "handoff unloads old audio; ACK follows actual lock release; new owner restores position/modes paused; old ticket 403",
+          "passed": true
+        },
+        {
+          "name": "same tab reacquires with fresh proof; old ticket and old ended/MediaSession callbacks remain revoked",
+          "passed": true
+        },
+        {
+          "name": "two requesters produce exactly one owner, loser stays blocked",
+          "passed": true
+        },
+        {
+          "name": "failed persistence retains real locks and queue snapshot; explicit retry releases",
+          "passed": true
+        },
+        {
+          "name": "third tab can win the real lock before delayed ACK; ACK recipient remains blocked",
+          "passed": true
+        },
+        {
+          "name": "closing owner permits a real availability check and paused restore",
+          "passed": true
+        },
+        {
+          "name": "without Web Locks playback, import, settings and export mutations stay blocked",
+          "passed": true
+        },
+        {
+          "name": "without BroadcastChannel manual release and real availability check work",
+          "passed": true
+        },
+        {
+          "name": "full import remains active beyond writer lock, including optional result and cancellation acknowledgement",
+          "passed": true
+        },
+        {
+          "name": "lyrics file read and pending lyrics persistence block cession until completion",
+          "passed": true
+        },
+        {
+          "name": "pending artwork persistence blocks cession",
+          "passed": true
+        },
+        {
+          "name": "batch cancellation awaits actual terminal result; no automatic cession after completion",
+          "passed": true
+        },
+        {
+          "name": "export identity write, backup confirmation and uncertain apply block cession; inspection resolves real commit",
+          "passed": true
+        },
+        {
+          "name": "backup commit refresh(true,false) preserves active audio source and independent queue",
+          "passed": true
+        },
+        {
+          "name": "visibility hidden saves position without pausing or releasing ownership",
+          "passed": true
+        },
+        {
+          "name": "synthetic persisted pagehide unloads synchronously; persisted pageshow requires real reacquisition without autoplay",
+          "passed": true
+        },
+        {
+          "name": "late transport response after pagehide cannot install a source or resume audio",
+          "passed": true
+        }
+      ],
+      "limitations": [
+        "No physical iPhone or real background shutdown guarantee",
+        "Existing authorized response streams may finish; no per-chunk revocation promised",
+        "BFCache lifecycle handlers tested with synthetic persisted events, not a browser-confirmed BFCache restore",
+        "Pagehide with an active/uncertain operation retains locks conservatively: close that entry to recover, no automatic release after completion",
+        "Importer test holds its final worker response after writer completion; separate delayed embedded-metadata subphase not injected"
+      ],
+      "browserVersion": "154.0.8037.57",
+      "distUnchanged": true
+    }
+  },
+  "reviewAndFix": {
+    "reviewRound": "pulso-t13-handoff-sol-review-r5",
+    "P2": "Empty playlist domain rejection incorrectly set permanent batch uncertainty",
+    "fix": "Only storage/worker/unknown errors activate new uncertainty; definitive errors preserve any existing marker without inventing uncertainty",
+    "browserRegression": "PASS in operation-gaps test, including storage and worker uncertainty remaining blocked until explicit resolution"
+  },
+  "operationGapsAfterFix": {
+    "passed": true,
+    "focus": "all",
+    "command": "INSTABOX_HEADLESS=1 node tests/integration/check-handoff-operation-gaps.mjs",
+    "environment": "Chromium Linux; sandbox enabled; private contexts; temporary loopback; isolated Vite production build",
+    "memory": "Engram read-only: 12 files; FullContentVerified=true, project/bytes/SHA-256 verified",
+    "fixtureProvenance": "Repository synthetic A.wav/A.mp3; own USLT text and canvas PNG APIC assembled in this runner",
+    "cases": [
+      {
+        "name": "inspectEmbeddedArtwork entry blocks cession after sealed audio and free writer; actual USLT/APIC and bytes finish; explicit cession only",
+        "passed": true
+      },
+      {
+        "name": "inspectEmbeddedLyrics entry blocks cession after sealed audio and free writer; actual USLT/APIC and bytes finish; explicit cession only",
+        "passed": true
+      },
+      {
+        "name": "recoverLocalBatch blocks before effect and after durable effect before response; preserves organization/bytes/audio",
+        "passed": true
+      },
+      {
+        "name": "retryLocalBatch blocks before effect and after durable effect before response; preserves organization/bytes/audio",
+        "passed": true
+      },
+      {
+        "name": "r5 real empty playlist rejects without uncertainty; history empty; explicit release frees both locks and reacquisition works",
+        "passed": true
+      },
+      {
+        "name": "storage injected worker response retains uncertainty through refresh and empty-domain rejection; explicit retry resolves and releases",
+        "passed": true
+      },
+      {
+        "name": "worker injected worker response retains uncertainty through refresh and empty-domain rejection; explicit retry resolves and releases",
+        "passed": true
+      },
+      {
+        "name": "preview actual export blocks at entry and after real plan creation; never auto-applies or cedes",
+        "passed": true
+      },
+      {
+        "name": "inspectOrganizationApply awaits before/after real API; unresolved inspection retains gate; explicit recovery archives unknown without replay",
+        "passed": true
+      },
+      {
+        "name": "startOrganizationRecovery awaits before/after real API; unresolved inspection retains gate; explicit recovery archives unknown without replay",
+        "passed": true
+      }
+    ],
+    "hooks": {
+      "inspectEmbeddedLyrics": 1,
+      "inspectEmbeddedArtwork": 2,
+      "previewOrganization": 1,
+      "inspectOrganizationApply": 1,
+      "startOrganizationRecovery": 1,
+      "recoverLocalBatch": 2,
+      "retryLocalBatch": 2
+    },
+    "externalRequests": [],
+    "pageErrors": [],
+    "limitations": [
+      "Test-only Vite API wrappers delay before effects and after settled effects; no await added inside IDB transactions.",
+      "Batch interrupted record and foreign backup operation are synthetic durable fixtures; recovery, retry, preview, inspect and worker implementations are real.",
+      "Blob transport and OPFS bytes used; import intentionally pauses audio at admission (existing main.tsx behavior); tests preserve that source/paused state and both ownership locks. Other operation tests preserve active playback. No BFCache, iPhone, Telegram or P0 acceptance."
+    ],
+    "sourceSHA256": {
+      "src/imports/artwork.ts": "d2829554b5d35e733997e199496f9b458443c46d203fd1e20d8108a2296e2bdd",
+      "src/imports/lyrics.ts": "1204cd20a317169840165cbfde799a8dca4571bf500f72d66d6156453bdb3974",
+      "src/library/local-batches.ts": "d702b672fac66f15dc4ef7b8233d2e3b6e6c1d330868dee83a4dc2240c69975b",
+      "src/library/organization-backup.ts": "5001507b30383af96e4e5962d041f53ac605444a8377baf4ac76478b1d9b3b96",
+      "src/main.tsx": "8882565e25a35594376e5620054718a5308e2c0d47e96ad86e9e826e83743947",
+      "src/ui/LocalBatchPanel.tsx": "c871c0e0bfbe051ecbdc46fdb1fc99e6839a15a3ad5034057465e70327de339f",
+      "src/ui/OrganizationPanel.tsx": "3082fb92afcec3c9ce32d2945a5bec0bc44be897b21e4538e0bdbc5c311e5ec2"
+    },
+    "browserVersion": "154.0.8037.57",
+    "distUnchanged": true,
+    "originalRunnerUnchanged": true
+  },
+  "realNavigation": {
+    "passed": true,
+    "iphoneVerified": false,
+    "cases": [
+      {
+        "name": "Actual navigation away while playing releases control; back restores queue paused",
+        "passed": true,
+        "persisted": false
+      },
+      {
+        "name": "Back navigation after explicit release requires lock acquisition or a new document and stays paused",
+        "passed": true,
+        "persisted": true
+      }
+    ],
+    "bfcache": {
+      "verified": true,
+      "playingNavigation": false,
+      "idleNavigation": true,
+      "notRestoredReasons": {
+        "src": null,
+        "id": null,
+        "url": "http://127.0.0.1:41079/",
+        "name": null,
+        "reasons": [
+          {
+            "reason": "weblocks-contention"
+          }
+        ],
+        "children": []
+      }
+    },
+    "environment": "Chromium headless sandbox, own context, temporary loopback, actual goBack navigation",
+    "browserVersion": "154.0.8037.57",
+    "pageErrors": 0,
+    "externalRequests": 0
+  },
+  "regressionsAfterFix": {
+    "queue": {
+      "passed": true,
+      "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+      "backend": "idb",
+      "transport": "blob",
+      "iphoneVerified": false,
+      "cases": [
+        {
+          "name": "A/B/A with missing B preserves second A, position, repeat and filtered shuffle",
+          "passed": true
+        },
+        {
+          "name": "missing current B falls back to first A at zero",
+          "passed": true
+        },
+        {
+          "name": "unknown current reference falls back at zero",
+          "passed": true
+        },
+        {
+          "name": "all present preserves A/B/A and second occurrence selection",
+          "passed": true
+        },
+        {
+          "name": "none available preserves original snapshot, organization and bytes",
+          "passed": true
+        },
+        {
+          "name": "null current remains unselected",
+          "passed": true
+        },
+        {
+          "name": "oversized position clamps on real loadedmetadata",
+          "passed": true
+        },
+        {
+          "name": "invalid shuffle and repeat normalize off with warning",
+          "passed": true
+        },
+        {
+          "name": "negative position and absent modes normalize",
+          "passed": true
+        },
+        {
+          "name": "malformed snapshot preserved without preparing audio",
+          "passed": true
+        },
+        {
+          "name": "malformed snapshot preserved without preparing audio",
+          "passed": true
+        },
+        {
+          "name": "malformed snapshot preserved without preparing audio",
+          "passed": true
+        },
+        {
+          "name": "malformed snapshot preserved without preparing audio",
+          "passed": true
+        },
+        {
+          "name": "global IDB chunk failure aborts restoration rather than marking songs absent",
+          "passed": true
+        },
+        {
+          "name": "global transport failure preserves original snapshot",
+          "passed": true
+        },
+        {
+          "name": "corruption: same-length B is omitted, second A stays selected and plays",
+          "passed": true
+        },
+        {
+          "name": "corruption: current B is omitted and first A starts paused at zero",
+          "passed": true
+        },
+        {
+          "name": "corruption: all damaged bytes and original snapshot remain unchanged",
+          "passed": true
+        }
+      ],
+      "browserVersion": "154.0.8037.57"
+    },
+    "embeddedLyrics": {
+      "passed": true,
+      "cases": [
+        {
+          "name": "real import worker automatically displays MP3 USLT, WAV ID3 and M4A text/LRC with known provenance and inert text",
+          "passed": true
+        },
+        {
+          "name": "SYLT literal brackets survive storage/UI; exactly two events at original times, with no invented 9000ms event",
+          "passed": true
+        },
+        {
+          "name": "manual override saves without pausing engine and survives exact reimport plus paused reload",
+          "passed": true
+        },
+        {
+          "name": "explicit manual absence stays hidden across reimport/reload and is labelled as the user choice",
+          "passed": true
+        },
+        {
+          "name": "oversized optional lyrics produce a Spanish warning while all five audio hashes and organization remain complete; no external requests",
+          "passed": true
+        }
+      ],
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57",
+      "pageErrors": 0,
+      "externalRequests": 0,
+      "cspViolations": 0
+    },
+    "organization": {
+      "passed": true,
+      "cases": [
+        {
+          "name": "real JSON download allowlist preserves organization and contains no audio/storage/session/ticket fields; audio continues",
+          "passed": true
+        },
+        {
+          "name": "preview never auto-applies; explicit confirmation and keep-local preserve newer metadata and playlist",
+          "passed": true
+        },
+        {
+          "name": "chosen backup restores metadata/favorite/order while active engine, source and queue snapshot stay unchanged; hostile title stays text",
+          "passed": true
+        },
+        {
+          "name": "clean context restores organization without false download; importing original links same track and preserves favorite/playlist without duplicate",
+          "passed": true
+        },
+        {
+          "name": "edit after preview rejects stale plan without partial changes or pausing active audio",
+          "passed": true
+        },
+        {
+          "name": "UI cancellation during real transaction rolls back organization and keeps audio playing",
+          "passed": true
+        },
+        {
+          "name": "invalid/future JSON has no partial effects; reload preserves linked track and paused queue",
+          "passed": true
+        }
+      ],
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57",
+      "pageErrors": 0,
+      "cspViolations": 0
+    }
+  },
+  "liveUpdate": {
+    "passed": true,
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    }
+  },
+  "privateHTTPSProbe": {
+    "passed": true,
+    "iphoneVerified": false,
+    "environment": "Chromium desktop private HTTPS, fresh context",
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "oneEngine": true,
+      "transport": "bounded-blob",
+      "violations": [],
+      "localBatchComplete": true,
+      "localLyricsReady": true,
+      "organizationRoundtrip": true,
+      "stableLauncher": true,
+      "explicitHandoff": {
+        "requestedWithoutPausing": true,
+        "oldAudioUnloaded": true,
+        "newOwnerRestoredPaused": true,
+        "newOwnerPlaysAfterGesture": true,
+        "onlyOneTabPlaying": true
+      }
+    }
+  },
+  "delivery": {
+    "version": 1,
+    "entry": "/releases/7b973abc7dcf3ded.html",
+    "copiedFiles": 31,
+    "retainedOldAssets": true,
+    "indexSHA256": "7b973abc7dcf3ded212d02c2331244ec804bd599630bf06315c9eb51b962a1c0",
+    "swSHA256": "ef1194e0c2513390a3116846b1ff4b471e9afaf2594fe54fc8af99b0ff7ce5a4",
+    "lockSHA256": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f"
+  },
+  "sourceSHA256": {
+    "src/main.tsx": "8882565e25a35594376e5620054718a5308e2c0d47e96ad86e9e826e83743947",
+    "src/playback/ownership.ts": "5c7ade658ae1251f83506cf29852a38e5a6bfa7c7126b4890585f18e5e5ee5e8",
+    "src/playback/player.ts": "3ec9a9b2cb898c115cb3f6c463edbe3ff18877b7671646afceb8e2b2105b56c3",
+    "src/playback/transport.ts": "2c9dd5a18cd22b3ebbd34eb4e67fd2984d3241421c6e3c75f22ef4e1457366f8",
+    "src/playback/blob-source.ts": "87c28ebfc305230a8c66d734fe38b81a1c61f5f5f068cd39b869afdb13b7b85a",
+    "src/ui/ArtworkPanel.tsx": "e80d1738a78a656da1d8d4197561f63f1770ee00b65706adfb69e370a017c503",
+    "src/ui/LyricsPanel.tsx": "31db0f9c04d37afa05aa4b3f1c1be14d70ad082e19fc4dc5b8d60bad20508e04",
+    "src/ui/LocalBatchPanel.tsx": "c871c0e0bfbe051ecbdc46fdb1fc99e6839a15a3ad5034057465e70327de339f",
+    "src/ui/OrganizationPanel.tsx": "3082fb92afcec3c9ce32d2945a5bec0bc44be897b21e4538e0bdbc5c311e5ec2",
+    "tests/unit/ownership.test.ts": "8fafa6c9c5128d5ed370e450a7d9c05c29ada0fbf504c29ae7af502fcbc4e61a",
+    "tests/unit/player.test.ts": "3f0dc989ad65ea3a55186589e3fb1f5654ab552f63d9a4ff69290630155b3d51",
+    "tests/integration/check-handoff-ui.mjs": "fee600bfcbde8e281075dcfb61ec8cb60989cdc1acff75d2db9c1494e1fec2b3"
+  },
+  "limits": [
+    "BFCache real confirmed after explicit idle release; playing departure returned as a new document, not BFCache",
+    "Pagehide during active/uncertain work keeps real locks conservatively; close that entry to recover",
+    "Previously authorized response streams can finish; bytes already delivered cannot be recalled",
+    "Private HTTPS probe uses bounded Blob: 8 MiB per asset, 24 MiB per queue; private offline remains PENDIENTE",
+    "Legacy pilot/samples/old bundles need closure to release control; no forced handoff",
+    "Telegram logout/account isolation and remote callbacks await authorized integration",
+    "iPhone physical APLAZADO/PENDIENTE; no result supplied for the requested short test",
+    "T13 overall and P0-W INCOMPLETO"
+  ],
+  "commands": [
+    "INSTABOX_HEADLESS=1 node tests/integration/check-handoff-ui.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-handoff-operation-gaps.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-handoff-navigation.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-queue-restore-ui.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-embedded-lyrics-ui.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-organization-ui.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-live-update.mjs",
+    "python3 scripts/update_review_release.py",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-private-artwork.mjs"
+  ]
+}

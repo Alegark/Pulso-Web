@@ -1,0 +1,221 @@
+{
+  "status": "EN CURSO: P2 de foco detectado, corrección antes de entrega",
+  "timestampUtc": "2026-10-31T11:02:51.899389+00:00",
+  "implementation": "r2:50 filas, selección completa;12 unitarias y7 grupos de integración",
+  "benchmark": {
+    "before": {
+      "search": {
+        "samples": 5,
+        "medianEventToCommitMs": 156.40000000596046,
+        "medianEventToTwoFramesMs": 158.5,
+        "medianPlaywrightE2EMs": 161.6752349999988,
+        "medianNonBrowserRemainderMs": 3.1752349999987928
+      },
+      "navigation": {
+        "samples": 5,
+        "medianEventToCommitMs": 526.5,
+        "medianEventToTwoFramesMs": 552.5999999940395,
+        "medianPlaywrightE2EMs": 564.1399789999996,
+        "medianNonBrowserRemainderMs": 11.539979005960049
+      },
+      "playlist": {
+        "samples": 5,
+        "medianEventToCommitMs": 140.79999999701977,
+        "medianEventToTwoFramesMs": 152.20000000298023,
+        "medianPlaywrightE2EMs": 164.24163300000146,
+        "medianNonBrowserRemainderMs": 11.744742997019785
+      }
+    },
+    "after": {
+      "search": {
+        "samples": 5,
+        "medianEventToCommitMs": 4.399999991059303,
+        "medianEventToTwoFramesMs": 19.399999991059303,
+        "medianPlaywrightE2EMs": 21.168061999997008,
+        "medianNonBrowserRemainderMs": 1.7680620089377044
+      },
+      "navigation": {
+        "samples": 5,
+        "medianEventToCommitMs": 3.0999999940395355,
+        "medianEventToTwoFramesMs": 18.899999991059303,
+        "medianPlaywrightE2EMs": 20.79882300000463,
+        "medianNonBrowserRemainderMs": 1.8988230089453282
+      },
+      "playlist": {
+        "samples": 5,
+        "medianEventToCommitMs": 9.299999997019768,
+        "medianEventToTwoFramesMs": 26.200000002980232,
+        "medianPlaywrightE2EMs": 28.037097000000358,
+        "medianNonBrowserRemainderMs": 1.9390429999984917
+      },
+      "pagination": {
+        "samples": 5,
+        "medianEventToCommitMs": 12.100000008940697,
+        "medianEventToTwoFramesMs": 22.5,
+        "medianPlaywrightE2EMs": 24.862318999999843,
+        "medianNonBrowserRemainderMs": 1.801127999999153
+      }
+    }
+  },
+  "benchmarkLimits": [
+    "Two requestAnimationFrame callbacks approximate a paint opportunity; no compositor presentation timestamp or exact CPU attribution.",
+    "Browser event to DOM mutation is a commit proxy, not React Profiler.",
+    "Baseline has null assets like audit r1; functional audio uses one shared synthetic WAV asset.",
+    "Benchmark uses injected DOM input/change/click events, not trusted hardware events; Playwright E2E is evaluate/wait overhead. Candidate includes parent CSS fix.",
+    "No heap measurement, physical iPhone, VoiceOver, or mobile AC23 PASS."
+  ],
+  "review": {
+    "round": "pulso-t18-pagination-sol-review-r3",
+    "P1": 0,
+    "P2": 1,
+    "reproduction": "51 playlist entries; second page; focus Move Up on occurrence at absolute index50; press Enter; storage moves correctly to49 but focused button unmounts and BODY takes focus",
+    "baseline": "Same action retains focus in frozen7b973abc7dcf3ded",
+    "fixStatus": "Sol medium r5 implementing focus preservation with concurrent-view guards; no PASS yet",
+    "otherContracts": "Reviewer found no other concreteP1/P2 in fullselection, occurrence keys, absolute indices, reset/clamp, owner/scope and refresh(true,false)"
+  },
+  "productRegressionsBeforeFocusFix": {
+    "unitPassed": 12,
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "build": "PASS",
+    "layout": {
+      "passed": true,
+      "environment": "Chromium Linux sandbox, temporary loopback, current production build",
+      "iphoneVerified": false,
+      "cases": [
+        {
+          "width": 320,
+          "height": 700,
+          "textScale": 100,
+          "passed": true,
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": []
+        },
+        {
+          "width": 320,
+          "height": 700,
+          "textScale": 200,
+          "passed": true,
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": []
+        },
+        {
+          "width": 390,
+          "height": 844,
+          "textScale": 100,
+          "passed": true,
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "overflow": []
+        },
+        {
+          "width": 390,
+          "height": 844,
+          "textScale": 200,
+          "passed": true,
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "overflow": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "textScale": 100,
+          "passed": true,
+          "scrollWidth": 844,
+          "clientWidth": 844,
+          "overflow": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "textScale": 200,
+          "passed": true,
+          "scrollWidth": 844,
+          "clientWidth": 844,
+          "overflow": []
+        }
+      ],
+      "limits": [
+        "200% font-size approximates text enlargement, not Safari zoom",
+        "No VoiceOver, contrast acceptance or physical iPhone test"
+      ],
+      "stylesheetSHA256": "91383fdf4951db2a5fb0c98a30e095111c18b0ff9d4c71e342473993ab81a22c",
+      "browserVersion": "154.0.8037.57",
+      "before": {
+        "scrollWidth": 390,
+        "clientWidth": 390
+      },
+      "pageErrors": 0,
+      "externalRequests": 0
+    },
+    "keyboard": {
+      "passed": true,
+      "iphoneVerified": false,
+      "cases": [
+        {
+          "name": "Enter prepares a paused queue and plays; Space pauses the sole audio element",
+          "passed": true
+        },
+        {
+          "name": "Keyboard slider changes position without autoplay; repeat and shuffle update through native keyboard controls",
+          "passed": true
+        },
+        {
+          "name": "Keyboard next/reorder/remove preserves selected occurrence, source and all library tracks",
+          "passed": true
+        },
+        {
+          "name": "Keyboard opens/closes lyrics and saves inert plain text without changing audio source",
+          "passed": true
+        },
+        {
+          "name": "Keyboard metadata save preserves current playback source and library size",
+          "passed": true
+        },
+        {
+          "name": "Keyboard export/download works; restore confirmation receives focus and Escape cancels confirmation without applying",
+          "passed": true
+        }
+      ],
+      "environment": "Chromium Linux sandbox, temporary loopback, own context, current production build",
+      "limits": [
+        "Targeted controls are focused explicitly before keyboard activation; not a complete Tab-order audit",
+        "Files supplied through the automation file input; OS picker not tested",
+        "No VoiceOver, real zoom or physical iPhone evidence"
+      ],
+      "browserVersion": "154.0.8037.57",
+      "pageErrors": 0,
+      "externalRequests": 0
+    },
+    "groupsLog": ".local/quality-groups-product.log",
+    "groupsPassed": 4,
+    "liveUpdate": {
+      "passed": true,
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57",
+      "result": {
+        "newVersionBypassesOldShell": true,
+        "stableLauncherSelectsCurrentBuild": true,
+        "waitingBeforeClosingClients": true,
+        "oldStillPlaying": true,
+        "newIsPaused": true,
+        "activatedAfterClientClosure": true,
+        "restoredPaused": true
+      }
+    },
+    "candidateEntry": "/releases/5a92e29d1b4021c7.html",
+    "deployed": false
+  },
+  "residualCost": {
+    "queueRows": 1000,
+    "timeupdateToTwoFramesMs": "13.4–37.8 in five injected events with paused queue, reported by r2/reviewed in r3",
+    "limits": "Not sustained playback, actual compositor presentation, mobile or heap evidence"
+  },
+  "nextAudit": "pulso-t18-security-sol-medium-audit-r4 runs independently, read-only privacy/security/licenses and public dependency audit; no result yet",
+  "privateCandidateUnchanged": "/releases/7b973abc7dcf3ded.html",
+  "P0W": "INCOMPLETO",
+  "iphone": "PENDIENTE; no new owner observation"
+}

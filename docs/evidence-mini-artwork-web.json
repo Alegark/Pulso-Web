@@ -1,0 +1,190 @@
+{
+  "project": "Pulso-Web",
+  "increment": "T8 portada local del minirreproductor",
+  "passedForMeasuredWebIncrement": true,
+  "release": "12b00fc83bbf49e8",
+  "entry": "/releases/12b00fc83bbf49e8.html",
+  "dateUTC": "2026-10-31",
+  "review": {
+    "parent": "Lectura de guards Activity/scope, effect-owned Object URLs, callbacks antiguos, fallbacks, CSS y delta import/prop en main; sin defecto concreto observado",
+    "sourcesMatchChildEvidence": true
+  },
+  "phases": [
+    {
+      "phase": "child r6 isolated component/product build",
+      "evidence": ".local/evidence/mini-artwork-r6.json",
+      "cases": 25,
+      "passed": true,
+      "rerunByParent": false,
+      "limits": "Read barriers/image errors/scope race hooks explícitos; lecturas exitosas readArtwork real; texto 200% aproximado por CSS; fallo inicial del harness conservado"
+    },
+    {
+      "phase": "parent production",
+      "checks": [
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "passed": true
+    },
+    {
+      "phase": "parent keyboard current production",
+      "cases": 6,
+      "passed": true,
+      "evidence": ".local/evidence/web-keyboard-product.json"
+    },
+    {
+      "phase": "parent original license bytes + offline shell/notice after server stopped",
+      "cases": 3,
+      "passed": true,
+      "evidence": ".local/evidence/license-delivery.json"
+    },
+    {
+      "phase": "parent previous deployed d49 to current 12b00 SW update",
+      "passed": true,
+      "evidence": ".local/evidence/mini-release-update.json",
+      "commands": [
+        "INSTABOX_HEADLESS=1 PULSO_UPDATE_BASELINE=.local/releases/mini-artwork-before node tests/integration/check-live-update.mjs"
+      ]
+    },
+    {
+      "phase": "existing authorized private copy",
+      "passed": true,
+      "copy": {
+        "copiedFiles": 33,
+        "verified": true,
+        "retainedOldAssets": true,
+        "entry": "/releases/12b00fc83bbf49e8.html"
+      },
+      "probe": {
+        "passed": true,
+        "iphoneVerified": false,
+        "environment": "Chromium desktop private HTTPS, fresh context",
+        "browserVersion": "154.0.8037.57",
+        "result": {
+          "oneEngine": true,
+          "transport": "bounded-blob",
+          "violations": [],
+          "localBatchComplete": true,
+          "localLyricsReady": true,
+          "organizationRoundtrip": true,
+          "stableLauncher": true,
+          "miniLocalArtwork": {
+            "ready": true,
+            "decodedWidth": 16,
+            "decorativeAlt": true,
+            "ownerChangeDropsOldImageAndLoadsNew": true
+          },
+          "thirdPartyNotices": {
+            "verified": true,
+            "packages": 17,
+            "sha256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88"
+          },
+          "functionalShell": {
+            "homeRecentVisible": true,
+            "openAndReturnFocus": true,
+            "routeFiltersPreserved": true,
+            "miniUsesExistingEngine": true,
+            "navigationPreservesPlayingSource": true
+          },
+          "explicitHandoff": {
+            "requestedWithoutPausing": true,
+            "oldAudioUnloaded": true,
+            "newOwnerRestoredPaused": true,
+            "newOwnerPlaysAfterGesture": true,
+            "onlyOneTabPlaying": true
+          }
+        }
+      },
+      "commands": [
+        "python3 scripts/update_review_release.py",
+        "INSTABOX_HEADLESS=1 node tests/integration/check-private-artwork.mjs"
+      ]
+    }
+  ],
+  "limits": [
+    "Chromium 154 Linux; no iPhone/VoiceOver/real zoom/safe area physical acceptance",
+    "Private origin uses bounded Blob fallback, 8 MiB/file and 24 MiB/queue; private offline not demonstrated",
+    "No SDK/auth/Telegram endpoints/account/provider enabled; auth/gzip candidate work stays separate",
+    "No global T8/P0 acceptance; complete scope preserved"
+  ],
+  "USD": 0,
+  "sourcesAndReceipts": {
+    "src/main.tsx": {
+      "bytes": 50864,
+      "SHA256": "afb26cda66e15c3a20cec7ee627dcaee9569a0f323b66494bccc41ec1bd3fe96"
+    },
+    "src/ui/MiniArtwork.tsx": {
+      "bytes": 2846,
+      "SHA256": "23e155ef1ac989376d07b8ca09705366192f2ab3d42d11a72f489e038c8a31c9"
+    },
+    "src/ui/mini-artwork.css": {
+      "bytes": 410,
+      "SHA256": "d5b40133277fc16b86667e8f147c74e673a5e540fac6f5831ece45451d1f4779"
+    },
+    "tests/integration/check-mini-artwork.mjs": {
+      "bytes": 20072,
+      "SHA256": "acf9df3501ffb1b9fd84accebf7cc82f224672cec6991ba062810975071e0f97"
+    },
+    "tests/integration/mini-artwork-r6-fixture.tsx": {
+      "bytes": 3177,
+      "SHA256": "6e63f59bd2b851837c88f6fc35750fc13a6413768eb71d2631fad871a86a47eb"
+    },
+    "tests/integration/check-private-artwork.mjs": {
+      "bytes": 11452,
+      "SHA256": "8f5d9faffbb493f17c861596c7f3ab5b140d866ac2957d1edf7a1c956f7d3df4"
+    },
+    "tests/integration/check-live-update.mjs": {
+      "bytes": 4469,
+      "SHA256": "b73aec97352df2bf69f5fe2a2e1be598837eb93f912ffc2034f0ec279c5c11ce"
+    },
+    "dist/index.html": {
+      "bytes": 965,
+      "SHA256": "12b00fc83bbf49e8c30ac060048443ac51a700deeef0febd4cb7e240a8e808db"
+    },
+    "dist/sw.js": {
+      "bytes": 19585,
+      "SHA256": "5ec676c9e4a17e3eac1a42566ae488fc5e319b643a27b261f4a4e45044ea2d4a"
+    },
+    ".local/evidence/mini-artwork-r6.json": {
+      "bytes": 14314,
+      "SHA256": "288b44c4fc4492a14d5ed2c85464b46236419ededb8f0c18be6a3a47710114fe"
+    },
+    ".local/evidence/mini-release-typecheck.log": {
+      "bytes": 45,
+      "SHA256": "9c3d1e1b04daef5ef7378ddbf921f0c204668897c69198e8ebeaf9cb185a9314"
+    },
+    ".local/evidence/mini-release-lint.log": {
+      "bytes": 78,
+      "SHA256": "9115c612f4c31d6ab637706d69432895db03337b27fb395cca045cdacbcb168b"
+    },
+    ".local/evidence/mini-release-build.log": {
+      "bytes": 1402,
+      "SHA256": "240b3e27c09aa3d7d16b38c5d46a9d39bd3fd216920009cf68f1832073240226"
+    },
+    ".local/evidence/web-keyboard-product.json": {
+      "bytes": 1370,
+      "SHA256": "56fbf7f2533be431e3978ce7af8c62496c42e40b65966b1125f0ed9a7b830aa5"
+    },
+    ".local/evidence/license-delivery.json": {
+      "bytes": 1424,
+      "SHA256": "d441404a47cd1e428a3cc78173bc999583c8fcaea89cfc141ecfe7d5c4f5033e"
+    },
+    ".local/evidence/mini-release-update.json": {
+      "bytes": 421,
+      "SHA256": "7aaa6e7f518cfd41a3bcdfcaf7039195146c500047bd0a0d755d2fcbb4ad7a5c"
+    },
+    ".local/evidence/mini-release-copy.json": {
+      "bytes": 109,
+      "SHA256": "0e0b191e09e2783058bf693db0e03a368676fddfe4afc8c464de971f3f5b32b9"
+    },
+    ".local/evidence/mini-release-private.json": {
+      "bytes": 883,
+      "SHA256": "5f7313e9165c2e9a1a7b212aed05f9ee693ec252a30e21e8f54b4637e771982a"
+    }
+  },
+  "originals": {
+    "PULSO-WEB-README.md": "779d6f579c69a832dfde7d4c36255c30ebb798a279cfdeb4dc75ea3b1bbe685a",
+    "doc/SPEC.md": "a988f5a1b5ea09bb9f0e6adf49904db248e77f41931f8ae5a990effbce125473"
+  }
+}

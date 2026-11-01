@@ -1,0 +1,10 @@
+.remote-lyrics-panel { overflow-wrap: anywhere; min-width: 0; }
+.remote-lyrics-panel label { display: flex; align-items: center; gap: .5rem; min-height: 44px; }
+.remote-lyrics-panel__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.remote-lyrics-panel button { min-height: 44px; max-width: 100%; white-space: normal; }
+.remote-lyrics-panel :focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+.remote-lyrics-panel dd { margin-inline-start: 1rem; }
+.remote-lyrics-panel__text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.remote-lyrics-panel__cues { padding-inline-start: 1.5rem; }
+.remote-lyrics-panel__cues li { padding-block: .3rem; }
+.remote-lyrics-panel__cues [aria-current="true"] { font-weight: 700; text-decoration: underline; }

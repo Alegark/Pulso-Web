@@ -1,0 +1,63 @@
+{
+  "project": "Pulso-Web",
+  "USD": 0,
+  "status": "DELIVERED_CURRENT_WEB_FOCAL_CHECKS_PASS_GLOBAL_ACCEPTANCE_PENDING",
+  "delivered": true,
+  "currentDeliveredEntry": "/releases/9cbcab4e444d7d6d.html",
+  "design": ".local/evidence/idb-realms-design-r44.json",
+  "parentReceiptAudit": ".local/evidence/idb-realms-parent-receipt-audit.json",
+  "core": {
+    "receipt": ".local/evidence/idb-realms-r45.json",
+    "nativeCases": 31,
+    "ACKBarrierCases": 2,
+    "unitCases": 5,
+    "sourceFreeze": ".local/idb-realms-r45/source-freeze.json"
+  },
+  "SW": {
+    "receipt": ".local/evidence/idb-realms-sw-r46.json",
+    "nativeCases": 14,
+    "productionCases": 7,
+    "mainAtProductionRun": "5bb45894990f2859f2ad9f3afa183259e30411b80981ed876e645b717f1d6b28",
+    "provenance": "Post-read barrier TESTONLY, real native versionchange; early ineffective transforms excluded"
+  },
+  "main": {
+    "source": {
+      "bytes": 72331,
+      "sha256": "a891f77c75c9399bd02f5baf6c3ebfee265169a7109227642089cc3d1fd846d4"
+    },
+    "wiring": ".local/evidence/idb-realms-parent-wiring.json",
+    "finalBrowser": "R48 historical37; R52 queuefix6 +Node; readonly6keyboard separate",
+    "historicalFinalBrowser": {
+      "receipt": ".local/evidence/idb-realms-main-r48.json",
+      "cases": 37,
+      "mainSHA256": "25b90a405124a17d0f52711aab7116e2f3fad7c439c4557f78db894021f7c1f2"
+    }
+  },
+  "independentReview": {
+    "R50": "R50-P2-01 fixed",
+    "R52": ".local/evidence/idb-realms-queue-review-r52.json",
+    "R55": ".local/evidence/readonly-song-ui-review-r55.json"
+  },
+  "scope": [
+    "Realm-local synchronous admission and revocation",
+    "DOM-only schema migration, existing version2 unchanged",
+    "Dedicated worker bind and terminal settlement independent of publication scope",
+    "Directed SW notices and explicit live proof readmission",
+    "No notices, timestamps or missing heartbeat as authority"
+  ],
+  "stillPending": [
+    "Global AC21/T7/T10/T16/T18/P0 and physical iPhone acceptance",
+    "Private-origin offline acceptance",
+    "External metadata/artwork provider browser feasibility and applicable consent"
+  ],
+  "iphone": "APLAZADO/PENDIENTE",
+  "P0Complete": false,
+  "candidateEntry": "/releases/9cbcab4e444d7d6d.html",
+  "releaseChecks": {
+    "assets": ".local/evidence/readonly-final-assets.json",
+    "keyboard": ".local/evidence/readonly-final-keyboard.json",
+    "licenses": ".local/evidence/readonly-final-licenses.json",
+    "update": ".local/evidence/readonly-final-update.json"
+  },
+  "deliveryReceipt": ".local/evidence/readonly-delivery-parent-verification.json"
+}

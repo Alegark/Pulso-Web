@@ -1,0 +1,224 @@
+{
+  "project": "Pulso-Web",
+  "dateUTC": "2026-10-31",
+  "increment": "T18 diagnóstico local voluntario FOUNDATION/UI/MAIN/PLAYER",
+  "status": "PASS solo incremento y casos web medidos, no aceptación global",
+  "release": "b63782b35bd03d5e",
+  "entry": "/releases/b63782b35bd03d5e.html",
+  "USD": 0,
+  "implementation": {
+    "defaultCapture": "off, memory-only",
+    "limits": "100 events /64KiB",
+    "export": "explicit selected fields, frozen exact JSON review, real fixed-name download; no automatic sending",
+    "privacy": "closed fields/enums/issued correlation; no raw errors/content/session/URLs; reset on consent/scope/pagehide",
+    "scope": "main/Player plus pure mappings; not complete writer/reader/workers/batch/backup migration"
+  },
+  "phases": [
+    {
+      "phase": "implementation r7",
+      "unitPassed": 20,
+      "browserGroupsPassed": 15,
+      "evidence": ".local/evidence/diagnostics-r7.json",
+      "limits": "isolated build, failures injected and own fixtures; no production delivery by child"
+    },
+    {
+      "phase": "independent review r8",
+      "outcome": "limited approval, no confirmed findings",
+      "newFocalGroupsPassed": 9,
+      "evidence": ".local/evidence/diagnostics-review-r8.json",
+      "limits": "4pure/4browser/1activeaudio; no rerun of20/15"
+    },
+    {
+      "phase": "parent final production build",
+      "checks": [
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "passed": true
+    },
+    {
+      "phase": "parent keyboard current production",
+      "cases": 6,
+      "passed": true,
+      "evidence": ".local/evidence/web-keyboard-product.json"
+    },
+    {
+      "phase": "parent original notices/offline with loopback stopped",
+      "cases": 3,
+      "passed": true,
+      "evidence": ".local/evidence/license-delivery.json"
+    },
+    {
+      "phase": "parent actual prior deployed build SW update",
+      "passed": true,
+      "evidence": ".local/evidence/diagnostics-release-update.json",
+      "command": "INSTABOX_HEADLESS=1 PULSO_UPDATE_BASELINE=.local/releases/diagnostics-before node tests/integration/check-live-update.mjs"
+    },
+    {
+      "phase": "existing authorized private release and probe",
+      "copy": {
+        "copiedFiles": 33,
+        "verified": true,
+        "retainedOldAssets": true,
+        "entry": "/releases/b63782b35bd03d5e.html"
+      },
+      "probe": {
+        "passed": true,
+        "iphoneVerified": false,
+        "environment": "Chromium desktop private HTTPS, fresh context",
+        "browserVersion": "154.0.8037.57",
+        "result": {
+          "oneEngine": true,
+          "transport": "bounded-blob",
+          "violations": [],
+          "localBatchComplete": true,
+          "localLyricsReady": true,
+          "organizationRoundtrip": true,
+          "stableLauncher": true,
+          "localDiagnostics": {
+            "defaultCaptureOff": true,
+            "explicitCapture": true,
+            "selectedFieldsOnly": true,
+            "downloadMatchesReview": true,
+            "playingSourcePreserved": true,
+            "handoffClearsReviewAndDisablesCapture": true
+          },
+          "miniLocalArtwork": {
+            "ready": true,
+            "decodedWidth": 16,
+            "decorativeAlt": true,
+            "ownerChangeDropsOldImageAndLoadsNew": true
+          },
+          "thirdPartyNotices": {
+            "verified": true,
+            "packages": 17,
+            "sha256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88"
+          },
+          "functionalShell": {
+            "homeRecentVisible": true,
+            "openAndReturnFocus": true,
+            "routeFiltersPreserved": true,
+            "miniUsesExistingEngine": true,
+            "navigationPreservesPlayingSource": true
+          },
+          "explicitHandoff": {
+            "requestedWithoutPausing": true,
+            "oldAudioUnloaded": true,
+            "newOwnerRestoredPaused": true,
+            "newOwnerPlaysAfterGesture": true,
+            "onlyOneTabPlaying": true
+          }
+        }
+      },
+      "commands": [
+        "python3 scripts/update_review_release.py",
+        "INSTABOX_HEADLESS=1 node tests/integration/check-private-artwork.mjs"
+      ]
+    }
+  ],
+  "counting": "Phases distinct; do not sum versions as unique cases or present historical suites as parent reruns.",
+  "pendingNecessary": [
+    "precise cause/phase from writer/close/commit/reader/import/recovery before legacy collapse",
+    "wire batch/backup mappings and safe primary/secondary causes",
+    "remaining error migration/accessibility/lifecycle/security/acceptance as SPEC",
+    "private offline and physical iPhone/VoiceOver/real zoom, no inferred PASS",
+    "SDK/Telegram real auth and distribution gates remain separate"
+  ],
+  "privateOriginLimit": "Chromium bounded-blob fallback 8MiB/file/24MiB/queue; not private offline proof",
+  "scopeGuardsPreserved": "one Audio, playback source/queue/focus/ownership preserved; review is not durable Activity",
+  "sourcesAndReceipts": {
+    "src/diagnostics/contract.ts": {
+      "bytes": 9199,
+      "SHA256": "e0c9d0cf95da6aaf006933289e15cedc2c12f811170c5df3559c5b143fe1a1bd"
+    },
+    "src/diagnostics/session.ts": {
+      "bytes": 3916,
+      "SHA256": "823e345d6994c58f9bfc906da8ff1777a6f548a6f24f630a3b03edd55b375a3e"
+    },
+    "src/diagnostics/export.ts": {
+      "bytes": 4168,
+      "SHA256": "8410135eb52b62a58b6b0b24bc18f74b5f4f63babe7d5905c4bef34ac6614802"
+    },
+    "src/ui/DiagnosticsPanel.tsx": {
+      "bytes": 6467,
+      "SHA256": "3a14904eae2e00198eacd7386161456364f9797d42d6d80360eb2624e7406dec"
+    },
+    "src/ui/diagnostics.css": {
+      "bytes": 780,
+      "SHA256": "36cfb6b1395fb1629d6f21737ac550c1d74ca1f0d621fa723339b9327b4cd963"
+    },
+    "src/main.tsx": {
+      "bytes": 55220,
+      "SHA256": "b77d1891c4b6f5d724ccb3cae54d9e2a0a2149681177daf635908606261d8444"
+    },
+    "src/playback/player.ts": {
+      "bytes": 7906,
+      "SHA256": "c720ffaea9bb8ed5007457fa27cdf12107bf98b69b02fcb93767eabf5d341eda"
+    },
+    "tests/integration/check-diagnostics-ui.mjs": {
+      "bytes": 23535,
+      "SHA256": "25c6954abf6e6bd29a970cc984dd4f7ea28f9fbd64d01d73bd8dbe38ee0a011b"
+    },
+    "tests/integration/check-private-artwork.mjs": {
+      "bytes": 13343,
+      "SHA256": "a41e0f0d6fad7a793c65148061aaa990985df7a3462e3c4ac831bef9c33a9ba5"
+    },
+    "tests/integration/check-live-update.mjs": {
+      "bytes": 4469,
+      "SHA256": "b73aec97352df2bf69f5fe2a2e1be598837eb93f912ffc2034f0ec279c5c11ce"
+    },
+    "dist/index.html": {
+      "bytes": 965,
+      "SHA256": "b63782b35bd03d5e56efce2427e2a6a17023d51d8427e726dce95a0e29ba529e"
+    },
+    "dist/sw.js": {
+      "bytes": 19585,
+      "SHA256": "cc5ab465e49d86c41a22829febff73b564d0173fcb1b51571233a9e9ed27a1d3"
+    },
+    ".local/evidence/diagnostics-r7.json": {
+      "bytes": 21513,
+      "SHA256": "8cfb20af04470e10610aa7099264e510d65e1114d5c463778571c9696862b550"
+    },
+    ".local/evidence/diagnostics-review-r8.json": {
+      "bytes": 20558,
+      "SHA256": "6e41b83fd54e76ba5fbbbba33ead9ce93c4d2d04c1b6abcd9ac09a72be4d6218"
+    },
+    ".local/evidence/diagnostics-release-typecheck.log": {
+      "bytes": 45,
+      "SHA256": "9c3d1e1b04daef5ef7378ddbf921f0c204668897c69198e8ebeaf9cb185a9314"
+    },
+    ".local/evidence/diagnostics-release-lint.log": {
+      "bytes": 78,
+      "SHA256": "9115c612f4c31d6ab637706d69432895db03337b27fb395cca045cdacbcb168b"
+    },
+    ".local/evidence/diagnostics-release-build.log": {
+      "bytes": 1402,
+      "SHA256": "c55e9476a229e8d30f8af88a0e2b1691f64beacb31376c4e5a9217a2b5ab9afc"
+    },
+    ".local/evidence/web-keyboard-product.json": {
+      "bytes": 1370,
+      "SHA256": "56fbf7f2533be431e3978ce7af8c62496c42e40b65966b1125f0ed9a7b830aa5"
+    },
+    ".local/evidence/license-delivery.json": {
+      "bytes": 1424,
+      "SHA256": "0dd2be6abb971c2d21118af026a6ecb0d75e4406908985ad8cc15fa4ed971d3f"
+    },
+    ".local/evidence/diagnostics-release-update.json": {
+      "bytes": 421,
+      "SHA256": "0413446137fba73c16bc5ba2c708f0dca5f8e9bea5405840dc18b687378b181e"
+    },
+    ".local/evidence/diagnostics-release-copy.json": {
+      "bytes": 109,
+      "SHA256": "9c4660c12a4fb6e2c1cd698920088d41fff7a919e563d52a870e4a2d78a29ad2"
+    },
+    ".local/evidence/diagnostics-release-private.json": {
+      "bytes": 1082,
+      "SHA256": "31b3f61caab0a965aabf7824a5bbb9e45a284a70a3890d3a605f7e1df3a2306e"
+    }
+  },
+  "originals": {
+    "PULSO-WEB-README.md": "779d6f579c69a832dfde7d4c36255c30ebb798a279cfdeb4dc75ea3b1bbe685a",
+    "doc/SPEC.md": "a988f5a1b5ea09bb9f0e6adf49904db248e77f41931f8ae5a990effbce125473"
+  }
+}

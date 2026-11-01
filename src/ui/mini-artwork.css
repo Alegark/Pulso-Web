@@ -1,0 +1,12 @@
+.mini-artwork {
+  width: 3.5rem;
+  height: 3.5rem;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border-radius: 4px;
+  background: var(--surface);
+}
+.mini-artwork img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.mini-player .mini-artwork span { max-width: 100%; font-size: .75rem; line-height: 1.1; text-align: center; overflow-wrap: anywhere; }

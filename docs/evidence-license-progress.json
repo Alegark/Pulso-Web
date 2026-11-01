@@ -1,0 +1,52 @@
+{
+  "status": "IMPLEMENTADO; entrega y offline pendientes del build final",
+  "timestampUtc": "2026-10-31T11:10:00.968511+00:00",
+  "sourceAudit": ".local/evidence/security-license-audit.json",
+  "finding": "P2 missing original copyright/license/disclaimer texts in dist",
+  "fix": {
+    "manifest": "scripts/license-packages.json",
+    "generator": "scripts/third-party-notices.mjs",
+    "versionsAndOriginalHashesPinned": true,
+    "packages": 17,
+    "noticeBytes": 19830,
+    "moduleGuard": "main+worker Vite generateBundle, SW build plugin; rejects recognized bundled package without review or changed metadata/notice",
+    "noticeArtifacts": [
+      "THIRD-PARTY-NOTICES.txt",
+      "third-party-licenses.json"
+    ],
+    "shellVersionIncludesNoticeDigest": true,
+    "visibleLink": "Licencias de terceros"
+  },
+  "checks": {
+    "unitPassed": 3,
+    "unitCommand": "npx tsx --test tests/unit/third-party-notices.test.ts",
+    "mainAndWorkerGuard": "PASS actual production graph build with write:false and isolated outDir",
+    "productionBuild": "PENDIENTE; no dist mutation while focus agent verifies its own unchanged-dist contract",
+    "deliveryAndOffline": "PENDIENTE; runner tests/integration/check-license-delivery.mjs prepared and syntax-checked"
+  },
+  "npmAudit": {
+    "knownAdvisories": 0,
+    "receipt": ".local/evidence/security-license-npm-audit.json",
+    "notGlobalSecurityAcceptance": true
+  },
+  "scanner": {
+    "fileCount": 88,
+    "patternMatches": 0,
+    "scope": "Bounded auditor-owned scan, not private review/Engram/home/session data"
+  },
+  "futureWasmGate": "Composite upstream notices/source verification still pending before SDK/WASM redistribution; current production bundle excludes these modules/binaries",
+  "limits": [
+    "No global AC22/T18/P0-W PASS",
+    "No physical iPhone or private offline evidence",
+    "Module guard does not classify arbitrary copied sources or binary assets outside the module graph"
+  ],
+  "sourceSHA256": {
+    "scripts/license-packages.json": "badbe7b4cc051c06eb40ae306f86a85b363113f5ab2be17609bdfe8922d5cc91",
+    "scripts/third-party-notices.mjs": "e5a8f29f2e44b0ff6ec1852c2d82a3d6192abfa2d7a743c70087bcfeb2f09a21",
+    "scripts/build-sw.mjs": "2504f1e31f3c062881bd9f48c00509076aa63542c27cde2b3faba33ba5cf80df",
+    "vite.config.ts": "514555c3f2eec34026ee3f7177741746a0402becbc81f445321da30c4483a4ad",
+    "index.html": "2d8b30e5b5a87937e76b7ef40f9665f8aa06e79b0c8a2c0ab0256c5bf6d5090b",
+    "tests/unit/third-party-notices.test.ts": "2835e4a6c1d78cb298e8c92c4c7f12f0ae143476d9827f54fa649ee015a1fce1",
+    "tests/integration/check-license-delivery.mjs": "3cbd37e91d5f5a3a8b8eeaf134b7f8fafad2d5974f5169e69a63bee82482065f"
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "recordedAt": "2026-10-31T08:00:20.588319+00:00",
+  "environment": {
+    "browser": "Chromium 154.0.8037.57",
+    "headless": true,
+    "sandbox": true,
+    "os": "Linux"
+  },
+  "hashes": {
+    "package-lock.json": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f",
+    "dist/index.html": "b871bcc9e11643269299fc93db04b3e9fa32f2c84c669f5cb78c6dfe7bc74ce4",
+    "dist/web.html": "b871bcc9e11643269299fc93db04b3e9fa32f2c84c669f5cb78c6dfe7bc74ce4",
+    "dist/sw.js": "5da5d8b843a2cf725640a618c658dc5f6c65d0b5a5f226f01ed0b60f07b89a69",
+    "PULSO-WEB-README.md": "779d6f579c69a832dfde7d4c36255c30ebb798a279cfdeb4dc75ea3b1bbe685a",
+    "doc/SPEC.md": "a988f5a1b5ea09bb9f0e6adf49904db248e77f41931f8ae5a990effbce125473"
+  },
+  "modelWorker": {
+    "passed": true,
+    "cases": 30,
+    "source": "T3 delegated task pulso-t7-artwork-sol-medium-fixes-r3 terminal result",
+    "initialHistoricalJsonCases": 21
+  },
+  "ui": {
+    "command": "node tests/integration/check-artwork-ui.mjs",
+    "passed": true,
+    "cases": 5,
+    "repeatedAgainstFinalModule": true,
+    "pageErrors": 0,
+    "cspViolations": 0
+  },
+  "opfsRegression": {
+    "passed": true,
+    "groups": 10,
+    "reason": "capability guard checks createWritable before staging"
+  },
+  "normalTransport": {
+    "command": "node tests/integration/check-local-assets.mjs",
+    "passed": true,
+    "backends": [
+      "idb",
+      "opfs"
+    ],
+    "httpChecksPerBackend": 8,
+    "foreignClientStatus": 403,
+    "offlineAfterChromiumRestart": true
+  },
+  "upgradeFallback": {
+    "command": "node tests/integration/check-transport-upgrade.mjs",
+    "passed": true,
+    "capabilityDropped": 1,
+    "ticketRequests": 0,
+    "forcedActivation": 0,
+    "sourceIsBlob": true,
+    "oneEngine": true
+  },
+  "privateHttps": {
+    "command": "node tests/integration/check-private-artwork.mjs",
+    "passed": true,
+    "entry": "/web.html",
+    "freshContext": true,
+    "transport": "bounded-blob",
+    "oneEngine": true,
+    "cspViolations": 0,
+    "fixture": "own synthetic MP3 and Canvas PNG"
+  },
+  "release": {
+    "copiedFiles": 26,
+    "hashesVerified": true,
+    "retainedOldAssets": true,
+    "sameExistingPrivatePort": 4175
+  },
+  "iphoneVerified": false,
+  "limits": [
+    "Only simple ID3 embedded extraction so far; M4A/WAV next",
+    "No private-origin offline acceptance",
+    "No locked-phone queue or physical audibility evidence",
+    "Repair assumes cooperating revision/lock writers; excessive/cyclic corrupt snapshots preserved without token"
+  ]
+}

@@ -1,0 +1,303 @@
+{
+  "status": "PASS para incremento web indicado; T18/P0-W incompletos",
+  "timestampUtc": "2026-10-31T11:17:12.950576+00:00",
+  "finalChecks": {
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "unitPassed": 15,
+    "unitCommand": "npx tsx --test tests/unit/pagination.test.ts tests/unit/groups.test.ts tests/unit/third-party-notices.test.ts",
+    "unitLog": ".local/evidence/quality-final-unit.tap",
+    "productionBuild": "PASS"
+  },
+  "pagination": {
+    "pageSize": 50,
+    "implementationGroups": [
+      "all 1000 tracks reachable, bounded 50 rows, last boundary and keyboard focus stable",
+      "search/group/navigation reset and filter across the whole library including track 999",
+      "partial page and absolute move indices cross page 50/51 in both directions with occurrence IDs preserved",
+      "full filtered selection queue, paused preparation, full 91-entry batch despite single visible result; metadata/favorite persist and audio survives nonqueue actions",
+      "persisted metadata/favorite survive reload and queue reopens paused",
+      "full 1000-entry library queue keeps order and distinct occurrence IDs, library DOM remains 50, preparation has no autoplay",
+      "same-metadata identity replacement resets page/form; deleting last-page entry clamps; real playlist add restores all 1000 relations"
+    ],
+    "functionalLimits": [
+      "Two requestAnimationFrame callbacks approximate a paint opportunity; no compositor presentation timestamp or exact CPU attribution.",
+      "Browser event to DOM mutation is a commit proxy, not React Profiler.",
+      "Baseline has null assets like audit r1; functional audio uses one shared synthetic WAV asset.",
+      "Benchmark uses injected DOM input/change/click events, not trusted hardware events; Playwright E2E is evaluate/wait overhead. Candidate includes parent CSS fix.",
+      "No heap measurement, physical iPhone, VoiceOver, or mobile AC23 PASS."
+    ],
+    "benchmarkStage": "r2 before subsequent focus correction; benchmark not rerun after focus-only fix",
+    "benchmarkSummary": {
+      "before": {
+        "search": {
+          "samples": 5,
+          "medianEventToCommitMs": 156.40000000596046,
+          "medianEventToTwoFramesMs": 158.5,
+          "medianPlaywrightE2EMs": 161.6752349999988,
+          "medianNonBrowserRemainderMs": 3.1752349999987928
+        },
+        "navigation": {
+          "samples": 5,
+          "medianEventToCommitMs": 526.5,
+          "medianEventToTwoFramesMs": 552.5999999940395,
+          "medianPlaywrightE2EMs": 564.1399789999996,
+          "medianNonBrowserRemainderMs": 11.539979005960049
+        },
+        "playlist": {
+          "samples": 5,
+          "medianEventToCommitMs": 140.79999999701977,
+          "medianEventToTwoFramesMs": 152.20000000298023,
+          "medianPlaywrightE2EMs": 164.24163300000146,
+          "medianNonBrowserRemainderMs": 11.744742997019785
+        }
+      },
+      "after": {
+        "search": {
+          "samples": 5,
+          "medianEventToCommitMs": 4.399999991059303,
+          "medianEventToTwoFramesMs": 19.399999991059303,
+          "medianPlaywrightE2EMs": 21.168061999997008,
+          "medianNonBrowserRemainderMs": 1.7680620089377044
+        },
+        "navigation": {
+          "samples": 5,
+          "medianEventToCommitMs": 3.0999999940395355,
+          "medianEventToTwoFramesMs": 18.899999991059303,
+          "medianPlaywrightE2EMs": 20.79882300000463,
+          "medianNonBrowserRemainderMs": 1.8988230089453282
+        },
+        "playlist": {
+          "samples": 5,
+          "medianEventToCommitMs": 9.299999997019768,
+          "medianEventToTwoFramesMs": 26.200000002980232,
+          "medianPlaywrightE2EMs": 28.037097000000358,
+          "medianNonBrowserRemainderMs": 1.9390429999984917
+        },
+        "pagination": {
+          "samples": 5,
+          "medianEventToCommitMs": 12.100000008940697,
+          "medianEventToTwoFramesMs": 22.5,
+          "medianPlaywrightE2EMs": 24.862318999999843,
+          "medianNonBrowserRemainderMs": 1.801127999999153
+        }
+      }
+    },
+    "selectionContract": "Search/group over full library; queue and batch use full applicable selection, not page slice"
+  },
+  "independentReview": {
+    "round": "r3",
+    "P2": "Cross-page reorder unmounted focused button, leaving BODY",
+    "correction": "r5: post-refresh revision/full occurrence order verification, follow visible occurrence index, preserve same directional control; cancel on changed user intent/view/owner"
+  },
+  "focusRegression": {
+    "passed": true,
+    "cases": [
+      "baseline reproduced: 50→49 commits, focus BODY",
+      "51 occurrences: both boundary directions, consecutive Enter, all IDs/organization/queue/engine intact, limits guarded",
+      "101 occurrences: both boundary directions, consecutive Enter, all IDs/organization/queue/engine intact, limits guarded",
+      "repeated track follows the moved occurrence ID, consecutive move",
+      "dangling record: absolute index 51 maps to visible page 1 after move",
+      "late response after filter: no navigation/focus theft",
+      "late response after list: no navigation/focus theft",
+      "late response after page: no navigation/focus theft",
+      "late response after group: no navigation/focus theft",
+      "late response after route: no navigation/focus theft",
+      "late response after focus: no navigation/focus theft",
+      "late response after away-back: no navigation/focus theft",
+      "late response after cede: no navigation/focus theft",
+      "late response after blur: no navigation/focus theft",
+      "late response after scope: no navigation/focus theft",
+      "late response after unmount: no navigation/focus theft",
+      "conflict: no false navigation, useful focus, durable order checked",
+      "error: no false navigation, useful focus, durable order checked",
+      "noop: no false navigation, useful focus, durable order checked",
+      "refresh-error: no false navigation, useful focus, durable order checked",
+      "refresh without a move does not navigate or autofocus"
+    ],
+    "limits": [
+      "No iPhone/VoiceOver or complete AC20/P0 acceptance.",
+      "Delay/no-op/storage failure/refresh failure are test-build injections around real APIs, not production hooks.",
+      "pagehide scope invalidation is synthetic; explicit cede is exercised through the real button.",
+      "No performance benchmark rerun."
+    ],
+    "source": ".local/evidence/pagination-focus.json"
+  },
+  "finalProduct": {
+    "layout": {
+      "passed": true,
+      "environment": "Chromium Linux sandbox, temporary loopback, current production build",
+      "iphoneVerified": false,
+      "cases": [
+        {
+          "width": 320,
+          "height": 700,
+          "textScale": 100,
+          "passed": true,
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": []
+        },
+        {
+          "width": 320,
+          "height": 700,
+          "textScale": 200,
+          "passed": true,
+          "scrollWidth": 320,
+          "clientWidth": 320,
+          "overflow": []
+        },
+        {
+          "width": 390,
+          "height": 844,
+          "textScale": 100,
+          "passed": true,
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "overflow": []
+        },
+        {
+          "width": 390,
+          "height": 844,
+          "textScale": 200,
+          "passed": true,
+          "scrollWidth": 390,
+          "clientWidth": 390,
+          "overflow": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "textScale": 100,
+          "passed": true,
+          "scrollWidth": 844,
+          "clientWidth": 844,
+          "overflow": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "textScale": 200,
+          "passed": true,
+          "scrollWidth": 844,
+          "clientWidth": 844,
+          "overflow": []
+        }
+      ],
+      "limits": [
+        "200% font-size approximates text enlargement, not Safari zoom",
+        "No VoiceOver, contrast acceptance or physical iPhone test"
+      ],
+      "stylesheetSHA256": "91383fdf4951db2a5fb0c98a30e095111c18b0ff9d4c71e342473993ab81a22c",
+      "browserVersion": "154.0.8037.57",
+      "before": {
+        "scrollWidth": 390,
+        "clientWidth": 390
+      },
+      "pageErrors": 0,
+      "externalRequests": 0
+    },
+    "keyboard": {
+      "passed": true,
+      "iphoneVerified": false,
+      "cases": [
+        {
+          "name": "Enter prepares a paused queue and plays; Space pauses the sole audio element",
+          "passed": true
+        },
+        {
+          "name": "Keyboard slider changes position without autoplay; repeat and shuffle update through native keyboard controls",
+          "passed": true
+        },
+        {
+          "name": "Keyboard next/reorder/remove preserves selected occurrence, source and all library tracks",
+          "passed": true
+        },
+        {
+          "name": "Keyboard opens/closes lyrics and saves inert plain text without changing audio source",
+          "passed": true
+        },
+        {
+          "name": "Keyboard metadata save preserves current playback source and library size",
+          "passed": true
+        },
+        {
+          "name": "Keyboard export/download works; restore confirmation receives focus and Escape cancels confirmation without applying",
+          "passed": true
+        }
+      ],
+      "environment": "Chromium Linux sandbox, temporary loopback, own context, current production build",
+      "limits": [
+        "Targeted controls are focused explicitly before keyboard activation; not a complete Tab-order audit",
+        "Files supplied through the automation file input; OS picker not tested",
+        "No VoiceOver, real zoom or physical iPhone evidence"
+      ],
+      "browserVersion": "154.0.8037.57",
+      "pageErrors": 0,
+      "externalRequests": 0
+    },
+    "groupsRegression": {
+      "passed": 4,
+      "stage": "r2 before focus correction",
+      "log": ".local/quality-groups-product.log"
+    },
+    "liveUpdate": {
+      "passed": true,
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57",
+      "result": {
+        "newVersionBypassesOldShell": true,
+        "stableLauncherSelectsCurrentBuild": true,
+        "waitingBeforeClosingClients": true,
+        "oldStillPlaying": true,
+        "newIsPaused": true,
+        "activatedAfterClientClosure": true,
+        "restoredPaused": true
+      }
+    },
+    "privateHTTPS": {
+      "passed": true,
+      "iphoneVerified": false,
+      "environment": "Chromium desktop private HTTPS, fresh context",
+      "browserVersion": "154.0.8037.57",
+      "result": {
+        "oneEngine": true,
+        "transport": "bounded-blob",
+        "violations": [],
+        "localBatchComplete": true,
+        "localLyricsReady": true,
+        "organizationRoundtrip": true,
+        "stableLauncher": true,
+        "thirdPartyNotices": {
+          "verified": true,
+          "packages": 17,
+          "sha256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88"
+        },
+        "explicitHandoff": {
+          "requestedWithoutPausing": true,
+          "oldAudioUnloaded": true,
+          "newOwnerRestoredPaused": true,
+          "newOwnerPlaysAfterGesture": true,
+          "onlyOneTabPlaying": true
+        }
+      }
+    }
+  },
+  "noticesEvidence": "docs/evidence-license-web.json",
+  "delivery": {
+    "version": 1,
+    "entry": "/releases/c97de0eb243dce01.html",
+    "copiedFiles": 33,
+    "retainedOldAssets": true,
+    "indexSHA256": "c97de0eb243dce0192a9d35471cb99b094084bb9c3f007fc6da60866d2cd7777",
+    "swSHA256": "79bb25d2cbd5002390e6676d903ad4bed9e3be28a735f1be6e03c6a217575c57",
+    "lockSHA256": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f"
+  },
+  "pending": [
+    "No complete AC20/AC23/iPhone/VoiceOver/real zoom/contrast acceptance",
+    "Queue still has1000rows; only synthetic paused timeupdate samples recorded, no sustained mobile/heap guarantee",
+    "Physical locked-next short test requested by owner still has no new reported result",
+    "Remote auth/account scopes, bot/provider and other applicable gates remain pending",
+    "Next T8 design runs independently; no new T8 implementation accepted yet"
+  ]
+}

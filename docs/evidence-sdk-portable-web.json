@@ -1,0 +1,38 @@
+{
+  "project": "Pulso-Web",
+  "scope": "T4 worker de prueba r16 portable r17; no SDK producto",
+  "USD": 0,
+  "childEvidence": ".local/evidence/sdk-source-portable-r17.json",
+  "childClaims": {
+    "relocatedBuild": "PASS",
+    "chromiumWorkers": 6,
+    "nodeProcesses": 2,
+    "resolverEscapesRejected": 3
+  },
+  "parentVerification": {
+    "archiveSHA256": "02eee25ea98faf35f727146e8e5937f37f4ebd36f27d85721f8ad89560aaed28",
+    "regularFiles": 1300,
+    "symlinksHardlinksTraversal": false
+  },
+  "independentReview": {
+    "decision": "LIMITED_APPROVAL_WORKER_TEST_SOURCE_COMPANION",
+    "findingsP1P2": 0,
+    "newFocalProbesPassed": 3,
+    "evidence": ".local/evidence/sdk-portable-review-r18.json",
+    "recompiled": false
+  },
+  "productBuild": "b63782b35bd03d5e unchanged, no SDK",
+  "openGates": [
+    "owner own terms/delivery when necessary",
+    "auth/storage/frontend final integration",
+    "DIST06 total / D03 / D05",
+    "final SDK notices/source/cache/SW/update",
+    "iPhone physical acceptance"
+  ],
+  "P0Complete": false,
+  "clarifications": [
+    "INPUTS.json tar0644 vs staging0664; same content, other1299 indexed modes match",
+    "resolution-node.jsonl lives at portable root",
+    "prebuild verify.py does not independently validate release-TEST snapshot; r18 checked separately"
+  ]
+}

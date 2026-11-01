@@ -1,0 +1,60 @@
+{
+  "environment": {
+    "browser": "Chromium 154.0.8037.57",
+    "host": "Linux",
+    "headless": true,
+    "sandbox": true,
+    "origin": "temporary loopback"
+  },
+  "lockSHA256": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f",
+  "candidateIndexSHA256": "bd16eb4b950475f55eab94e615e2025cd1ae7cd898fad94b49f1f227031b3239",
+  "iphone": "APLAZADO/PENDIENTE",
+  "P0W": "INCOMPLETO",
+  "status": "PASS for stated web cases",
+  "modelWorker": {
+    "round": "pulso-t7-table-budget-sol-medium-r7",
+    "groupsPassed": 27,
+    "pageErrors": 0,
+    "priorGroups": {
+      "r4": 20,
+      "r6": 26
+    },
+    "rawR6File": ".local/artwork-r5-browser-result.log",
+    "rawR6ContainsFinal27": false
+  },
+  "largeOwnAAC": {
+    "packets": 44000,
+    "bytes": 12914649,
+    "durationSeconds": 2023.21995,
+    "checks": [
+      "copy and original SHA-256",
+      "parser and native duration",
+      "initial playback state/time",
+      "seek near end"
+    ],
+    "elapsedSeconds": 1.869,
+    "fullDurationListened": false
+  },
+  "limits": {
+    "optionalTagBytes": 2097152,
+    "optionalTagEntries": 128,
+    "audioTableEncodedBytes": 2097152,
+    "audioTableEntries": 524288,
+    "decodedHeapMeasured": false
+  },
+  "productIntegration": {
+    "command": "INSTABOX_HEADLESS=1 node tests/integration/check-container-ui.mjs",
+    "status": "PASS",
+    "cases": [
+      "M4A and WAV own embedded images 24x16 confirmed via pixels",
+      "one engine and advancing native time",
+      "close Chromium and reopen offline: covers persisted and audio paused"
+    ]
+  },
+  "limitsPending": [
+    "physical iPhone",
+    "universal container support",
+    "30-minute listening",
+    "real physical storage pressure"
+  ]
+}

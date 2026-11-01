@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "tracksVisibleOnOpen": ["Aurora", "Brisa", "Camino"],
+  "fileImportRequired": false,
+  "initialPlayback": "Aurora/playing",
+  "finalPlayback": "Camino/ended",
+  "runner": "tests/integration/check-samples.mjs",
+  "environment": "Chromium local headless with browser sandbox, real private HTTPS",
+  "iphoneVerified": false
+}

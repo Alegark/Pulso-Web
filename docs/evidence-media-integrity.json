@@ -1,0 +1,26 @@
+{
+  "checks": [
+    {
+      "name": "bytes corruptos no entregados",
+      "pass": true
+    },
+    {
+      "name": "manifiesto corrupto rechazado",
+      "pass": true
+    },
+    {
+      "name": "copia original conservada",
+      "pass": true
+    },
+    {
+      "name": "ticket de generación anterior revocado",
+      "pass": true
+    },
+    {
+      "name": "ticket nuevo autorizado",
+      "pass": true
+    }
+  ],
+  "passed": true,
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+}

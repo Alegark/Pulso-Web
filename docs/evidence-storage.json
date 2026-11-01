@@ -1,0 +1,12 @@
+{
+  "results": [
+    "PASS publicación y doble reopen íntegros",
+    "PASS truncado no publica ni borra copia válida",
+    "PASS hash erróneo no publica",
+    "PASS cancelación no elimina publicación previa",
+    "PASS bytes ausentes producen missing sin borrar manifiesto",
+    "PASS recuperación explícita reemplaza missing"
+  ],
+  "passed": true,
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+}

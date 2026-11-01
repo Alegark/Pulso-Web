@@ -1,0 +1,329 @@
+# T18 · Accesibilidad, privacidad y rendimiento web · EN CURSO
+
+Objetivo completo P0-W conservado: W17/W18 y AC19–AC23, sin anticipar paridad visual final ni aceptar iPhone por emulación. T18 se amplía conforme dependencias; autenticación/datos Telegram y pruebas físicas pendientes conservan gates. USD0, solo proyecto propio y loopback temporal.
+
+## Primer incremento preparado
+
+Auditar estáticamente el recorrido actual y medir casos web reproducibles: teclado/foco/nombres accesibles, ancho reducido/horizontal y texto al200%, contraste/reduced-motion si hay evidencia comprobable; biblioteca sintética1000 pistas/20playlists con interacción y búsqueda local medidas. No declarar VoiceOver/Safari/iPhone comprobados ni considerar un estilo font-size equivalente a todo el zoom real. No instalar paquetes ni proveedores.
+
+Primera ronda propuesta Terra6.1 low/default: inventario mecánico y pruebas de navegador propias, sin cambios de producto/ODD/docs/paquetes/publicación. Debe leer README/SPEC/AGENTS y Engram independiente, usar build aislado o dist congelado del padre y contexto sintético sin bases/credenciales ajenas. Pistas sin bytes no se presentan como reproducibles; anotar límites de la fixture y muestreo/rendimiento. Medición de este servidor no garantiza300ms en el iPhone objetivo. Hallazgos con causa/repro y prioridad; evitar rediseño cosmético y soluciones inventadas.
+
+Estado: preparada para delegación, sin auditoría ni PASS aún. La aceptación de licencias/privacidad/seguridad/migración completa y demás tareas T18 no se considera satisfecha por este primer inventario.
+
+## Auditoría r1 iniciada
+
+Delegación real pulso-t18-terra-web-audit-r1: proveedor Codex, Terra6.1 reasoningEffort low/serviceTier default devueltos y comprobados. Runner nuevo y evidencia aislada; sin cambios de fuentes/dist/ODD/docs ni servicios. Engram13 tareas verificadas antes de iniciar. Trabaja sobre dist de handoff congelado7b973abc7dcf3ded; audit de teclado/layout/texto y1000pistas/20listas. En curso, sin hallazgos ni PASS nuevos por delegar. La entrega privada de T13 la controla el padre, no este agente.
+
+## Auditoría recibida y correcciones web en curso
+
+R1 Terra entregó evidencia real de1000pistas/20listas/1000relaciones/91favoritos, nulos assetId/fingerprint: sin IO audio ni heap medido. Título válido largo rompe ancho en320/390/horizontal, con texto100/200% (font-sizeaproximado); búsqueda1.92–2.76s, navegación1.32–2.02s y filtro50entradas0.74–3.03s enVM incluyendosobrecargaPlaywright.45Tabs registran foco/outline en vista filtrada, sin probar aún interacción de todos paneles; candidatos automáticos de nombre incluyen ocultos y no se aceptan como defectos demostrados. Contraste/reduced-motion/VoiceOver/zoomreal pendientes.
+
+Se congeló dist completo en .local/releases/quality-before, entry7b973abc7dcf3ded e indexSHA7b973abc7dcf3ded212d02c2331244ec804bd599630bf06315c9eb51b962a1c0. Runner baseline original ahora usa latest.json de esa copia (env PULSO_QUALITY_AUDIT_DIST), sin hardcodear dist mutable. No se reejecutó la auditoría amplia sin motivo.
+
+Delegación real pulso-t18-library-render-sol-medium-r2 iniciada, Sol6.1 reasoningEffort medium/serviceTier default devueltos/verificados. Acotar filasDOM/paginación y coste de render, preservar selección COMPLETA/cola/playlist/batch e índices absolutos y medir input→commit/pintado separado de E2E. Main/componentes nuevos/tests propios, sin tocar dist/CSS/modelos/ODD/docs/servicio privado. EN CURSO: no mejora de tiempos ni producto paginado se consideran comprobados aún.
+
+Padre corrigió CSS: overflow-wrap:anywhere, botón max-width/border-box y min-width0 de hijosflex, sin overflowhidden ni truncartexto. check-web-layout.mjs reproduce desbordamiento en baseline (3490/390) y aplica stylesheetself actual:6/6 combinaciones320/390/844px ×100/200% sin overflow ni pérdida de título; metadatoslargos300char también presentes. Primer ensayo de styleinline fue bloqueado por CSP; se corrigió harness a stylesheet del mismo origen, no CSP. .local/evidence/web-layout-long-text.json.
+
+check-web-keyboard.mjs:6 casos funcionales PASS en mismo baseline+CSS/contexto propio/Blob: Enterprepara/reproduce ySpacepausa; slider/modos; siguiente/reordenar/quitarcola conservaentradaactual/fuente/biblioteca; letrasinertesabrir/cerrar/guardar; metadata; exportación real/confirmaciónfoco/Escapesinaplicar. Foco dirigido explícitamente y archivos por automationinput, no auditoría completa Tab ni filepickerOS. Primer ensayo esperaba cola con serviceWorkers:block y agotótimeout; variante deBlob ahora hace rechazar explícitamente APIworker encontextotest, sin cambio deproducto. Ceroerrorespágina/redexterna final. .local/evidence/web-keyboard.json. No integrar/publicar todavía: rendimiento corre en main. docs/evidence-quality-progress.json conserva fases/límites. T18/P0-W/iPhone pendientes.
+
+## Paginación r2 recibida y revisión r3 en curso
+
+R2 entregó50filasDOM por página, búsqueda/grupos completos, cola/lote con selección completa e índices absolutos/IDs de ocurrencia;12 unitarias y7 grupos de integración PASS con1000pistas/20listas, movimientos50/51, metadata/identidad/clamp, cola1000 y lote91 con audio. useLibraryPage/LibraryPagination y helper pageRange. Baseline preservado, dist intacto por subagente. .local/evidence/library-pagination.json distingue5muestras por acción, commitproxy DOM/2frames/E2E: medianas búsqueda156.4→4.4ms, navegación526.5→3.1ms, playlist140.8→9.3ms. Eventosinyectados nohardware,2frames no sello de compositor, baseline sinbytes y functional fixture WAV compartida; no heap ni300msiPhone.
+
+Revisión independiente pulso-t18-pagination-sol-review-r3 Sol6.1 medium/default real iniciada, solo lectura de contratos/código/evidencia, sin cambios ni suites repetidas por defecto. Busca errores de límites/ocurrencias/reset/foco y validez de las afirmaciones de benchmark. Sin resultado todavía.
+
+Padre pasó typecheck/lint y12 unitarias focales (pagination+groups), compiló producto con CSS integrado.6 casos layout y6 funcionales teclado ahora PASS contra build actual sin inyectar CSS;4regresionesagrupación/cola/audio/reopen PASS. .local/evidence/web-layout-long-text-product.json, web-keyboard-product.json y library-groups resultado del runner. Sin publicación aún: candidato privado siguehandoff7b973abc7dcf3ded hasta cerrar revisión. Privacidad/licencias/seguridad y aceptación global T18 permanecen pendientes.
+
+## Revisión r3: foco al cruzar página; corrección r5 iniciada
+
+Sol medium r3 verificó13 tareas Engram,12unitarias y todas huellas de r2; reprodujo1P2/nadaP1:51entradas, página2, enfocar Subir en ocurrenciaíndice50 yEnter→mueve bienal49 pero botónse desmonta yBODYrecibefoco; baseline conservaelbotón. No repitió7grupos ni benchmark. Datos soportan mejora para eventosinyectadosenVM;2frames no presentación efectiva ni resta E2E−frames atribuciónCPU exclusiva. Coste residual declarado:cola1000filas,timeupdateinyectadopausado13.4–37.8ms hasta2frames, no reproducción sostenida/heap/iPhone. Ningún otroP1/P2 concreto en seleccióncompleta/keys/índices/resetclamp/guardas/refresh(false).
+
+Padre comprobó además actualizaciónold→newSW PASS para candidato compilado5a92e29d1b4021c7 (sinpublicar); conservó ownerreproduciendo y nueva pausada/activaciónnormal. Esa evidencia y6layout/6teclado/4grupos corresponden al candidato antesdelarreglodefoco. docs/evidence-pagination-review.json conserva fase y límites, no se usa el PASS generaldeteclado para ocultar el P2 específico.
+
+Delegación real pulso-t18-pagination-focus-sol-medium-fixes-r5, Sol6.1 medium/default comprobados: mantener destino útil en la ocurrenciamovida, ambos sentidos/repetición y guardas contra filtro/vista/página/owner concurrentes, conflicto/no-op/error; tests focales propios. EN CURSO sinresultado, no publicación. Paralelo pulso-t18-security-sol-medium-audit-r4 Solmedium/default sololectura de privacidad/seguridad/licencias y advisories públicos de dependencias, sin secretos/servicios/cambios deproducto ni memoria. En curso sinhallazgos/PASS todavía. Engram13 tras registrar.
+
+## Auditoría de privacidad/licencias r4 recibida y avisos preparados
+
+R4 Sol medium verificó13 tareas Engram, seis casos puros de límites/manifiesto/backup PASS y escaneo acotado88archivos sin patronesdefinidos, nunca secretos privados/Engram/review. npm audit real0advisories conocidos en respuesta guardada, sin instalar/autofix. No vulnerabilidadalcanzableconfirmada en revisiónacotada de tickets/owner/CSP/MIME/URLs/backup/rendertextual/diagnóstico; no AC22/P0PASS por esa ausencia.
+
+P2 confirmado de distribución: faltan textosoriginalesMIT/BSD en dist (16MIT+ieee754BSD3). P3 inventarioSDK/WASM incompleto: metadata MIT peroREADME declaraAESderivado tgcryptoLGPL3, libdeflateMIT yfuentesSHA; fuera de producciónactual. docs/DEPENDENCIES.md ahora distinguecompuesto y exige verificarbinario/fuentes/avisos antesdedistribuirSDK, no cambiaSPEC ni activaTelegram. FFmpeg sigueherramientadev noentregada. .local/evidence/security-license-audit.json y security-license-npm-audit.json conservan detalle.
+
+Padre implementó manifest17paquetes/versiones/avisosSHA, generatorpreserva19830bytesincluyendoheaders (bytesoriginalesporoffset), guardasViteprincipal/workers/SW contra paqueteidentificado nuevo/metadata/avisocambiado, enlacefooter y shellincluyearchivosavisos+digestcaché.3unitariasPASS (bytesoriginales17, paquetesno-revisados, versión/avisocorrupto enfixturespropias); build in-memory real main/workers write:falsePASS sin modificar dist. scripts/build-sw.mjs incorpora a próximo build, nodecheckPASS; check-license-delivery.mjs preparado/syntaxPASS paraarchivosylecturaoffline conservidorapagado, todavía NOEJECUTADO. No publicarhastaevidenciaentrega; fuenteprincipal cambiaenr5foco y se respeta su contrato distintacto. docs/evidence-license-progress.json. P2 no cerrado aún por tenergenerador; P0/T18/iPhonependientes.
+
+## Incremento de calidad entregado; P2 foco y avisos cerrados en web
+
+R5 foco corrigeP2: actWork callback tras refresh exitoso, revisión/ordencompletodeIDs verificados y destino poríndicevisible; mismo controlcontinúa al cruzar, aria-disabled+guardas en límites. Cambio de vista/página/foco/scope/control/desmontaje cancela.21casosChromiumPASS (incluyeprobarREDbaseline),15unitariasinclownership segúnr5; no reejecutóbenchmark. .local/evidence/pagination-focus.json. Padre pasó typecheck/lint y15unitariasfocales finales pagination+groups+licencias, compilóproducto y6layout/6tecladofinalesPASS sin CSSinyectada;actualizaciónold→newSWPASS.4regresionesgrupos previas alarreglodefoco están etiquetadas como esa fase.
+
+Avisos17originales19833bytes agregadosconBOM, offsets/hash:3unitarias y3casos entrega/offlinePASS en Chromiumconloopbackapagado,respuestaSW ytextoPRE correcto. Ensayosiniciales demostraron crudo19830SHAcorrecto perocharsetausente maldecodificado;BOMcorrige,CDPremoveBOM yDOMnormaliza18CRLF porloqueharness validaArrayBuffercrudo+texto normalizado. Logs deintentosconservados. SWcache incluye digest deavisos, sin skipWaiting;staticnotices17 guardados/copiados. docs/evidence-license-web.json/evidence-quality-web.json.
+
+Misma publicación privada autorizada actualizada33archivos a /releases/c97de0eb243dce01.html via/open.html,assetsanterioresconservados. ProbeHTTPS propioPASS:artwork/audio/lote/letras/backup,hashnotices17exacto yhandoff2pestañas restorepausado/sologanadorreproduce,bounded-blob/0CSP. SHAdenoticesenlacopiaexactoalbuild. No aceptaciónprivadooffline/iPhone/globalT18/P0. Benchmarkr2 VM sigue etiquetado antesdearreglodefoco,nofake300msmóvil. GateSDKWASMfuturocompuesto sigue pendiente.
+
+ContinúaT8 diseño funcional local con Solmediumsololectura; no parte deestebuildni paridadvisualfinal. T18 guarda pendientes de contraste/VoiceOver/zoomreal/privacidaddiagnóstico/migración/seguridadintegral y demás aceptaciónaplicable, sin reducirSPEC original.
+
+## 2026-10-31 · Diagnóstico local seguro: diseño en curso
+
+Tras entregar portada mini y comprobar contrato auth offline, continúa la parte independiente de W18/I.security/I.errors aún pendiente. Delegación T3 real `pulso-t18-diagnostics-sol-medium-design-r6`, Sol 6.1 medium/default verificados, solo lectura de producto/documentos y reporte propio `.local/evidence/diagnostics-design-r6.json`. Engram real 14/14 verificado antes de iniciar. No nueva implementación, build, suite ni PASS por delegar.
+
+Diseño requerido: errores con operación/fase/familia/código cerrado/correlación opaca y recuperación útil; sin convertir objetos/strings arbitrarios, títulos, consultas, nombres de archivo, URLs, proofs/tickets, sesión o datos privados en logs. Exportación solo con selección visible de campos y revisión previa/descarga expresa, nunca envío automático. Captura mínima local consentida si fuera necesaria, sin interceptar console/errores globales indiscriminadamente ni telemetría. Presupuesto acotado, guards Activity/scope y ausencia de IO por tick; único motor y operaciones/handoff conservados.
+
+Pendiente decidir API/puntos reales de instrumentación y pruebas de límites/foco/cancelación/canarios/privacidad; no sistema genérico sobredimensionado ni auth falso. Alcance actual local único explícito y estado unknown cuando no se puede determinar. USD 0, sin cuentas/red/páginas públicas nuevas/otros proyectos; T18/P0/iPhone completos siguen pendientes.
+
+## 2026-10-31 · Diseño recibido; diagnóstico r7 en implementación
+
+R6 entregó `.local/evidence/diagnostics-design-r6.json`: lectura/diseño, JSON válido y Engram14/14, sin tests/build/servidor ni nuevo PASS. Padre leyó contrato, mapeos, instrumentación, capacidades, UI/exportación, lifecycle, migración y pruebas propuestas por secciones para completar la salida inicialmente truncada. Diseño conserva causas conocidas por familia/código/fase y correlación opaca, evita datos privados/objetos arbitrarios, mantiene capture OFF y revisión explícita de selección/JSON antes de descarga.
+
+Decisión reversible del padre: 100 registros/64 KiB, solo memoria por documento; sin captura avanzada one-shot mientras no haya caso concreto que la requiera. Primer incremento FOUNDATION+UI+MAIN+PLAYER y mapeos puros; el diseño amplio proponía cambios simultáneos en readers/writers/workers/paneles, que se separan por dependencias para revisar sus contratos. **Pendiente necesario** después: causas y fases precisas desde import/recovery/commit/close/cleanup, conexión de lotes/backup y demás legacy; no declarar completado I.errors ni inferir causas de false/null o strings. `docs/DIAGNOSTICS-DESIGN.md` registra alcance y pendientes sin reemplazar SPEC.
+
+Delegación T3 real `pulso-t18-diagnostics-sol-medium-implementation-r7`, Sol 6.1 medium/default verificados: módulos nuevos de contrato/sesión/exportación y panel/CSS, main composición/reset e instrumentación de fronteras conocidas, Player callback seguro opcional. Sin cambiar ownership/transport/SW/storage/writers/paneles existentes, fuentes SDK, paquetes o dist; tests nuevos aislados y evidencia `.local/evidence/diagnostics-r7.json`. No IO/persistencia por vista/tick, ninguna telemetría, Activity no se retiene por revisión, captura/handles/URLs se invalidan por ámbito. Pruebas focales de límites/canarios/exportación real/foco/cancelación y motor activo exigidas, resultado todavía pendiente.
+
+T4 SDK-storage r9 sigue working separado, sin cliente/red/cuenta. Engram propio 14/14 leído independientemente antes de estos cambios. Copia privada 12b00fc83bbf49e8 estable, USD 0, alcance completo conservado; no aceptación T18/P0/iPhone por este arranque.
+
+## 2026-10-31 · Diagnóstico r7 implementado; revisión r8 y siguiente diseño r9
+
+R7 entrega contrato/ring100/64KiB/captureOFF, panel con selección/revisión exacta/descarga real y main/Player acotados. 20 unitarias y 15 grupos Chromium/sandbox PASS, typecheck/lint/tipos focales PASS, cero pageerrors/externos; artifacts `.local/evidence/diagnostics-r7.json`. Casos incluyen canarios ausentes, epoch de consentimiento/callbacks antiguos, URL/Blob/click failures y retry, posición con fallos deduplicados, commit confirmado con refresh secundario fallido, mano de control con revisión abierta y mismo Audio/fuente/cola/playhead. Pagehide sintético, no BFCache físico. Dist/privada12b00 intactos; no build producto ni entrega todavía.
+
+Padre lee ring/export/contrato/panel e instrumentación main/Player. Delegación real `pulso-t18-diagnostics-sol-medium-review-r8`, Sol 6.1 medium/default verificados, revisa/reproduce fronteras concretas sin repetir suites amplias ni tocar fuentes. No PASS global ni aprobación por delegar. Probe HTTPS propio existente preparado con selección límites, JSON exacto/descarga y reset al ceder: sintaxis PASS, NOEJECUTADO hasta build/revisión favorables.
+
+Delegación real `pulso-t18-errors-propagation-sol-medium-design-r9`, Sol 6.1 medium/default verificados, SOLOLECTURA+reporte para ordenar causa/fase tipadas de writer/import/recovery y luego batch/backup, preservando jobs/CAS/kept/cancel/uncertainty sin tocar contrato bajo revisión. Primera llamada tuvo error de sintaxis JS antes de invocar herramienta; corregida con el mismo clientRequestId, una sola tarea aceptada real. Sin nuevos tests/PASS por este diseño. Objetivo completo/I.errors y pendientes explícitos siguen íntegros.
+
+T4 adaptador storage r10 también recibido y revisión r11 separada; no SDK en producto. Engram14 real verificado al retomar. USD 0, sin publicaciones nuevas/cuentas/red Telegram, privada12b00 estable, T18/P0/iPhone pendientes.
+
+## 2026-10-31 · Diagnóstico foundation entregado después de revisión
+
+Review r8 APRUEBA LIMITADAMENTE r7, sin hallazgos confirmados; nueve grupos propios PASS (cuatro puros/cuatro browser/un audioactivo), cero pageerrors/CSP/externos. 10.000 intentos retienen100 eventos y proyección completa37.712bytes, accesores no ejecutados en probe; callback current arbitrario reentrante descartado como hipótesis sin ruta real de producto, no inmunidad al JS mismo origen. Hashes y recibos20U/15B históricos verificados, sin repetir. `.local/evidence/diagnostics-review-r8.json`. Padre verifica fuentes r7 actuales iguales y README/SPEC originales intactos.
+
+Parent typecheck/lint/build PASS en candidato b63782b35bd03d5e; seis casos teclado producto, tres avisos originales/offline con loopback apagado y actualización SW desde baseline privado12b00 PASS. Antiguo sigue reproduciendo, nuevo pausado, SW espera cierre normal, restaura pausado; no skipWaiting forzado. No repetición amplia20/15 por rutina.
+
+Se actualiza misma copia privada autorizada33files a `/releases/b63782b35bd03d5e.html` por `/open.html`, conservando assets anteriores. Probe HTTPS propio PASS: default captureOFF, activación por gesto, camposseleccionados solos, descarga real byte-exacta del JSON revisado/nombre fijo, revisión abierta no retiene Activity y handoff la borra/desactiva. Audioúnico/fuente/cola conservados; miniportada/navegación/foco/contextos, lote/letras/roundtrip organización/17noticesSHA/handoff2tabs también PASS, bounded-blob/0CSP. `.local/evidence/diagnostics-release-private.json`, consolidado `docs/evidence-diagnostics-web.json` con fases/hashes/comandos.
+
+No privadooffline/iPhone/VoiceOver/zoomreal/contrasteglobal ni T18/P0 aceptados; 200% fuenteaproximada y pagehide de r7 sintético. Precisión causas writer/close/commit/reader/import/recovery/conexiónbatchbackup y migraciónrestante todavía NECESARIAS, diseño r9 sigue separado. No SDK ni auth en build. ODD/Engram14 propios se sincronizan y leen independientemente tras registro; USD 0 y alcance original intactos.
+
+## 2026-10-31 · Causas precisas r9 leído; núcleo slice A r10 en curso
+
+Diseño r9 recibido y leído por secciones (proposedTypes, fronteras, readerDetailed, DTO worker, proyección y semánticas/pruebas propuestas); sin código/tests/build/nuevoPASS. A prioriza núcleo único import/recovery/writer + lector detallado necesario ahí, B consumidores queue/Blob/lote/backup después. R8 ya concluyó aprobación limitada de foundation y fue entregado b637, satisfaciendo esa dependencia técnica sin elevar aceptación global.
+
+Delegación real `pulso-t18-import-failure-core-sol-medium-r10`, Sol 6.1 medium/default verificados: AppFailure emitida con payload cerrado, FailureV1/OutcomeV1/validadores/mapeo ring, APIs Detailed con legacy sobre el mismo core, causas/fases reales de read/parse/open/write/close/verify/commit/reconcile/cleanup. Precisión missing/corrupt/unknown y un hash por verifyDetailed; IO unknown no autoriza reemplazar kept. Preservar cuota primaria/segundarios/uncertainty, cancel pre/postcommit/CAS/everPublished/manual/organización y metadata opcional postaudio. Nuevos tests focales IDB/OPFS/worker y límites de DTO, resultado pendiente.
+
+MAIN EXCLUSIVO PADRE: integración secuencial después de recibir APIs; child no modifica main/Player/ownership/SW/transport/diagfoundation/paneles ni producto privado. Workers nuevos mantienen protocolo previo hasta emparejar main o se ensayan en handlers propios; no bundle mixto desplegado. Correlación de diagnóstico/consentimiento no viaja al worker, slots ring acotados y refresh secundario del mismo intento. No migración de schema ni lectura de job.cause strings históricos para inferir precisión.
+
+`docs/DIAGNOSTICS-DESIGN.md` recoge contratos/pendientes. B sigue necesario explícito y el objetivo íntegro/I.errors no se reduce. T4 r12 recibido/fix acotado revisado por padre y crypto r13 aislado inicia aparte. Engram14 real leído antes de registrar, USD 0, privada b637 estable, T18/P0/iPhone pendientes.
+
+## 2026-10-31 · Núcleo A recibido; main/workers v2 y pruebas/review en curso
+
+R10 implementa coreDetailed/Outcome/Failure/readerDetailed/handlersDTO2/mapping con11 unitarias,69 Chromium(33IDB36OPFS),20regresionesexistentes PASS/tipos/lint/harness/bundlememoria PASS. Engram14/23hashesprotegidos coincidentes en su cierre, sin editar main/workersproducto/foundation/dist/ODD/docs. `.local/evidence/import-failure-r10.json` conserva firmas, casos y fallos. No UI/consentimiento/exportación aceptados por ese núcleo.
+
+Padre modifica secuencialmente main y dos workers para v2, retirando v1 del mismo conjunto sin desplegarlo aún. Cada intento usa gate exacto Worker/request/DTO, scope/proof/token y handle diagnóstico antes del dispatch. Conserva primary+cleanup/reconcile proyectado en slot acotado y refresh antes de finish/end; contadores confirmados no se revierten por refresh. Quota/cancel/recoveryRequired detienen lote y conservan commit ganado. File vacío/excesivo se rechaza sin escritura. onerror/messageerror/matchinginvalid cierran trabajo con outcome transport sin falsa subfase y sin payload libre.
+
+Set privado de respuestas no verificadas bloquea importaciones/cesión sin exponer IDs al diagnóstico. Refresh normal no lo borra; botón explícito contrasta jobs terminales validados o respuesta recover/discard confirmada. Sin registro verificable conserva incertidumbre y pide cerrar/reabrir; no reimport/autocleanup. Workers manejan rechazos inesperados con DTO conservador. Tipos/lint después de wiring PASS; primer intento de parchear workers con delete/add repetido fue rechazado por herramienta antes de aplicar, corregido por update; no error de producto ni bundle mixto entregado.
+
+Delegación real `pulso-t18-import-v2-ui-sol-medium-tests-r11`, Sol6.1 medium/default verificados, crea runner/UI/faults reales para wiring/counters/cancel/postcommit/epoch/export/worker2/recovery/handoff; no fuentes producto. Delegación real independiente `pulso-t18-import-failure-sol-medium-review-r12`, Sol6.1 medium/default verificados, revisa core+main/worker y repros focales sin repetir69/20 por rutina. Resultados pendientes; Main padre no se da por aceptado por types. Contrato core/lectorlegacy queda hasta B, B consumidores/lote/backup sigue necesario.
+
+T4 fuentes r15 y fixcrypto r16 recibidos, paquete de fuente de workerPRUEBA r17 inicia aparte. Privada b637 estable y sin SDK; Engram14 real leído antes de estos cambios y se sincroniza tras registrar, USD 0, objetivo íntegro/T18/P0/iPhone pendientes.
+
+
+## 2026-10-31 · UI v2 probada; revisión reproduce dos fronteras adicionales
+
+R11 entrega 55 casos Chromium PASS (25 IDB/30 OPFS), cero pageerrors/intentos externos, tipos y sintaxis PASS; `.local/evidence/import-v2-ui-r11.json` distingue inyección TESTONLY, transporte Blob, consentimiento/epoch/export, respuesta postcommit, recovery real v2 y guardas de handoff. No cancelación precommit UI, cuota física, SW/offline ni aceptación iPhone. No se repiten 69 casos core ni 20 regresiones por rutina. No publicación por estos resultados.
+
+Review independiente r12 reproduce dos P2 con pruebas focales: Outcome v2 válido uncertain sin job durable pierde bloqueo tras refresh automático; cancelar dentro de dedup se informa como storage/unknown. `.local/evidence/import-failure-review-r12.json` conserva RED, sin P1 confirmado ni pérdida observada. Padre corrige main para retener también todo recoveryRequired válido en el Set privado por operación tanto import como recovery; refresh no resuelve incertidumbre. Texto visible explica resultado sin confirmar, sin calificar falsamente como respuesta inválida. No PASS del arreglo todavía.
+
+Dos delegaciones Sol6.1 medium/default reales verificadas: r13 corrige dedup con evidencia de aborto confirmado, preservando cuota primaria/commit ganador; r14 prueba UI del bloqueo sin job, refresh y resolución explícita con regresiones focales. Ningún resultado por iniciarlas. Fuente portable SDK r17 continúa separada, sin runtime SDK/auth ni red Telegram. Privada b63782b35bd03d5e estable; no build/despliegue nuevo aún. B lectores consumidores/lotes/backup sigue NECESARIO. USD 0, objetivo íntegro NO COMPLETADO; iPhone APLAZADO/PENDIENTE. Engram real leído 14/14 antes de registrar; sincronización y lectura independiente obligatorias después.
+
+
+## 2026-10-31 · Cancelación dedup corregida; pausa de organización ampliada
+
+R13 corrige R12-02 únicamente en la frontera dedup: aborto confirmado con señal propia se clasifica cancelled, TransactionInactiveError derivado no tapa el aborto, cuota/error primario independiente y commit ganador se conservan. Nueve casos Chromium/IDB reales PASS, tipos/lint focales PASS, 45 archivos RED r12 intactos; `.local/evidence/import-dedup-cancel-r13.json`. No OPFS/UI/SW/cuota física nuevos por esa prueba.
+
+R14 verifica R12-01 con ocho casos PASS: Outcome válido incierto sin job en IDB/OPFS y recovery incierto conservan bloqueo tras refresh normal/manual/expreso sin terminal; busy=false/count=0, respuesta terminal coincidente o checkFiles explícito resuelven sin replay, canarios intactos. Un RED adicional muestra favorito editable durante incertidumbre (true→false, revisión2→3); `.local/evidence/import-uncertainty-r14.json` y runner original conservan exit1, no se presentan como suite aprobada.
+
+Padre añade guardas dinámicas edit-organization/actWork/favorito/movimiento y permiso canOrganize para favoritos/metadatos/playlists/portadas/letras/lotes/backup. Lectura, navegación, playback y acciones de revisión/recovery siguen disponibles. Mensaje visible explica pausa de cambios de organización. Typecheck/lint PASS después de cambio; no PASS de navegador todavía. Revisión independiente r15 Sol6.1 medium/default real comprueba RED→GREEN, guardas y resolución sin repetir suites amplias. Privada b637 intacta; build/actualización pendientes de aceptación del incremento. B y objetivo completo siguen vigentes; USD0, iPhone APLAZADO/PENDIENTE. Engram real14 verificado al retomar.
+
+
+## 2026-10-31 · Main/workers v2 entregados tras revisión y transporte real
+
+R15 APRUEBA LIMITADAMENTE, sin nuevos P1/P2; diez grupos Chromium PASS (nueve reproducciones r14 + uno ampliado) con guardas UI y ejecución directa/callbacks anteriores, canarios intactos, resolución matching y escrituras reactivadas sin replay. RED r14 original permanece intacto; r13 dedup revisado por código/evidencia, nueve GREEN históricos no repetidos. `.local/evidence/import-guards-review-r15.json`. Fuentes main209c2018/dedup84886b5b cotejadas por padre antes de build.
+
+Padre typecheck/lint/build PASS; seis casos teclado y tres avisos originales/offline PASS. IDB y OPFS: GET/hash íntegro, 0–1/rango cruzando chunk/sufijo/abierto/416/multipart vigente/HEAD y ticket ajeno403 PASS; SW detenido vuelve a servir, Chromium cerrado/reabierto con red desactivada restaura y sirve offline en ambos backends. El servidor no se apagó en esa prueba de assets: se distingue de los avisos offline con servidor apagado. Live update desde baseline privado b637 PASS: anterior sigue reproduciendo, nueva pausada, activación tras cierre normal y restauración pausada, sin skipWaiting forzado.
+
+Misma copia privada autorizada actualizada atómicamente33files a `/releases/5f5ba1bfe2fd5ae2.html`, stable `/open.html`, conservando assets anteriores y sin nuevo puerto/servicio/cuenta. Probe HTTPS propio PASS: único Audio, bounded-blob, portadas16px y revocación al ceder, letras/lote/playlist/backup roundtrip, shell/foco/contextos, diagnóstico optinOFF/review/descarga exacta/reset al handoff, 17 avisos SHA originales, dos tabs con nuevo owner pausado/gesto y cero CSP. No privadooffline demostrado ni iPhone/Safari/VoiceOver/zoom real/cuota física/P0 aceptados.
+
+Consolidado `docs/evidence-import-v2-web.json` conserva fases históricas, recibos/comandos/SHA y límites. README/SPEC originales intactos. B consumidores Detailed/library/queue/Blob/batch/backup sigue NECESARIO; diseño r16 separado en curso, sin saltar dependencias. Objetivo íntegro NO COMPLETADO, USD0; ODD+Engram14 propios se sincronizan y leen independientemente tras registro.
+
+
+## 2026-10-31 · Slice B1a en implementación: disponibilidad y cola conservadora
+
+Diseño r16 leído completo por reporte y contratos: `docs` conserva A entregado; `.local/evidence/reader-panel-failure-design-r16.json` propone B1a Detailed/library/restore/main, B1b scan único+Blob, después B2 batch y B3 backup/hooks. Diseño no ejecuta pruebas ni aporta nuevos PASS. No amplía FailureV1/DTO/schema ni trata historial legacy como causa precisa.
+
+Delegación real B1a r17 Sol6.1 medium/default verificados escribe exclusivamente library/queue-restore y pruebas nuevas; exporta VerifiedAssetResult (valid+asset, missing/corrupt/unknown+FailureV1), lectura de manifiesto data-only, legacy sobre core, restore boolean Detailed(true) una vez y unknown emitido. Estado sin job/ausencia/corrupción/IO no se confunden, locks liberados y plan A/B/A conservado. Pruebas focales core todavía en curso, ningún PASS por implementar.
+
+Padre integra main secuencialmente: refresh usa Detailed, unknown rechaza sin publicar vista/cache parcial ni limpiar gates; captura scope/proof/Activity.scope antes de awaits. Queue captura token propio/scope/proof para plan, validación, tickets e instalación/finally; callbacks viejos no deben afectar adquisición nueva. Errores emitidos pasan a localFailure conservando fase/código en diagnóstico; opening también captura proof/token. Typecheck/lint PASS después del wiring y APIs ya disponibles. Sin build/dist/privada nuevos; entrega5f5ba1bfe2fd5ae2 permanece estable.
+
+Delegación real UI r18 Sol6.1 medium/default verificados prepara pruebas reales main/cola/refresh/canarios/callbacks tardíos en build aislado, sin editar producto ni repetir suites generales A. Resultados pendientes, revisión posterior necesaria. B1b/B2/B3 y resto I.errors/T18/P0 se conservan NECESARIOS; iPhone APLAZADO/PENDIENTE, USD0, sin cuenta/red Telegram ni publicación adicional. Engram14 real leído al retomar; tras apéndices sincronización+lectura independiente con bytes/SHA obligatoria.
+
+
+## 2026-10-31 · Revisión B1a favorable; lector 57 casos GREEN
+
+Review independiente r19 Sol6.1 medium/default real concluye código favorable sin P1/P2 confirmados y dos probes Node PASS (fase AppFailure/DOMException y token de generación); aceptación browser queda expresamente condicionada a recibos finales r17/r18. `.local/evidence/reader-b1-review-r19.json` conserva seis fuentes/SHA revisadas, todas cotejadas iguales por padre después del reporte. No nueva aceptación global por revisión estática.
+
+R17 comunica focal Chromium154/sandbox57 PASS: IDB27/OPFS30, cero pageerrors/externos; padre relee browser-1793469547319.json y confirma57/57. Incluye presencia/integridad, restore hashúnico treschunks/sinreopenOPFS, manifiesto/id mismatch/ausencia/corrupción/IO/generación, locks y cache A/B/A, plan unknown sinwrites. Primer browser-1793469488485 conserva cuatro FAIL de harness por comprobar lock con ifAvailable antes de liberación asíncrona; corregido esperando request exclusivo acotado, sin tocar lector A. No se convierten aquellos FAIL en PASS ni se afirma fuga de producto.
+
+Typecheck/lint y veinte pruebas actuales queue-restore+player PASS comunicados por r17 (6+14; conteos históricos15 no describen inventario actual). Recibo final/API/hashes r17 se está cerrando; r18 UI sigue en validación, sus ensayos provisionales no son aceptación. B1a aún sin build/entrega, privada5f5 intacta. B1b/B2/B3 y P0 íntegros pendientes; iPhone aplazado y USD0. Engram14 real leído antes de registrar; sync+lectura independiente requeridos.
+
+
+## 2026-10-31 · B1a validado con recibos finales; comienza B1b
+
+R17 final `reader-b1a-r17.json` recibido/cotejado:57 Chromium IDB27/OPFS30 PASS, typecheck/lint y20 unitarias actuales PASS. R18 final `reader-queue-ui-r18.json`:18/18 Chromium (IDB12/OPFS6) PASS, cero pageerrors/externos, Blob real, A/B/A faltante/corrupto, unknown/asset-changed conserva snapshot, refresh atómico y guards tardíos. Guard/proof/ABA sintéticos etiquetados, no aceptación de lifecycle físico. Intentos provisionales UI conservados por carreras de observación/harness corregidas, sin bug de producto reproducible.
+
+Padre coteja seis fuentes r19 iguales antes de iniciar B1b; r18 final declara fuente construida=actual con cambios concurrentes vacíos. La revisión r19 original sigue diciendo código favorable/browser pendiente históricamente; el padre resuelve ahora esa condición con ambos recibos finales, aceptación LIMITADA B1a. No se reescribe el informe ni se elevan dos Node a browser. `docs/evidence-reader-b1-web.json` separa revisión/pruebas/decisión padre y baseline B1a de ediciones posteriores B1b. Primer intento de registro paró antes de escribir al exigir hashes viejos de Blob ya asignado a r20; corregido registrando concurrencia esperada, sin defecto de producto ni reversión. No build/entrega B1a todavía; dist/privada5f5 intactos.
+
+Sigue B1b autorizado por dependencia ya satisfecha: delegación real r20 Sol6.1 medium/default verificados, propiedad exclusiva temporal asset-reader.ts/blob-source.ts y pruebas nuevas. Extiende verifyDetailed con scan/check/onChunk en mismo bucle; Blob acumula los mismos chunks que hash, sin presencia prepass/hash manual extra; locks/8MiB24MiB/proof/current/revocación propia se preservan. Sin ampliar DTO/pairs/schema ni tocar main/library/restore/Player/transport/SW/SDK/foundation; no PASS por iniciar. Se comprobarán regresiones pertinentes del lector compartido antes de nueva entrega, agrupando B1a+B1b.
+
+B2 lotes/B3 backup y demás I.errors/T18/P0 siguen NECESARIOS, USD0, iPhone APLAZADO/PENDIENTE. Engram14 real leído al retomar; sync y lectura independiente posteriores con contenido/bytes/SHA. Ninguna nueva cuenta/puerto/red Telegram ni publicación.
+
+
+## 2026-10-31 · B1b implementado; revisión independiente r21
+
+R20 entrega lector scan único+Blob con mismo contrato/locks/size exacto OPFS/límites8MiB24MiB y revocación propia. Sin scan conserva ruta legacy; onChunk requiere integridad, check-only no añade lectura OPFS. Callbacks internos síncronos: solo guards emitidos cancelled/owner-unavailable se conservan; otros errores de consumidor quedan unknown, no prueban bytes ausentes/corruptos. Manifiesto data-only/id y proof/playback mismo clientId se validan, fuentes lector3cce2a576590/Blob6320e19e1809 verificadas por padre.
+
+`.local/evidence/reader-blob-b1b-r20.json` registra84 casos únicos IDB/OPFS cubiertos en134 ejecuciones focales de seis selecciones sobre cambios sucesivos, NO una suite final completa de84 en una versión única. Veinte regresiones seleccionadas (10B1a/10import), presupuesto unitario+bordes8/24 exactos/+1, tipos/lint y Engram14 PASS; legacymétodo bool usado por SW ejercitado directamente, sin SW real nuevo todavía. Recibos/fallos de harness y límites conservados; el padre no convierte estos conteos en aceptación global ni en regresiones reejecutadas propias.
+
+Delegación real r21 Sol6.1 medium/default verificados revisa dos fuentes/recibos y probes selectivos finales de las fronteras modificadas. Sin resultado todavía ni build/entrega de B1. Padre guarda/relee baseline33files de privada5f5 para update posterior. Cambio propio SOLO texto en Ajustes expone límites8MiB/audio24MiB/cola y diferencia importación100MiB de reproducción compatible; no cambia presupuesto ni fuente lógica. Reviewer avisado de ese texto, sin exigir suites amplias por él.
+
+`docs/evidence-reader-b1-web.json` distingue B1a aceptado acotadamente de B1b revisión pendiente. Antes de entregar el conjunto se verificará SW/rangos/offline/actualización en producto y misma privada autorizada. B2/B3 y resto P0 siguen NECESARIOS; iPhone APLAZADO/PENDIENTE, privadooffline no demostrado, USD0. Engram14 real leído al retomar; sync+lectura independiente posteriores conservan contenido/bytes/SHA. Sin cuenta/red Telegram ni nuevo puerto/publicación.
+
+
+## 2026-10-31 · B1a+B1b entregados; B2 iniciado separado
+
+Review r21 APRUEBA LIMITADAMENTE B1b, cero P1/P2 reproducibles y ocho probes Chromium IDB/OPFS propios PASS; dos fuentes congeladas/artefactos auditados, conteos históricos de84 únicos/134 ejecuciones preservados como selecciones sucesivas, no suitefinalúnica. `.local/evidence/reader-blob-review-r21.json`. Padre compila el conjunto B1: typecheck/lint/build PASS, lector/Blob y main conservador unidos sin alterar DTO/schema, límites8/24 visibles en Ajustes.
+
+Producto6314ebda94d3dfd5: seis teclado y tres avisos originales/offline PASS; IDB/OPFS GET/hash/rangos/HEAD/ticketajeno403, detenerSW+fetch y reapertura offline tras reiniciar Chromium PASS. Para assets se desactivó la red del contexto; servidor no apagado. Actualización real desde5f5 conserva audio anterior, nueva pausada, SW espera cierre normal y restaura pausado, sin forzar activación. Recibos/comandos/SHA consolidados en `docs/evidence-reader-b1-web.json`.
+
+Misma copia privada autorizada actualizada atómicamente33files, `/releases/6314ebda94d3dfd5.html` vía stable `/open.html`, assets previos conservados, ningún nuevo puerto/servicio/cuenta. Probe HTTPS propio PASS: unAudio/bounded-blob, portada/dropped al ceder/nuevoowner, letras/lote/playlist/backup roundtrip, shell/foco/contextos, diagnósticoOFFpor defecto/review/descarga exacta/reset al handoff,17noticesSHA y dos tabs con nuevoowner pausado y reproducción por gesto, ceroCSP. Privadooffline NOdemostrado e iPhone APLAZADO/PENDIENTE, sin aceptar T18/P0 global. README/SPEC originales intactos.
+
+B2 comienza aparte después de APIs B1 estables y revisión R21: delegación real r22 Sol6.1 medium/default verificados, propiedad exclusiva local-batches/worker/LocalBatchPanel y nuevo panel-mapping/tipos+pruebas. Causas/fases precisas, procedencia privada, observación terminal cerrada, worker2 emparejado, scan único con progreso/cancel, guards/snapshot/commitganador y hooksopcionales; Main exclusivo padre para wiring posterior a APIs. Sin nuevas causas persistidas/schema/consentimiento al worker ni efecto de diagnóstico en datos. Resultado pendiente; B2 NO está en dist6314, ya compilado antes de iniciarlo.
+
+B3 backup y restantes I.errors/T18/P0 siguen NECESARIOS, USD0, sin autenticación/red Telegram ni publicación adicional. Engram14 real leído al retomar; tras registro sync+lectura independiente fullcontent/bytes/SHA.
+
+
+## 2026-10-31 · B2 recibido; integración main y revisión/prueba real en curso
+
+R22 entrega APIs ObserveFeature opcional al final de create/run/retry/recover y BeginPanelDiagnostic opcional en LocalBatchPanel, Worker/cliente v2, scan único, causas cerradas/procedencia WeakMap, cancelación durable/progreso/snapshot terminal propio. `.local/evidence/batch-diagnostics-r22.json`:106 casos Chromium finales IDB53/OPFS53 PASS +2 adicionales de modos,9unitarias (3nuevas/6diagnósticoexistentes), tipos/lint yEngram14 PASS. Padre relee recibo final/SHA y confirma106; fallos/correcciones previos conservados. Sin pruebas de main/producto por ese núcleo.
+
+Padre integra main exclusivamente: factory beginPanelDiagnostic captura scope/proof/Activity.scope/guardpanel y Session al inicio (incluido OFF), copia observación cerrada, primary/cleanup y refreshFailed en mismo handle con phase refresh, finish idempotente/WeakMap privado. Ningún handle/consentimiento/epoch/correlationId viaja al worker; LocalBatchPanel recibe factory opcional. Typecheck/lint después del wiring PASS, sin build ni nueva entrega. La copia privada6314 y dist siguen siendo B1, sin B2.
+
+Delegaciones reales r23UI y r24review Sol6.1 medium/default verificados prueban integración real y revisan fronteras concretas, sin modificar producto ni repetir106/69/55 por rutina. Scope: consentimiento OFF→ON/clear/ownership, causes/payload/progress sin PII, refresh mismo handle, errores/cancel y resultado confirmado, guardas/foco/audio/bytes y exportación revisada. Resultados pendientes; no aceptación por lanzar agentes. `docs/evidence-batch-diagnostics-web.json` conserva etapas y pendientes.
+
+B3 backup y resto I.errors/T18/P0 siguen NECESARIOS; iPhone APLAZADO/PENDIENTE, USD0, sin auth/cuentas/Telegram real/puertos ni publicación. Engram14 real leído al retomar; tras apéndices sync+lectura independiente fullcontent/bytes/SHA.
+
+
+## 2026-10-31 · Review B2 r24 favorable; aceptación main aún condicionada
+
+Revisión independiente r24 Sol6.1 medium/default real: código favorable limitado, sin P1/P2 concretos reproducibles; cuatro probes Node propios PASS. Audita diez snapshots r22/tres recibos finales/SHA,106 casos finales+2 modos/9U como evidencia histórica, no reejecución propia. Lector/Blob siguen idénticos a B1b revisado. Padre coteja todos los SHA de fuentes src/ revisados iguales; main e5fa3a7c y módulos B2 no cambian.
+
+`.local/evidence/batch-diagnostics-review-r24.json` conserva condición de aceptación main al recibo final r23 sobre mismas fuentes, o diferencias revisadas; r23 continúa trabajando. Ensayos provisionales de UI no se convierten en PASS ni se atribuyen automáticamente a producto. No build/despliegue B2; privada6314 permanece estable. `docs/evidence-batch-diagnostics-web.json` separa código revisado/Node/condición browser y núcleo r22.
+
+B3 backup preparado solo mediante lectura de sus firmas/fronteras existentes, sin implementación ni cambios de contratos B2 bajo ensayo. Resto I.errors/T18/P0 y físico iPhone siguen pendientes, USD0, sin auth/cuentas/red Telegram/puertos/publicación nuevos. Engram14 real leído; apéndices se sincronizan y leen independientemente con fullcontent/bytes/SHA.
+
+
+## 2026-10-31 · B2 aceptado acotadamente con UI33; B3 en implementación
+
+R23 final33/33 Chromium (IDB23/OPFS10) PASS, cero pageerrors/externos, fuentes construidas=actuales y doce src revisadas r24 coincidentes; main e5fa3a7c. Padre confirma recibo/SHA antes de asignar B3 y guarda `.local/evidence/batch-b2-accepted-baseline.json`. R24 conserva su condición histórica browser pendiente; el padre la resuelve ahora con r23 final/huellas iguales, aceptación LIMITADA B2. No se reescribe revisión ni se convierte cuatro Node en browser. Ensayos fallidos de harness r23 preservados, sin bug de producto reproducible. `docs/evidence-batch-diagnostics-web.json` separa núcleo106, UI33, revisión/decisión padre y baseline previo a cambios nuevos.
+
+B3 inicia por dependencia satisfecha: delegación real r25 Sol6.1 medium/default verificados, exclusiva organization-backup/OrganizationPanel/extensión panel-mapping compatible B2 y tests nuevos. Causas/fases precisas y emisión única, primera causa antesabort/inspect, commit ganador/receipt/incarnation sin falsonotcommitted, observeropc/procedencia y callback onCommitted con intento opcional. Sin nuevo schema/causas persistidas/secretos ni tocar módulos B2/lector/Blob/DB/Player/SW/SDK. Resultado pendiente; ningún PASS por delegar.
+
+Padre prepara main: onCommitted mantiene refresh(true,false) y tercerhandle privado por WeakMap (o null explícito, sin nuevo begin tardío); cuarto parámetro opcional fija phase refresh sólo para esa operación secundaria B3. Globalrefresh por defecto de A/B1/B2 queda igual; no retitular cola. Typecheck/lint PASS tras preparación. Prop beginDiagnostic de OrganizationPanel todavía NO conectada hasta API del hijo. Parent comunica contrato para no duplicarrefresh registrado y conservar commit ante fallo de vista. Históricos B2 siguen en baseline, no se exige que nuevos archivos B3 coincidan con hashes antiguos.
+
+Agruparemos B2+B3 en entrega posterior a pruebas/review; dist/privada6314 siguen B1 sin B2/B3. Resto I.errors/T18/P0 necesario, USD0, iPhone APLAZADO/PENDIENTE, sin auth/cuentas/red Telegram/nuevos puertos/publicación. Engram14 real leído al retomar; sync+lectura independiente posterior fullcontent/bytes/SHA.
+
+
+## 2026-10-31 · B3 recibido y main conectado; pruebas/review finales en curso
+
+R25 entrega OrganizationBackup/Panel/extensión compatible panel-mapping y APIs ObserveFeature opcional; resultado y certeza siguen recibos/incarnation reales, primera causa/secondaryreconcile cerrados y callbacks aislados.52 Chromium IDB/OPFS PASS,26unitarias (3nuevas/9diagregresión/14formato),typecheck/lint yEngram14 PASS. Padre coteja cinco hashesfinales y SHA del recibo final; main no fue probado por ese hijo. `.local/evidence/backup-diagnostics-r25.json` conserva fallos/harness y límites Sessionharness, sin inferir playbackreal ni iPhone.
+
+Padre conecta OrganizationPanel.beginDiagnostic albridge7ops ya existente. Callback exacto onCommitted(attempt?) resuelvehandleprivado y mantiene refresh(true,false), sin nuevo begin tardío siOFF/capabilityausente; fallo secundario queda phase refresh en mismo handle. Panel conserva el mismo intento y finaliza después del callback/antesActivity.end, sin duplicar fallo delrefreshpadre. Typecheck/lint PASS tras wiring. Dist/privada6314 intactos, B2+B3 todavía NOentregados.
+
+Delegaciones reales r26UI y r27review Sol6.1 medium/default verificados prueban integración real/códigofronterasyrecibos: commitganador/ACK/quota/cancel/incarnation, refreshfallidomismacorr/confirmadoconservado, consentimiento/clear/scope/proof/lifetimes, exportrevisadoprivacidad, audio/queue/canarios y guardas. Resultados pendientes; no aceptación por delegar. `docs/evidence-backup-diagnostics-web.json` separa etapas y límites.
+
+Inventario estático r28 Sol6.1 medium/default real prepara próximos pendientes W01–W18/AC/T y tres incrementos web sustanciales independientes, preservando SDK/cuenta/bot/externallyrics/iPhone gates. No código/tests ni PASS nuevos por ese inventario; objetivo completo no se reduce al diagnóstico. I.errors/T18/P0 y físico siguen pendientes; USD0, sin redexterna/cuentas/auth/puertos/publicación adicionales. Engram14 real leído al retomar; tras registros sync+lectura independiente contenido/bytes/SHA.
+
+
+## 2026-10-31 · Review B3 r27 reproduce bloqueo de preview; arreglo padre en verificación
+
+R27 solicita cambios por un P2 real, sin P1 identificado: si canWrite pasa a false mientras preview lee el File, finally usa current() también para pending; el resultado se descarta correctamente pero pending queda true al recuperar permiso. Probe Chromium del componente real lo reproduce (ruta importconcurrente/mainbusy establecida por código), cuatro probes Node PASS no lo anulan. `.local/evidence/backup-diagnostics-review-r27.json` preserva RED/repro/hashes, sin aceptar B3.
+
+Padre corrige sólo OrganizationPanel.makePreview: ownsState controla mounted+generation+action+file del intento; current añade allowed.current y token vigente para admitir resultados. Finally libera pending cuando todavía le pertenece, independientemente de canWrite o admisión; no borra pending de intento nuevo. Diagnóstico finish sigue antes Activity.end. SHA nuevo4a66c742d2d22c9b6492d045f1c5b0ec3af7d9c657bb66c8f353d399cdcf3298; typecheck/lint PASS, sin nuevo PASS browser por ese cambio.
+
+Nueva revisión real r29 Sol6.1 medium/default verifica RED→GREEN y regresiones de resultado/settlement sobre copia propia sin alterar r27. UIr26 avisado para añadir importconcurrente/cambio canWrite real y reconstruir finales con fuente corregida; no aceptar builds previos como final. Inventario r28 sigue separado. `docs/evidence-backup-diagnostics-web.json` registra P2/arreglo/condiciones, núcleo52 y26U permanece evidencia histórica anterior al arreglo de panel; no repetición amplia sin motivo.
+
+Main/código backup/lector/Blob/B2 no cambian en este arreglo, dist/privada6314 intactos. B3/entregaB2B3/I.errors/T18/P0 y físico siguen pendientes; USD0, sin nueva cuenta/red/auth/puerto/publicación. Engram14 se sincroniza y verifica con lectura independiente después de estos apéndices.
+
+
+## 2026-10-31 · R29 resuelve preview; main sigue esperando R26 final completo
+
+Nueva review r29 favorable acotada: R27-P2-1 resuelto, sin nuevos P1/P2 reproducibles. RED original reproducido y seis escenarios GREEN/ocho ejecuciones contando callbacks legacy, cuatro Node PASS; r27/r25 artefactos intactos. PanelSHA4a66c742 y mainc37d1539 coinciden por padre, restantes fuentes r27 sin delta según auditoría. `.local/evidence/backup-preview-review-r29.json` conserva alcance componente+bridge extraído/sintético, NO aceptación del main real ni prueba física.
+
+R26 aún ejecuta selecciones: recibos provisionales filtrados PASS no resuelven condición de selección final completa/fuentescorregidas. Se espera final con canWrite/importconcurrente real, consentimiento/correlación/refreshfallidocommitganador, audio/cola/bytes y exportrevisado. `docs/evidence-backup-diagnostics-web.json` distingue P2 resuelto de aceptación B3 pendiente. Dist/privada6314 intactos, no build/entregaB2B3 por este registro.
+
+Inventario estático r28 aporta borrador de próximos incrementos: gestión segura de copias, migraciones recuperables, y demás brechas independientes, con contratos/gates conservados; aún en cierre, no pruebas nuevas. Para no tratar hipótesis de apertura IDB como defecto, empieza probe real SOLOLECTURA de producto r30 Sol6.1 medium/default verificados: legacyv1 bloqueante→openv2/onblocked→soltar, ownership/cierre/upgradeabort/reopen/canarios en origen propio. Ningún source/data real cambia mientras B3 se verifica, ningún P2/PASS por lanzarlo, sin esquema nuevo ni migración del producto.
+
+Objetivo íntegro I.errors/T18/P0 y físico pendientes, USD0, sin auth/cuentas/red externa/puertos/publicación adicionales. Engram14 real leído antes del registro, tras apéndices sync+lectura independiente fullcontent/bytes/SHA.
+
+
+## 2026-10-31 · B2+B3 entregados: revisión y UI final sobre fuentes corregidas
+
+R26 FINAL49/49 Chromium (IDB46/OPFS3) PASS, selección completa/sourcescurrent/cero pageerrors/externos; padre verifica hash de final-receipt y mainc37d1539/panel4a66c742 iguales a r29 antes de compilar. Incluye commit confirmado+refreshfallido misma correlación/emisión única/(true,false)/finish correcto, preview con importconcurrente corregido, ACKperdido/recibos/recovery/privacidad y dos regresionesB2. Históricos provisionales no elevados a final. R29 ya favorable con P2 resuelto; el padre resuelve su condición de main con r26, sin otra ronda por rutina ni reescribir informes. B2 conserva aceptación baselineR23/R24 previa a B3. Aceptación LIMITADA del incremento, no T16/T18/P0 global.
+
+Padre types/lint/build y pruebas de producto PASS: seis teclado/tres noticesofflineservidorapagado, assetsIDB+OPFS GET/hash/rangos/HEAD/403, SWdetenido+fetch y reapertura offline después de cerrar/reiniciar Chromium (contexto offline, servidor assets no apagado). Liveupdate desde6314 preserva audio anterior/nueva pausada/SWesperacierre y restaura pausado. `docs/evidence-panel-diagnostics-release-web.json` une recibos/comandos/SHA y límites; docs deB2/B3 actualizados por etapas.
+
+Misma copia privada autorizada actualizada33files a `/releases/41e21b4f8c921156.html`, vía stable `/open.html`, assets anteriores conservados. ProbeHTTPS propio PASS: unAudio/bounded-blob/0CSP, portadas/letras/playlist/lote/backup roundtrip, shell/foco/contextos, diagnósticoOFFpor defecto/revisión/descargaJSONexacta/reset al handoff,17noticesSHA y nuevoownerpausado+gesto. Privadooffline NOdemostrado e iPhone APLAZADO/PENDIENTE. README/SPEC originales intactos, ningún nuevo servicio/puerto/cuenta/auth/red Telegram, USD0.
+
+Fuente y dist41 congelados ANTES de trabajo de migración en `.local/evidence/panel-diagnostics-release-source-baseline.json`: cambios posteriores de src/storage/database.ts deR31 NO están en esta entrega. R30 confirmó P3 de conexión tardía sin dueño trasdatabase-blocked; seis casosrealIDB/canarios intactos, versionchange sí cierra, sin P2/pérdida ni AC21global. R31 Sol6.1 medium/default real corrige finalizaciónúnica/lateclose/upgradeabort y API lifecycle mínima en DB exclusivamente, con pruebasde migración; mainwiring posterior exclusivo padre. No PASS por iniciarlo.
+
+Inventario final R28 estático conserva W01–W18/AC01–24/T1–20/D01–10 y objetivo íntegro. Prioriza gestión segura de copias, migraciones recuperables y álbumes locales; orden técnico de ejecución: verificar migraciones/lifecycle antes de nuevas mutaciones destructivas de copias. R32 Sol6.1 medium/default real diseña gestión/exports/persistencia/retirada segura sin escribir producto ni borrar datos; r33 Sol6.1 medium/default real compone AuthCoordinatorr8+OwnSlotr12+IdbStorage en worker DEPRUEBA aislado, auth sintética/disabledsincliente/red/cuenta, no repetir matrizcrypto/sourcepack. Resultados pendientes, gatesD03/D05/SDKreal/iPhone y todas las exclusiones vigentes. Engram14 real leído; tras apéndices sync+lectura independiente fullcontent/bytes/SHA.
+
+
+## 2026-10-31 · IDB R31 recibido y lifecycle main conectado
+
+R31 corrige P3R30 en database.ts exclusivamente: finalizaciónúnica, rechazo blocked terminal, upgrade tardío abortado antesmutar/success tardío cerrado, versión2/stores actuales, migración aditiva atómica, typedopen/futureversionpreservada.19 Chromium+2regresiones IDB/types/lint PASS, sin pageerrors/externos; padre verifica SHA40b165d2 y recibo. transaction-done intacto, ningún P2/pérdida por r30 ni aceptación AC21global por estos19.
+
+API subscribeDatabaseLifecycle devuelve unsubscribe/closedstates blocked|versionchange|version-incompatible, notificación síncrona antesclose/aislamiento de listenerthrows, sin éxitos porread/tick. Padre integra main: databaseState separado de importRecoveryPending, bloquea nuevas mutaciones/cola/savePosition anteblock, retry explícito forcevalida antesliberar sóloDBgate. Versionchange/futuro sticky invalida scope+Activity antesclose, guarda snapshot sólomemoria, Player.suspend/clearMediaSession/revocaURLs propias; no settingswrite enhandler. Banner pide entrada actual, sólo tras tokens0, sin autoreload/skipWaiting. Typecheck/lint PASS; dist/privada41 intactos.
+
+Nueva prueba real r34 Sol6.1 medium/default verificados ejecuta main/IDB/guards/canarios/pausa/retry/versiónfutura; fuentes de producto congeladas salvofix comunicado. Revisión independiente de core/main se hará al liberar slot; no aceptar UI por types. `docs/IDB-MIGRATIONS.md` y evidence-idb-migrations-web.json documentan límites: señales module-local, no nuevo fanout worker/SW, visibilidad entre realms/bundleviejo/SW y AC21integral aún pendientes. No se oculta esa brecha ni se atribuye iOS.
+
+R32 diseño de copias y R33 ensayo SDK aislado siguen aparte, sin auth/red/cuenta ni borrado real. ObjetivoP0 íntegro NOcompleto, USD0, iPhoneAPLazado. Engram14 real leído; tras registros sync+lectura independiente fullcontent/bytes/SHA.
+
+
+## 2026-10-31 · Copias locales entregadas con revisión y pruebas finales
+
+R40 final49/49 casos Chromium154 sandbox PASS, cero pageerrors/externos; descargas reales IDB/OPFS con bytes/SHA exactos y Audio único conservado. Paginación52 entradas 0→1→0→1 conserva snapshot/ref/caché; fresh explícito invalida refs anteriores. Cancelación tardía de inventario/verificación/exportación no publica éxito/enlace; fallo original storage-denied se conserva. Incluye tokens/Activity/proof/scope, gesto de persistencia, consentimiento diagnóstico, URL propia frente a reproducción y layout320/568horizontal con fuente200% aproximada. RED y fallos de harness se mantienen separados. R41 aprueba limitadamente core/UI sin P1/P2 y resuelve su condición R40; el recibo final R40 sólo añadió finalAudit después del sample de R41, con casos/builds/sources idénticos, verificados por padre.
+
+P3R41 confirmado: el lector común podía recrear el directorio OPFS vacío si desaparecía tras preflight. Padre corrige sólo adquisición OPFS del lector: directorio/archivo create:false después de tomar lock; helper de escritura sigue create:true. Worker cambia comentario solamente. Nueva revisión R43 reproduce dos RED nativos y verifica seis casos finales PASS (ambas carreras, guard ACK y tres vecinos, incluido Blob8MiB/hash). Directorio ausente sigue ausente, asset-missing correcto, canarios/manifiestos conservados, locks y admisión liberados. Sin nuevos hallazgos; delta aprobado limitadamente. No se reetiquetan los49 UI ni84 core como reejecutados tras este cambio: sus etapas y la selección final R43 se conservan.
+
+Build/typecheck/lint y comprobaciones del producto PASS: IDB+OPFS GET/hash/rangos/HEAD/403, fetch tras detenerSW y reapertura tras reiniciar Chromium con contexto offline (servidor assets no apagado); seis teclado; tres licencias con origen loopback apagado y avisos completos desde SW; actualización normal desde41cc mantiene audio anterior/nueva entrada pausada/activación tras cierre y restore pausado. Mismo acceso privado autorizado actualizado34 archivos a /releases/9a5944784009419c.html mediante /open.html, conservando assets anteriores. Probe HTTPS propio PASS: inventario OPFS, verificar, preparación sin descarga automática, enlace real con audio exacto, URL propia liberada al cerrar y ceder; reproducción/fuente única intactas. También recorrido previo de biblioteca/portadas/letras/lote/backup/diagnóstico/notices y handoff con nuevo owner pausado. Transporte privado bounded-blob; offline privado NO demostrado. Sin nueva cuenta/puerto/Telegram ni costo.
+
+Evidencia docs/evidence-local-copies-web.json y .local/evidence/local-copies-delivery-parent-verification.json con baseline src/dist y hashes. Raw R37(84 histórico+12 delta), R40(49), R41 y R43(6) separados; no sumar como una suite final. Originales README/SPEC intactos. Retirada de copias sigue pendiente: este incremento no borra/reclasifica kept, no confirma copia externa ni garantiza purga/heap/iPhone. T11/T12/T18/P0-W siguen EN CURSO; iPhone APLAZADO/PENDIENTE, USD0.
+
+
+## 2026-10-31 · Entrega actual sin editores y continuación de portadas gratuitas
+
+R55 aprueba limitadamente main/ArtworkPanel sin nuevos P1/P2: coteja117 hashes del build/recibos y preservación de cola/lifecycle/legacy. No reejecuta navegador ni se suma a las suites. Observación P3 del harness histórico: expectativas de ausencia de editores sólo corresponden al producto nuevo, no al baseline quality-before. Padre condiciona ese caso y conserva prueba original del baseline; sintaxis y seis casos de modo histórico PASS. La rama producto se conserva y su seis PASS precedente queda identificado, sin fingir reejecución tras el cambio condicional.
+
+Misma copia privada previamente autorizada actualizada con /releases/9cbcab4e444d7d6d.html,34 archivos cotejados y assets antiguos retenidos, sin reiniciar servicio ni puertos nuevos. Launcher /open.html estable. Readback117 fuentes/public/dist continúa igual al build. Probe HTTPS propio Chromium154 sandbox PASS: importación real MP3 propio con APIC16px extraída automáticamente, editores ausentes, unAudio/mini, playlist/lote, letras locales, backup export/preview/apply, avisos17, diagnóstico opt-in y descarga exacta, copia individual OPFS SHA/segundo gesto/URL propia revocada sin tocar fuente; cesión real a segunda pestaña antigua descargada/nueva pausada/reproduce sólo tras gesto. No se usó editor de portadas para sembrar la prueba. Modo privado sigue bounded-blob8MiB/24MiB, sin offline privado demostrado, sin físicoiPhone. Recibo .local/evidence/readonly-delivery-parent-verification.json correlaciona fuentes y pruebas; cuatro checks locales previos permanecen separados.
+
+R54 investigación/diseño recibido, NO runtime: reutilizar LRCLIB para letras y contraste básico, CAA por lanzamiento MusicBrainz para imagen; iTunes no seleccionado por finalidad promocional. El propietario confirma interés en gratuidad; se mantiene USD0 sin planes/cuentas/keys ni activación implícita de consultas privadas. La investigación no se transforma en consentimiento de envío de biblioteca. R56 Sol6.1 medium/default inicia piloto limitado de navegador con ejemplos públicos documentados: identificación clienteMusicBrainz válida, CORS/HTTPS/redirecciones/cotas de CAA, sin tocar CSP del producto/4175, sin música privada ni guardar imágenes comerciales en fixtures. Probes aún PENDIENTES, no declarar proveedor activo. No nuevas propuestas de editor de R51.
+
+Objetivo completo P0-W EN CURSO/NO COMPLETADO; AC21/T7/T10/T16/T18 y los demás pendientes no se convierten en aceptación global por esta entrega. iPhone APLAZADO/PENDIENTE. ODD y Engram real propios, sync y lectura independiente tras registro. El estado histórico del mecanismo de objetivos no tiene API de reanudación disponible; la tarea documentada y las delegaciones reales continúan, sin afirmar scheduler persistente nuevo.
+
+
+## 2026-10-31 · Álbumes/backup v2 entregados; continuidad de aceptación
+
+R66/R68/R69 final y entrega c44e797fff04a757: backup exportv2 con fuente declarada de álbum, lector/digestv1 intactos, preview avisa pérdida antes de confirmar use-backup. Sin migración IDB ni nuevos editores. R66 32U/10B; R68 11B finales; R69 revisión4 probes propios favorable limitada con condiciónbrowser satisfecha. Bug real progress a320px/fuente200% RED→GREEN CSS máximo inline; no zoom físico. Matrices separadas/no sumas de regresiones como suite única.
+
+Producto final tipos/lint/build, assets/rangos2backends,teclado6,licencias3,update9cb→c44 PASS. Misma copiaHTTPS autorizada34archivos y smoke real propio etiquetas/backupv2/unAudio/copiaOPFS/handoff pausado PASS. Readback124src/public/dist y16freeze, originales intactos. Recibo .local/evidence/album-delivery-parent-verification.json; contrato docs/ALBUM-METADATA.md. PrivadoBlob8/24MiB sin offlineprivado demostrado; LRCLIB disabled sin red privada. T16/T18/AC21global/P0 e iPhone no completos. Historia previa permanece; descripción completa en P0-W/T10 y recibos. R70 reinspección legacy sólo diseño iniciado, no capacidad implementada. USD0. Engram oficial sync+lecturaindependiente tras esta actualización.
+
+
+## 2026-11-01 · Entrega de rescan y apertura por request verificadas
+
+R75(foco/terminal), R77(cancelación) y R80(apertura por solicitud) favorables limitados, con R72producto11 y R79primeruso8 finales; etapas y hashes separados. La nueva API openExistingDatabase niega sólo su propio upgrade sin vetar el inicializador root concurrente. Primer uso IDB/OPFS sin preseed, v1/v2/v3/cohortes/políticas y resto del migrador byte-exacto verificados. No cambio de schema/stores.
+
+Build8cfb8eb02744ca5c entregado al mismo accesoHTTPS autorizado35archivos, originales/oldassets retenidos. Root131readbacks, checksassets2/teclado6/licencias3/updatec44 y smokeHTTPS con rescan explícito mientras suena/backupv2/exportOPFS/handoff pausado PASS. Parent .local/evidence/metadata-rescan-delivery-parent-verification.json; docs/evidence-metadata-rescan-web.json. FAIL8a4primeruso preservado como defecto real, no eliminado. No promesas heap, offlineprivado o iPhone por el GREEN desktop. P0/AC21global/T16/T18 no completos, USD0, proveedores disabled. Próxima protección de fuentes/cola previa a retirada no equivale a borrado implementado ni permiso sobre originales. ODD+Engram14 sync+lecturaindependiente.

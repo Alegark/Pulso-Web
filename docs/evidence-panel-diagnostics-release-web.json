@@ -1,0 +1,88 @@
+{
+  "project": "Pulso-Web",
+  "updatedUTC": "2026-10-31T19:16:51.539768+00:00",
+  "increment": "T18 A+B1+B2+B3 diagnostics increment, no global T18/P0 acceptance",
+  "USD": 0,
+  "reviewAndFinalUI": {
+    "B2": {
+      "review": "r24 code favorable",
+      "UI": "r23 final33 same reviewed source baseline",
+      "acceptedByParentBeforeB3": ".local/evidence/batch-b2-accepted-baseline.json"
+    },
+    "B3": {
+      "initialReview": "r27 P2 preview invalidation, preserved RED",
+      "fixReview": "r29 resolvesP2,6GREENscenarios/8executions/4Node",
+      "UIFinal": "r26 final49, full selection, corrected main/panel hashes matched before build",
+      "UIReceiptSHA256Verified": true,
+      "parentDecision": "LIMITED_ACCEPTANCE_B3_AND_COMBINED_B2_B3"
+    }
+  },
+  "historicalCoreEvidence": [
+    ".local/evidence/batch-diagnostics-r22.json",
+    ".local/evidence/backup-diagnostics-r25.json"
+  ],
+  "validation": {
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "productBuild": "PASS",
+    "keyboardCases": 6,
+    "rawNoticesOfflineCases": 3,
+    "localAssets": [
+      "IDB",
+      "OPFS"
+    ],
+    "GETHashRangesHEADForeign403": "PASS",
+    "SWStoppedThenFetch": "PASS",
+    "offlineAfterChromiumRestart": "PASS, browser context offline, asset origin server not stopped",
+    "liveUpdateFrom6314": "PASS old still playing/new paused/activation after clients close/restored paused"
+  },
+  "delivery": {
+    "entry": "/releases/41e21b4f8c921156.html",
+    "indexSHA256": "41e21b4f8c921156735e119af433a33c4f16470b97b80243ebb0d0e38b269ad6",
+    "swSHA256": "286fd65d52d272f2b57272bba8f4e74e9177d6a462603da100662a70b8e5b61d",
+    "copiedFiles": 33,
+    "sameExistingAuthorizedPrivateCopy": true,
+    "retainedOldAssets": true,
+    "HTTPSProbe": "PASS",
+    "transport": "bounded-blob",
+    "CSPViolations": 0,
+    "oneAudio": true,
+    "privateOffline": "PENDING_NOT_DEMONSTRATED",
+    "excludesMigrationR31": true
+  },
+  "receipts": {
+    "local-assets": {
+      "path": ".local/evidence/panel-diagnostics-local-assets.json",
+      "SHA256": "4a6c44018cf96def8f3d23bbf32fdeba3a25845e6e4ecdb47213cce4cc2e49b5"
+    },
+    "keyboard": {
+      "path": ".local/evidence/panel-diagnostics-keyboard.json",
+      "SHA256": "a053a7e72d83aeceb6824176e1d1259e4bdaca000dce3277afbaf3f39202c9a3"
+    },
+    "licenses": {
+      "path": ".local/evidence/panel-diagnostics-licenses.json",
+      "SHA256": "bbbe70709e9eba2e0c73ccc54f5372c32bc21b8927969db5ab178532265cae19"
+    },
+    "live-update": {
+      "path": ".local/evidence/panel-diagnostics-live-update.json",
+      "SHA256": "a75417775c76c1238d60ce725c5c6be800556ee9f169a9f5c581681eeb8ad8ee"
+    },
+    "private-copy": {
+      "path": ".local/evidence/panel-diagnostics-private-copy.json",
+      "SHA256": "26ad40c806fe879e0eb6b2b56bc599c7f9139292e6f594fa03c319d16eac3e44"
+    },
+    "private-probe": {
+      "path": ".local/evidence/panel-diagnostics-private-probe.json",
+      "SHA256": "31b3f61caab0a965aabf7824a5bbb9e45a284a70a3890d3a605f7e1df3a2306e"
+    }
+  },
+  "compiledSourceBaseline": ".local/evidence/panel-diagnostics-release-source-baseline.json",
+  "concurrentNextSourceWork": "R31 may edit src/storage/database.ts after baseline/build; not compiled into this release",
+  "limits": [
+    "TESTONLY injected failures and timings remain labeled, no physical quota/process-kill guarantee",
+    "HTTPS private uses bounded Blob8MiB/file24MiB/queue; no private offline demonstrated",
+    "iPhone/Safari/VoiceOver/real zoom/remote auth and final T18/P0 acceptance pending",
+    "no new service/port/account/Telegram connection"
+  ],
+  "P0Complete": false
+}

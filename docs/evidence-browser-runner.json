@@ -1,0 +1,22 @@
+{
+  "scope": "T6/T7 automatic local browser runner",
+  "source": "T3 delegated implementation pulso-t6-terra-browser-runner-r2; parent source review",
+  "model": "gpt-6.1-terra",
+  "reasoningEffort": "low",
+  "serviceTier": "default",
+  "environment": {
+    "browser": "system Chromium /usr/bin/chromium",
+    "version": "not captured in this execution",
+    "mode": "Linux headless, chromiumSandbox=true",
+    "origin": "temporary loopback port, isolated fresh browser context"
+  },
+  "checks": [
+    {"command": "node --check scripts/run-browser-tests.mjs", "result": "PASS"},
+    {"command": "INSTABOX_HEADLESS=1 npm run test:browser:run -- library", "result": "PASS", "cases": 10, "pageErrors": 0, "exitCode": 0}
+  ],
+  "compiledRunners": "existing .local/browser-tests build",
+  "otherSuitesExecuted": false,
+  "opfsVerified": false,
+  "iphoneVerified": false,
+  "limitations": ["Does not exercise SW product transport or offline reopen", "Does not exercise real Telegram", "Does not prove physical iPhone behavior"]
+}

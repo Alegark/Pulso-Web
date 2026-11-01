@@ -1,0 +1,130 @@
+{
+  "project": "Pulso-Web",
+  "dateUTC": "2026-10-31",
+  "increment": "T4 contrato de sesión offline y lifecycle",
+  "status": "Verificado solo en contratos locales y navegador con driver sintético; no aceptación de T4 completo",
+  "phases": [
+    {
+      "phase": "r3 implementación inicial",
+      "unitPassed": 26,
+      "browserGroupsPassed": 9,
+      "evidence": ".local/evidence/auth-offline.json",
+      "historicalLimit": "Crash solo reabre store; cierre termina worker; expire manual; conteo runner inicialmente constante, log sí verifica26/26"
+    },
+    {
+      "phase": "r5 revisión independiente",
+      "outcome": "2P2 y2P3 reproducidos; CHANGES_REQUESTED",
+      "evidence": ".local/evidence/auth-offline-review-r5.json"
+    },
+    {
+      "phase": "r6 corrección",
+      "outcome": "4repros RED→GREEN",
+      "unitPassed": 29,
+      "browserGroupsPassed": 17,
+      "evidence": ".local/evidence/auth-offline-r6.json"
+    },
+    {
+      "phase": "r7 revisión independiente",
+      "outcome": "4arreglos confirmados; un nuevo P2 existente lifecycle R7-01 reproducido en cuatro caminos",
+      "evidence": ".local/evidence/auth-offline-review-r7.json"
+    },
+    {
+      "phase": "r8 corrección lifecycle",
+      "outcome": "4caminos RED→GREEN",
+      "unitPassed": 41,
+      "browserGroupsPassed": 27,
+      "typecheck": "PASS",
+      "lint": "PASS",
+      "browserTypes": "PASS",
+      "pageErrors": 0,
+      "externalRequests": 0,
+      "evidence": ".local/evidence/auth-offline-r8.json"
+    },
+    {
+      "phase": "parent final focal",
+      "outcome": "Lectura de close/retryClose/releaseDriver/disconnect/bind y hashes actuales sin defecto concreto adicional;12pruebas del APIclose PASS",
+      "command": "node_modules/.bin/tsx --test tests/unit/auth-offline-close.test.ts",
+      "unitPassed": 12,
+      "receipt": ".local/evidence/auth-r8-parent-close.log"
+    }
+  ],
+  "counting": "No sumar versiones como cobertura distinta ni presentar las suites históricas como reejecución independiente. Driver siempre sintético. Worker/MessageChannel/IDB reales en pruebas Chromium sandbox/loopback propio.",
+  "API": {
+    "close": "Promise<boolean>, invalidación de admisión/generación síncrona; compartida/idempotente",
+    "stop": "Promise<boolean>, puerto/admisión cerrados síncronamente; ignorar promesa no deja rechazo del driver sin observar",
+    "retryClose": "Reintento explícito de rechazo terminal, sin reabrir admisión ni solapar un cierre pendiente",
+    "meaning": "true observa driver.close resuelto/no driver; false rechazo observado; pendiente no confirma liberación; no logout/borrado/revocación"
+  },
+  "limits": [
+    "Default disabled, sin imports en producto ni SDK/client/socket/auth real",
+    "Expiración explícita, no timer/lease/peer-loss detection",
+    "Driver que ignora AbortSignal puede conservar/recrear recursos; supresión de callbacks no prueba cierre físico",
+    "Journal pending tras pérdida de proceso/fallo de persistencia conserva incertidumbre sin re-delete automático; política futura pendiente",
+    "Sin recuperación autenticada, SDK IdbStorage ni borrado seguro de strings/heap",
+    "No T4/D03/D05/D10/T5/iPhone/P0 completo"
+  ],
+  "product": {
+    "release": "12b00fc83bbf49e8",
+    "authModulesIncluded": false,
+    "attribution": "Cambio de dist realizado por padre al entregar MiniArtwork, no por r8; manifiesto final separa esa concurrencia"
+  },
+  "sourcesAndReceipts": {
+    "src/telegram/auth-protocol.ts": {
+      "bytes": 6719,
+      "SHA256": "188e0227aad94bb5ff2909489514edd1b2dc7ac2a6a2e08b4eb38c96cc27a781"
+    },
+    "src/telegram/auth-state.ts": {
+      "bytes": 11457,
+      "SHA256": "2aec3b7672c49052262a9b2cdc5bcbade8c88a2a2bb1939e159834ce0d68486c"
+    },
+    "src/telegram/auth-scope-store.ts": {
+      "bytes": 5505,
+      "SHA256": "e2b187c37d03c2cac83bff471d7599a6cb498e3f7bc070dcad39ae0f4c62efc3"
+    },
+    "tests/unit/auth-offline.test.ts": {
+      "bytes": 12509,
+      "SHA256": "dc269c75b71434824938c0bd39750b01ba3b672e42b3c776ab97827dc92d0175"
+    },
+    "tests/unit/auth-offline-close.test.ts": {
+      "bytes": 5729,
+      "SHA256": "e7e2859474a7a9031ae112deb9c360f1ff1d970b9f95550bcd8917a9fdfce71d"
+    },
+    "tests/browser/auth-offline.ts": {
+      "bytes": 31515,
+      "SHA256": "ee5349ad1ab1ce01ddb05d5eb86a982f51181882ec18b375c4353de9752b4494"
+    },
+    "tests/browser/auth-offline.worker.ts": {
+      "bytes": 1305,
+      "SHA256": "b3bb855eff1f976239450a23e71da37a31f470ab19b9e575fb33d64e9f0509be"
+    },
+    "tests/integration/check-auth-offline.mjs": {
+      "bytes": 7998,
+      "SHA256": "4717a2a2d3c6da736da6e323359fd5cadc9b8822b0ac4ced98b6b720254cb1e8"
+    },
+    ".local/evidence/auth-offline.json": {
+      "bytes": 5495,
+      "SHA256": "d5880394b02d6e0e0be7603dcacffc6a71924896ec951e0ad8df3bd46cc0df99"
+    },
+    ".local/evidence/auth-offline-review-r5.json": {
+      "bytes": 13883,
+      "SHA256": "94543ca95b238e57f46f50b306df4ff39598eee88a0414ccdcbf252a24201497"
+    },
+    ".local/evidence/auth-offline-r6.json": {
+      "bytes": 22707,
+      "SHA256": "4504254f88d734f22dbd2107769c69c072e9402caf27c2a2d95e0e97e6428bec"
+    },
+    ".local/evidence/auth-offline-review-r7.json": {
+      "bytes": 14492,
+      "SHA256": "7763dd7e8535c3690c3e00f337245e5c61ef85024263933d33233b79993f65b5"
+    },
+    ".local/evidence/auth-offline-r8.json": {
+      "bytes": 30214,
+      "SHA256": "df95e110522507ccce9392614b91b33b92762b60641223eebb915839a86ce614"
+    },
+    ".local/evidence/auth-r8-parent-close.log": {
+      "bytes": 2548,
+      "SHA256": "21b3fbb00667cd1721f0551e2c642233670e92385e1ed86d923f0650667fdd86"
+    }
+  },
+  "USD": 0
+}

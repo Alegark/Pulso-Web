@@ -1,0 +1,197 @@
+{
+  "status": "PASS solo casos web indicados",
+  "timestampUtc": "2026-10-31T09:56:45.345823+00:00",
+  "environment": {
+    "browser": "Chromium 154.0.8037.57",
+    "sandbox": true,
+    "headless": true,
+    "localOrigin": "loopback efímero con fixtures propias"
+  },
+  "unit": {
+    "passed": 14,
+    "failed": 0,
+    "command": "npx tsx --test --test-reporter=tap tests/unit/embedded-lyrics.test.ts tests/unit/lyrics.test.ts",
+    "log": ".local/evidence/embedded-r7-unit.tap"
+  },
+  "browserModel": {
+    "passed": true,
+    "environment": "Chromium Linux headless with sandbox; ephemeral loopback; no iPhone evidence",
+    "cases": [
+      {
+        "name": "embedded-lyrics",
+        "passed": true,
+        "pageErrors": 0,
+        "results": [
+          "PASS USLT Unicode UTF8, UTF16 BOM/BE e ISO8859-1 reales; v2.3/v2.4",
+          "PASS SYLT ms se prefiere a USLT; candidatos deterministas conservan idioma/descriptor",
+          "PASS SYLT frames MPEG nunca se convierte a ms, USLT válido se conserva",
+          "PASS WAV ID3 y M4A ©lyr plain/LRC estricto sin tiempos inventados",
+          "PASS sin letra, formato no inspeccionado, truncados, flags y codificaciones distintos",
+          "PASS payload excesivo se omite antes de leerlo; límites cues/líneas y presupuesto global",
+          "PASS audio/padding/APIC grandes se saltan con slices pequeños; walkers acotados",
+          "PASS worker real importa MP3 USLT/SYLT, WAV+USLT y M4A+LRC; hash/metadata/organización intactos",
+          "PASS audio exitoso aunque letra inválida/omitida/fallo de guardado; original conservado",
+          "PASS dedup/reimport conserva edición manual y ausencia explícita sin tocar organización/audio",
+          "PASS legacy sin audioFingerprint reimporta exacto y extrae sin falso conflict",
+          "PASS SYLT literal exacto y 4000 cues persisten sin reinterpretación; corrupción rechazada",
+          "PASS M4A UTF16-BE real; presupuestos compartidos M4A y WAV antes del segundo payload",
+          "PASS ficha assetId null con manual/ausencia conserva revisión y elección al reimportar exacto",
+          "PASS manual durante extracción y dos respuestas antiguas: CAS impide sobreescritura",
+          "PASS cambio de pista/generación/hash durante extracción rechaza publicación; parser/Blob fuera IDB/lock",
+          "PASS generación confirmada del intento no acepta una revisión posterior antes de extraer",
+          "PASS registros manuales anteriores siguen válidos; corrupción automática no se repara",
+          "PASS V11 real: Blob y parser fuera de transacciones y del lock de letras",
+          "PASS recarga real conserva letra, procedencia y hash verificado del audio",
+          "PASS reapertura SYLT literal y 4000 cues; borrador plain y override manual CAS"
+        ]
+      },
+      {
+        "name": "lyrics",
+        "passed": true,
+        "pageErrors": 0,
+        "results": [
+          "PASS ausencia inicial, texto Unicode/inyección inerte y reapertura IDB",
+          "PASS LRC explícito/offset/multiples y ausencia manual versionada",
+          "PASS límites/truncados fallan sin mutar; formato explícito",
+          "PASS pista inválida/ausente y conflictos CAS entre escritores",
+          "PASS cuota inyectada y abort preservan registro anterior y audio",
+          "PASS corrupción preservada: null revision, reparación CAS y token obsoleto",
+          "PASS corrupción no acotable/Blob rechazada sin lectura IO ni reparación",
+          "PASS manual sobrevive reimportación sin cambios en audio, metadata ni cola",
+          "PASS V11: parser fuera de transacción; ningún IO Blob/hash; reparación evita ABA",
+          "PASS cuota asíncrona inyectada en transacción aborta CAS y conserva elección",
+          "PASS corrupción 100000 claves corta enumeración y no ordena fuera de cota, también en CAS",
+          "PASS recarga real del documento conserva revisión/texto en nueva instancia"
+        ]
+      }
+    ],
+    "browserVersion": "154.0.8037.57"
+  },
+  "productUI": {
+    "passed": true,
+    "cases": [
+      {
+        "name": "real import worker automatically displays MP3 USLT, WAV ID3 and M4A text/LRC with known provenance and inert text",
+        "passed": true
+      },
+      {
+        "name": "SYLT literal brackets survive storage/UI; exactly two events at original times, with no invented 9000ms event",
+        "passed": true
+      },
+      {
+        "name": "manual override saves without pausing engine and survives exact reimport plus paused reload",
+        "passed": true
+      },
+      {
+        "name": "explicit manual absence stays hidden across reimport/reload and is labelled as the user choice",
+        "passed": true
+      },
+      {
+        "name": "oversized optional lyrics produce a Spanish warning while all five audio hashes and organization remain complete; no external requests",
+        "passed": true
+      }
+    ],
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "pageErrors": 0,
+    "externalRequests": 0,
+    "cspViolations": 0
+  },
+  "manualLyricsRegressionUI": {
+    "passed": true,
+    "cases": [
+      {
+        "name": "plain Unicode and hostile markup render inertly; save leaves one engine playing same source",
+        "passed": true
+      },
+      {
+        "name": "LRC is explicit draft until save; seek highlights all equal timestamps and none before first cue",
+        "passed": true
+      },
+      {
+        "name": "invalid LRC, oversized file and malformed UTF-8 preserve saved lyrics and playing audio",
+        "passed": true
+      },
+      {
+        "name": "selection change rejects stale File callbacks; tracks keep independent manual text and LRC",
+        "passed": true
+      },
+      {
+        "name": "dedup preserves manual lyrics; explicit absence survives reload; restored queue remains paused",
+        "passed": true
+      },
+      {
+        "name": "corrupt persisted version is repaired using observed token without pausing audio; repair survives reload",
+        "passed": true
+      }
+    ],
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "pageErrors": 0,
+    "cspViolations": 0
+  },
+  "privateHTTPSProbe": {
+    "passed": true,
+    "iphoneVerified": false,
+    "environment": "Chromium desktop private HTTPS, fresh context",
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "oneEngine": true,
+      "transport": "bounded-blob",
+      "violations": [],
+      "localBatchComplete": true,
+      "localLyricsReady": true,
+      "organizationRoundtrip": true,
+      "stableLauncher": true
+    }
+  },
+  "liveUpdate": {
+    "passed": true,
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    }
+  },
+  "build": {
+    "passed": true,
+    "log": ".local/embedded-lyrics-product-build.log",
+    "indexSHA256": "4f081f3c368b5a2d918ca3e5288b04b98b327becafc5d221e89ef904dc24bfd7",
+    "swSHA256": "5883c72451ff8ad11254cb6cd29dc303fe4e9de55842245cb4ad6ed18571a9d5",
+    "lockSHA256": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f"
+  },
+  "delivery": {
+    "version": 1,
+    "entry": "/releases/4f081f3c368b5a2d.html",
+    "copiedFiles": 31,
+    "retainedOldAssets": true,
+    "existingPrivateAccessOnly": true
+  },
+  "limits": {
+    "lyricsPayloadBytes": 131072,
+    "audioMetadataBudgetSeparateBytes": 2097152,
+    "cues": 4000,
+    "syltFramesMpeg": "no soportado, sin tiempos inferidos",
+    "externalProvider": "desactivado; cero consultas de canciones",
+    "iphone": "APLAZADO/PENDIENTE",
+    "privateOffline": "PENDIENTE",
+    "P0W": "INCOMPLETO"
+  },
+  "commands": [
+    "npx tsx --test tests/unit/embedded-lyrics.test.ts tests/unit/lyrics.test.ts",
+    "node scripts/browser-build.mjs embedded-lyrics lyrics",
+    "INSTABOX_HEADLESS=1 node scripts/run-browser-tests.mjs embedded-lyrics lyrics",
+    "npm run build",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-embedded-lyrics-ui.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-lyrics-ui.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-live-update.mjs",
+    "python3 scripts/update_review_release.py",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-private-artwork.mjs"
+  ]
+}

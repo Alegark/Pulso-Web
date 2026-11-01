@@ -1,0 +1,44 @@
+{
+  "checks": [
+    {
+      "name": "ticket publicado sobrevive reapertura",
+      "pass": true
+    },
+    {
+      "name": "bytes=0-1",
+      "pass": true
+    },
+    {
+      "name": "bytes=3-",
+      "pass": true
+    },
+    {
+      "name": "bytes=-3",
+      "pass": true
+    },
+    {
+      "name": "bytes=999999999-",
+      "pass": true
+    },
+    {
+      "name": "bytes=0-1,4-5",
+      "pass": true
+    },
+    {
+      "name": "HEAD",
+      "pass": true
+    },
+    {
+      "name": "ticket ajeno sin bytes",
+      "pass": true
+    },
+    {
+      "name": "GET completo y MIME seguro",
+      "pass": true
+    }
+  ],
+  "passed": true,
+  "digest": "1aa77294c9baee02473bd8b492acc75d3404103a4a312e6f19ef50950a27ef32",
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+  "secureContext": true
+}

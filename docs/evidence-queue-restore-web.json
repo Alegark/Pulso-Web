@@ -1,0 +1,533 @@
+{
+  "status": "PASS for the stated local/web cases only",
+  "timestampUtc": "2026-10-31T10:10:06.598319+00:00",
+  "browser": "Chromium 154.0.8037.57 Linux sandbox headless",
+  "unit": {
+    "passed": 15,
+    "failed": 0,
+    "source": ".local/evidence/queue-restore-r3-unit.tap"
+  },
+  "typecheck": "PASS",
+  "lint": "PASS",
+  "productBuild": "PASS",
+  "baselineReports": {
+    "idb-blob": {
+      "stage": "final-baseline",
+      "source": ".local/evidence/queue-restore-ui-idb-blob.json",
+      "result": {
+        "passed": true,
+        "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+        "backend": "idb",
+        "transport": "blob",
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "A/B/A with missing B preserves second A, position, repeat and filtered shuffle",
+            "passed": true
+          },
+          {
+            "name": "missing current B falls back to first A at zero",
+            "passed": true
+          },
+          {
+            "name": "unknown current reference falls back at zero",
+            "passed": true
+          },
+          {
+            "name": "all present preserves A/B/A and second occurrence selection",
+            "passed": true
+          },
+          {
+            "name": "none available preserves original snapshot, organization and bytes",
+            "passed": true
+          },
+          {
+            "name": "null current remains unselected",
+            "passed": true
+          },
+          {
+            "name": "oversized position clamps on real loadedmetadata",
+            "passed": true
+          },
+          {
+            "name": "invalid shuffle and repeat normalize off with warning",
+            "passed": true
+          },
+          {
+            "name": "negative position and absent modes normalize",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "global IDB chunk failure aborts restoration rather than marking songs absent",
+            "passed": true
+          },
+          {
+            "name": "global transport failure preserves original snapshot",
+            "passed": true
+          },
+          {
+            "name": "corruption: same-length B is omitted, second A stays selected and plays",
+            "passed": true
+          },
+          {
+            "name": "corruption: current B is omitted and first A starts paused at zero",
+            "passed": true
+          },
+          {
+            "name": "corruption: all damaged bytes and original snapshot remain unchanged",
+            "passed": true
+          }
+        ],
+        "browserVersion": "154.0.8037.57"
+      }
+    },
+    "idb-sw": {
+      "stage": "before-integrity-fix",
+      "source": ".local/evidence/queue-restore-ui-idb-sw.json",
+      "result": {
+        "passed": true,
+        "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+        "backend": "idb",
+        "transport": "sw",
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "A/B/A with missing B preserves second A, position, repeat and filtered shuffle",
+            "passed": true
+          },
+          {
+            "name": "missing current B falls back to first A at zero",
+            "passed": true
+          },
+          {
+            "name": "unknown current reference falls back at zero",
+            "passed": true
+          },
+          {
+            "name": "all present preserves A/B/A and second occurrence selection",
+            "passed": true
+          },
+          {
+            "name": "none available preserves original snapshot, organization and bytes",
+            "passed": true
+          },
+          {
+            "name": "null current remains unselected",
+            "passed": true
+          },
+          {
+            "name": "oversized position clamps on real loadedmetadata",
+            "passed": true
+          },
+          {
+            "name": "invalid shuffle and repeat normalize off with warning",
+            "passed": true
+          },
+          {
+            "name": "negative position and absent modes normalize",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "global IDB chunk failure aborts restoration rather than marking songs absent",
+            "passed": true
+          }
+        ],
+        "browserVersion": "154.0.8037.57"
+      }
+    },
+    "opfs-sw": {
+      "stage": "before-integrity-fix",
+      "source": ".local/evidence/queue-restore-ui-opfs-sw.json",
+      "result": {
+        "passed": true,
+        "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+        "backend": "opfs",
+        "transport": "sw",
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "A/B/A with missing B preserves second A, position, repeat and filtered shuffle",
+            "passed": true
+          },
+          {
+            "name": "missing current B falls back to first A at zero",
+            "passed": true
+          },
+          {
+            "name": "unknown current reference falls back at zero",
+            "passed": true
+          },
+          {
+            "name": "all present preserves A/B/A and second occurrence selection",
+            "passed": true
+          },
+          {
+            "name": "none available preserves original snapshot, organization and bytes",
+            "passed": true
+          },
+          {
+            "name": "null current remains unselected",
+            "passed": true
+          },
+          {
+            "name": "oversized position clamps on real loadedmetadata",
+            "passed": true
+          },
+          {
+            "name": "invalid shuffle and repeat normalize off with warning",
+            "passed": true
+          },
+          {
+            "name": "negative position and absent modes normalize",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "malformed snapshot preserved without preparing audio",
+            "passed": true
+          },
+          {
+            "name": "global OPFS failure aborts restoration rather than marking songs absent",
+            "passed": true
+          }
+        ],
+        "browserVersion": "154.0.8037.57"
+      }
+    }
+  },
+  "integrityRegressions": {
+    "idb-blob": {
+      "stage": "after-integrity-fix",
+      "source": ".local/evidence/queue-restore-ui-idb-blob-corruption.json",
+      "result": {
+        "passed": true,
+        "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+        "backend": "idb",
+        "transport": "blob",
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "corruption: same-length B is omitted, second A stays selected and plays",
+            "passed": true
+          },
+          {
+            "name": "corruption: current B is omitted and first A starts paused at zero",
+            "passed": true
+          },
+          {
+            "name": "corruption: all damaged bytes and original snapshot remain unchanged",
+            "passed": true
+          }
+        ],
+        "browserVersion": "154.0.8037.57"
+      }
+    },
+    "idb-sw": {
+      "stage": "after-integrity-fix",
+      "source": ".local/evidence/queue-restore-ui-idb-sw-corruption.json",
+      "result": {
+        "passed": true,
+        "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+        "backend": "idb",
+        "transport": "sw",
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "corruption: same-length B is omitted, second A stays selected and plays",
+            "passed": true
+          },
+          {
+            "name": "corruption: current B is omitted and first A starts paused at zero",
+            "passed": true
+          },
+          {
+            "name": "corruption: all damaged bytes and original snapshot remain unchanged",
+            "passed": true
+          }
+        ],
+        "browserVersion": "154.0.8037.57"
+      }
+    },
+    "opfs-blob": {
+      "stage": "after-integrity-fix",
+      "source": ".local/evidence/queue-restore-ui-opfs-blob-corruption.json",
+      "result": {
+        "passed": true,
+        "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+        "backend": "opfs",
+        "transport": "blob",
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "corruption: same-length B is omitted, second A stays selected and plays",
+            "passed": true
+          },
+          {
+            "name": "corruption: current B is omitted and first A starts paused at zero",
+            "passed": true
+          },
+          {
+            "name": "corruption: all damaged bytes and original snapshot remain unchanged",
+            "passed": true
+          }
+        ],
+        "browserVersion": "154.0.8037.57"
+      }
+    },
+    "opfs-sw": {
+      "stage": "after-integrity-fix",
+      "source": ".local/evidence/queue-restore-ui-opfs-sw-corruption.json",
+      "result": {
+        "passed": true,
+        "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+        "backend": "opfs",
+        "transport": "sw",
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "corruption: same-length B is omitted, second A stays selected and plays",
+            "passed": true
+          },
+          {
+            "name": "corruption: current B is omitted and first A starts paused at zero",
+            "passed": true
+          },
+          {
+            "name": "corruption: all damaged bytes and original snapshot remain unchanged",
+            "passed": true
+          }
+        ],
+        "browserVersion": "154.0.8037.57"
+      }
+    }
+  },
+  "offlineAndRanges": {
+    "idb": {
+      "stage": "after-integrity-fix",
+      "source": ".local/evidence/queue-restore-ui-idb-sw-offline.json",
+      "result": {
+        "passed": true,
+        "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+        "backend": "idb",
+        "transport": "sw",
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "A/B/A with missing B preserves second A, position, repeat and filtered shuffle",
+            "passed": true,
+            "offlineAndRanges": {
+              "range": {
+                "status": 206,
+                "bytes": [
+                  73,
+                  68
+                ],
+                "contentRange": "bytes 0-1/132832",
+                "head": 200,
+                "headBytes": 0,
+                "invalid": 416
+              },
+              "reopenedPausedWithoutNetwork": true,
+              "manualOfflinePlayback": true
+            }
+          }
+        ],
+        "browserVersion": "154.0.8037.57"
+      }
+    },
+    "opfs": {
+      "stage": "after-integrity-fix",
+      "source": ".local/evidence/queue-restore-ui-opfs-sw-offline.json",
+      "result": {
+        "passed": true,
+        "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+        "backend": "opfs",
+        "transport": "sw",
+        "iphoneVerified": false,
+        "cases": [
+          {
+            "name": "A/B/A with missing B preserves second A, position, repeat and filtered shuffle",
+            "passed": true,
+            "offlineAndRanges": {
+              "range": {
+                "status": 206,
+                "bytes": [
+                  73,
+                  68
+                ],
+                "contentRange": "bytes 0-1/132832",
+                "head": 200,
+                "headBytes": 0,
+                "invalid": 416
+              },
+              "reopenedPausedWithoutNetwork": true,
+              "manualOfflinePlayback": true
+            }
+          }
+        ],
+        "browserVersion": "154.0.8037.57"
+      }
+    }
+  },
+  "backupUIRegression": {
+    "passed": true,
+    "cases": [
+      {
+        "name": "real JSON download allowlist preserves organization and contains no audio/storage/session/ticket fields; audio continues",
+        "passed": true
+      },
+      {
+        "name": "preview never auto-applies; explicit confirmation and keep-local preserve newer metadata and playlist",
+        "passed": true
+      },
+      {
+        "name": "chosen backup restores metadata/favorite/order while active engine, source and queue snapshot stay unchanged; hostile title stays text",
+        "passed": true
+      },
+      {
+        "name": "clean context restores organization without false download; importing original links same track and preserves favorite/playlist without duplicate",
+        "passed": true
+      },
+      {
+        "name": "edit after preview rejects stale plan without partial changes or pausing active audio",
+        "passed": true
+      },
+      {
+        "name": "UI cancellation during real transaction rolls back organization and keeps audio playing",
+        "passed": true
+      },
+      {
+        "name": "invalid/future JSON has no partial effects; reload preserves linked track and paused queue",
+        "passed": true
+      }
+    ],
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "pageErrors": 0,
+    "cspViolations": 0
+  },
+  "liveUpdate": {
+    "passed": true,
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    }
+  },
+  "privateHTTPSProbe": {
+    "passed": true,
+    "iphoneVerified": false,
+    "environment": "Chromium desktop private HTTPS, fresh context",
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "oneEngine": true,
+      "transport": "bounded-blob",
+      "violations": [],
+      "localBatchComplete": true,
+      "localLyricsReady": true,
+      "organizationRoundtrip": true,
+      "stableLauncher": true
+    }
+  },
+  "delivery": {
+    "version": 1,
+    "entry": "/releases/416c4e0dbc97cfca.html",
+    "copiedFiles": 31,
+    "retainedOldAssets": true,
+    "indexSHA256": "416c4e0dbc97cfca181fda436855f23baa36bc4aacfab8f0b4691110ec609df2",
+    "swSHA256": "883838ad1c71edde43ca9cebca054e92dda68a7e28f70a32e851b927bffe250d",
+    "lockSHA256": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f"
+  },
+  "review": {
+    "task": "pulso-t13-partial-restore-sol-review-r3",
+    "finding": "P2: same-size corruption of B made Blob reject the entire A/B/A queue",
+    "fix": "Incremental SHA-256 per asset before filtering; uncertain IO still propagates",
+    "reproducedByIndependentReviewer": true
+  },
+  "executionHistory": [
+    {
+      "attempt": "initial concurrent idb/sw corruption group",
+      "passed": false,
+      "completedCases": 2,
+      "failure": "Third context startup status wait exceeded 30 seconds; cause unconfirmed",
+      "log": ".local/queue-restore-idb-sw-corruption.log"
+    },
+    {
+      "attempt": "isolated retry with diagnostic capture",
+      "passed": true,
+      "completedCases": 3,
+      "log": ".local/queue-restore-idb-sw-corruption-retry.log"
+    }
+  ],
+  "limits": [
+    "Desktop Chromium only; iPhone physical APLAZADO/PENDIENTE",
+    "Offline uses context.setOffline and reload in the same isolated browser context; no browser process restart or server shutdown in these new cases",
+    "Private HTTPS probe uses bounded Blob; private-origin offline remains PENDIENTE",
+    "Adversarial manifest mutation race not reproduced",
+    "No active ownership handoff in this candidate; implementation of next increment runs separately",
+    "No Telegram account or external lyrics provider activated",
+    "P0-W INCOMPLETO"
+  ],
+  "commands": [
+    "npm run typecheck",
+    "npm run lint",
+    "npx tsx --test tests/unit/queue-restore.test.ts tests/unit/player.test.ts",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-queue-restore-ui.mjs",
+    "PULSO_RESTORE_BACKEND=opfs PULSO_RESTORE_TRANSPORT=sw PULSO_RESTORE_FOCUS=corruption INSTABOX_HEADLESS=1 node tests/integration/check-queue-restore-ui.mjs",
+    "PULSO_RESTORE_BACKEND=idb PULSO_RESTORE_TRANSPORT=sw PULSO_RESTORE_FOCUS=offline INSTABOX_HEADLESS=1 node tests/integration/check-queue-restore-ui.mjs",
+    "npm run build",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-organization-ui.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-live-update.mjs",
+    "python3 scripts/update_review_release.py",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-private-artwork.mjs"
+  ]
+}

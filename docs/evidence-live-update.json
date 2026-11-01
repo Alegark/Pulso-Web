@@ -1,0 +1,46 @@
+{
+  "environment": {
+    "browser": "Chromium 154.0.8037.57",
+    "host": "Linux",
+    "headless": true,
+    "sandbox": true,
+    "origin": "temporary loopback"
+  },
+  "lockSHA256": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f",
+  "candidateIndexSHA256": "bd16eb4b950475f55eab94e615e2025cd1ae7cd898fad94b49f1f227031b3239",
+  "iphone": "APLAZADO/PENDIENTE",
+  "P0W": "INCOMPLETO",
+  "status": "PASS",
+  "command": "INSTABOX_HEADLESS=1 node tests/integration/check-live-update.mjs",
+  "oldStaticControl": ".local/releases/compat-before-groups",
+  "oldIndexSHA256": "b871bcc9e11643269299fc93db04b3e9fa32f2c84c669f5cb78c6dfe7bc74ce4",
+  "oldSwSHA256": "5da5d8b843a2cf725640a618c658dc5f6c65d0b5a5f226f01ed0b60f07b89a69",
+  "newSwSHA256": "db7a7fb64896a10897edad010d800a9aa5f0da87e1de16ad2e496c278f983189",
+  "observed": {
+    "newVersionBypassesOldShell": true,
+    "waitingBeforeClosingClients": true,
+    "oldStillPlaying": true,
+    "newIsPaused": true,
+    "activatedAfterClientClosure": true,
+    "restoredPaused": true
+  },
+  "notes": [
+    "Own loopback server changes from frozen old static artifact to new build, retaining old assets.",
+    "Test was run with the same old bytes before moving the frozen control to its durable local path; path-only edit was syntax checked.",
+    "No skipWaiting, forced takeover, new public endpoint or account."
+  ],
+  "subsequentLauncherRun": {
+    "passed": true,
+    "indexSHA256": "5602b9f2c2f215cf97d10ea43a76349a075c23077a10038d39cf6b888bb2afe5",
+    "swSHA256": "60171eaec5d61f64c1da69e8b9b3419ba2a95823d3ad35e415dc0f58fbedadc6",
+    "stableLauncher": "/open.html",
+    "oldControl": ".local/releases/compat-before-groups",
+    "newVersionBypassesOldShell": true,
+    "stableLauncherSelectsCurrentBuild": true,
+    "waitingBeforeClosingClients": true,
+    "oldStillPlaying": true,
+    "newIsPaused": true,
+    "activatedAfterClientClosure": true,
+    "restoredPaused": true
+  }
+}

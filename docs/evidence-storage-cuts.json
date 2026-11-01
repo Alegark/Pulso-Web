@@ -1,0 +1,17 @@
+{
+  "results": [
+    "PASS publicación y doble reopen íntegros",
+    "PASS truncado no publica ni borra copia válida",
+    "PASS hash erróneo no publica",
+    "PASS cancelación no elimina publicación previa",
+    "PASS bytes ausentes producen missing sin borrar manifiesto",
+    "PASS recuperación explícita reemplaza missing",
+    "PASS cancelación después del primer commit de chunk conserva original",
+    "PASS QuotaExceeded en chunks no publica ni borra original",
+    "PASS abort de transacción de publicación mantiene revisión previa",
+    "PASS cancelación tardía tras commit no borra asset publicado",
+    "PASS manifiesto corrupto rechazado sin bucle ni borrado"
+  ],
+  "passed": true,
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+}

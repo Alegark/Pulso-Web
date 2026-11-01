@@ -1,0 +1,63 @@
+{
+  "status": "EN CURSO: revisión y pruebas focales, sin publicación",
+  "timestampUtc": "2026-10-31T10:38:44.489649+00:00",
+  "implementationReport": ".local/evidence/t13-implementation-report.json",
+  "implementationUnit": 22,
+  "implementationBrowserGroups": 20,
+  "review": {
+    "round": "pulso-t13-handoff-sol-review-r5",
+    "P1confirmed": 0,
+    "P2confirmed": 1,
+    "finding": "Empty playlist verification incorrectly marked batch-uncertain, preventing explicit release without a pending write",
+    "reproduced": "Chromium154 sandbox, no failure injection",
+    "parentFix": "Domain errors with confirmed abort no longer activate a new uncertainty flag; storage/worker/unknown retain conservative block",
+    "focalBrowserRegression": "EN CURSO in r6",
+    "typecheck": "PASS after fix",
+    "lint": "PASS after fix"
+  },
+  "realNavigation": {
+    "passed": true,
+    "iphoneVerified": false,
+    "cases": [
+      {
+        "name": "Actual navigation away while playing releases control; back restores queue paused",
+        "passed": true,
+        "persisted": false
+      },
+      {
+        "name": "Back navigation after explicit release requires lock acquisition or a new document and stays paused",
+        "passed": true,
+        "persisted": true
+      }
+    ],
+    "bfcache": {
+      "verified": true,
+      "playingNavigation": false,
+      "idleNavigation": true,
+      "notRestoredReasons": {
+        "src": null,
+        "id": null,
+        "url": "http://127.0.0.1:41079/",
+        "name": null,
+        "reasons": [
+          {
+            "reason": "weblocks-contention"
+          }
+        ],
+        "children": []
+      }
+    },
+    "environment": "Chromium headless sandbox, own context, temporary loopback, actual goBack navigation",
+    "browserVersion": "154.0.8037.57",
+    "pageErrors": 0,
+    "externalRequests": 0
+  },
+  "executionHistory": [
+    "First real-navigation attempt passed the playing leave/back with a new document; second goBack waited for load and timed out after returning. Harness now waits for commit, permitting real persisted restore; corrected attempt passed both cases.",
+    "No claim that real BFCache occurred during playing departure: that return used a new document. Actual BFCache was observed after explicit idle release."
+  ],
+  "additionalCases": "Metadata optional subphases, batch recover/retry and backup preview/recovery are being tested independently by r6; no PASS yet",
+  "privateCandidateUnchanged": "/releases/416c4e0dbc97cfca.html",
+  "iphone": "APLAZADO/PENDIENTE; short locked-next test instructions delivered, no new physical result",
+  "P0W": "INCOMPLETO"
+}

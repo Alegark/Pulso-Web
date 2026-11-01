@@ -1,0 +1,16 @@
+.home-view,
+.mini-player {
+  color: var(--text, inherit);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.home-view section { margin-block: 1.25rem; }
+.home-view__list { display: grid; gap: 0.75rem; list-style: none; margin: 0; padding: 0; }
+.home-view__item { min-width: 0; padding: 0.75rem; border: 1px solid var(--border, #888); border-radius: 0.5rem; }
+.home-view__item p, .mini-player__details p { margin: 0 0 0.5rem; }
+.home-view__actions, .mini-player__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; min-width: 0; }
+.home-view button, .mini-player button { min-height: 44px; max-width: 100%; box-sizing: border-box; overflow-wrap: anywhere; }
+.mini-player { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 0.75rem; background: var(--surface, #f4f4f4); }
+.mini-player__artwork { flex: 0 0 auto; }
+.mini-player__details { flex: 1 1 10rem; min-width: 0; }

@@ -1,0 +1,86 @@
+{
+  "project": "Pulso-Web",
+  "dateUTC": "2026-10-31",
+  "increment": "T4 IdbStorage real offline + candidato lifecycle",
+  "status": "PASS solo experimentos y correcciones focales, sin integración de producto",
+  "USD": 0,
+  "phases": [
+    {
+      "phase": "r9 SDK real characterization",
+      "browserGroups": 14,
+      "meaning": "persistencia/reapertura propias y caracterización de fallos load/save/destroy, no todos los cierres aprobados",
+      "evidence": ".local/evidence/sdk-storage-r9.json"
+    },
+    {
+      "phase": "r10 isolated adapter and ESM patch",
+      "unitPassed": 10,
+      "browserGreenGroups": 12,
+      "originalRedFailures": 5,
+      "meaning": "single owned load, abort-aware save/rollback, release independent of uncertainty",
+      "evidence": ".local/evidence/sdk-storage-r10.json"
+    },
+    {
+      "phase": "r11 independent review",
+      "outcome": "P2 R11-01 requesting total safe error classifier; no second finding for onerror-before-abort under durable journal",
+      "evidence": ".local/evidence/sdk-storage-review-r11.json"
+    },
+    {
+      "phase": "r12 focal correction",
+      "nodeGreen": 22,
+      "browserGreen": 22,
+      "baselineRedPerEnvironment": 11,
+      "meaning": "11variants of one finding plus controls; preserve first cause before optional inspection; final journal/close",
+      "evidence": ".local/evidence/sdk-storage-r12.json"
+    },
+    {
+      "phase": "parent inspection",
+      "outcome": "Read r12 report and adapter diff; source/hash and SDK patch consistency checked; no additional concrete issue observed in limited change",
+      "reranBroadSuites": false
+    }
+  ],
+  "API": "OwnSlot.prepare / openOnce / enqueue / save / close / retryClose / report; own trusted exclusive factory+fixture journal, KV only",
+  "privacy": "Synthetic own registered slots and canaries; no raw session/content/canary bytes in report; no client/auth/network Telegram",
+  "SDKPatchChangedByR12": false,
+  "SDKPatchMatchesR10": true,
+  "candidateAdapterSHA256": "59336e1cb1c0fd19bc11cf9fc2f73b9b96e700ac11c1ea8e8f1fc50085c70a14",
+  "remaining": [
+    "per-slot queued/intent/write-uncertain resolution policy",
+    "product ownership/control integration",
+    "complete MTProto session/authKeys and independent repositories",
+    "native loads/events that never terminate",
+    "SDK distribution/composite licenses and source/recombination gate D03",
+    "API identity D05 and real auth/account/source consent",
+    "T4/T5/P0-W and physical iPhone acceptance"
+  ],
+  "notes": "Do not sum historical suites as new tests. Original RED receipts remain preserved. R12 is an isolated correction, not delivered SDK.",
+  "sourcesAndReceipts": {
+    ".local/evidence/sdk-storage-r9.json": {
+      "bytes": 21644,
+      "SHA256": "8f31db33cd4581cf31a3dcf8fb0cbb09e905cff773db7d720307611926454941"
+    },
+    ".local/evidence/sdk-storage-r10.json": {
+      "bytes": 44826,
+      "SHA256": "4bf23b42b835899851a71f13e1dc06a237168e2f3b7a2010b5551a65ca7258fa"
+    },
+    ".local/evidence/sdk-storage-review-r11.json": {
+      "bytes": 17622,
+      "SHA256": "84c2b7d96e82f886066876110f2742d10e77396217a4dffceab1df00b8017bb0"
+    },
+    ".local/evidence/sdk-storage-r12.json": {
+      "bytes": 27365,
+      "SHA256": "a4b20b46c78c7df41fae7b6f9fa9cbc19584d25e374a1d4bce01f007e9be7da2"
+    },
+    ".local/sdk-storage-r10/candidate.patch": {
+      "bytes": 1576,
+      "SHA256": "bc084bd6317fc4c0f50ad81061987ee31356645be59f220ec84cca35227acf56"
+    },
+    ".local/sdk-storage-r12/adapter.ts": {
+      "bytes": 6721,
+      "SHA256": "59336e1cb1c0fd19bc11cf9fc2f73b9b96e700ac11c1ea8e8f1fc50085c70a14"
+    },
+    ".local/sdk-storage-r12/adapter.patch": {
+      "bytes": 4428,
+      "SHA256": "de72d62ec5afb0cd202a32c641da6c013c64c1717ca4274f28a69f1c864cb78d"
+    }
+  }
+}

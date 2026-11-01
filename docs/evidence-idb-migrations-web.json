@@ -1,0 +1,108 @@
+{
+  "project": "Pulso-Web",
+  "increment": "T16 IDB open/lifecycle",
+  "status": "DELIVERED_LIMITED_WEB_INCREMENT",
+  "USD": 0,
+  "coreEvidence": ".local/evidence/idb-migrations-r31.json",
+  "historicalRED": ".local/evidence/idb-open-migration-probe-r30.json",
+  "coreClaim": {
+    "chromiumCases": 19,
+    "selectedIDBRegressions": 2,
+    "types": "PASS",
+    "lint": "PASS",
+    "receiptSHA256VerifiedByParent": true
+  },
+  "mainWiring": {
+    "states": [
+      "ready",
+      "blocked",
+      "versionchange",
+      "version-incompatible"
+    ],
+    "blocked": "pause new storage mutations/queue/savePosition; explicit successful checkFiles force required to release only database gate",
+    "versionChange": "sticky reload requirement, invalidate scope/Activity before native close, capture snapshot only memory, suspend Player and revoke own URLs, no settings writes from lifecycle handler",
+    "importRecovery": "separate existing gate preserved; no fake pending copies for database-only block",
+    "reload": "open current stable entry only after Activity count0",
+    "sourceSHA256": "e50026aa8f7364c546d1f93d75a6e277774e59083cdf4a20657a13b2226f7e64",
+    "typesLint": "PASS",
+    "databaseSHA256": "80d6292dacf85bf8e24decfb617822719d0ca15d1eb2627970ffa0ba907e670c",
+    "scope": "sources frozen in release baseline, before local-copy feature"
+  },
+  "lifecycleScope": "Module-local per JS realm. No new worker/SW fanout; cross-realm visibility and old-bundle/SW integration remain pending for global AC21. Native per-realm database closures still apply.",
+  "pending": [
+    "cross-realm worker/SW lifecycle fanout and global migration acceptance",
+    "full AC21/T16/T18/P0",
+    "physical iPhone",
+    "local-copy feature implementation/review/UI; not in this delivery"
+  ],
+  "existingPrivateBuild": "41e21b4f8c921156 excludes this increment",
+  "P0Complete": false,
+  "historicalInitialWiring": {
+    "status": "CORE_AND_MAIN_IMPLEMENTED_UI_AND_REVIEW_PENDING",
+    "mainWiring": {
+      "states": [
+        "ready",
+        "blocked",
+        "versionchange",
+        "version-incompatible"
+      ],
+      "blocked": "pause new storage mutations/queue/savePosition; explicit successful checkFiles force required to release only database gate",
+      "versionChange": "sticky reload requirement, invalidate scope/Activity before native close, capture snapshot only memory, suspend Player and revoke own URLs, no settings writes from lifecycle handler",
+      "importRecovery": "separate existing gate preserved; no fake pending copies for database-only block",
+      "reload": "open current stable entry only after Activity count0",
+      "sourceSHA256": "61a93d6709b17c0ebcfcd4431a9ec94ae75b28b4b67484480a4751427dd9375e",
+      "typesLint": "PASS"
+    },
+    "pending": [
+      "UIr34 main/browser",
+      "independent code review",
+      "production build/delivery",
+      "global AC21/T16/T18/P0/iPhone acceptance"
+    ],
+    "existingPrivateBuild": "41e21b4f8c921156 excludes this increment"
+  },
+  "globalAC21": false,
+  "iphone": "APLAZADO/PENDIENTE",
+  "uiEvidence": {
+    "receipt": ".local/evidence/idb-lifecycle-ui-r34.json",
+    "cases": 32,
+    "passed": true,
+    "nativeProductionControls": 2,
+    "nativeSourceTransformation": false,
+    "zeroPageErrors": true,
+    "zeroExternalRequests": true,
+    "REDHistoryPreserved": true
+  },
+  "review": {
+    "receipt": ".local/evidence/idb-migrations-review-r35.json",
+    "decision": "FAVORABLE_ACOTADA_CORE_Y_MAIN_GUARDS",
+    "newFocalCases": 6,
+    "noP1P2Reproduced": true
+  },
+  "parentCorrections": [
+    "Cancel queued older-cohort opens after blocked; no passive schema upgrade without explicit live retry",
+    "Optional theme read catches storage failure and ignores stale delivery",
+    "Acquired callback guards database lifecycle before Player/MediaSession changes",
+    "Realm admission guard at open/upgrade/deliver boundaries; retry permission captures scope/proof/Activity generation, invalidated stale retry cannot migrate"
+  ],
+  "delivery": {
+    "entry": "/releases/41ccf4e56306c684.html",
+    "previousEntry": "/releases/41e21b4f8c921156.html",
+    "sourceBaseline": ".local/evidence/idb-migrations-release-source-baseline.json",
+    "copiedFiles": 33,
+    "retainedOldAssets": true,
+    "newPortsOrAccounts": false,
+    "testReceipts": {
+      "local-assets": ".local/evidence/idb-migrations-local-assets.json",
+      "keyboard": ".local/evidence/idb-migrations-keyboard.json",
+      "licenses": ".local/evidence/idb-migrations-licenses.json",
+      "live-update": ".local/evidence/idb-migrations-live-update.json",
+      "private-copy": ".local/evidence/idb-migrations-private-copy.json",
+      "private-probe": ".local/evidence/idb-migrations-private-probe.json"
+    },
+    "privateTransport": "bounded-blob",
+    "privateOfflineDemonstrated": false,
+    "assetsOfflineScope": "Chromium restarted and context offline; asset origin server not stopped",
+    "noticeOfflineScope": "loopback origin stopped; shell and complete raw notices served from SW"
+  }
+}

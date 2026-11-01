@@ -1,0 +1,157 @@
+{
+  "project": "Pulso-Web",
+  "updatedUTC": "2026-10-31T17:49:49.268244+00:00",
+  "scope": "T18 slice A núcleo+main/workersv2 y guardas incertidumbre, no I.errors completo",
+  "USD": 0,
+  "implementation": [
+    "FailureV1/OutcomeV1 cerrados con primera causa/fases y secundarios acotados",
+    "coreDetailed único para import/recovery/dedup; legacyreader preservado hasta B",
+    "main/workersv2 emparejados con gates Worker/request/scope/proof y consentimiento diagnóstico local",
+    "incertidumbre válida/sinACK conserva Set privado hasta resolución explícita, sin replay/borrado",
+    "cancel dedup distingue aborto confirmado, conserva cuota independiente y commit ganador",
+    "pausa organización durante incertidumbre con guardas UI+ejecución"
+  ],
+  "historicalPhases": {
+    "r10": {
+      "unit": 11,
+      "browser": 69,
+      "legacyRegression": 20,
+      "evidence": ".local/evidence/import-failure-r10.json",
+      "rerunByParent": false
+    },
+    "r11": {
+      "browser": 55,
+      "idb": 25,
+      "opfs": 30,
+      "evidence": ".local/evidence/import-v2-ui-r11.json"
+    },
+    "r12": {
+      "decision": "CHANGES_REQUESTED",
+      "P2": 2,
+      "evidence": ".local/evidence/import-failure-review-r12.json"
+    },
+    "r13": {
+      "browser": 9,
+      "evidence": ".local/evidence/import-dedup-cancel-r13.json"
+    },
+    "r14": {
+      "passed": 8,
+      "redAdditional": 1,
+      "originalREDPreserved": true,
+      "evidence": ".local/evidence/import-uncertainty-r14.json"
+    },
+    "r15": {
+      "decision": "LIMITED_APPROVAL",
+      "browser": 10,
+      "findingsP1P2": 0,
+      "evidence": ".local/evidence/import-guards-review-r15.json"
+    }
+  },
+  "parentValidation": {
+    "types": "PASS",
+    "lint": "PASS",
+    "build": "PASS",
+    "keyboardCases": 6,
+    "licenseCases": 3,
+    "localAssets": {
+      "backends": [
+        "idb",
+        "opfs"
+      ],
+      "fullGETHash": true,
+      "ranges": [
+        "0-1",
+        "cross-chunk",
+        "suffix",
+        "open",
+        "416",
+        "multipart-current-full-response"
+      ],
+      "HEAD": true,
+      "foreignTicket403": true,
+      "SWStoppedThenFetch": true,
+      "offlineAfterChromiumRestart": true,
+      "originServerStoppedInAssetTest": false
+    },
+    "liveUpdate": {
+      "oldStillPlaying": true,
+      "newPaused": true,
+      "activationAfterClientsClose": true,
+      "restorePaused": true
+    },
+    "buildLog": ".local/evidence/import-v2-product-build.log"
+  },
+  "delivery": {
+    "sameExistingAuthorizedPrivateCopy": true,
+    "entry": "/releases/5f5ba1bfe2fd5ae2.html",
+    "indexSHA256": "5f5ba1bfe2fd5ae2827fd9ca9077cb048338bdf853c53ab6a301fc5352db115c",
+    "swSHA256": "791819a7761df87f7e76c685172d8734ddee8069818f13e930715f1c6d878a4c",
+    "copiedFiles": 33,
+    "retainedOldAssets": true,
+    "privateProbe": "PASS",
+    "transport": "bounded-blob",
+    "CSPViolations": 0,
+    "oneEngine": true,
+    "noNewPortServiceOrAccount": true
+  },
+  "receipts": {
+    "local-assets": {
+      "path": ".local/evidence/import-v2-local-assets.json",
+      "SHA256": "4a6c44018cf96def8f3d23bbf32fdeba3a25845e6e4ecdb47213cce4cc2e49b5"
+    },
+    "keyboard": {
+      "path": ".local/evidence/import-v2-keyboard.json",
+      "SHA256": "a053a7e72d83aeceb6824176e1d1259e4bdaca000dce3277afbaf3f39202c9a3"
+    },
+    "licenses": {
+      "path": ".local/evidence/import-v2-licenses.json",
+      "SHA256": "4b17a25a915fcf26a441017d03d0d088d2561bdce3b889d27400d524658a6386"
+    },
+    "live-update": {
+      "path": ".local/evidence/import-v2-live-update.json",
+      "SHA256": "ebc7501520f3d3824502c781018ef22c39daf31a73eb7914f46cf7faa9e6a649"
+    },
+    "private-copy": {
+      "path": ".local/evidence/import-v2-private-copy.json",
+      "SHA256": "124f29f3926559324405d58fd8dd39daa1452a64b4a37b5d5125af82e9610607"
+    },
+    "private-probe": {
+      "path": ".local/evidence/import-v2-private-probe.json",
+      "SHA256": "31b3f61caab0a965aabf7824a5bbb9e45a284a70a3890d3a605f7e1df3a2306e"
+    }
+  },
+  "sourceSHA256": {
+    "src/main.tsx": "209c20188fceb6031a1729946b6d52ad5ac6c2b98a6e32bf050c062b7b072a0d",
+    "src/imports/import.worker.ts": "ea33f29c302647798afe297dcda41dd534e17a095f15ba507c099bb745ffdef2",
+    "src/imports/recovery.worker.ts": "8f2f7d1b3574f7f4352588f59dd9697dc681843bda3fa8ebb6493d6fbae7f556",
+    "src/errors/app-failure.ts": "177cfc666556e119ebfb899e8e314782fbf20766b21c82cc2bbd2c86de38395c",
+    "src/imports/import-outcome.ts": "a06deca0d036ca38cb699a32c84c24c29e236aac0051805778bd274fd04a9239",
+    "src/imports/import-protocol.ts": "0f0be86ff5957220270d9a2b012ccd3ec48a9731f7d3f508848fab9cdaa52d13",
+    "src/imports/import-file.ts": "e06b787270e07c8f6546b345d47c67c650b2b1fa550aca4cd63ed2e09d728183",
+    "src/storage/import-operations.ts": "84886b5bccaccc091c83134d0b5aae6ba99a441ab40acbd1da8ea0ef94652459",
+    "src/storage/asset-reader.ts": "f73fd32fecc082252545c9068ce7b984f800ba1dae61b3fa1aa32a2a6e0e0e18",
+    "src/storage/database.ts": "e3390ed6ed1777199b0a2a3019d5353979a44322c64ba0d4ce537c1579237f35",
+    "src/storage/transaction-done.ts": "9c2e05b68baf17c9b338d992bc5eec62fb4b2a12bfdbc9df722168018938bea2",
+    "src/diagnostics/import-mapping.ts": "c9b57d935401fd2607bd0245d233759e8fae1e69f5f2268197433997887358e3"
+  },
+  "commands": [
+    "npm run typecheck",
+    "npm run lint",
+    "npm run build",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-local-assets.mjs",
+    "INSTABOX_HEADLESS=1 PULSO_QUALITY_PRODUCT=1 node tests/integration/check-web-keyboard.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-license-delivery.mjs",
+    "INSTABOX_HEADLESS=1 PULSO_UPDATE_BASELINE=.local/releases/import-failure-before node tests/integration/check-live-update.mjs",
+    "python3 scripts/update_review_release.py",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-private-artwork.mjs"
+  ],
+  "remaining": [
+    "B detailed consumers: library/queue/Blob/batch/backup and hooks",
+    "remaining migration/accessibility/security/performance acceptance",
+    "physical quota/eviction/process kill",
+    "private HTTPS offline not demonstrated",
+    "SDK/auth/Telegram external gates",
+    "physical iPhone APLAZADO/PENDIENTE"
+  ],
+  "P0Complete": false
+}

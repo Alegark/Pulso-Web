@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+import {resolve} from 'node:path';
+import {writeFile} from 'node:fs/promises';
+import {preview} from 'vite';
+import {chromium} from 'playwright-core';
+let browser,server,page;
+const report={passed:false,cases:[],iphoneVerified:false};
+try{
+ server=await preview({configFile:false,build:{outDir:'dist'},preview:{host:'127.0.0.1',port:0,strictPort:true}});
+ browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true});report.browserVersion=browser.version();
+ const context=await browser.newContext(),origin=`http://127.0.0.1:${server.httpServer.address().port}`;
+ await context.addInitScript(()=>{
+  window.pulsoLyricsUI={audio:[],violations:[]};const NativeAudio=window.Audio;window.Audio=class extends NativeAudio{constructor(...args){super(...args);window.pulsoLyricsUI.audio.push(this);}};
+  document.addEventListener('securitypolicyviolation',e=>window.pulsoLyricsUI.violations.push(e.violatedDirective));
+  const arrayBuffer=File.prototype.arrayBuffer;File.prototype.arrayBuffer=async function(){if(this.name==='lenta.txt')await new Promise(resolve=>setTimeout(resolve,400));return arrayBuffer.call(this);};
+ });
+ page=await context.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.name));await page.goto(origin);
+ const input=page.getByLabel('Importar audios',{exact:true});await page.waitForFunction(()=>!document.querySelector('input[type=file]').disabled);
+ await input.setInputFiles([resolve('public/samples/Aurora.mp3'),resolve('public/samples/Brisa.m4a')]);await page.getByRole('status').filter({hasText:'2 importadas, 0 ya existentes.'}).waitFor();
+ await page.getByRole('button',{name:'Preparar cola de esta selección',exact:true}).click();await page.getByRole('status').filter({hasText:'Cola lista y pausada.'}).waitFor();
+ const player=page.getByRole('region',{name:'Reproductor',exact:true});await player.getByLabel(/Repetición/).selectOption('one');await player.getByRole('button',{name:'Reproducir',exact:true}).click();await page.waitForFunction(()=>window.pulsoLyricsUI.audio[0]?.currentTime>0&&!window.pulsoLyricsUI.audio[0].paused);
+ const panel=page.locator('.lyrics-panel');await panel.locator('summary').click();await panel.getByText(/^Sin letras para /).waitFor();
+ const source=await page.evaluate(()=>window.pulsoLyricsUI.audio[0].src);
+ const plain='Texto original de prueba, niño 😀\n<img src=x onerror="window.lyricsInjected=true">';await panel.getByLabel('Texto del borrador',{exact:true}).fill(plain);await panel.getByRole('button',{name:'Guardar letras',exact:true}).click();await panel.getByText('Letras guardadas.',{exact:true}).waitFor();assert.equal(await panel.locator('.lyrics-text').textContent(),plain);assert.equal(await panel.locator('img,script').count(),0);
+ assert.equal(await page.evaluate(source=>window.pulsoLyricsUI.audio.length===1&&!window.pulsoLyricsUI.audio[0].paused&&window.pulsoLyricsUI.audio[0].src===source&&!window.lyricsInjected,source),true);
+ report.cases.push({name:'plain Unicode and hostile markup render inertly; save leaves one engine playing same source',passed:true});
+ const lrc='[00:00.500]Primera línea propia\r\n[00:00.500]Segunda línea simultánea\r\n[00:02]Tercera línea propia';
+ await panel.getByLabel(/Importar archivo .txt o .lrc/).setInputFiles({name:'propia.lrc',mimeType:'text/plain',buffer:Buffer.from(lrc)});await panel.getByText('Archivo cargado como borrador. Elige el formato y guarda para aplicarlo.',{exact:true}).waitFor();assert.equal(await panel.locator('.lyrics-text').textContent(),plain);
+ await panel.getByRole('combobox',{name:/^Formato/}).selectOption('lrc');await panel.getByRole('button',{name:'Guardar letras',exact:true}).click();await panel.getByText('Letra sincronizada',{exact:true}).waitFor();
+ await player.getByRole('button',{name:'Pausar',exact:true}).click();const seek=player.getByLabel('Posición en segundos',{exact:true});
+ const seekTo=async seconds=>{await seek.evaluate((element,seconds)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(element,String(seconds));element.dispatchEvent(new Event('change',{bubbles:true}));element.dispatchEvent(new Event('input',{bubbles:true}));},seconds);await page.waitForFunction(seconds=>Math.abs(window.pulsoLyricsUI.audio[0].currentTime-seconds)<0.15,seconds);};
+ await seekTo(0);await page.waitForFunction(()=>document.querySelectorAll('.lyrics-cues li[aria-current=true]').length===0);
+ await seekTo(0.8);await page.waitForFunction(()=>document.querySelectorAll('.lyrics-cues li[aria-current=true]').length===2);
+ await seekTo(2.5);await page.waitForFunction(()=>document.querySelectorAll('.lyrics-cues li[aria-current=true]').length===1);assert.match(await panel.locator('[aria-current=true]').textContent(),/Tercera línea propia/);
+ report.cases.push({name:'LRC is explicit draft until save; seek highlights all equal timestamps and none before first cue',passed:true});
+ await player.getByRole('button',{name:'Reproducir',exact:true}).click();await page.waitForFunction(()=>!window.pulsoLyricsUI.audio[0].paused);
+ await panel.getByLabel('Texto del borrador',{exact:true}).fill('[00:99]Inválida');await panel.getByRole('button',{name:'Guardar letras',exact:true}).click();await panel.getByRole('status').filter({hasText:/Corrige las marcas/}).waitFor();assert.equal(await panel.locator('.lyrics-cues li').count(),3);assert.equal(await page.evaluate(()=>!window.pulsoLyricsUI.audio[0].paused),true);
+ const fileInput=panel.getByLabel(/Importar archivo .txt o .lrc/);
+ await fileInput.setInputFiles({name:'grande.txt',mimeType:'text/plain',buffer:Buffer.alloc(131073,65)});await panel.getByRole('status').filter({hasText:'Reduce las letras a 128 KiB.'}).waitFor();assert.equal(await panel.getByLabel('Texto del borrador',{exact:true}).inputValue(),'[00:99]Inválida');
+ await fileInput.setInputFiles({name:'invalido.txt',mimeType:'text/plain',buffer:Buffer.from([0xc3,0x28])});await panel.getByRole('status').filter({hasText:/Corrige el texto Unicode/}).waitFor();assert.equal(await panel.locator('.lyrics-cues li').count(),3);
+ report.cases.push({name:'invalid LRC, oversized file and malformed UTF-8 preserve saved lyrics and playing audio',passed:true});
+ await fileInput.setInputFiles({name:'lenta.txt',mimeType:'text/plain',buffer:Buffer.from('No debe aparecer en otra pista')});
+ await player.locator('ol>li>button:first-child').nth(1).click();await panel.locator('summary').click();await panel.getByText(/^Sin letras para /).waitFor();
+ // Completion of the old File read cannot change the new track's draft or notices.
+ await page.waitForTimeout(450);assert.equal(await panel.getByLabel('Texto del borrador',{exact:true}).inputValue(),'');assert.equal(await panel.getByText('Archivo cargado como borrador. Elige el formato y guarda para aplicarlo.',{exact:true}).count(),0);
+ await panel.getByLabel('Texto del borrador',{exact:true}).fill('Texto propio de la segunda pista');await panel.getByRole('button',{name:'Guardar letras',exact:true}).click();await panel.getByText('Letras guardadas.',{exact:true}).waitFor();
+ await player.locator('ol>li>button:first-child').nth(0).click();await panel.locator('summary').click();await panel.getByText('Letra sincronizada',{exact:true}).waitFor();assert.equal(await panel.locator('.lyrics-cues li').count(),3);
+ report.cases.push({name:'selection change rejects stale File callbacks; tracks keep independent manual text and LRC',passed:true});
+ await input.setInputFiles(resolve('public/samples/Aurora.mp3'));await page.getByRole('status').filter({hasText:'0 importadas, 1 ya existentes.'}).waitFor();assert.equal(await panel.locator('.lyrics-cues li').count(),3);
+ await panel.getByRole('button',{name:'Sin letras',exact:true}).click();await panel.getByText('Elección «Sin letras» guardada.',{exact:true}).waitFor();await page.reload();await page.getByRole('status').filter({hasText:'Cola lista y pausada.'}).waitFor();await panel.locator('summary').click();await panel.getByText(/^Sin letras para /).waitFor();assert.equal(await page.evaluate(()=>window.pulsoLyricsUI.audio.length===1&&window.pulsoLyricsUI.audio[0].paused),true);
+ await player.locator('ol>li>button:first-child').nth(1).click();await panel.locator('summary').click();await panel.locator('.lyrics-text').filter({hasText:'Texto propio de la segunda pista'}).waitFor();await player.getByRole('button',{name:'Pausar',exact:true}).click();
+ report.cases.push({name:'dedup preserves manual lyrics; explicit absence survives reload; restored queue remains paused',passed:true});
+ await player.getByRole('button',{name:'Reproducir',exact:true}).click();await page.waitForFunction(()=>!window.pulsoLyricsUI.audio[0].paused);
+ await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('pulso-web-local-v1');r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,tx=db.transaction('settings','readwrite'),store=tx.objectStore('settings'),cursor=store.openCursor(IDBKeyRange.bound('lyrics:v1:','lyrics:v1:\uffff'));cursor.onsuccess=()=>{const c=cursor.result;if(!c)return;if(c.value?.text==='Texto propio de la segunda pista')c.update({...c.value,version:99});c.continue();};tx.oncomplete=()=>{db.close();resolve();};tx.onabort=()=>{db.close();reject(tx.error);};};}));
+ await panel.locator('summary').click();await page.waitForFunction(()=>!document.querySelector('.lyrics-panel').open);await panel.locator('summary').click();await panel.getByText(/Letras no disponibles/).waitFor();
+ await panel.getByLabel('Texto del borrador',{exact:true}).fill('Texto propio reparado');await panel.getByRole('button',{name:'Guardar letras',exact:true}).click();await panel.locator('.lyrics-text').filter({hasText:'Texto propio reparado'}).waitFor();assert.equal(await page.evaluate(()=>window.pulsoLyricsUI.audio.length===1&&!window.pulsoLyricsUI.audio[0].paused),true);
+ await page.reload();await page.getByRole('status').filter({hasText:'Cola lista y pausada.'}).waitFor();await panel.locator('summary').click();await panel.locator('.lyrics-text').filter({hasText:'Texto propio reparado'}).waitFor();assert.equal(await page.evaluate(()=>window.pulsoLyricsUI.audio[0].paused),true);
+ report.cases.push({name:'corrupt persisted version is repaired using observed token without pausing audio; repair survives reload',passed:true});
+ assert.deepEqual(errors,[]);assert.deepEqual(await page.evaluate(()=>window.pulsoLyricsUI.violations),[]);report.pageErrors=0;report.cspViolations=0;report.passed=true;
+}catch(error){report.failure={error:error.message,status:page&&!page.isClosed()?await page.getByRole('status').allTextContents():[]};throw error;}
+finally{await browser?.close();if(server)await new Promise(resolve=>server.httpServer.close(resolve));await writeFile('.local/lyrics-ui-result.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));}

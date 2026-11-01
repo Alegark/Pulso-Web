@@ -1,0 +1,268 @@
+{
+  "status": "PASS para avisos actuales entregados, no aceptación jurídica/global de T18",
+  "timestampUtc": "2026-10-31T11:17:12.950073+00:00",
+  "finding": "T18-LICENSE-01/B15",
+  "manifest": {
+    "version": 1,
+    "file": "/THIRD-PARTY-NOTICES.txt",
+    "sha256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88",
+    "packages": [
+      {
+        "name": "@borewit/text-codec",
+        "version": "0.2.3",
+        "license": "MIT",
+        "originalFile": "LICENSE.txt",
+        "offset": 277,
+        "bytes": 1073,
+        "sha256": "d55209d49c97d162829baf379dfcf841e47c98528d2d50baeb922ac2983a1e47"
+      },
+      {
+        "name": "@noble/hashes",
+        "version": "2.4.0",
+        "license": "MIT",
+        "originalFile": "LICENSE",
+        "offset": 1392,
+        "bytes": 1109,
+        "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec"
+      },
+      {
+        "name": "@tokenizer/inflate",
+        "version": "0.6.0",
+        "license": "MIT",
+        "originalFile": "LICENSE",
+        "offset": 2548,
+        "bytes": 1072,
+        "sha256": "5bb0e8b566dee0e946cafd9bbed359eb0494580df86457876b4f41bba5c77b25"
+      },
+      {
+        "name": "content-type",
+        "version": "3.1.1",
+        "license": "MIT",
+        "originalFile": "LICENSE",
+        "offset": 3661,
+        "bytes": 1089,
+        "sha256": "257aed98914108e91a337912727b6a802eef218248507f74b76faffaff517a38"
+      },
+      {
+        "name": "debug",
+        "version": "4.4.3",
+        "license": "MIT",
+        "originalFile": "LICENSE",
+        "offset": 4784,
+        "bytes": 1139,
+        "sha256": "3a61c6c96caf5c1d9b623fb9b04c822b783dfcb78aa7e49c76a3f643e6ed7f95"
+      },
+      {
+        "name": "file-type",
+        "version": "22.3.0",
+        "license": "MIT",
+        "originalFile": "license",
+        "offset": 5962,
+        "bytes": 1117,
+        "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+      },
+      {
+        "name": "ieee754",
+        "version": "1.2.1",
+        "license": "BSD-3-Clause",
+        "originalFile": "LICENSE",
+        "offset": 7124,
+        "bytes": 1465,
+        "sha256": "18d45466ba3253deae04667e267a91ea8de8548f18c1125264d1c9db28194cc1"
+      },
+      {
+        "name": "media-typer",
+        "version": "2.0.0",
+        "license": "MIT",
+        "originalFile": "LICENSE",
+        "offset": 8629,
+        "bytes": 1094,
+        "sha256": "bd47ce7b88c7759630d1e2b9fcfa170a0f1fde522be09e13fb1581a79d090400"
+      },
+      {
+        "name": "ms",
+        "version": "2.1.3",
+        "license": "MIT",
+        "originalFile": "license.md",
+        "offset": 9754,
+        "bytes": 1079,
+        "sha256": "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801"
+      },
+      {
+        "name": "music-metadata",
+        "version": "12.3.2",
+        "license": "MIT",
+        "originalFile": "LICENSE.txt",
+        "offset": 10877,
+        "bytes": 1073,
+        "sha256": "ab27d7574bc6d292302b0b49c2e1ad6f0d88031822dce486257c085c7d83133c"
+      },
+      {
+        "name": "react",
+        "version": "19.3.1",
+        "license": "MIT",
+        "originalFile": "LICENSE",
+        "offset": 11985,
+        "bytes": 1088,
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      },
+      {
+        "name": "react-dom",
+        "version": "19.3.1",
+        "license": "MIT",
+        "originalFile": "LICENSE",
+        "offset": 13112,
+        "bytes": 1088,
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      },
+      {
+        "name": "scheduler",
+        "version": "0.28.0",
+        "license": "MIT",
+        "originalFile": "LICENSE",
+        "offset": 14239,
+        "bytes": 1088,
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      },
+      {
+        "name": "strtok3",
+        "version": "10.6.3",
+        "license": "MIT",
+        "originalFile": "LICENSE.txt",
+        "offset": 15364,
+        "bytes": 1063,
+        "sha256": "c33959fabde25a1b6161d8e0fdc6fdcea1fc48095fe0bd51043247bfd214287f"
+      },
+      {
+        "name": "token-types",
+        "version": "6.1.2",
+        "license": "MIT",
+        "originalFile": "LICENSE.txt",
+        "offset": 16467,
+        "bytes": 1082,
+        "sha256": "eb0bff8faaba4581e0f09c962e0f795f1f8810191c9d616f3f66f36be4b3a5dc"
+      },
+      {
+        "name": "uint8array-extras",
+        "version": "1.6.0",
+        "license": "MIT",
+        "originalFile": "license",
+        "offset": 17595,
+        "bytes": 1117,
+        "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+      },
+      {
+        "name": "win-guid",
+        "version": "0.2.1",
+        "license": "MIT",
+        "originalFile": "LICENSE.txt",
+        "offset": 18749,
+        "bytes": 1082,
+        "sha256": "eb0bff8faaba4581e0f09c962e0f795f1f8810191c9d616f3f66f36be4b3a5dc"
+      }
+    ]
+  },
+  "encoding": "UTF-8 BOM on aggregate; original package byte slices remain unchanged, including their CRLF; browser-visible text compares after newline/BOM normalization",
+  "checks": {
+    "unitPassed": 3,
+    "unitLog": ".local/evidence/license-notices-final-unit.tap",
+    "actualMainWorkerGuardBuild": "PASS write:false before final build",
+    "finalMainWorkerSWGuards": "PASS final production build and SW rebuild",
+    "browserDeliveryAndOffline": {
+      "passed": true,
+      "iphoneVerified": false,
+      "cases": [
+        {
+          "name": "Production notice preserves all original package byte ranges and recorded SHA-256",
+          "passed": true
+        },
+        {
+          "name": "Release exposes the complete notice through the visible first-party link",
+          "passed": true
+        },
+        {
+          "name": "Shell and notice reopen offline with the loopback origin stopped; notice is served by SW with the same SHA-256",
+          "passed": true
+        }
+      ],
+      "environment": "Chromium Linux sandbox, own context and ephemeral loopback",
+      "packages": 17,
+      "noticeSHA256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88",
+      "browserVersion": "154.0.8037.57",
+      "offlineDiagnostic": {
+        "fromServiceWorker": true,
+        "headers": {
+          "cache-control": "no-cache",
+          "connection": "keep-alive",
+          "content-encoding": "gzip",
+          "content-type": "text/plain",
+          "date": "Sat, 31 Oct 2026 11:13:38 GMT",
+          "etag": "W/\"19833-1793445169668\"",
+          "keep-alive": "timeout=5",
+          "last-modified": "Sat, 31 Oct 2026 11:12:49 GMT",
+          "transfer-encoding": "chunked",
+          "vary": "Origin"
+        },
+        "protocolBodyBytes": 19830,
+        "originalBytes": 19833
+      },
+      "offlineRaw": {
+        "bytes": 19833,
+        "sha256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88"
+      },
+      "noticeTextMatches": true,
+      "pageErrors": 0,
+      "externalRequests": 0
+    },
+    "privateHTTPS": {
+      "verified": true,
+      "packages": 17,
+      "sha256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88"
+    },
+    "staticPrivateCopySHA256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88"
+  },
+  "delivery": {
+    "version": 1,
+    "entry": "/releases/c97de0eb243dce01.html",
+    "copiedFiles": 33,
+    "retainedOldAssets": true,
+    "indexSHA256": "c97de0eb243dce0192a9d35471cb99b094084bb9c3f007fc6da60866d2cd7777",
+    "swSHA256": "79bb25d2cbd5002390e6676d903ad4bed9e3be28a735f1be6e03c6a217575c57",
+    "lockSHA256": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f"
+  },
+  "executionHistory": [
+    {
+      "attempt": 1,
+      "result": "Raw notice hash correct; browser text navigation misdecoded non-ASCII with text/plain and no charset; CDP text body differed from raw bytes",
+      "log": ".local/license-delivery.log"
+    },
+    {
+      "attempt": 2,
+      "result": "Diagnostics confirmed raw19830bytes/SHA exact while visible text incorrect",
+      "log": ".local/license-delivery-r2.log"
+    },
+    {
+      "attempt": 3,
+      "result": "BOM fixed decoding; render comparison still needed normalizing original18CRLF and using plaintext pre rather than body",
+      "log": ".local/license-delivery-r3.log"
+    },
+    {
+      "attempt": 4,
+      "result": "PASS raw19833bytes/SHA, visible text correct, actualSW offline response after origin stopped",
+      "log": ".local/license-delivery-r4.log"
+    }
+  ],
+  "limits": [
+    "No iPhone or private-origin offline claim; offline notice test is loopback desktop",
+    "Recognized module package/version/notice guard does not classify arbitrary copied code or binary assets outside graph",
+    "SDK/WASM composite upstream source/notices still require verification before distribution",
+    "AC22/T18/P0-W incomplete"
+  ],
+  "commands": [
+    "npx tsx --test tests/unit/third-party-notices.test.ts",
+    "npm run build",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-license-delivery.mjs",
+    "python3 scripts/update_review_release.py",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-private-artwork.mjs"
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "project": "Pulso-Web",
+  "increment": "T18 B3",
+  "status": "LIMITED_ACCEPTANCE_B3_FINAL_UI49_AND_R29_REVIEW_DELIVERED",
+  "USD": 0,
+  "coreEvidence": ".local/evidence/backup-diagnostics-r25.json",
+  "reportedValidation": {
+    "chromium": 52,
+    "unit": 26,
+    "unitNew": 3,
+    "types": "PASS",
+    "lint": "PASS",
+    "finalBrowserReceiptSHA256VerifiedByParent": true
+  },
+  "API": {
+    "exportOrganization": "exportOrganization(observe?:ObserveFeature):Promise<Blob>",
+    "previewOrganization": "previewOrganization(file:Blob,choices:Readonly<Record<string,OrganizationChoice>>={},observe?:ObserveFeature):Promise<OrganizationPreview>",
+    "applyOrganization": "applyOrganization(planId:string,signal?:AbortSignal,observe?:ObserveFeature):Promise<OrganizationApplyResult>",
+    "inspectOrganizationApply": "inspectOrganizationApply(operationId:string,observe?:ObserveFeature):Promise<OrganizationApplyInspection>",
+    "startOrganizationRecovery": "startOrganizationRecovery(operationId:string,observe?:ObserveFeature):Promise<OrganizationApplyInspection>",
+    "organizationErrorObservation": "organizationErrorObservation(error:unknown):FeatureObservationV1; private WeakMap provenance, public constructor alone grants none",
+    "OrganizationPanelProps": "beginDiagnostic?:BeginPanelDiagnostic; onCommitted:(attempt?:PanelDiagnosticAttempt)=>Promise<void>",
+    "mainContract": "Exact attempt identity goes to parent onCommitted. Parent records its refresh on the same handle; panel never duplicates that failure. finish after awaiting callback and before ActivityToken.end. No handle created at completion."
+  },
+  "mainIntegration": {
+    "beginDiagnosticConnected": true,
+    "onCommitted": "exact attempt -> private WeakMap handle or explicit null -> refresh(true,false,handle,refresh phase)",
+    "lateBegin": false,
+    "secondaryPhase": "refresh",
+    "retitlesQueue": false,
+    "mainSHA256": "c37d1539ebbd9c12244052d30f31e9171f10a67604d9787c2febf8eae238e408",
+    "typesLintAfterWiring": "PASS"
+  },
+  "pending": [
+    "remaining global I.errors/T18/T16/P0 acceptance and physical iPhone",
+    "further capabilities per final r28 inventory"
+  ],
+  "existingPrivateBuild": "6314ebda94d3dfd5 B1 only",
+  "iPhone": "APLAZADO/PENDIENTE",
+  "P0Complete": false,
+  "reviewR27": {
+    "evidence": ".local/evidence/backup-diagnostics-review-r27.json",
+    "P1": 0,
+    "P2": 1,
+    "finding": "R27-P2-1 preview pending remains after canWrite false/true",
+    "ownNodeProbes": 4,
+    "ownChromiumRepro": 1
+  },
+  "parentFix": {
+    "file": "src/ui/OrganizationPanel.tsx",
+    "beforeSHA256": "cb07fd2af6655fd382f7785f5307ed935199ad0315cf42dd89cc1baa16a87438",
+    "afterSHA256": "4a66c742d2d22c9b6492d045f1c5b0ec3af7d9c657bb66c8f353d399cdcf3298",
+    "change": "Separate ownsState(mounted,generation,action,file) from result current(allowed,operation.current,ownsState); pending settlement uses ownsState, stale results stay discarded",
+    "types": "PASS",
+    "lint": "PASS",
+    "verificationPending": [
+      "r29 fresh review/probes",
+      "r26 main final rebuilt against fixed source"
+    ]
+  },
+  "reviewR29": {
+    "evidence": ".local/evidence/backup-preview-review-r29.json",
+    "findingResolved": "R27-P2-1",
+    "newP1P2": 0,
+    "greenScenarios": 6,
+    "greenExecutionsWithLegacyCallbacks": 8,
+    "originalREDReproduced": true,
+    "ownNodeProbes": 4,
+    "realMainAccepted": false,
+    "condition": "final full-selection R26 on corrected panel/main hashes"
+  },
+  "UIFinal": {
+    "cases": 49,
+    "IDB": 46,
+    "OPFS": 3,
+    "sourceMatchedReview": true,
+    "fullSelection": true,
+    "receipt": ".local/evidence/backup-diagnostics-ui-r26.json",
+    "metadataReceipt": ".local/backup-diagnostics-ui-r26/final-receipt.json",
+    "metadataSHA256Verified": true
+  },
+  "parentDecision": "R29 main browser condition discharged with corrected same sources in final R26 before build",
+  "delivery": {
+    "entry": "/releases/41e21b4f8c921156.html",
+    "indexSHA256": "41e21b4f8c921156735e119af433a33c4f16470b97b80243ebb0d0e38b269ad6",
+    "swSHA256": "286fd65d52d272f2b57272bba8f4e74e9177d6a462603da100662a70b8e5b61d",
+    "copiedFiles": 33,
+    "sameExistingAuthorizedPrivateCopy": true,
+    "retainedOldAssets": true,
+    "HTTPSProbe": "PASS",
+    "transport": "bounded-blob",
+    "CSPViolations": 0,
+    "oneAudio": true,
+    "privateOffline": "PENDING_NOT_DEMONSTRATED",
+    "excludesMigrationR31": true
+  }
+}

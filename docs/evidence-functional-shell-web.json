@@ -1,0 +1,1738 @@
+{
+  "status": "PASS solo incremento web indicado; T8/P0-W incompletos",
+  "timestampUtc": "2026-10-31T11:52:41.784230+00:00",
+  "initialImplementation": {
+    "phase": "r3 before r5 corrections",
+    "cases": [
+      "empty Inicio has useful library/create/import actions; global importer remains visible in Buscar",
+      "51: independent route query/list/pages; cross-page occurrence focus; filtered move disabled; full queue and full playlist batch survive routes",
+      "101: independent route query/list/pages; cross-page occurrence focus; filtered move disabled; full queue and full playlist batch survive routes",
+      "honest metadata-only and combined present/favorites; committed favorite removal focuses next row; recents ignore edits",
+      "route group/query/present/list/page contexts stay independent; Buscar searches outside the library playlist",
+      "Home continues the genuinely restored paused Player with same queue/source/modes, no preparation or autoplay",
+      "favorite removal 1: empty destination heading focus",
+      "favorite removal 51: last page clamps to previous row focus",
+      "repeated track: repeated cross-page moves keep occurrence identity and focus in both directions",
+      "dangling record: repeated cross-page moves keep occurrence identity and focus in both directions",
+      "favorite navigate: stale/error/no-op response does not steal focus",
+      "favorite focus: stale/error/no-op response does not steal focus",
+      "favorite conflict: stale/error/no-op response does not steal focus",
+      "favorite noop: stale/error/no-op response does not steal focus",
+      "favorite error: stale/error/no-op response does not steal focus",
+      "mini open/back preserves source/queue/position/modes/proof, one Audio, no autoplay; real play/pause; second-tab navigation guards and paused handoff",
+      "active batch survives route without abort and completes real worker; organization preview stays mounted across destinations",
+      "inactive library pagination clamps during shrink and cannot resurrect old page after growth",
+      "playing navigation/open/back issues no play/pause/load commands; no ResizeObserver fallback measures bars",
+      "320/390/landscape × 100/200% font-size: measured reserves, no horizontal overflow, player controls and license reachable, dark/light mini colors"
+    ],
+    "unitPassed": 19,
+    "source": ".local/evidence/functional-shell.json"
+  },
+  "independentReview": {
+    "round": "r4",
+    "P1": 0,
+    "P2": [
+      "Fixed bars left42px for66px focused search at568x320/200%",
+      "Open/return delayed RAF stole later focus"
+    ],
+    "evidence": ".local/t8-review-focal.json"
+  },
+  "corrections": {
+    "phase": "r5",
+    "passed": true,
+    "cases": [
+      "10 viewport/text combinations: full search/player/nav/mini/footer border boxes reachable without interception, long title retained, measured fixed reserves",
+      "open: positive legitimate focus",
+      "open: tab cancels delayed shell response",
+      "open: focusABA cancels delayed shell response",
+      "open: pointer cancels delayed shell response",
+      "open: blur cancels delayed shell response",
+      "open: route cancels delayed shell response",
+      "open: wheel cancels delayed shell response",
+      "open: owner cancels delayed shell response",
+      "open: unmount cancels delayed shell response",
+      "back: positive legitimate focus",
+      "back: tab cancels delayed shell response",
+      "back: focusABA cancels delayed shell response",
+      "back: pointer cancels delayed shell response",
+      "back: blur cancels delayed shell response",
+      "back: route cancels delayed shell response",
+      "back: wheel cancels delayed shell response",
+      "back: owner cancels delayed shell response",
+      "back: unmount cancels delayed shell response",
+      "create: positive legitimate focus",
+      "create: tab cancels delayed shell response",
+      "create: focusABA cancels delayed shell response",
+      "create: pointer cancels delayed shell response",
+      "create: blur cancels delayed shell response",
+      "create: route cancels delayed shell response",
+      "create: wheel cancels delayed shell response",
+      "create: owner cancels delayed shell response",
+      "create: unmount cancels delayed shell response",
+      "navigation RAF preserves newer scrolling",
+      "normal regression: 50 rows/full queue101/full playlist batch101, move focus both directions and favorite commit focus, filters and route query/list/pager, playing open/back same Audio/source/queue/proof/modes with no extra commands or pending activity"
+    ],
+    "layout": [
+      {
+        "width": 320,
+        "height": 568,
+        "scale": 100,
+        "bars": {
+          "nav": "fixed",
+          "mini": "fixed",
+          "navHeight": 84,
+          "reserveNav": 84,
+          "miniHeight": 312.390625,
+          "reserveMini": 312.390625,
+          "overflow": false
+        },
+        "targets": [
+          {
+            "text": "",
+            "x": 25,
+            "y": 103.875,
+            "width": 270,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Posición en segundos",
+            "x": 27,
+            "y": 52.015625,
+            "width": 270,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Anterior",
+            "x": 25,
+            "y": 52.015625,
+            "width": 100.59375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir",
+            "x": 133.59375,
+            "y": 52.015625,
+            "width": 122.53125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Pausar",
+            "x": 25,
+            "y": 104.015625,
+            "width": 89.59375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Siguiente",
+            "x": 122.59375,
+            "y": 104.015625,
+            "width": 111.453125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "DesactivadaUna pistaToda la cola",
+            "x": 25,
+            "y": 104.015625,
+            "width": 270,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Aleatorio",
+            "x": 25,
+            "y": 104.015625,
+            "width": 107.921875,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Inicio",
+            "x": 8,
+            "y": 492,
+            "width": 98.65625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Buscar",
+            "x": 110.65625,
+            "y": 492,
+            "width": 98.671875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Biblioteca",
+            "x": 213.328125,
+            "y": 492,
+            "width": 98.671875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir desde minirreproductor",
+            "x": 13,
+            "y": 430.609375,
+            "width": 122.53125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Abrir reproductor desde minirreproductor",
+            "x": 143.53125,
+            "y": 430.609375,
+            "width": 74.703125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Licencias de terceros",
+            "x": 16,
+            "y": 109.53125,
+            "width": 169.03125,
+            "height": 19,
+            "visible": true,
+            "hit": true
+          }
+        ]
+      },
+      {
+        "width": 320,
+        "height": 568,
+        "scale": 200,
+        "bars": {
+          "nav": "fixed",
+          "mini": "fixed",
+          "navHeight": 180,
+          "reserveNav": 180,
+          "miniHeight": 164,
+          "reserveMini": 164,
+          "overflow": false
+        },
+        "targets": [
+          {
+            "text": "",
+            "x": 25,
+            "y": 66.71875,
+            "width": 270,
+            "height": 66,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Posición en segundos",
+            "x": 27,
+            "y": 78.375,
+            "width": 270,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Anterior",
+            "x": 25,
+            "y": 66.375,
+            "width": 165.1875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir",
+            "x": 25,
+            "y": 132.375,
+            "width": 209.0625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Pausar",
+            "x": 25,
+            "y": 132.375,
+            "width": 143.1875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Siguiente",
+            "x": 25,
+            "y": 132.375,
+            "width": 186.890625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "DesactivadaUna pistaToda la cola",
+            "x": 25,
+            "y": 142.375,
+            "width": 270,
+            "height": 58,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Aleatorio",
+            "x": 25,
+            "y": 132.375,
+            "width": 179.828125,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Inicio",
+            "x": 8,
+            "y": 396,
+            "width": 98.65625,
+            "height": 164,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Buscar",
+            "x": 110.65625,
+            "y": 396,
+            "width": 98.671875,
+            "height": 164,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Biblioteca",
+            "x": 213.328125,
+            "y": 396,
+            "width": 98.671875,
+            "height": 164,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir desde minirreproductor",
+            "x": 13,
+            "y": 227,
+            "width": 209.0625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Abrir reproductor desde minirreproductor",
+            "x": 13,
+            "y": 311,
+            "width": 113.40625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Licencias de terceros",
+            "x": 16,
+            "y": 92.71875,
+            "width": 197.21875,
+            "height": 86,
+            "visible": true,
+            "hit": true
+          }
+        ]
+      },
+      {
+        "width": 390,
+        "height": 844,
+        "scale": 100,
+        "bars": {
+          "nav": "fixed",
+          "mini": "fixed",
+          "navHeight": 60,
+          "reserveNav": 60,
+          "miniHeight": 426,
+          "reserveMini": 426,
+          "overflow": false
+        },
+        "targets": [
+          {
+            "text": "",
+            "x": 25,
+            "y": 144.875,
+            "width": 340,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Posición en segundos",
+            "x": 27,
+            "y": 145.015625,
+            "width": 340,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Anterior",
+            "x": 25,
+            "y": 11.015625,
+            "width": 100.59375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir",
+            "x": 133.59375,
+            "y": 11.015625,
+            "width": 122.53125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Pausar",
+            "x": 264.125,
+            "y": 11.015625,
+            "width": 89.59375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Siguiente",
+            "x": 25,
+            "y": 63.015625,
+            "width": 111.453125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "DesactivadaUna pistaToda la cola",
+            "x": 25,
+            "y": 225.015625,
+            "width": 340,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Aleatorio",
+            "x": 25,
+            "y": 281.015625,
+            "width": 107.921875,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Inicio",
+            "x": 8,
+            "y": 792,
+            "width": 122,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Buscar",
+            "x": 134,
+            "y": 792,
+            "width": 122,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Biblioteca",
+            "x": 260,
+            "y": 792,
+            "width": 122,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir desde minirreproductor",
+            "x": 13,
+            "y": 731,
+            "width": 122.53125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Abrir reproductor desde minirreproductor",
+            "x": 143.53125,
+            "y": 731,
+            "width": 74.703125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Licencias de terceros",
+            "x": 16,
+            "y": 295.53125,
+            "width": 169.03125,
+            "height": 19,
+            "visible": true,
+            "hit": true
+          }
+        ]
+      },
+      {
+        "width": 390,
+        "height": 844,
+        "scale": 200,
+        "bars": {
+          "nav": "fixed",
+          "mini": "fixed",
+          "navHeight": 132,
+          "reserveNav": 132,
+          "miniHeight": 464.1875,
+          "reserveMini": 464.1875,
+          "overflow": false
+        },
+        "targets": [
+          {
+            "text": "",
+            "x": 25,
+            "y": 78.71875,
+            "width": 340,
+            "height": 66,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Posición en segundos",
+            "x": 27,
+            "y": 90.21875,
+            "width": 340,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Anterior",
+            "x": 25,
+            "y": 78.21875,
+            "width": 165.1875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir",
+            "x": 25,
+            "y": 154.21875,
+            "width": 209.0625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Pausar",
+            "x": 25,
+            "y": 156.21875,
+            "width": 143.1875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Siguiente",
+            "x": 176.1875,
+            "y": 156.21875,
+            "width": 186.890625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "DesactivadaUna pistaToda la cola",
+            "x": 25,
+            "y": 166.21875,
+            "width": 340,
+            "height": 58,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Aleatorio",
+            "x": 25,
+            "y": 156.21875,
+            "width": 179.828125,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Inicio",
+            "x": 8,
+            "y": 720,
+            "width": 122,
+            "height": 116,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Buscar",
+            "x": 134,
+            "y": 720,
+            "width": 122,
+            "height": 116,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Biblioteca",
+            "x": 260,
+            "y": 720,
+            "width": 122,
+            "height": 116,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir desde minirreproductor",
+            "x": 13,
+            "y": 634.8125,
+            "width": 209.0625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Abrir reproductor desde minirreproductor",
+            "x": 238.0625,
+            "y": 634.8125,
+            "width": 113.40625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Licencias de terceros",
+            "x": 16,
+            "y": 164.40625,
+            "width": 338.0625,
+            "height": 38,
+            "visible": true,
+            "hit": true
+          }
+        ]
+      },
+      {
+        "width": 568,
+        "height": 320,
+        "scale": 100,
+        "bars": {
+          "nav": "fixed",
+          "mini": "static",
+          "navHeight": 60,
+          "reserveNav": 60,
+          "miniHeight": 538,
+          "reserveMini": 0,
+          "overflow": false
+        },
+        "targets": [
+          {
+            "text": "",
+            "x": 25,
+            "y": 95.875,
+            "width": 518,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Posición en segundos",
+            "x": 27,
+            "y": 96.015625,
+            "width": 518,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Anterior",
+            "x": 25,
+            "y": 14.015625,
+            "width": 100.59375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir",
+            "x": 133.59375,
+            "y": 14.015625,
+            "width": 122.53125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Pausar",
+            "x": 264.125,
+            "y": 14.015625,
+            "width": 89.59375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Siguiente",
+            "x": 361.71875,
+            "y": 14.015625,
+            "width": 111.453125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "DesactivadaUna pistaToda la cola",
+            "x": 25,
+            "y": 176.015625,
+            "width": 518,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Aleatorio",
+            "x": 25,
+            "y": 192.015625,
+            "width": 107.921875,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Inicio",
+            "x": 8,
+            "y": 268,
+            "width": 181.328125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Buscar",
+            "x": 193.328125,
+            "y": 268,
+            "width": 181.34375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Biblioteca",
+            "x": 378.671875,
+            "y": 268,
+            "width": 181.328125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir desde minirreproductor",
+            "x": 337.765625,
+            "y": 95.53125,
+            "width": 122.53125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Abrir reproductor desde minirreproductor",
+            "x": 468.296875,
+            "y": 95.53125,
+            "width": 74.703125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Licencias de terceros",
+            "x": 16,
+            "y": 197.53125,
+            "width": 169.03125,
+            "height": 19,
+            "visible": true,
+            "hit": true
+          }
+        ]
+      },
+      {
+        "width": 568,
+        "height": 320,
+        "scale": 200,
+        "bars": {
+          "nav": "fixed",
+          "mini": "static",
+          "navHeight": 84,
+          "reserveNav": 84,
+          "miniHeight": 838,
+          "reserveMini": 0,
+          "overflow": false
+        },
+        "targets": [
+          {
+            "text": "",
+            "x": 25,
+            "y": 72.71875,
+            "width": 518,
+            "height": 66,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Posición en segundos",
+            "x": 27,
+            "y": 84.0625,
+            "width": 518,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Anterior",
+            "x": 25,
+            "y": 72.0625,
+            "width": 165.1875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir",
+            "x": 198.1875,
+            "y": 72.0625,
+            "width": 209.0625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Pausar",
+            "x": 25,
+            "y": 144.0625,
+            "width": 143.1875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Siguiente",
+            "x": 176.1875,
+            "y": 144.0625,
+            "width": 186.890625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "DesactivadaUna pistaToda la cola",
+            "x": 25,
+            "y": 77.0625,
+            "width": 518,
+            "height": 58,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Aleatorio",
+            "x": 25,
+            "y": 144.0625,
+            "width": 179.828125,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Inicio",
+            "x": 8,
+            "y": 244,
+            "width": 181.328125,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Buscar",
+            "x": 193.328125,
+            "y": 244,
+            "width": 181.34375,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Biblioteca",
+            "x": 378.671875,
+            "y": 244,
+            "width": 181.328125,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir desde minirreproductor",
+            "x": 25,
+            "y": 72.09375,
+            "width": 209.0625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Abrir reproductor desde minirreproductor",
+            "x": 250.0625,
+            "y": 72.09375,
+            "width": 113.40625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Licencias de terceros",
+            "x": 16,
+            "y": 174.09375,
+            "width": 338.0625,
+            "height": 38,
+            "visible": true,
+            "hit": true
+          }
+        ]
+      },
+      {
+        "width": 600,
+        "height": 320,
+        "scale": 100,
+        "bars": {
+          "nav": "fixed",
+          "mini": "static",
+          "navHeight": 60,
+          "reserveNav": 60,
+          "miniHeight": 418,
+          "reserveMini": 0,
+          "overflow": false
+        },
+        "targets": [
+          {
+            "text": "",
+            "x": 25,
+            "y": 95.875,
+            "width": 550,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Posición en segundos",
+            "x": 27,
+            "y": 96.015625,
+            "width": 550,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Anterior",
+            "x": 25,
+            "y": 14.015625,
+            "width": 100.59375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir",
+            "x": 133.59375,
+            "y": 14.015625,
+            "width": 122.53125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Pausar",
+            "x": 264.125,
+            "y": 14.015625,
+            "width": 89.59375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Siguiente",
+            "x": 361.71875,
+            "y": 14.015625,
+            "width": 111.453125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "DesactivadaUna pistaToda la cola",
+            "x": 25,
+            "y": 176.015625,
+            "width": 550,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Aleatorio",
+            "x": 25,
+            "y": 192.015625,
+            "width": 107.921875,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Inicio",
+            "x": 8,
+            "y": 268,
+            "width": 192,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Buscar",
+            "x": 204,
+            "y": 268,
+            "width": 192,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Biblioteca",
+            "x": 400,
+            "y": 268,
+            "width": 192,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir desde minirreproductor",
+            "x": 369.765625,
+            "y": 95.53125,
+            "width": 122.53125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Abrir reproductor desde minirreproductor",
+            "x": 500.296875,
+            "y": 95.53125,
+            "width": 74.703125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Licencias de terceros",
+            "x": 16,
+            "y": 197.53125,
+            "width": 169.03125,
+            "height": 19,
+            "visible": true,
+            "hit": true
+          }
+        ]
+      },
+      {
+        "width": 600,
+        "height": 320,
+        "scale": 200,
+        "bars": {
+          "nav": "fixed",
+          "mini": "static",
+          "navHeight": 84,
+          "reserveNav": 84,
+          "miniHeight": 838,
+          "reserveMini": 0,
+          "overflow": false
+        },
+        "targets": [
+          {
+            "text": "",
+            "x": 25,
+            "y": 72.71875,
+            "width": 550,
+            "height": 66,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Posición en segundos",
+            "x": 27,
+            "y": 84.0625,
+            "width": 550,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Anterior",
+            "x": 25,
+            "y": 72.0625,
+            "width": 165.1875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir",
+            "x": 198.1875,
+            "y": 72.0625,
+            "width": 209.0625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Pausar",
+            "x": 415.25,
+            "y": 72.0625,
+            "width": 143.1875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Siguiente",
+            "x": 25,
+            "y": 144.0625,
+            "width": 186.890625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "DesactivadaUna pistaToda la cola",
+            "x": 25,
+            "y": 77.0625,
+            "width": 550,
+            "height": 58,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Aleatorio",
+            "x": 25,
+            "y": 144.0625,
+            "width": 179.828125,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Inicio",
+            "x": 8,
+            "y": 244,
+            "width": 192,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Buscar",
+            "x": 204,
+            "y": 244,
+            "width": 192,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Biblioteca",
+            "x": 400,
+            "y": 244,
+            "width": 192,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir desde minirreproductor",
+            "x": 25,
+            "y": 72.09375,
+            "width": 209.0625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Abrir reproductor desde minirreproductor",
+            "x": 250.0625,
+            "y": 72.09375,
+            "width": 113.40625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Licencias de terceros",
+            "x": 16,
+            "y": 174.09375,
+            "width": 338.0625,
+            "height": 38,
+            "visible": true,
+            "hit": true
+          }
+        ]
+      },
+      {
+        "width": 844,
+        "height": 390,
+        "scale": 100,
+        "bars": {
+          "nav": "static",
+          "mini": "static",
+          "navHeight": 44,
+          "reserveNav": 0,
+          "miniHeight": 250,
+          "reserveMini": 0,
+          "overflow": false
+        },
+        "targets": [
+          {
+            "text": "",
+            "x": 59,
+            "y": 161.3125,
+            "width": 726,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Posición en segundos",
+            "x": 61,
+            "y": 161.453125,
+            "width": 726,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Anterior",
+            "x": 59,
+            "y": 79.453125,
+            "width": 100.59375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir",
+            "x": 167.59375,
+            "y": 79.453125,
+            "width": 122.53125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Pausar",
+            "x": 298.125,
+            "y": 79.453125,
+            "width": 89.59375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Siguiente",
+            "x": 395.71875,
+            "y": 79.453125,
+            "width": 111.453125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "DesactivadaUna pistaToda la cola",
+            "x": 59,
+            "y": 241.453125,
+            "width": 726,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Aleatorio",
+            "x": 59,
+            "y": 297.453125,
+            "width": 107.921875,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Inicio",
+            "x": 38,
+            "y": 154.875,
+            "width": 78.34375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Buscar",
+            "x": 124.34375,
+            "y": 154.875,
+            "width": 90.640625,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Biblioteca",
+            "x": 222.984375,
+            "y": 154.875,
+            "width": 114.984375,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir desde minirreproductor",
+            "x": 587.765625,
+            "y": 160.96875,
+            "width": 122.53125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Abrir reproductor desde minirreproductor",
+            "x": 718.296875,
+            "y": 160.96875,
+            "width": 74.703125,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Licencias de terceros",
+            "x": 38,
+            "y": 327.96875,
+            "width": 169.03125,
+            "height": 19,
+            "visible": true,
+            "hit": true
+          }
+        ]
+      },
+      {
+        "width": 844,
+        "height": 390,
+        "scale": 200,
+        "bars": {
+          "nav": "static",
+          "mini": "static",
+          "navHeight": 68,
+          "reserveNav": 0,
+          "miniHeight": 766,
+          "reserveMini": 0,
+          "overflow": false
+        },
+        "targets": [
+          {
+            "text": "",
+            "x": 45,
+            "y": 149.71875,
+            "width": 754,
+            "height": 66,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Posición en segundos",
+            "x": 47,
+            "y": 161.0625,
+            "width": 754,
+            "height": 44,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Anterior",
+            "x": 45,
+            "y": 31.0625,
+            "width": 165.1875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir",
+            "x": 218.1875,
+            "y": 31.0625,
+            "width": 209.0625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Pausar",
+            "x": 435.25,
+            "y": 31.0625,
+            "width": 143.1875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Siguiente",
+            "x": 586.4375,
+            "y": 31.0625,
+            "width": 186.890625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "DesactivadaUna pistaToda la cola",
+            "x": 45,
+            "y": 265.0625,
+            "width": 754,
+            "height": 58,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Aleatorio",
+            "x": 45,
+            "y": 298.0625,
+            "width": 179.828125,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Inicio",
+            "x": 24,
+            "y": 148.75,
+            "width": 120.671875,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Buscar",
+            "x": 152.671875,
+            "y": 148.75,
+            "width": 145.265625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Biblioteca",
+            "x": 305.9375,
+            "y": 148.75,
+            "width": 193.953125,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Reproducir desde minirreproductor",
+            "x": 37,
+            "y": 149.09375,
+            "width": 209.0625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Abrir reproductor desde minirreproductor",
+            "x": 262.0625,
+            "y": 149.09375,
+            "width": 113.40625,
+            "height": 68,
+            "visible": true,
+            "hit": true
+          },
+          {
+            "text": "Licencias de terceros",
+            "x": 16,
+            "y": 328.09375,
+            "width": 338.0625,
+            "height": 38,
+            "visible": true,
+            "hit": true
+          }
+        ]
+      }
+    ],
+    "limits": [
+      "Chromium desktop sandbox with synthetic IDB WAV; not iPhone, VoiceOver, actual browser zoom, offline acceptance, final visual parity or complete T8/P0.",
+      "200% uses font-size, not browser zoom.",
+      "Async gates are test-build-only wrappers around real APIs. Mini artwork deliberately says Portada sin cargar.",
+      "No broad T18 benchmark repeated.",
+      "Desktop text-size approximation and layout only: no on-screen keyboard, positive physical safe-area inset, hardware zoom, iPhone or VoiceOver acceptance. Existing CSS safe-area env reservations retained.",
+      "Owner cancellation uses test-only proof replacement; no new broad handoff/uncertain-operation fault suite. Normal real local batch finishes with zero pending activity."
+    ],
+    "validation": {
+      "typecheck": "npm run typecheck",
+      "lint": "npm run lint",
+      "unit": "node_modules/.bin/tsx --test tests/unit/shell-selectors.test.ts tests/unit/pagination.test.ts tests/unit/groups.test.ts tests/unit/player.test.ts tests/unit/ownership.test.ts",
+      "unitLog": ".local/shell-layout-focus-unit.log",
+      "tests": 31,
+      "typecheckLog": ".local/shell-layout-focus-typecheck.log",
+      "lintLog": ".local/shell-layout-focus-lint.log",
+      "unitPassed": true,
+      "logs": {
+        ".local/shell-layout-focus-unit.log": "3eae179c359aa08dce27306d932b88a8ddd50f80cd0bbd20f833b1696d4f0263",
+        ".local/shell-layout-focus-typecheck.log": "9c3d1e1b04daef5ef7378ddbf921f0c204668897c69198e8ebeaf9cb185a9314",
+        ".local/shell-layout-focus-lint.log": "9115c612f4c31d6ab637706d69432895db03337b27fb395cca045cdacbcb168b"
+      }
+    },
+    "source": ".local/evidence/shell-layout-focus.json",
+    "shortWindows": "Mini flows normally at max-height480px; remains fixed with measured reserves elsewhere",
+    "focus": "Interaction generation cancels stale open/back/create and navigation scroll callbacks; route/owner/proof and unmount also invalidate"
+  },
+  "finalBuildChecks": {
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "unitPassed": 22,
+    "unitCommand": "npx tsx --test tests/unit/shell-selectors.test.ts tests/unit/pagination.test.ts tests/unit/groups.test.ts tests/unit/ownership.test.ts tests/unit/third-party-notices.test.ts",
+    "unitLog": ".local/evidence/shell-release-unit.tap",
+    "build": "PASS",
+    "keyboard": {
+      "passed": true,
+      "iphoneVerified": false,
+      "cases": [
+        {
+          "name": "Enter prepares a paused queue and plays; Space pauses the sole audio element",
+          "passed": true
+        },
+        {
+          "name": "Keyboard slider changes position without autoplay; repeat and shuffle update through native keyboard controls",
+          "passed": true
+        },
+        {
+          "name": "Keyboard next/reorder/remove preserves selected occurrence, source and all library tracks",
+          "passed": true
+        },
+        {
+          "name": "Keyboard opens/closes lyrics and saves inert plain text without changing audio source",
+          "passed": true
+        },
+        {
+          "name": "Keyboard metadata save preserves current playback source and library size",
+          "passed": true
+        },
+        {
+          "name": "Keyboard export/download works; restore confirmation receives focus and Escape cancels confirmation without applying",
+          "passed": true
+        }
+      ],
+      "environment": "Chromium Linux sandbox, temporary loopback, own context, current production build",
+      "limits": [
+        "Targeted controls are focused explicitly before keyboard activation; not a complete Tab-order audit",
+        "Files supplied through the automation file input; OS picker not tested",
+        "No VoiceOver, real zoom or physical iPhone evidence"
+      ],
+      "browserVersion": "154.0.8037.57",
+      "pageErrors": 0,
+      "externalRequests": 0
+    },
+    "licensesOffline": {
+      "passed": true,
+      "iphoneVerified": false,
+      "cases": [
+        {
+          "name": "Production notice preserves all original package byte ranges and recorded SHA-256",
+          "passed": true
+        },
+        {
+          "name": "Release exposes the complete notice through the visible first-party link",
+          "passed": true
+        },
+        {
+          "name": "Shell and notice reopen offline with the loopback origin stopped; notice is served by SW with the same SHA-256",
+          "passed": true
+        }
+      ],
+      "environment": "Chromium Linux sandbox, own context and ephemeral loopback",
+      "packages": 17,
+      "noticeSHA256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88",
+      "browserVersion": "154.0.8037.57",
+      "offlineDiagnostic": {
+        "fromServiceWorker": true,
+        "headers": {
+          "cache-control": "no-cache",
+          "connection": "keep-alive",
+          "content-encoding": "gzip",
+          "content-type": "text/plain",
+          "date": "Sat, 31 Oct 2026 11:49:57 GMT",
+          "etag": "W/\"19833-1793447337696\"",
+          "keep-alive": "timeout=5",
+          "last-modified": "Sat, 31 Oct 2026 11:48:57 GMT",
+          "transfer-encoding": "chunked",
+          "vary": "Origin"
+        },
+        "protocolBodyBytes": 19830,
+        "originalBytes": 19833
+      },
+      "offlineRaw": {
+        "bytes": 19833,
+        "sha256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88"
+      },
+      "noticeTextMatches": true,
+      "pageErrors": 0,
+      "externalRequests": 0
+    },
+    "liveUpdate": {
+      "passed": true,
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57",
+      "result": {
+        "newVersionBypassesOldShell": true,
+        "stableLauncherSelectsCurrentBuild": true,
+        "waitingBeforeClosingClients": true,
+        "oldStillPlaying": true,
+        "newIsPaused": true,
+        "activatedAfterClientClosure": true,
+        "restoredPaused": true
+      }
+    }
+  },
+  "additionalStorageRegression": {
+    "phase": "r3 before r5 layout/focus-only correction",
+    "result": {
+      "passed": true,
+      "environment": "Chromium Linux sandbox, ephemeral loopback, isolated product test build",
+      "backend": "opfs",
+      "transport": "sw",
+      "iphoneVerified": false,
+      "cases": [
+        {
+          "name": "A/B/A with missing B preserves second A, position, repeat and filtered shuffle",
+          "passed": true,
+          "offlineAndRanges": {
+            "range": {
+              "status": 206,
+              "bytes": [
+                73,
+                68
+              ],
+              "contentRange": "bytes 0-1/132832",
+              "head": 200,
+              "headBytes": 0,
+              "invalid": 416
+            },
+            "reopenedPausedWithoutNetwork": true,
+            "manualOfflinePlayback": true
+          }
+        }
+      ],
+      "browserVersion": "154.0.8037.57"
+    },
+    "limit": "Context offline/reload, no browser restart or stopped server for this media case"
+  },
+  "privateHTTPS": {
+    "passed": true,
+    "iphoneVerified": false,
+    "environment": "Chromium desktop private HTTPS, fresh context",
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "oneEngine": true,
+      "transport": "bounded-blob",
+      "violations": [],
+      "localBatchComplete": true,
+      "localLyricsReady": true,
+      "organizationRoundtrip": true,
+      "stableLauncher": true,
+      "thirdPartyNotices": {
+        "verified": true,
+        "packages": 17,
+        "sha256": "35ce28463b5f034f410bfa2df6803d90dba4b8dd5571b14adcff1e5b56749e88"
+      },
+      "functionalShell": {
+        "homeRecentVisible": true,
+        "openAndReturnFocus": true,
+        "routeFiltersPreserved": true,
+        "miniUsesExistingEngine": true,
+        "navigationPreservesPlayingSource": true
+      },
+      "explicitHandoff": {
+        "requestedWithoutPausing": true,
+        "oldAudioUnloaded": true,
+        "newOwnerRestoredPaused": true,
+        "newOwnerPlaysAfterGesture": true,
+        "onlyOneTabPlaying": true
+      }
+    }
+  },
+  "delivery": {
+    "version": 1,
+    "entry": "/releases/d49e87f072e4c51b.html",
+    "copiedFiles": 33,
+    "retainedOldAssets": true,
+    "indexSHA256": "d49e87f072e4c51b15936e111c5c05d6314a962dc48fbb3a23e9b4e5fb076107",
+    "swSHA256": "f9081e8ed7fda953a4cfa45547d622e83716804bda78f1c9c8fba04285dd5496",
+    "lockSHA256": "6f78604135ebfa41897164dcdc226a2d874e99fe10d4812a9cf66d53c360207f"
+  },
+  "sourceSHA256": {
+    "src/main.tsx": "2da64b6f8a6d5d63a610908e3e8117f6500d81e3fb313eb3dc38c4d7f98b3f7e",
+    "src/style.css": "e7972e05db5c1064b1bfb37d88fb613b066d69de22199a126b6ca7a9cb33dd02",
+    "src/library/shell-selectors.ts": "d7da516849e184e053187ccd63fb0f27162e484b5246f0447746cb7f70dc875b",
+    "src/ui/HomeView.tsx": "2a659e1a36a0ea62d13ecf335fe91389532355a19cc2a59fc96ef61f536dae12",
+    "src/ui/MiniPlayer.tsx": "546b7d12ae007c329c23083e462c9e10b903c479ecb4a5ca49213ed890a5c9fb",
+    "src/ui/shell.css": "e3b24369233dc73fcbddf7ef43a651f8463ec866d3a7d62f5554573176990247",
+    "src/ui/LibraryPagination.tsx": "5200004d51822f5a7144a5196679ee8bc487fc2d9d0832b6729cf8ebe2f04494"
+  },
+  "limits": [
+    "Default destination remains Biblioteca in this increment; Inicio is functional when selected",
+    "Mini shows Portada sin cargar; actual cover reading in mini remains pending",
+    "Nonmodal Player remains mounted; opening/return is focus and scroll, not a separate audio surface",
+    "View contexts retained in memory for session, not persisted navigation across reload",
+    "No physical iPhone, VoiceOver, actual zoom or positive physical safe-area test",
+    "Private gateway uses bounded Blob; private offline and large-file transport still pending",
+    "No Telegram client/session/network, external lyrics provider or new account activated",
+    "T8/P0-W and applicable final gates not complete"
+  ],
+  "commands": [
+    "npm run typecheck",
+    "npm run lint",
+    "npm run build",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-functional-shell.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-shell-layout-focus.mjs",
+    "PULSO_QUALITY_PRODUCT=1 INSTABOX_HEADLESS=1 node tests/integration/check-web-keyboard.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-license-delivery.mjs",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-live-update.mjs",
+    "python3 scripts/update_review_release.py",
+    "INSTABOX_HEADLESS=1 node tests/integration/check-private-artwork.mjs"
+  ]
+}

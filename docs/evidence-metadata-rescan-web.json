@@ -1,0 +1,28 @@
+{
+  "project": "Pulso-Web",
+  "scope": "Individual explicit local metadata rescan and first-use opening correction",
+  "status": "FOCAL_WEB_DELIVERED_NOT_P0_ACCEPTANCE",
+  "entry": "/releases/8cfb8eb02744ca5c.html",
+  "parentReceipt": ".local/evidence/metadata-rescan-delivery-parent-verification.json",
+  "sourceReadbackFiles": 131,
+  "phases": {
+    "R71": "10 browser groups / 2 unit groups; historical core source",
+    "R72": "11 product groups; historical f22 + final root UI",
+    "R75": "focus and terminal fixed; 6 neighbors including one explicitly TESTONLY deferred callback",
+    "R76_R77": "6 delta groups + 5 independent probes; own-abort classification/primary cause/commit winner preserved",
+    "R79_R80": "8 groups (7 native + fresh product IDB/OPFS) and 4 independent probes; request-local existing open",
+    "production": "2 asset backends, 6 keyboard groups, 3 license groups, normal update from c44 PASS",
+    "privateHTTPS": "explicit local rescan no-change while source plays, backup v2, local batch/lyrics/artwork, exact individual export and two-tab handoff PASS"
+  },
+  "limits": [
+    "Separate source stages are not one aggregate suite",
+    "Declared file tags are not provider validation or musical authenticity",
+    "Rescan explicit per track <=8MiB, only localAlbum fields; no editor/provider/bulk scan",
+    "Private bounded Blob 8MiB/file and 24MiB/queue; private offline not demonstrated",
+    "iPhone, VoiceOver, real zoom and complete P0-W acceptance pending",
+    "Copy removal still design only; no real file deletion"
+  ],
+  "USD": 0,
+  "iPhone": "APLAZADO/PENDIENTE",
+  "P0Complete": false
+}

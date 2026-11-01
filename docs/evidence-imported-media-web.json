@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "archivo importado completo e íntegro",
+      "pass": true
+    },
+    {
+      "name": "bytes=0-1",
+      "pass": true
+    },
+    {
+      "name": "bytes=-3",
+      "pass": true
+    },
+    {
+      "name": "bytes=3-",
+      "pass": true
+    },
+    {
+      "name": "bytes=EOF-",
+      "pass": true
+    },
+    {
+      "name": "HEAD sin cuerpo",
+      "pass": true
+    }
+  ],
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+}
