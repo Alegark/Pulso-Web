@@ -1,8 +1,8 @@
 {
   "project": "Pulso-Web",
-  "status": "CANDIDATE_CHECKS_PASS_REVIEW_PENDING_NOT_DELIVERED",
+  "status": "DELIVERED_WEB_INCREMENT_NOT_P0_ACCEPTANCE",
   "candidate": "/releases/b88da5c9b1ea9b8c.html",
-  "delivered": false,
+  "delivered": true,
   "sourceReadbackFiles": 133,
   "stages": {
     "R81": {
@@ -23,7 +23,9 @@
       "labelledTestObservations": 10
     },
     "R85": {
-      "review": "PENDING"
+      "review": "limited favorable",
+      "ownProbes": 6,
+      "browser": "Chromium156 native shared preview; synthetic bundles/guards, actual registry/Player"
     }
   },
   "checks": {
@@ -61,11 +63,14 @@
   "limits": [
     "No copy removal implemented or authorized by this prerequisite",
     "Physical iPhone/Safari acceptance deferred",
-    "No private HTTPS/offline check for this candidate yet",
     "Asset offline test keeps its loopback server running; license shell test stops its origin",
     "No aggregate sum of historical and final cases",
-    "No heap or sustained physical audio guarantee"
+    "No heap or sustained physical audio guarantee",
+    "Private HTTPS smoke PASS, bounded Blob8MiB/file24MiB/queue; private offline remains unproven"
   ],
   "USD": 0,
-  "fullProjectAccepted": false
+  "fullProjectAccepted": false,
+  "reviewR85": "FAVORABLE_LIMITED",
+  "privateSmoke": "PASS",
+  "parentReceipt": ".local/evidence/source-protection-delivery-parent-verification.json"
 }

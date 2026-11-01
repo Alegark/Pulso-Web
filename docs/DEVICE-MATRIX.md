@@ -163,3 +163,8 @@ Chromium154/Linux/sandbox: R72 producto11 PASS, R75 foco/terminal seis vecinos P
 Build final: tipos/lint/build, assets IDB/OPFS+ranges/HEAD/403/SWrestart/reapertura Chromium offline (servidor assets no apagado), teclado6, licencias3 con origen detenido y update c44→8cfb tras cierre normal PASS. Acceso HTTPS existente actualizado35 archivos y smoke propio PASS, revisión local explícita mientras suena/backupv2/exportación exacta/handoff nuevo pausado. Transporte privado Blob8MiB/archivo24MiB/cola, offline privado no demostrado. Recibo .local/evidence/metadata-rescan-delivery-parent-verification.json.
 
 iPhone/Safari/Chrome/Inicio, VoiceOver, zoom real, 10 pistas/30min bloqueados y remoto: APLAZADOS/PENDIENTES, sin nuevos PASS físicos. Fuente200% de escritorio no demuestra zoom iOS. P0-W no completo. USD0.
+
+
+### 2026-11-01 · Fuentes físicas y cola protegida, entrega web b88
+
+`b88da5c9b1ea9b8c` entregado al mismo acceso privado autorizado tras R81/R82 y R83/R85 favorables limitados, R84 doce grupos y checks de producto de transporte, teclado, licencias y actualización normal8cfb→b88. Smoke HTTPS propio PASS, sin iPhone físico. Fuentes registradas por generación y pending/retained explícitos; no retirada implementada. Transporte privado Blob8/24MiB y offline privado pendiente. Evidencia y etapas separadas en `docs/evidence-source-protection-web.json`; siguiente reserva R86 aún en desarrollo, no aceptación P0/T12.

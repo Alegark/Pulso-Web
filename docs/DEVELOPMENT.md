@@ -122,3 +122,8 @@ En una fila, Revisar datos del archivo abre el panel; Revisar archivo local veri
 R72 producto11, R75 foco6, R76 cancelación6/R77 revisión5 y R79 primer uso8/R80 revisión4 son etapas separadas, con sus fuentes; no una suite agregada. Root tipo/lint/build y assets2/teclado6/licencias3/update normal PASS. El runner browser también supera su comprobación TS estricta tras dos ajustes de tipos separados de producto. Misma copia HTTPS actualizada35 archivos y smoke explícito no-change/audio conservado PASS. Evidencia docs/evidence-metadata-rescan-web.json. La API nueva openExistingDatabase no crea/migra ni instala un guard global: evita vetar la inicialización de otros callers. No editar el esquema ni el histórico para resolver incertidumbre.
 
 Quedan el alcance P0-W restante, retirada segura de copias —todavía diseño—, SDK/Telegram/proveedores bajo sus gates y aceptación física. LRCLIB sigue disabled. USD0; offline privado y iPhone no aceptados.
+
+
+### 2026-11-01 · Fuentes físicas y cola protegida, entrega web b88
+
+`b88da5c9b1ea9b8c` entregado al mismo acceso privado autorizado tras R81/R82 y R83/R85 favorables limitados, R84 doce grupos y checks de producto de transporte, teclado, licencias y actualización normal8cfb→b88. Smoke HTTPS propio PASS, sin iPhone físico. Fuentes registradas por generación y pending/retained explícitos; no retirada implementada. Transporte privado Blob8/24MiB y offline privado pendiente. Evidencia y etapas separadas en `docs/evidence-source-protection-web.json`; siguiente reserva R86 aún en desarrollo, no aceptación P0/T12.
