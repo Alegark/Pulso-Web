@@ -6,6 +6,8 @@ import {applyOrganization, exportOrganization, inspectOrganizationApply, startOr
 export interface OrganizationPanelProps {
   activity: Activity;
   canWrite: boolean;
+  /** Capture root admission during render; a retained callback keeps that epoch. */
+  captureWriteCurrent?: () => () => boolean;
   beginDiagnostic?: BeginPanelDiagnostic;
   onStatus: (message: string) => void;
   onCommitted: (attempt?:PanelDiagnosticAttempt) => Promise<void>;
@@ -45,7 +47,7 @@ function messageFor(error: unknown): string {
   }
 }
 
-export function OrganizationPanel({activity, canWrite, onStatus, onCommitted, beginDiagnostic}: OrganizationPanelProps) {
+export function OrganizationPanel({activity, canWrite, captureWriteCurrent, onStatus, onCommitted, beginDiagnostic}: OrganizationPanelProps) {
   const [phase, setPhase] = useState<'draft' | 'preview' | 'confirm' | 'apply'>('draft');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<OrganizationPreview | null>(null);
@@ -66,7 +68,12 @@ export function OrganizationPanel({activity, canWrite, onStatus, onCommitted, be
   const url = useRef<string | null>(null);
   const callbacks = useRef({onStatus, onCommitted});
   callbacks.current = {onStatus, onCommitted};
-  const allowed=useRef(canWrite);allowed.current=canWrite;
+  const allowed=useRef(canWrite),admission=useRef(0);
+  if(allowed.current!==canWrite){allowed.current=canWrite;++admission.current;}
+  const admissionRevision=admission.current,activityScope=activity.scope();
+  let writeGuard:()=>boolean;
+  try{writeGuard=captureWriteCurrent?.()??(()=>true);}catch{writeGuard=()=>false;}
+  const writeCurrent=()=>{try{return mounted.current&&canWrite&&allowed.current&&admissionRevision===admission.current&&activity.admitted&&activityScope()&&writeGuard();}catch{return false;}};
   const action=useRef(0);
   function begin(operation:PanelOperation,current:()=>boolean):PanelDiagnosticAttempt|null {
     // Keep the exact capability: main owns its identity in a private WeakMap.
@@ -92,11 +99,11 @@ export function OrganizationPanel({activity, canWrite, onStatus, onCommitted, be
     try { await callbacks.current.onCommitted(attempt??undefined); } catch { if(current())report('La organización se restauró, pero no se pudo actualizar la vista.'); }
   }
   async function makePreview(selected: File, nextChoices: Record<string, OrganizationChoice>) {
-    if (!canWrite || busy.current) return;
+    if (!writeCurrent() || busy.current) return;
     const operationToken = activity.begin(); if (!operationToken) return;
     const token = ++generation.current,sequence=++action.current;
     const ownsState=()=>mounted.current&&token===generation.current&&sequence===action.current&&currentFile.current===selected;
-    const current=()=>allowed.current&&operationToken.current()&&ownsState();
+    const current=()=>writeCurrent()&&operationToken.current()&&ownsState();
     const attempt=begin('preview-organization',current);
     setPreview(null); setPhase('draft'); setError(''); setPending(true);
     try {
@@ -107,10 +114,10 @@ export function OrganizationPanel({activity, canWrite, onStatus, onCommitted, be
     finally { finish(attempt); if(ownsState())setPending(false); operationToken.end(); }
   }
   async function exportFile() {
-    if (!canWrite || busy.current || pending || operation) return;
+    if (!writeCurrent() || busy.current || pending || operation) return;
     const operationToken = activity.begin(); if (!operationToken) return;
     const sequence=++action.current,gen=generation.current,selected=currentFile.current;
-    const current=()=>allowed.current&&operationToken.current()&&mounted.current&&sequence===action.current&&gen===generation.current&&selected===currentFile.current;
+    const current=()=>writeCurrent()&&operationToken.current()&&mounted.current&&sequence===action.current&&gen===generation.current&&selected===currentFile.current;
     const attempt=begin('export-organization',current);
     busy.current = true; setPending(true); setError('');
     try {
@@ -123,10 +130,10 @@ export function OrganizationPanel({activity, canWrite, onStatus, onCommitted, be
     finally { finish(attempt); operationToken.end(); busy.current = false; if (mounted.current) setPending(false); }
   }
   async function apply() {
-    if (!canWrite || !preview || !preview.canApply || busy.current || pending || operation) return;
+    if (!writeCurrent() || !preview || !preview.canApply || busy.current || pending || operation) return;
     const operationToken = activity.begin(); if (!operationToken) return;
     const sequence=++action.current,gen=generation.current,selected=currentFile.current;
-    const current=()=>allowed.current&&operationToken.current()&&mounted.current&&sequence===action.current&&gen===generation.current&&selected===currentFile.current;
+    const current=()=>writeCurrent()&&operationToken.current()&&mounted.current&&sequence===action.current&&gen===generation.current&&selected===currentFile.current;
     const attempt=begin('apply-organization',current);
     busy.current = true; const active = new AbortController(); controller.current = active;
     activity.block('backup-uncertain', true);
@@ -145,10 +152,10 @@ export function OrganizationPanel({activity, canWrite, onStatus, onCommitted, be
     } finally { finish(attempt); operationToken.end(); controller.current = null; busy.current = false; if (mounted.current) { setPending(false); setCancelling(false); } }
   }
   async function inspect() {
-    if (!canWrite || !operation || busy.current || pending) return;
+    if (!writeCurrent() || !operation || busy.current || pending) return;
     const operationToken = activity.begin(); if (!operationToken) return;
     const sequence=++action.current,gen=generation.current,selected=currentFile.current;
-    const current=()=>allowed.current&&operationToken.current()&&mounted.current&&sequence===action.current&&gen===generation.current&&selected===currentFile.current;
+    const current=()=>writeCurrent()&&operationToken.current()&&mounted.current&&sequence===action.current&&gen===generation.current&&selected===currentFile.current;
     const attempt=begin('inspect-organization',current);
     busy.current = true; setPending(true); setError(''); setCanRecover(false); setConfirmRecovery(false);
     try {
@@ -167,10 +174,10 @@ export function OrganizationPanel({activity, canWrite, onStatus, onCommitted, be
     finally { finish(attempt); operationToken.end(); busy.current = false; if (mounted.current) setPending(false); }
   }
   async function recover() {
-    if (!operation || !canRecover || !confirmRecovery || busy.current || pending || !canWrite) return;
+    if (!operation || !canRecover || !confirmRecovery || busy.current || pending || !writeCurrent()) return;
     const operationToken = activity.begin(); if (!operationToken) return;
     const sequence=++action.current,gen=generation.current,selected=currentFile.current;
-    const current=()=>allowed.current&&operationToken.current()&&mounted.current&&sequence===action.current&&gen===generation.current&&selected===currentFile.current;
+    const current=()=>writeCurrent()&&operationToken.current()&&mounted.current&&sequence===action.current&&gen===generation.current&&selected===currentFile.current;
     const attempt=begin('recover-organization',current);
     busy.current = true; setPending(true);
     try {
@@ -201,6 +208,7 @@ export function OrganizationPanel({activity, canWrite, onStatus, onCommitted, be
     <button type="button" disabled={!canWrite || blocked} onClick={() => void exportFile()}>Preparar exportación</button>
     {download && <p><a href={download} download="pulso-organizacion.json">Descargar organización</a></p>}
     <label>Importar organización <input type="file" accept="application/json,.json" disabled={!canWrite || blocked} onChange={event => {
+      if(!writeCurrent()||busy.current||pending||operation)return;
       const selected = event.currentTarget.files?.[0] ?? null; currentFile.current = selected; ++generation.current;
       setFile(selected); setPreview(null); setChoices({}); setPhase('draft'); setError('');
       if (!selected) return;
@@ -213,7 +221,7 @@ export function OrganizationPanel({activity, canWrite, onStatus, onCommitted, be
     {operation && phase !== 'apply' && <div><p>El resultado de una restauración está pendiente de comprobación.</p><button type="button" disabled={pending} onClick={() => void inspect()}>Comprobar resultado</button></div>}
     {canRecover && operation && <div>
       <p>El seguimiento anterior puede abandonarse para restaurar en este almacenamiento. Su resultado seguirá desconocido; no se repetirá el plan anterior ni se borrarán canciones.</p>
-      {!confirmRecovery ? <button type="button" disabled={pending || !canWrite} onClick={() => {if(!activity.admitted)return;activity.block('backup-confirm',true);setConfirmRecovery(true);}}>Restaurar en este almacenamiento</button> : <div>
+      {!confirmRecovery ? <button type="button" disabled={pending || !canWrite} onClick={() => {if(!writeCurrent()||busy.current||pending)return;activity.block('backup-confirm',true);setConfirmRecovery(true);}}>Restaurar en este almacenamiento</button> : <div>
         <p>Confirma que quieres abandonar el seguimiento anterior y preparar una restauración nueva.</p>
         <button type="button" disabled={pending || !canWrite} onClick={() => void recover()}>Confirmar abandono del seguimiento</button>
         <button type="button" disabled={pending} onClick={() => setConfirmRecovery(false)}>Volver al seguimiento</button>
@@ -230,12 +238,12 @@ export function OrganizationPanel({activity, canWrite, onStatus, onCommitted, be
         <p>{conflict.entity === 'track' ? 'Canción' : 'Lista'}: local «{conflict.localLabel}»; copia «{conflict.backupLabel}».</p>
         {conflict.losesLocalAlbum&&<p>{conflict.choice==='use-backup'?'Esta decisión retirará':'Elegir «Usar copia» retirará'} los datos de disco, pista y artista del álbum conservados localmente, porque esta copia no los contiene. «Conservar local» los mantiene.</p>}
         <select aria-label={`Decisión para ${conflict.entity === 'track' ? 'canción' : 'lista'} ${index + 1}: ${conflict.localLabel}`} value={conflict.choice} disabled={!canWrite || blocked || phase === 'confirm'} onChange={event => {
-          if (!file) return;
+          if (!writeCurrent()||busy.current||pending||operation||phase==='confirm'||!file) return;
           const next = {...choices, [conflict.key]: event.currentTarget.value as OrganizationChoice};
           setChoices(next); void makePreview(file, next);
         }}><option value="keep-local">Conservar local</option><option value="use-backup">Usar copia</option></select>
       </li>)}</ul>}
-      {phase === 'preview' && <button type="button" disabled={!canWrite || blocked || !preview.canApply} onClick={() => {if(!activity.admitted)return;activity.block('backup-confirm',true);setPhase('confirm');}}>Aplicar organización</button>}
+      {phase === 'preview' && <button type="button" disabled={!canWrite || blocked || !preview.canApply} onClick={() => {if(!writeCurrent()||busy.current||pending||operation||!preview.canApply)return;activity.block('backup-confirm',true);setPhase('confirm');}}>Aplicar organización</button>}
       {phase === 'confirm' && <div onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setPhase('preview'); } }}>
         <p ref={confirmRef} tabIndex={-1}>Confirma la restauración con las decisiones mostradas. Los datos locales ajenos a la copia se conservan.</p>
         <button type="button" disabled={!canWrite || blocked} onClick={() => void apply()}>Confirmar restauración</button>
