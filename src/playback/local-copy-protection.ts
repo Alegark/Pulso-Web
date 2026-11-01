@@ -17,6 +17,14 @@ export interface ProtectionSnapshot {
 }
 declare const captureBrand:unique symbol;
 export interface ProtectionCapture {readonly [captureBrand]:true}
+declare const reservationBrand:unique symbol;
+export interface SourceReservation {
+ readonly [reservationBrand]:true;
+ current():boolean;
+ release():void;
+}
+export type SourceReservationBlockedReason='reservation-active'|'invalid-target'|'invalid-capture'|'queue-pending'|'runtime-unknown'|'player-current'|'player-prepared'|'source-retained';
+export type SourceReservationResult={readonly kind:'reserved';readonly reservation:SourceReservation}|{readonly kind:'blocked';readonly reason:SourceReservationBlockedReason};
 export interface SourcePreparation {
  setPlanned(trackIds:readonly string[]):boolean;
  /** Takes ownership even when stale, so settle can clean this exact bundle. */
@@ -42,6 +50,13 @@ export function createLocalCopyProtection(host:{getPlayer():ProtectionPlayer;cap
  const owned=new WeakSet<PreparedLocalSources>();
  const captures=new WeakMap<ProtectionCapture,{serial:number;epoch:number;current:()=>boolean}>();
  const changed=()=>{++serial;};
+ // Occupancy survives invalidation until the owning attempt settles and releases.
+ // Scope close is never permission for another attempt to take over.
+ let reservation:object|null=null;
+ const rootGuard=()=>{try{return host.captureCurrent();}catch{return()=>false;}};
+ const hasReservation=()=>reservation!==null;
+ // Root must query synchronously before pause, Activity.begin or any await.
+ const canPrepare=()=>!hasReservation()&&safe(rootGuard());
  function observePlayer(){
   const player=host.getPlayer();
   // Order, titles, time, repeat and shuffle do not change resource identity.
@@ -69,15 +84,17 @@ export function createLocalCopyProtection(host:{getPlayer():ProtectionPlayer;cap
   await Promise.all([...bundles].filter(b=>!held.has(b)).map(release));
  }
  function beginPreparation(trackIds:readonly string[],current:()=>boolean):SourcePreparation {
-  const rootCurrent=host.captureCurrent();
+  const rootCurrent=rootGuard(),admitted=!hasReservation();
   const record:PreparationRecord={trackIds:copyIds(trackIds),planned:false,current:()=>safe(current)&&safe(rootCurrent),epoch,bundle:null,published:false,settled:false,settlement:null};
-  pending.add(record);changed();
-  const live=()=>!record.settled&&record.epoch===epoch&&safe(record.current);
+  if(admitted){pending.add(record);changed();}
+  const live=()=>admitted&&!hasReservation()&&!record.settled&&record.epoch===epoch&&safe(record.current);
   return Object.freeze({
    setPlanned(ids:readonly string[]){if(!live()||record.bundle)return false;record.trackIds=copyIds(ids);record.planned=true;changed();return true;},
    stage(bundle:PreparedLocalSources,entries:readonly SourceEntry[]){
     if(record.bundle||record.settled||owned.has(bundle))throw new Error('Bundle ownership already assigned');
     owned.add(bundle);
+    // A denied producer may still deliver: retain cleanup ownership, never publish.
+    pending.add(record);
     // Copy the transport snapshot, never re-read the database after issuance.
     const sources=Object.freeze(bundle.sources.map(source=>{
      const asset:Readonly<LocalAsset>|null=source.protection==='pinned'?copySourceAsset(source.asset):null;
@@ -99,18 +116,18 @@ export function createLocalCopyProtection(host:{getPlayer():ProtectionPlayer;cap
    },
    settle(){
     if(record.settlement)return record.settlement;
-    record.settled=true;changed();
+    record.settled=true;if(pending.has(record))changed();
     record.settlement=(async()=>{
      if(!record.published&&record.bundle)await release(record.bundle);
      await releaseUnused();
-     pending.delete(record);changed();
+     if(pending.delete(record))changed();
     })();return record.settlement;
    },
   });
  }
  function getReadonlySnapshot():ProtectionSnapshot {
   observePlayer();
-  const player=host.getPlayer(),scopeCurrent=safe(host.captureCurrent());
+  const player=host.getPlayer(),scopeCurrent=safe(rootGuard());
   let unknown=!scopeCurrent;
   const matched=new Set<string>(),prepared:ProtectedOccurrence[]=[];let current:ProtectedOccurrence|null=null;
   for(const entry of player.entries){
@@ -134,13 +151,48 @@ export function createLocalCopyProtection(host:{getPlayer():ProtectionPlayer;cap
  }
  function capture():ProtectionCapture {
   observePlayer();const token=Object.freeze(Object.create(null)) as ProtectionCapture;
-  captures.set(token,{serial,epoch,current:host.captureCurrent()});return token;
+  captures.set(token,{serial,epoch,current:rootGuard()});return token;
  }
  function inspect(token:ProtectionCapture):ProtectionSnapshot|null {
   const saved=captures.get(token);if(!saved)return null;
   const snapshot=getReadonlySnapshot();
   return saved.serial===serial&&saved.epoch===epoch&&safe(saved.current)&&snapshot.scopeCurrent?snapshot:null;
  }
+ /** Only document-local exclusion, never authority to remove bytes. The caller
+  * retains this handle until its own attempt has fully settled, including after
+  * current() becomes false. No invalidation implicitly releases occupancy. */
+ function reserve(token:ProtectionCapture,target:Readonly<LocalAsset>):SourceReservationResult {
+  const blocked=(reason:SourceReservationBlockedReason):SourceReservationResult=>Object.freeze({kind:'blocked',reason});
+  if(hasReservation())return blocked('reservation-active');
+  const asset=copySourceAsset(target);if(!asset)return blocked('invalid-target');
+  let snapshot:ProtectionSnapshot|null;
+  try{snapshot=inspect(token);}catch{return blocked('invalid-capture');}
+  if(!snapshot)return blocked('invalid-capture');
+  if(snapshot.pending.length)return blocked('queue-pending');
+  if(snapshot.unknown)return blocked('runtime-unknown');
+  // Full snapshot validation above; collisions use physical identity, so changing
+  // revision/hash/id of the same storage generation never bypasses protection.
+  const physical=(source:PreparedLocalSource)=>source.protection==='pinned'&&source.asset.backend===asset.backend&&source.asset.storageKey===asset.storageKey;
+  if(snapshot.current&&physical(snapshot.current.source))return blocked('player-current');
+  if(snapshot.prepared.some(ref=>physical(ref.source)))return blocked('player-prepared');
+  if(snapshot.retainedSources.some(physical))return blocked('source-retained');
+  const guard=captures.get(token)!.current,identity=Object.freeze({asset}),savedEpoch=epoch;
+  reservation=identity;changed();const savedSerial=serial;
+  let released=false,invalid=false;
+  const handle=Object.freeze({
+   current(){
+    if(released||invalid||reservation!==identity)return false;
+    try{observePlayer();invalid=serial!==savedSerial||epoch!==savedEpoch||!safe(guard);}
+    catch{invalid=true;}
+    return !invalid;
+   },
+   release(){
+    if(released)return;released=true;
+    if(reservation===identity){reservation=null;changed();}
+   },
+  }) as SourceReservation;
+  return Object.freeze({kind:'reserved',reservation:handle});
+ }
  function invalidateScope(){++epoch;active=null;for(const b of bundles)b.retired=true;changed();}
- return Object.freeze({beginPreparation,observePlayer,getReadonlySnapshot,capture,inspect,invalidateScope,releaseUnused});
+ return Object.freeze({beginPreparation,observePlayer,getReadonlySnapshot,capture,inspect,reserve,hasReservation,canPrepare,invalidateScope,releaseUnused});
 }

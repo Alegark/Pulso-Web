@@ -107,3 +107,58 @@ test('root scope/proof/Activity/DB ABA guards never resurrect captures; scope re
  for(const invalidate of ['bumpScope','bumpProof','bumpDb','bumpActivity'] as const){const t=setup();const old=await t.install(['A']);const capture=t.registry.capture();t[invalidate]();t.setReady(false);t.setReady(true);assert.equal(t.registry.inspect(capture),null);assert.equal(old.b.calls,0);t.player.suspend();t.registry.invalidateScope();await t.registry.releaseUnused();assert.equal(old.b.calls,1);assert.equal(t.resources.size,0);}
  const t=setup();const h=t.registry.beginPreparation(['A'],()=>true);h.setPlanned(['A']);t.registry.invalidateScope();const b=t.bundle(['A']);assert.equal(h.stage(b.value,[{id:'e0',trackId:'A',src:b.value.sources[0].url}]),false);assert.equal(h.publish(),false);await h.settle();assert.equal(b.calls,1);
 });
+
+const reserve=(t:ReturnType<typeof setup>,id='Z')=>{
+ const result=t.registry.reserve(t.registry.capture(),asset(id));
+ assert.equal(result.kind,'reserved');if(result.kind!=='reserved')throw new Error(result.reason);return result.reservation;
+};
+test('R86 captures, closed targets and competing reservations fail closed',()=>{
+ const t=setup(),other=setup(),capture=t.registry.capture();
+ assert.equal(t.registry.reserve(other.registry.capture(),asset('Z')).kind,'blocked');
+ assert.equal(t.registry.reserve(JSON.parse(JSON.stringify(capture)),asset('Z')).kind,'blocked');
+ assert.equal(t.registry.reserve(capture,{...asset('Z'),revision:0}).kind,'blocked');
+ const h=reserve(t);assert.equal(h.current(),true);assert.equal(t.registry.inspect(capture),null);
+ assert.equal(t.registry.reserve(t.registry.capture(),asset('Y')).kind,'blocked');
+ assert.equal(t.registry.hasReservation(),true);assert.equal(t.registry.canPrepare(),false);
+ h.release();assert.equal(h.current(),false);assert.equal(t.registry.canPrepare(),true);
+});
+test('R86 physical identity blocks current, prepared and retained despite changed manifest',async()=>{
+ const t=setup();await t.install(['A','B','C']);
+ for(const [id,reason] of [['A','player-current'],['B','player-prepared']] as const){assert.deepEqual(t.registry.reserve(t.registry.capture(),{...asset(id),id:assetId('Z'),revision:2,sha256:'b'.repeat(64)}),{kind:'blocked',reason});}
+ t.player.removeFuture('e2');assert.deepEqual(t.registry.reserve(t.registry.capture(),{...asset('C'),revision:9}),{kind:'blocked',reason:'source-retained'});
+ const h=reserve(t);h.release();
+});
+test('R86 pending ANY blocks regardless of target; legacy/mismatch remain unknown',async()=>{
+ const t=setup(),p=t.registry.beginPreparation(['A'],t.captureCurrent());
+ assert.deepEqual(t.registry.reserve(t.registry.capture(),asset('Z')),{kind:'blocked',reason:'queue-pending'});
+ p.setPlanned(['A']);assert.equal(t.registry.reserve(t.registry.capture(),asset('Z')).kind,'blocked');await p.settle();
+ await t.install(['A'],t.bundle(['A'],undefined,true));assert.deepEqual(t.registry.reserve(t.registry.capture(),asset('Z')),{kind:'blocked',reason:'runtime-unknown'});
+ t.audio.src='blob:unregistered';assert.equal(t.registry.reserve(t.registry.capture(),asset('Z')).kind,'blocked');
+});
+test('R86 denied preparation adopts its own late bundle and never wins publication',async()=>{
+ const t=setup(),h=reserve(t),empty=t.registry.beginPreparation(['B'],t.captureCurrent());await empty.settle();assert.equal(h.current(),true);
+ const p=t.registry.beginPreparation(['A'],t.captureCurrent());
+ assert.equal(p.setPlanned(['A']),false);assert.equal(h.current(),true);
+ const b=t.bundle(['A']);assert.equal(p.stage(b.value,[{id:'late',trackId:'A',src:b.value.sources[0].url}]),false);assert.equal(p.publish(),false);
+ assert.equal(h.current(),false);assert.equal(t.registry.canPrepare(),false);
+ await p.settle();assert.equal(b.calls,1);assert.equal(t.resources.size,0);assert.equal(t.registry.hasReservation(),true);h.release();
+});
+test('R86 reservation survives scope invalidation conservatively and old release cannot ABA clear newer',()=>{
+ const t=setup(),old=reserve(t);t.registry.invalidateScope();assert.equal(old.current(),false);assert.equal(t.registry.hasReservation(),true);assert.equal(t.registry.canPrepare(),false);
+ assert.equal(t.registry.reserve(t.registry.capture(),asset('Y')).kind,'blocked');old.release();const fresh=reserve(t);old.release();assert.equal(fresh.current(),true);assert.equal(t.registry.hasReservation(),true);fresh.release();
+});
+test('R86 Player and root proof DB Activity epochs invalidate without reopening admission',async()=>{
+ for(const change of ['bumpScope','bumpProof','bumpDb','bumpActivity'] as const){const t=setup(),h=reserve(t);t[change]();assert.equal(h.current(),false);assert.equal(t.registry.canPrepare(),false);h.release();}
+ const t=setup();await t.install(['A','B']);const h=reserve(t);t.player.select(1);t.player.select(0);assert.equal(h.current(),false);assert.equal(t.registry.hasReservation(),true);h.release();
+});
+test('R86 ticks titles modes do not invalidate; release invalidates captures',async()=>{
+ const t=setup();await t.install(['A','B']);const h=reserve(t),capture=t.registry.capture();
+ for(let i=0;i<30;i++){t.audio.event('timeupdate');t.player.entries[0].title='Title';t.player.setRepeat('all');t.player.setShuffle(true,()=>0.5);}
+ assert.equal(h.current(),true);assert.ok(t.registry.inspect(capture));h.release();assert.equal(t.registry.inspect(capture),null);h.release();
+});
+test('R86 throwing root guards never authorize or reopen admission',()=>{
+ let throws=false;const r=createLocalCopyProtection({getPlayer:()=>({entries:[],currentEntryId:null,source:null}),captureCurrent:()=>{if(throws)throw new Error('root unavailable');return()=>{if(throws)throw new Error('guard unavailable');return true;};}});
+ const c=r.capture();throws=true;assert.equal(r.reserve(c,asset('Z')).kind,'blocked');assert.equal(r.canPrepare(),false);
+ throws=false;const result=r.reserve(r.capture(),asset('Z'));assert.equal(result.kind,'reserved');if(result.kind!=='reserved')return;
+ throws=true;assert.equal(result.reservation.current(),false);throws=false;assert.equal(result.reservation.current(),false);assert.equal(r.canPrepare(),false);result.reservation.release();
+});
