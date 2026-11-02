@@ -44,7 +44,7 @@ export function licenseGuard(){
 export function noticeArtifacts({root=projectRoot,packages=reviewedPackages}={}){
  // UTF-8 BOM keeps static text navigation readable even when the host omits charset.
  // Original package bytes remain unchanged at their recorded offsets.
- const chunks=[Buffer.from('\uFEFFPulso Web — avisos originales de dependencias de producción\n\nLos textos siguientes se conservan íntegros. Este archivo no incluye el SDK/WASM de preflight ni herramientas de desarrollo, que no se distribuyen en este build.\n\n')];
+ const chunks=[Buffer.from('\uFEFFPulso Web — avisos originales de dependencias de producción\n\nLos textos siguientes se conservan íntegros. Esta entrega incluye el SDK de acceso a Telegram y sus componentes WASM. Sus avisos compuestos se incluyen al final; fuentes y receta de sustitución en /telegram-sources.tar.gz.\n\n')];
  let offset=chunks[0].length;const entries=[];
  for(const record of packages){
   for(const {notice,bytes}of checkPackage(record,root)){

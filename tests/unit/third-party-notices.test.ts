@@ -7,14 +7,24 @@ import {createHash} from 'node:crypto';
 import {noticeArtifacts,reviewedPackages,verifyBundledModule,projectRoot} from '../../scripts/third-party-notices.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 test('all reviewed notices retain every original byte, copyright and conditions',()=>{
- const {text,manifest}=noticeArtifacts();assert.equal(manifest.packages.length,17);assert.equal(hash(text),manifest.sha256);
+ const {text,manifest}=noticeArtifacts();assert.equal(manifest.packages.length,26);assert.equal(hash(text),manifest.sha256);
  for(const row of manifest.packages){const expected=reviewedPackages.find(p=>p.name===row.name);const original=readFileSync(resolve(projectRoot,expected.noticeFiles[0].file));const slice=text.subarray(row.offset,row.offset+row.bytes);assert.deepEqual(slice,original);assert.equal(hash(slice),row.sha256);}
  assert.match(text.toString(),/Permission is hereby granted/);assert.match(text.toString(),/Redistribution and use in source and binary forms/);
- assert.equal(manifest.packages.some(p=>p.name.startsWith('@mtcute/')||p.name.includes('ffmpeg')),false);
+ assert.equal(manifest.packages.some(p=>p.name.includes('ffmpeg')),false);
+ for(const name of ['@mtcute/core','@mtcute/web','@mtcute/wasm','long'])assert.ok(manifest.packages.some(p=>p.name===name));
+ assert.match(text.toString(),/Apache License/);
 });
-test('module inventory guard permits current reviewed packages and rejects an unreviewed SDK',()=>{
+test('module inventory guard permits the reviewed SDK and still rejects unreviewed packages',()=>{
  verifyBundledModule(resolve(projectRoot,'node_modules/react/index.js'));verifyBundledModule('\0'+resolve(projectRoot,'node_modules/react/jsx-runtime.js')+'?commonjs-proxy');
- assert.throws(()=>verifyBundledModule(resolve(projectRoot,'node_modules/@mtcute/web/index.js')),/License review required before bundling/);
+ verifyBundledModule(resolve(projectRoot,'node_modules/@mtcute/web/index.js'));
+ assert.throws(()=>verifyBundledModule(resolve(projectRoot,'node_modules/@mtcute/web/index.js'),{packages:reviewedPackages.filter(p=>p.name!=='@mtcute/web')}),/License review required before bundling/);
+ assert.throws(()=>verifyBundledModule(resolve(projectRoot,'node_modules/@ffmpeg-installer/linux-x64/index.js')),/License review required before bundling/);
+});
+test('composite WASM source and original GPL/LGPL notices remain byte-exact',()=>{
+ const base=resolve(projectRoot,'vendor/telegram-wasm'),source=JSON.parse(readFileSync(resolve(base,'SOURCE-MANIFEST.json'),'utf8'));
+ for(const row of source.sourceFiles){const bytes=readFileSync(resolve(base,row.path));assert.equal(bytes.length,row.bytes);assert.equal(hash(bytes),row.sha256);}
+ assert.match(readFileSync(resolve(base,'PULSO-NOTICES.txt'),'utf8'),/GNU LESSER GENERAL PUBLIC LICENSE/);
+ assert.match(readFileSync(resolve(base,'packages/wasm/lib/crypto/COPYING.lesser'),'utf8'),/Version 3/);
 });
 test('changed package metadata or notice bytes stop generation and module bundling',()=>{
  const root=mkdtempSync(resolve(tmpdir(),'pulso-license-fixture-'));const name='own-fixture';const dir=resolve(root,'node_modules',name);mkdirSync(dir,{recursive:true});

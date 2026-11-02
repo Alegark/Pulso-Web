@@ -157,3 +157,10 @@ El runner amplio `check-queue-insertion-main.mjs` conserva helpers versionados y
 ## Fuente de audio exclusiva de Telegram
 
 La interfaz de producción ya no dispone de selector de audio ni muestras. `check-telegram-only-entry.mjs` valida el nuevo recorrido sin source transforms y con biblioteca anterior sintética sembrada en contexto aislado. `check-local-assets.mjs` usa ahora setup nativo IDB/OPFS para mantener las pruebas del transporte sin reintroducir el picker. El setup no prueba descarga Telegram ni importación. Los otros ejecutores históricos dependientes de `Importar audios` corresponden a versiones anteriores y requieren adaptación antes de usarse para aceptar la UI actual. No habilitar un selector oculto de producción para hacerlos pasar.
+
+
+## Acceso temporal a Telegram
+
+`npm run build` genera SDK worker, avisos compuestos y `telegram-sources.tar.gz`; no incorpora las claves API al build. Para el acceso de prueba privado se copia la configuración local con el helper explícito de `scripts/telegram-source.mjs`; nunca se incluye en Git o los manifiestos de hashes. `serve_review.py` aplica al worker de autenticación una CSP específica; los otros contextos mantienen su CSP anterior.
+
+Pruebas focales: `npx tsx --test tests/unit/telegram-session.test.ts tests/unit/player.test.ts tests/unit/queue-restore.test.ts tests/unit/third-party-notices.test.ts`; después de compilar, `INSTABOX_HEADLESS=1 node tests/integration/check-telegram-session.mjs`. Este runner requiere la configuración privada local para construir el SDK sin red y no es CI autónoma de un checkout sin ella. Las respuestas positivas de interfaz se sustituyen explícitamente por un worker sintético; los constructores de sockets se bloquean y la ausencia SW es explícita. Conserva audio nativo, organización y bytes propios, y comprueba foco sin robar una intención posterior. La actualización normal se prueba con `check-telegram-session-update.mjs`, una fixture propia y el baseline local congelado; no reintroduce un selector de audio. No acreditar una cuenta real con estas pruebas.

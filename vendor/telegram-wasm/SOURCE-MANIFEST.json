@@ -1,0 +1,214 @@
+{
+  "upstream": "https://github.com/mtcute/mtcute",
+  "commit": "c43258260e8ceddb0ad37720b043f6891b837e27",
+  "sourceFiles": [
+    {
+      "path": ".github/workflows/release.yaml",
+      "bytes": 1507,
+      "sha256": "8af8444b4035be3015a950c82f2c42c59568ff6b5b88325b15f7db06efcd9888"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1063,
+      "sha256": "0f9b6ce801d6a981c7224fc28ada8fdaab8540b4b8a5acec673db62092b97d27"
+    },
+    {
+      "path": "packages/wasm/README.md",
+      "bytes": 1126,
+      "sha256": "a0dd13da548ac559aa00d05a8e868c622a713e694fc9e499bbb285f23399c05d"
+    },
+    {
+      "path": "packages/wasm/build.config.js",
+      "bytes": 308,
+      "sha256": "6b435957d54dd4eda848460a386604abd9b2c637a8c598f4bc078fa585987322"
+    },
+    {
+      "path": "packages/wasm/lib/Dockerfile",
+      "bytes": 317,
+      "sha256": "152596da7a8b8a746f72beaa250b8ae26752b2410f8991fc380c6f36d651be9d"
+    },
+    {
+      "path": "packages/wasm/lib/Makefile",
+      "bytes": 1163,
+      "sha256": "2440a5eb483150f312780508f16f4bc54b666ac4fcec43112d1a7c305f11a15e"
+    },
+    {
+      "path": "packages/wasm/lib/crypto/COPYING.lesser",
+      "bytes": 7651,
+      "sha256": "a5681bf9b05db14d86776930017c647ad9e6e56ff6bbcfdf21e5848288dfaf1b"
+    },
+    {
+      "path": "packages/wasm/lib/crypto/aes256.c",
+      "bytes": 44316,
+      "sha256": "2c49bff7c22f0435fe457f19e8663da14a3dadbd950ef7294a9ed5b170b0f809"
+    },
+    {
+      "path": "packages/wasm/lib/crypto/aes256.h",
+      "bytes": 629,
+      "sha256": "aee1c845d296b37a3b49401e716c9c87d20e97d1d4a6eb9fa81cf338b4146b48"
+    },
+    {
+      "path": "packages/wasm/lib/crypto/ctr256.c",
+      "bytes": 1436,
+      "sha256": "c44d88032273304e1d24ef3af2bdad9733e0a2a4d6323da7a40cab2993b40347"
+    },
+    {
+      "path": "packages/wasm/lib/crypto/ige256.c",
+      "bytes": 1192,
+      "sha256": "522710306648d6983475331b44a779da3fa54b32d92b1d0a87e62dce674ef242"
+    },
+    {
+      "path": "packages/wasm/lib/hash/sha1.c",
+      "bytes": 5491,
+      "sha256": "7dd3ec4ea8148629b267f310147c12de309ebf3dbb11c4893ee480304702f294"
+    },
+    {
+      "path": "packages/wasm/lib/hash/sha256.c",
+      "bytes": 6263,
+      "sha256": "81fb259ab824c61678cc38053bb34e94794ecdd2e3ac58679628745a9bd6106f"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/COPYING",
+      "bytes": 1052,
+      "sha256": "5d246dd2537307b80fed9ba5fdddf5d0fe7a8f023393a071182b9daed56b40fe"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/adler32.c",
+      "bytes": 3402,
+      "sha256": "07a974556deaa2f1d764ad0b6efa6f3d074fa352cfc2fbc6dcae23d1f29d354e"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/adler32.h",
+      "bytes": 189,
+      "sha256": "3c93914202a48e5b768546df279fac74c61eb3699d663eaeefb650b124185da5"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/allocator.c",
+      "bytes": 379,
+      "sha256": "02c757a989d0e1a804fc5ed5cbdbdc873386ff2489977a90fbba3ce08a17ac9f"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/bt_matchfinder.h",
+      "bytes": 11415,
+      "sha256": "f90c3316b4598195af3ea0acaaa92cf02c987127c54528cf3cf2f493d3904277"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/decompress_template.h",
+      "bytes": 25055,
+      "sha256": "757a4bc3be85a99975d1aca0874a336a35efe4bbbd9a2540bbf5132f34fa7f76"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/deflate_compress.c",
+      "bytes": 138076,
+      "sha256": "a9ef35c1eaa99d9c28825c091ebe4091682cbe0987b0a3a169b7f2d32508e2e5"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/deflate_compress.h",
+      "bytes": 651,
+      "sha256": "019880ccca7f8196635e956936fc123b9309d4e2190197dbb499e3c4f285f926"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/deflate_constants.h",
+      "bytes": 1747,
+      "sha256": "72ea6e5f0abe53e781203e3f383603a765a768b860a09b3356be36bfd87c8af3"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/deflate_decompress.c",
+      "bytes": 48936,
+      "sha256": "5c64e3913c688328049e6f70c9da085aa4d1a59229569cb35ac535c177511406"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/deflate_decompress.h",
+      "bytes": 369,
+      "sha256": "c60302b39ddce259cc666f5b51bb3f839ced4f67dfc7ee085f1c5b7cfa29ed97"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/gzip_constants.h",
+      "bytes": 1029,
+      "sha256": "135661faa24f45407517f9f73380cf89890613aeba27b3a4f5cfba0e74e85ae0"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/gzip_decompress.c",
+      "bytes": 4573,
+      "sha256": "f7beb1c0fcddda31af4487171b464d673f53bbfb4c1c99ef81daf1dade85cf5c"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/hc_matchfinder.h",
+      "bytes": 13922,
+      "sha256": "d7e9df295e3bb437d14c20af1c1edb3ceb588bb755d1acfa0b5d3fae03ab6305"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/ht_matchfinder.h",
+      "bytes": 7087,
+      "sha256": "8c932dc7397d95794b10b686c7f4d1005873550dc773f67848467b91757babdc"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/lib_common.h",
+      "bytes": 1417,
+      "sha256": "c8b6bca696491781b378cab46bc8ab40b484d4afd588d0b69d2770c5528dcfb0"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/libdeflate.h",
+      "bytes": 9097,
+      "sha256": "9533a2359570fbf2da115dee2b5a07ffe6b5c91dfc9cf48eb90ee3eec9b71afa"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/matchfinder_common.h",
+      "bytes": 5465,
+      "sha256": "9232d63fa1713032f12e06624b5afa91cfecef890ec19c16a9fd4be7b9401c2c"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/zlib_compress.c",
+      "bytes": 2650,
+      "sha256": "cff83bfcb90fb910ff90b07d4895cb60b77654745354a6fd8c41647dbb050094"
+    },
+    {
+      "path": "packages/wasm/lib/libdeflate/zlib_constants.h",
+      "bytes": 488,
+      "sha256": "562e16b83ac33ac6d351cdfdf1962750576080d65c22ab66cad0aaa33695bebb"
+    },
+    {
+      "path": "packages/wasm/lib/utils/allocator.c",
+      "bytes": 1741,
+      "sha256": "0a17e10c93487850f99965f2e05e7160f2d09b62beb38bf49de1fbbb3106c579"
+    },
+    {
+      "path": "packages/wasm/lib/utils/common_defs.h",
+      "bytes": 19694,
+      "sha256": "75bf4c50045798bb1eaf166ec51053feed2d446c7a478729468007c02a808e9b"
+    },
+    {
+      "path": "packages/wasm/lib/wasm.h",
+      "bytes": 415,
+      "sha256": "49db64ee86562c429ec653f1c5444c437e6f5bf631a1ac996085aea96350ca22"
+    },
+    {
+      "path": "packages/wasm/package.json",
+      "bytes": 647,
+      "sha256": "8b9f75bfcfeba86147b24faf5eb22f9593f1fa3154c01bc67c3d0f03e540f730"
+    },
+    {
+      "path": "packages/wasm/src/index.ts",
+      "bytes": 7103,
+      "sha256": "4b8f6abbc9f08512c34447ae98bb5579afe132d5f4bbd7bde7ce7846b7154632"
+    },
+    {
+      "path": "PULSO-NOTICES.txt",
+      "bytes": 267261,
+      "sha256": "ea6fbd7dd0afef99a7e67b4c99ccce7ed4157d724053b41bfc18a589cd87e2aa"
+    }
+  ],
+  "binaryRebuild": "Repeatable WASI20/LLVM16 builds; not byte-identical to npm binaries. Original npm WASM remain unmodified.",
+  "unmodifiedInstalledBinaries": [
+    {
+      "file": "mtcute.wasm",
+      "bytes": 57363,
+      "sha256": "cd5817cabd16835353b52fba26d0afa4a0c7bfd19a6993251331aa8f0894ad30"
+    },
+    {
+      "file": "mtcute-simd.wasm",
+      "bytes": 59241,
+      "sha256": "a50729e55eac1cf6b251e1379080dbb7a761a6f1ec36c653d20561ded43bfb1c"
+    }
+  ]
+}

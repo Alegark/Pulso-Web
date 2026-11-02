@@ -1,0 +1,57 @@
+name: Run release
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: 'Release kind (major, minor, patch)'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - major
+          - minor
+          - patch
+      branch:
+        description: 'Branch to release from'
+        required: true
+        default: 'master'
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BOT_PAT }}
+      - if: ${{ github.event.inputs.branch != 'master' }}
+        run: git checkout ${{ github.event.inputs.branch }}
+      - uses: ./.github/actions/init
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.8.1
+      - name: Initialize configs
+        run: |
+          git config user.name "mtcute-bot"
+          git config user.email mtcute-bot@tei.su
+
+      - name: Run release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm exec fuman-build release \
+            --kind=${{ github.event.inputs.kind }} \
+            --with-npm \
+            --with-jsr \
+            --npm-token=${{ secrets.NPM_TOKEN }} \
+            --with-github-release \
+            --github-repo=mtcute/mtcute \
+            --github-token=${{ secrets.BOT_PAT }}

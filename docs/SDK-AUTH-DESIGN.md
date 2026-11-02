@@ -1,4 +1,6 @@
-# T4 · Contrato de sesión preparado, todavía sin conexión real
+# T4 · Contrato de sesión y acceso temporal
+
+Estado actual, 2026-11-02: el acceso temporal está integrado como slice separado de los candidatos persistentes históricos. Usa un worker con `MemoryStorage`, claves API recibidas del propietario, envío explícito de teléfono y pasos de código/2FA; no activa sesión por abrir la página. El cierre local y la revocación remota son resultados separados. Las pruebas locales no constituyen autenticación real ni aceptación de T4/P0. Contrato actualizado en `docs/TELEGRAM-SETUP.md`; evidencia en `docs/evidence-telegram-session-web.json`. Los apartados siguientes conservan el desarrollo histórico y sus límites originales.
 
 El producto entregado no contiene cliente ni sesión Telegram. El preflight inicial solo comprobó imports/worker/WASM y un hash local. La investigación posterior está en `.local/evidence/sdk-auth-design.json`; receipts públicos y SHA-256 en `.local/research-sdk-auth/`. Investigación de fuentes no equivale a autenticación, búsqueda o lectura de bytes remotos.
 

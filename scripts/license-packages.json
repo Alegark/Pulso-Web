@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "scope": "Reviewed packages in the current production main, worker and service-worker module inventories; SDK/WASM and development tools excluded",
+  "scope": "Production packages including the Telegram authentication worker; composite WASM notices and accompanying sources are added by telegram-source.mjs.",
   "packages": [
     {
       "name": "@borewit/text-codec",
@@ -203,6 +203,114 @@
           "file": "node_modules/win-guid/LICENSE.txt",
           "bytes": 1082,
           "sha256": "eb0bff8faaba4581e0f09c962e0f795f1f8810191c9d616f3f66f36be4b3a5dc"
+        }
+      ]
+    },
+    {
+      "name": "@mtcute/web",
+      "version": "0.32.7",
+      "license": "MIT",
+      "noticeFiles": [
+        {
+          "file": "node_modules/@mtcute/web/LICENSE",
+          "bytes": 1063,
+          "sha256": "0f9b6ce801d6a981c7224fc28ada8fdaab8540b4b8a5acec673db62092b97d27"
+        }
+      ]
+    },
+    {
+      "name": "@mtcute/core",
+      "version": "0.32.7",
+      "license": "MIT",
+      "noticeFiles": [
+        {
+          "file": "node_modules/@mtcute/core/LICENSE",
+          "bytes": 1063,
+          "sha256": "0f9b6ce801d6a981c7224fc28ada8fdaab8540b4b8a5acec673db62092b97d27"
+        }
+      ]
+    },
+    {
+      "name": "@mtcute/wasm",
+      "version": "0.32.6",
+      "license": "MIT",
+      "noticeFiles": [
+        {
+          "file": "node_modules/@mtcute/wasm/LICENSE",
+          "bytes": 1063,
+          "sha256": "0f9b6ce801d6a981c7224fc28ada8fdaab8540b4b8a5acec673db62092b97d27"
+        }
+      ]
+    },
+    {
+      "name": "@mtcute/file-id",
+      "version": "0.32.6",
+      "license": "MIT",
+      "noticeFiles": [
+        {
+          "file": "node_modules/@mtcute/file-id/LICENSE",
+          "bytes": 1063,
+          "sha256": "0f9b6ce801d6a981c7224fc28ada8fdaab8540b4b8a5acec673db62092b97d27"
+        }
+      ]
+    },
+    {
+      "name": "@mtcute/tl-runtime",
+      "version": "0.32.6",
+      "license": "MIT",
+      "noticeFiles": [
+        {
+          "file": "node_modules/@mtcute/tl-runtime/LICENSE",
+          "bytes": 1063,
+          "sha256": "0f9b6ce801d6a981c7224fc28ada8fdaab8540b4b8a5acec673db62092b97d27"
+        }
+      ]
+    },
+    {
+      "name": "@fuman/io",
+      "version": "0.0.23",
+      "license": "MIT",
+      "noticeFiles": [
+        {
+          "file": "node_modules/@fuman/io/LICENSE",
+          "bytes": 1063,
+          "sha256": "2583c99bf7333dbba6c0e01aa3ccd0d2b0a881bef69836f362a4a8d62eef3ebd"
+        }
+      ]
+    },
+    {
+      "name": "@fuman/net",
+      "version": "0.0.23",
+      "license": "MIT",
+      "noticeFiles": [
+        {
+          "file": "node_modules/@fuman/net/LICENSE",
+          "bytes": 1063,
+          "sha256": "2583c99bf7333dbba6c0e01aa3ccd0d2b0a881bef69836f362a4a8d62eef3ebd"
+        }
+      ]
+    },
+    {
+      "name": "@fuman/utils",
+      "version": "0.0.23",
+      "license": "MIT",
+      "noticeFiles": [
+        {
+          "file": "node_modules/@fuman/utils/LICENSE",
+          "bytes": 1063,
+          "sha256": "2583c99bf7333dbba6c0e01aa3ccd0d2b0a881bef69836f362a4a8d62eef3ebd"
+        }
+      ]
+    },
+    {
+      "name": "long",
+      "version": "5.3.2",
+      "license": "Apache-2.0",
+      "noticeFiles": [
+        {
+          "file": "node_modules/long/LICENSE",
+          "bytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
         }
       ]
     }

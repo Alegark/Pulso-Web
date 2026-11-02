@@ -1,0 +1,194 @@
+{
+  "project": "Pulso-Web",
+  "recordedAt": "2026-11-02T01:27:52.795020+00:00",
+  "release": "4d459aa4c10b6bb6",
+  "previousDeliveredRelease": "c543e9f0a1a173d3",
+  "status": "TEMPORARY_AUTH_UI_DELIVERED_ACCOUNT_AUTHENTICATION_NOT_VERIFIED",
+  "scope": "Phone/code/2FA in a dedicated SDK worker with explicit MemoryStorage; no persistence, session export, chat search or music download yet.",
+  "tests": {
+    "unit": {
+      "passed": 37,
+      "failed": 0,
+      "newSessionGroups": 13,
+      "selectedExistingPlayerQueueLicenseGroups": 24
+    },
+    "browser": {
+      "version": 1,
+      "cases": [
+        {
+          "name": "Cold main starts no auth worker/network and keeps Telegram-only audio entry",
+          "passed": true,
+          "kind": "native-main"
+        },
+        {
+          "name": "Real worker rejects missing config without SDK/network/session DB",
+          "passed": true,
+          "kind": "native-worker"
+        },
+        {
+          "name": "Legitimate identity constructs/prepares real SDK and WASM with memory storage; close shared, zero network/IDB",
+          "passed": true,
+          "kind": "native-worker",
+          "result": {
+            "passed": true,
+            "realSdkConstructed": true,
+            "networkConnected": false,
+            "accountAuthenticated": false,
+            "memoryOnly": true,
+            "external": 0,
+            "idb": 0,
+            "sockets": 0,
+            "releaseShared": true
+          }
+        },
+        {
+          "name": "Code error, retry, two-step password and focus use closed messages",
+          "passed": true,
+          "kind": "TESTONLY-synthetic-auth"
+        },
+        {
+          "name": "Explicit logout confirmation resets only temporary auth",
+          "passed": true,
+          "kind": "TESTONLY-synthetic-auth"
+        },
+        {
+          "name": "Native Audio source/play/pause and existing favorite/playlist stay intact across synthetic auth/logout",
+          "passed": true,
+          "kind": "TESTONLY-auth+native-audio"
+        },
+        {
+          "name": "Cancel clears inputs; 320/landscape with enlarged text stays within viewport",
+          "passed": true,
+          "kind": "TESTONLY-synthetic-auth+native-layout"
+        },
+        {
+          "name": "Delayed synthetic code response respects subsequent focus outside the auth panel",
+          "passed": true,
+          "kind": "TESTONLY-worker-barrier+native-focus"
+        }
+      ],
+      "externalRequests": 0,
+      "pageErrors": 0,
+      "realTelegramAuthentication": false,
+      "cleanup": true,
+      "browser": "154.0.8037.57",
+      "passed": true,
+      "cspViolations": 0,
+      "sourceUnchanged": true,
+      "chromiumSandbox": true,
+      "privateConfigurationRemoved": true,
+      "serviceWorkerExecuted": false,
+      "serviceWorkerCapabilityExplicitlyAbsent": true,
+      "allExternalHttpAndWebSocketsBlocked": true
+    },
+    "update": {
+      "passed": true,
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57",
+      "result": {
+        "oldEntrySHA256": "c543e9f0a1a173d33c0bdf80f5bd37e77a4d1c418ae3e6fbda39a5303df2bfb0",
+        "newEntry": "/releases/4d459aa4c10b6bb6.html",
+        "newVersionBypassesOldShell": true,
+        "stableLauncherSelectsCurrentBuild": true,
+        "waitingBeforeClosingClients": true,
+        "oldStillPlaying": true,
+        "newIsPaused": true,
+        "activatedAfterClientClosure": true,
+        "restoredPaused": true
+      }
+    },
+    "privatePreparation": {
+      "passed": true,
+      "realTelegramAuthentication": false,
+      "forwardedWebSockets": 0,
+      "privateUrlRecorded": false,
+      "configurationValuesRecorded": false,
+      "browser": "154.0.8037.57",
+      "sdkPreparedOnPrivateHttps": true,
+      "workerBodyPrelude": "TESTONLY-native-WebSocket-constructor-never-invoked",
+      "webSocketAttemptsIntercepted": 1,
+      "nativeSocketConstructorBlocked": true,
+      "configurationNoStore": true,
+      "workerOnlyCsp": true,
+      "pageErrors": 0,
+      "cleanup": true
+    },
+    "productTypecheck": "PASS",
+    "productLint": "PASS",
+    "build": "PASS"
+  },
+  "checks": {
+    "browser.json": {
+      "path": ".local/telegram-auth-integration/browser.json",
+      "bytes": 2085,
+      "sha256": "a6c11118d8f318a9e3c6ddb253aa2cf80a5f9dd870b2825e512d8848acdbe7e3"
+    },
+    "private.json": {
+      "path": ".local/telegram-auth-integration/private.json",
+      "bytes": 478,
+      "sha256": "f850dba876849890554e65a229c40085fdcef09a819faa337d0bb485bd10a07b"
+    },
+    "update.json": {
+      "path": ".local/telegram-auth-integration/update.json",
+      "bytes": 495,
+      "sha256": "3b88bbbbb87dac83bf92bc7a592092ee2e126b9ba282926b8382b7a603050e8b"
+    },
+    "delivery.json": {
+      "path": ".local/telegram-auth-integration/delivery.json",
+      "bytes": 232,
+      "sha256": "2880b0d65f65eeb2621bf1d14aba40506c5a282d188a0390c58a68dda43d663b"
+    },
+    "unit-final.log": {
+      "path": ".local/telegram-auth-integration/unit-final.log",
+      "bytes": 8026,
+      "sha256": "0a69cbe7cf155dbbdaa408e5182288183577b2880db31a4e74907493272f5dee"
+    },
+    "typecheck.log": {
+      "path": ".local/telegram-auth-integration/typecheck.log",
+      "bytes": 45,
+      "sha256": "9c3d1e1b04daef5ef7378ddbf921f0c204668897c69198e8ebeaf9cb185a9314"
+    },
+    "lint.log": {
+      "path": ".local/telegram-auth-integration/lint.log",
+      "bytes": 78,
+      "sha256": "9115c612f4c31d6ab637706d69432895db03337b27fb395cca045cdacbcb168b"
+    },
+    "tested-sources.json": {
+      "path": ".local/telegram-auth-integration/tested-sources.json",
+      "bytes": 20384,
+      "sha256": "550d207fdabc7ff38c4b3b4f0d65b7741e26109cfaaf95a92a30890bce41d9e2"
+    }
+  },
+  "delivery": {
+    "release": "/releases/4d459aa4c10b6bb6.html",
+    "filesReadback": 37,
+    "previousAssetsAndEntriesPreserved": 164,
+    "sourceArchiveHasNoCredentials": true,
+    "runtimeConfigurationPrivate": true,
+    "privateAccessUnchanged": true
+  },
+  "authenticityOfApiPairValidated": false,
+  "authenticatedUserSessionConfirmed": false,
+  "positiveAuthRepliesInTests": "TESTONLY synthetic, never a real-account PASS",
+  "privateProbeHistory": "Initial private probes did not prove WebSocket interception for workers and displayed a configuration failure. Their zero counters are not traffic proof. Historical reports are preserved. Final private probe blocks the native WebSocket constructor in a clearly labelled worker prelude; it verifies preparation/CSP, not server acceptance.",
+  "failuresPreserved": [
+    "unit.log retains two historical license-exclusion expectations before updating the manifest/test contract",
+    "late-focus-failed-browser.json retains the incomplete focus-observation run",
+    "sw-blocked-failed-browser.json retains the unsupported test transport setup; final UI test makes SW absence explicit",
+    "initial-private.json",
+    "pre-worker-guard-private.json"
+  ],
+  "privacy": {
+    "noCredentialsOrCredentialDigestsInReport": true,
+    "runtimeConfigurationExcludedFromSourceArchiveAndManifests": true,
+    "runtimeConfigurationNoStore": true,
+    "noNumberCodePasswordSessionInDiagnosticDTOs": true
+  },
+  "limits": [
+    "Temporary session ends on reload, pagehide or owner/scope loss; local close is not remote revocation.",
+    "Persistent SDK storage candidates remain isolated.",
+    "No real account authentication, iPhone, private offline, heap or full P0 acceptance.",
+    "Private production probe uses a TESTONLY network-constructor prelude; no claim of unmodified-worker successful Telegram RPC."
+  ],
+  "usd": 0
+}

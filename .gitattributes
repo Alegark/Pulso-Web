@@ -1,0 +1,2 @@
+# Preserve the exact reviewed upstream source/notice bytes, including CRLF and whitespace.
+vendor/telegram-wasm/** -text -whitespace

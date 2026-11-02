@@ -1,6 +1,6 @@
 # Dependencias declaradas · fase web
 
-Versiones/integridad en package-lock.json; avisos originales en paquetes. music-metadata 12.3.2 MIT usado en worker; portadas omitidas. FFmpeg GPLv3 solo herramienta de desarrollo para fixtures, fuera del bundle. Sin código copiado de referencias GPL. No constituye revisión jurídica completa.
+Versiones/integridad en package-lock.json; avisos originales en paquetes. music-metadata 12.3.2 MIT usado en worker. FFmpeg GPLv3 solo herramienta de desarrollo para fixtures, fuera del bundle. El acceso temporal a Telegram incorpora SDK/WASM con fuentes y avisos compuestos descritos en la actualización al final. No constituye revisión jurídica completa.
 
 - node_modules/@borewit/text-codec: 0.2.3; MIT.
 - node_modules/@esbuild/aix-ppc64: 0.28.2; MIT.
@@ -36,7 +36,7 @@ Versiones/integridad en package-lock.json; avisos originales en paquetes. music-
 - node_modules/@mtcute/core: 0.32.7; MIT.
 - node_modules/@mtcute/file-id: 0.32.6; MIT.
 - node_modules/@mtcute/tl-runtime: 0.32.6; MIT.
-- node_modules/@mtcute/wasm: 0.32.6; MIT. Instalación/preflight solamente: README declara composición adicional (AES derivado de tgcrypto LGPL-3.0; libdeflate MIT y fuentes SHA); no equivale a revisión de todos los componentes del binario.
+- node_modules/@mtcute/wasm: 0.32.6; metadata superior MIT, con composición adicional (AES derivado de tgcrypto LGPL-3.0; libdeflate MIT y fuentes SHA). Se utiliza en el worker de acceso temporal con avisos compuestos y fuente acompañante; no equivale a un dictamen jurídico.
 - node_modules/@mtcute/web: 0.32.7; MIT.
 - node_modules/@noble/hashes: 2.4.0; MIT.
 - node_modules/@oxc-project/types: 0.156.0; MIT.
@@ -127,6 +127,8 @@ Versiones/integridad en package-lock.json; avisos originales en paquetes. music-
 - playwright-core 1.64.1 (Apache-2.0): desarrollo, runner focal con Chromium del sistema; no entra al bundle ni instala agentes.
 
 ## Distribución de avisos y gate del SDK
+
+Actualización 2026-11-02: el inventario de producción pasa de los 17 paquetes históricos a 26 al incorporar el worker de acceso temporal: @mtcute web/core/wasm/file-id/tl-runtime, @fuman io/net/utils y long. El guard mantiene versiones y bytes originales de avisos; sigue rechazando FFmpeg y paquetes sin revisión. `vendor/telegram-wasm/` conserva fuentes/avisos ya investigados y un manifiesto por bytes/SHA. `scripts/telegram-source.mjs` genera el acompañante de fuentes y anexa los avisos compuestos; el caché SW cambia también con la identidad del acompañante. Los binarios npm se distribuyen separados y sin modificación; su reconstrucción WASI20 repetible no es byte-idéntica. Fuentes de integración, dependencias JS, C, lockfile y receta se entregan en `/telegram-sources.tar.gz`, sin credenciales. Se comprueba la copia privada por separado; autenticación real, redistribución final y P0 no reciben aceptación general. El texto siguiente registra la fase anterior al SDK.
 
 La lista histórica anterior describe paquetes instalados, no todos los componentes redistribuidos. El inventario de módulos de producción de T18 identifica17paquetes:16MIT e ieee754 BSD-3-Clause; FFmpeg/Vite/TypeScript/Playwright y SDK/WASM de preflight no están en el bundle actual. scripts/license-packages.json fija versiones, archivos originales y SHA-256 de los avisos revisados; scripts/third-party-notices.mjs los concatena preservando bytes y registra offsets/hash en third-party-licenses.json. El guard del build exige revisar un paquete identificado nuevo, una versión/licencia distinta o un aviso original cambiado. No sustituye la revisión de assets binarios o código copiado fuera del grafo de módulos.
 

@@ -67,10 +67,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', mime)
         self.send_header('Content-Length', str(end - start))
         self.send_header('Accept-Ranges', 'bytes')
-        self.send_header('Cache-Control', 'no-cache')
+        self.send_header('Cache-Control', 'no-store' if resolved.name == 'telegram-config.json' else 'no-cache')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
-        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+        policy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        if resolved.name.startswith('session.worker-') and resolved.suffix == '.js':
+            # Only this dedicated worker can open the five SDK WebSocket origins.
+            # The document, import workers and SW keep the existing policy.
+            policy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' wss://pluto.web.telegram.org wss://venus.web.telegram.org wss://aurora.web.telegram.org wss://vesta.web.telegram.org wss://flora.web.telegram.org; object-src 'none'; base-uri 'none'"
+        self.send_header('Content-Security-Policy', policy)
         if resolved.name == 'sw.js':
             self.send_header('Service-Worker-Allowed', '/')
         if status == 206:
@@ -97,7 +102,7 @@ if __name__ == '__main__':
     if not (directory / 'index.html').is_file():
         parser.error('Frozen review directory must contain index.html')
     server = ThreadingHTTPServer(('127.0.0.1', args.port), partial(Handler, directory=directory))
-    print(f'Review server listening on loopback port {args.port}; NOT published.', flush=True)
+    print(f'Review server listening on loopback port {server.server_address[1]}; NOT published.', flush=True)
     try:
         server.serve_forever()
     finally:
