@@ -1,7 +1,8 @@
 import React from 'react';
 import type {Activity} from '../playback/ownership';
 import {TelegramSourcesPanel} from './TelegramSourcesPanel';
-import {TelegramSessionClient,type SourcesSnapshot} from '../telegram/session-client';
+import {BotProvidersController} from './BotProvidersController';
+import {TelegramSessionClient,type SourcesSnapshot,type BotsSnapshot} from '../telegram/session-client';
 import {initialSessionState,sessionErrorText,type SessionState} from '../telegram/session-protocol';
 import {telegramBlockText,type TelegramBlockReason} from '../telegram/admission';
 import {phoneCountries} from '../telegram/phone-countries';
@@ -10,10 +11,11 @@ import './telegram.css';
 export interface TelegramPanelProps {activity:Activity;canConnect:boolean;scopeKey:string;captureCurrent:()=>()=>boolean;blockedReason?:TelegramBlockReason;libraryPending?:boolean;onCheckControl?:()=>void;onRequestControl?:()=>void}
 export function TelegramPanel({activity,canConnect,scopeKey,captureCurrent,blockedReason='busy',libraryPending=false,onCheckControl,onRequestControl}:TelegramPanelProps){
  const [sources,setSources]=React.useState<SourcesSnapshot|null>(null);
+ const [bots,setBots]=React.useState<BotsSnapshot|null>(null);
  const [state,setState]=React.useState<SessionState>(initialSessionState);const [phone,setPhone]=React.useState('');const [country,setCountry]=React.useState('');const [code,setCode]=React.useState('');const [password,setPassword]=React.useState('');const [consent,setConsent]=React.useState(false);
  const [now,setNow]=React.useState(Date.now);const client=React.useRef<TelegramSessionClient|null>(null);const heading=React.useRef<HTMLHeadingElement>(null);const input=React.useRef<HTMLInputElement>(null);const current=React.useRef(captureCurrent);current.current=captureCurrent;
  const panel=React.useRef<HTMLElement>(null),focusIntent=React.useRef(false);
- React.useEffect(()=>{let live=true;const service=new TelegramSessionClient(activity,()=>current.current(),value=>{if(live)setState(value);},undefined,undefined,value=>{if(live)setSources(value);});client.current=service;setState(initialSessionState());setSources(null);return()=>{live=false;client.current=null;service.dispose();};},[activity,scopeKey]);
+ React.useEffect(()=>{let live=true;const service=new TelegramSessionClient(activity,()=>current.current(),value=>{if(live)setState(value);},undefined,undefined,value=>{if(live)setSources(value);},undefined,undefined,value=>{if(live)setBots(value);});client.current=service;setState(initialSessionState());setSources(null);setBots(null);return()=>{live=false;client.current=null;service.dispose();};},[activity,scopeKey]);
  React.useEffect(()=>{const active=!['disconnected','error'].includes(state.phase);client.current?.revalidate();if(!canConnect){client.current?.stop(active?'cancelled':null);setCode('');setPassword('');if(active){setCountry('');setPhone('');setConsent(false);}}},[canConnect,scopeKey]);
  React.useEffect(()=>{client.current?.revalidate();});
  React.useEffect(()=>{const close=()=>client.current?.stop('cancelled');addEventListener('pagehide',close);return()=>removeEventListener('pagehide',close);},[]);
@@ -21,7 +23,7 @@ export function TelegramPanel({activity,canConnect,scopeKey,captureCurrent,block
  React.useEffect(()=>{if(!state.retryAt)return;const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[state.retryAt]);
  React.useEffect(()=>{if(state.phase==='connected'){setCountry('');setPhone('');setCode('');setPassword('');}if(!focusIntent.current)return;if(state.phase==='code'||state.phase==='password')input.current?.focus();else if(state.phase==='connected')heading.current?.focus();if(['code','password','connected'].includes(state.phase))focusIntent.current=false;},[state.phase]);
  const pending=['sending-code','authorizing','disconnecting'].includes(state.phase),retrying=state.retryAt!==null&&now<state.retryAt;
- const actionCurrent=captureCurrent(),actionClient=client.current,sourceAction=actionClient?.captureSourcesCurrent(),sessionAction=actionClient?.captureSessionCurrent(),localStop=actionClient?.captureLocalStop();
+ const actionCurrent=captureCurrent(),actionClient=client.current,sessionAction=actionClient?.captureSessionCurrent(),localStop=actionClient?.captureLocalStop();
  const normalizedPhone=normalizeTelegramPhone(country,phone);
  const draftReason=!normalizedPhone.ok?phoneNumberErrorText[normalizedPhone.error]:!consent?'Marca la autorización para enviar tu número a Telegram.':null;
  const draftHelpId=React.useId(),draftReasonId=React.useId();
@@ -36,7 +38,7 @@ export function TelegramPanel({activity,canConnect,scopeKey,captureCurrent,block
  {state.phase==='code'&&<form onSubmit={submit}><p>{state.delivery==='sms'?'Telegram envió el código por SMS.':state.delivery==='call'?'Telegram enviará el código mediante una llamada.':state.delivery==='email'?'Comprueba el código enviado por Telegram a tu correo.':'Abre Telegram y busca el código de acceso en el mensaje de servicio.'}</p><label>Código de Telegram<input ref={input} type="text" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e=>setCode(e.target.value)} pattern="[0-9]{1,12}" maxLength={12} required disabled={!canConnect||pending}/></label><button disabled={!canConnect||pending||retrying}>Confirmar código</button></form>}
  {state.phase==='password'&&<form onSubmit={submit}><label>Contraseña de verificación en dos pasos<input ref={input} type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} maxLength={1024} required disabled={!canConnect||pending}/></label><button disabled={!canConnect||pending||retrying}>Verificar contraseña</button></form>}
  {pending&&<p role="status">{state.phase==='sending-code'?'Conectando con Telegram…':state.phase==='disconnecting'?'Solicitando el cierre de sesión en Telegram…':'Comprobando el acceso…'}</p>}
- {state.phase==='connected'&&<><p role="status">Cuenta autenticada en esta pestaña. Las fuentes sólo se consultan cuando lo pides.</p>{client.current&&sources?.binding&&<TelegramSourcesPanel client={client.current} state={sources} canConnect={canConnect}/>}<button disabled={!canConnect||pending} onClick={()=>{if(actionCurrent()&&sourceAction?.()&&client.current===actionClient)actionClient?.logout();}}>Cerrar sesión en Telegram</button></>}
+ {state.phase==='connected'&&<><p role="status">Cuenta autenticada en esta pestaña. Los perfiles y las otras fuentes sólo se consultan cuando lo pides.</p>{client.current&&bots?.binding&&<BotProvidersController client={client.current} state={bots} canConnect={canConnect}/>}<details><summary>Otras fuentes de Telegram</summary>{client.current&&sources?.binding&&<TelegramSourcesPanel client={client.current} state={sources} canConnect={canConnect}/>}</details><button disabled={!canConnect||pending} onClick={()=>{if(actionCurrent()&&sessionAction?.()&&client.current===actionClient)actionClient?.logout();}}>Cerrar sesión en Telegram</button></>}
  {state.error&&<p role="alert">{sessionErrorText[state.error]}{retrying?` Podrás volver a intentarlo en ${Math.ceil((state.retryAt!-now)/1000)} segundos.`:''}</p>}
  {!['disconnected','error'].includes(state.phase)&&<button onClick={()=>{if(!localStop?.())return;setCountry('');setPhone('');setCode('');setPassword('');}}>Detener conexión local</button>}
  </section>;

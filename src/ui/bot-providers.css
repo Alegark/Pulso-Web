@@ -1,0 +1,25 @@
+.bot-providers {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  color: var(--text, inherit);
+  margin-block: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.bot-providers *, .bot-providers *::before, .bot-providers *::after { box-sizing: border-box; }
+.bot-providers-list { display: grid; gap: .75rem; padding: 0; list-style-position: inside; }
+.bot-providers-list > li { min-inline-size: 0; padding: .75rem; border: 1px solid var(--border, #888); border-radius: .5rem; }
+.bot-providers-list p { margin-block: .35rem .65rem; }
+.bot-providers-priority { font-weight: 700; }
+.bot-providers-name bdi { unicode-bidi: isolate; }
+.bot-providers-actions { display: flex; flex-wrap: wrap; gap: .5rem; min-inline-size: 0; }
+.bot-providers-form { display: grid; gap: .65rem; max-inline-size: 36rem; margin-block: 1rem; }
+.bot-providers-form p { margin: 0; }
+.bot-providers button, .bot-providers input {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  max-inline-size: 100%;
+  font: inherit;
+}
+.bot-providers button { white-space: normal; overflow-wrap: anywhere; padding: .5rem .75rem; }
+.bot-providers input { inline-size: 100%; min-inline-size: 0; padding: .5rem; }
+.bot-providers button:focus-visible, .bot-providers input:focus-visible { outline: 2px solid var(--ring, currentColor); outline-offset: 2px; }

@@ -1,3 +1,5 @@
+import {parseBotProvidersCommand,parseBotUsername,type BotProvidersCommand,type BotProviderRow,type BotProvidersReply} from './bot-providers-protocol';
+import {parseBotProvidersBridgeReply} from './bot-providers-bridge-protocol';
 import type {Activity,ActivityToken} from '../playback/ownership';
 import {initialSessionState,parseSessionCommand,parseSessionReply,type SessionCommand,type SessionError,type SessionState} from './session-protocol';
 import {SOURCES_BOUNDS,parseSourcesCommand,type AccountBinding,type SourceRow,type SourcesCommand,type Folder,type PageEnd,type SourcesError} from './sources-protocol';
@@ -5,15 +7,91 @@ import {parseSourcesBridgeReply} from './sources-bridge-protocol';
 export interface SourcesSnapshot {binding:AccountBinding|null;rows:readonly SourceRow[];selected:readonly string[];revision:number;pending:boolean;reading:boolean;cancelling:boolean;folder:Folder|null;end:PageEnd|null;error:SourcesError|null;retryAt:number|null;retryBlocked:boolean;listEpoch:number;operationId:string}
 const emptySources=():SourcesSnapshot=>({binding:null,rows:[],selected:[],revision:0,pending:false,reading:false,cancelling:false,folder:null,end:null,error:null,retryAt:null,retryBlocked:false,listEpoch:0,operationId:''});
 interface SourcesPending {command:SourcesCommand;token:ActivityToken;current:()=>boolean;timer:ReturnType<typeof setTimeout>;cancelled:boolean}
-export interface SessionWorker {onmessage:((event:MessageEvent)=>void)|null;onerror:((event:ErrorEvent)=>void)|null;onmessageerror:((event:MessageEvent)=>void)|null;postMessage(message:SessionCommand|SourcesCommand):void;terminate():void}
+export interface BotsSnapshot {binding:AccountBinding|null;providers:readonly BotProviderRow[];revision:number;scopeKey:string;pending:boolean;cancelling:boolean;error:string|null;notice:string|null;retryAt:number|null;retryBlocked:boolean}
+const emptyBots=():BotsSnapshot=>({binding:null,providers:[],revision:0,scopeKey:'',pending:false,cancelling:false,error:null,notice:null,retryAt:null,retryBlocked:false});
+interface BotPlan {worker:SessionWorker;command:BotProvidersCommand;refs:readonly string[];operationId:string;revision:number;epoch:number;token:ActivityToken;current:()=>boolean;timer:ReturnType<typeof setTimeout>;cancelled:boolean;cancelCommand:BotProvidersCommand|null;cancelAck:boolean;done:boolean;result:BotProvidersReply|null;until:number}
+export interface SessionWorker {onmessage:((event:MessageEvent)=>void)|null;onerror:((event:ErrorEvent)=>void)|null;onmessageerror:((event:MessageEvent)=>void)|null;postMessage(message:SessionCommand|SourcesCommand|BotProvidersCommand):void;terminate():void}
 interface Pending {request:string;token:ActivityToken;timer:ReturnType<typeof setTimeout>}
 /** One RAM-only session/worker, created only by an explicit valid phone submission. */
 export class TelegramSessionClient {
+ private bots:BotsSnapshot=emptyBots();private botBinding:AccountBinding|null=null;private botPlan:BotPlan|null=null;private botEpoch=0;private commandEpoch=0;
+ private botGuards=new WeakMap<()=>boolean,()=>boolean>();private retiredBots=new Map<string,{command:BotProvidersCommand;refs:readonly string[]}>();
+ private remoteRetryAt:number|null=null;private remoteRetryBlocked=false;
  private sources:SourcesSnapshot=emptySources();private sourceRead:SourcesPending|null=null;private sourceControl:SourcesPending|null=null;private cursor:string|null=null;private retired=new Map<string,SourcesCommand>();private queuedLogout:SessionCommand|null=null;private sourcesIdle:ReturnType<typeof setTimeout>|null=null;
  private sourcesUntil:number|null=null;private projectionEpoch=0;private sourcesExpiryDirty=false;
  private worker:SessionWorker|null=null;private session='';private pending:Pending|null=null;private guard:()=>boolean=()=>false;private state:SessionState=initialSessionState();private stopped=false;
- constructor(private activity:Activity,private captureCurrent:()=>()=>boolean,private changed:(state:SessionState)=>void,private factory:()=>SessionWorker=()=>new Worker(new URL('./session.worker.ts',import.meta.url),{type:'module'}),private timeoutMs=45000,private sourcesChanged:(state:SourcesSnapshot)=>void=()=>{},private sourcesTimeoutMs=20000,private graceMs=2000){}
- sourcesSnapshot():SourcesSnapshot{this.expireSources();if(this.state.phase==='disconnecting')return emptySources();return {...this.sources,binding:this.sources.binding?{...this.sources.binding}:null,rows:this.sources.rows.map(r=>({...r})),selected:[...this.sources.selected]};}
+ constructor(private activity:Activity,private captureCurrent:()=>()=>boolean,private changed:(state:SessionState)=>void,private factory:()=>SessionWorker=()=>new Worker(new URL('./session.worker.ts',import.meta.url),{type:'module'}),private timeoutMs=45000,private sourcesChanged:(state:SourcesSnapshot)=>void=()=>{},private sourcesTimeoutMs=20000,private graceMs=2000,private botsChanged:(state:BotsSnapshot)=>void=()=>{}){}
+ sourcesSnapshot():SourcesSnapshot{this.expireSources();if(this.state.phase==='disconnecting')return emptySources();return {...this.sources,pending:this.sources.pending||!!this.botPlan,retryAt:this.remoteRetryAt,retryBlocked:this.remoteRetryBlocked,binding:this.sources.binding?{...this.sources.binding}:null,rows:this.sources.rows.map(r=>({...r})),selected:[...this.sources.selected]};}
+ botsSnapshot():BotsSnapshot {if(this.state.phase==='disconnecting')return emptyBots();return {...this.bots,providers:this.bots.providers.map(r=>({...r})),binding:this.bots.binding?{...this.bots.binding}:null,pending:!!(this.botPlan||this.sourceRead||this.sourceControl),cancelling:!!this.botPlan?.cancelled,retryAt:this.remoteRetryAt,retryBlocked:this.remoteRetryBlocked};}
+ private publishBots(){this.botsChanged(this.botsSnapshot());}
+ /** Focus authority survives this panel's own ACK; every worker lifetime has a fresh scopeKey. */
+ private captureBotLifetime():()=>boolean {const worker=this.worker,session=this.session,binding=this.botBinding,root=this.captureCurrent();return()=>!!worker&&this.worker===worker&&this.session===session&&this.current()&&root()&&!!binding&&this.botBinding?.accountRef===binding.accountRef&&this.botBinding?.accountEpoch===binding.accountEpoch;}
+ captureBotsCurrent():()=>boolean {const lifetime=this.captureBotLifetime();return()=>lifetime()&&this.state.phase==='connected';}
+ captureBotActionCurrent():()=>boolean {const lifetime=this.captureBotLifetime(),revision=this.bots.revision,epoch=this.botEpoch,commands=this.commandEpoch;const allowed=()=>lifetime()&&this.state.phase==='connected'&&this.bots.revision===revision&&this.botEpoch===epoch&&this.commandEpoch===commands;this.botGuards.set(allowed,lifetime);return allowed;}
+ captureBotCancel():(()=>void)|undefined {const p=this.botPlan,command=p?.command;if(!p||p.cancelled||command?.type!=='bots.validate')return undefined;return()=>{if(this.botPlan===p&&p.command===command)this.cancelBot(p);};}
+ private remoteAllowed(){return !this.remoteRetryBlocked&&(this.remoteRetryAt===null||Date.now()>=this.remoteRetryAt);}
+ private observeRemote(reply:{retryAt:number|null;retryBlocked:boolean}) {this.remoteRetryBlocked ||=reply.retryBlocked;if(reply.retryAt!==null)this.remoteRetryAt=Math.max(this.remoteRetryAt??0,reply.retryAt);}
+ private botReady(){return !!this.worker&&!this.pending&&!this.botPlan&&!this.sourceRead&&!this.sourceControl&&this.state.phase==='connected'&&this.current()&&!!this.bots.binding;}
+ addBot(input:string,allowed:()=>boolean=this.captureBotActionCurrent()) {this.startBot({kind:'add',input},allowed);}
+ moveBot(id:string,direction:'up'|'down',allowed:()=>boolean=this.captureBotActionCurrent()) {this.startBot({kind:'move',id,direction},allowed);}
+ removeBot(id:string,allowed:()=>boolean=this.captureBotActionCurrent()) {this.startBot({kind:'remove',id},allowed);}
+ private startBot(action:{kind:'add';input:string}|{kind:'move';id:string;direction:'up'|'down'}|{kind:'remove';id:string},allowed:()=>boolean){
+  const root=this.botGuards.get(allowed);if(!root||!allowed()||!this.botReady())return;
+  const worker=this.worker!,binding=this.bots.binding!,revision=this.bots.revision,refs=this.bots.providers.map(r=>r.providerRef),operationId=crypto.randomUUID();
+  this.botEpoch++;this.commandEpoch++;const epoch=this.botEpoch;
+  this.bots={...this.bots,error:null,notice:null};
+  if(action.kind==='add'&&(!parseBotUsername(action.input)||refs.length>=5||!this.remoteAllowed())){this.bots={...this.bots,error:refs.length>=5?'Puedes elegir hasta 5 bots.':!parseBotUsername(action.input)?'Escribe un @usuario o enlace público válido.':'Telegram ha limitado las consultas. No se reintentará automáticamente.'};this.publishBots();return;}
+  let next=refs.slice();
+  if(action.kind!=='add') {const index=refs.indexOf(action.id);if(index<0)return;if(action.kind==='remove')next.splice(index,1);else{const target=index+(action.direction==='up'?-1:1);if(target>=0&&target<next.length)[next[index],next[target]]=[next[target],next[index]];}}
+  const command=parseBotProvidersCommand({protocol:'pulso-bot-providers',version:1,sessionId:this.session,...binding,providerRevision:revision,operationId,requestId:crypto.randomUUID(),...(action.kind==='add'?{type:'bots.validate',input:action.input}:{type:'bots.setOrder',expectedRevision:revision,providerRefs:next})});if(!command)return;
+  if(!root())return;const token=this.activity.begin();if(!token)return;
+  const p:BotPlan={worker,command,refs,revision,operationId,epoch,token,current:()=>root()&&token.current()&&this.worker===worker,timer:setTimeout(()=>{if(this.botPlan!==p||this.worker!==worker)return;if(p.command.type==='bots.validate')this.cancelBot(p,true);else this.stop('timeout');},this.sourcesTimeoutMs),cancelled:false,cancelCommand:null,cancelAck:false,done:false,result:null,until:Date.now()+this.sourcesTimeoutMs};
+  this.botPlan=p;this.publishBots();this.publishSources();
+  if(!p.current()){this.stop('cancelled');return;}try{worker.postMessage(command);}catch{this.stop('protocol');}
+ }
+ private cancelBot(p:BotPlan,timeout=false){
+  if(this.botPlan!==p||p.cancelled||this.state.phase!=='connected'||p.command.type!=='bots.validate'||p.cancelCommand||this.worker!==p.worker)return;
+  p.cancelled=true;this.botEpoch++;
+  const {input,...base}=p.command;void input;
+  const cancel=parseBotProvidersCommand({...base,type:'bots.cancel',requestId:crypto.randomUUID(),targetRequestId:p.command.requestId});if(!cancel){this.stop('protocol');return;}
+  p.cancelCommand=cancel;clearTimeout(p.timer);p.timer=setTimeout(()=>{if(this.worker===p.worker&&this.botPlan===p)this.stop(this.state.phase==='disconnecting'?'logout-unconfirmed':timeout?'timeout':'cancelled');},this.graceMs);
+  this.publishBots();if(!p.current()){this.stop('cancelled');return;}try{p.worker.postMessage(cancel);}catch{this.stop('protocol');}
+ }
+ private finishBot(p:BotPlan){
+  if(this.botPlan!==p||!p.done||p.cancelCommand&&!p.cancelAck)return;
+  clearTimeout(p.timer);p.token.end();this.botPlan=null;
+  this.bots={...this.bots,notice:p.cancelled?'Cambio detenido.':this.bots.notice};this.publishBots();this.publishSources();
+  this.flushLogout();
+ }
+ private flushLogout(){if(this.queuedLogout&&!this.sourceControl&&!this.botPlan){const command=this.queuedLogout;this.queuedLogout=null;try{this.worker!.postMessage(command);}catch{this.stop('logout-unconfirmed');}}}
+ private receiveBots(raw:unknown):boolean {
+  const p=this.botPlan;
+  if(p){for(const command of [p.command,p.cancelCommand]){if(!command)continue;const bridge=parseBotProvidersBridgeReply(raw,command,p.refs);if(!bridge)continue;
+   if(!this.current()||!p.current()){this.stop(this.state.phase==='disconnecting'?'logout-unconfirmed':'cancelled');return true;}
+   if(bridge.sessionClosed){this.stop(this.state.phase==='disconnecting'?'logout-unconfirmed':'cancelled');return true;}
+   const reply=bridge.reply;if(reply.type==='bots.error')this.observeRemote(reply);
+   this.retiredBots.set(command.requestId,{command,refs:p.refs});if(this.retiredBots.size>256)this.retiredBots.delete(this.retiredBots.keys().next().value!);
+   if(command===p.cancelCommand){p.cancelAck=true;this.finishBot(p);return true;}
+   if(p.done)return true;
+   // A dispatched order may already have committed. Never keep an old local revision alive
+   // after its ACK deadline; closing this exact worker purges both sides' RAM preferences.
+   if(reply.type==='bots.ordered'&&this.state.phase==='connected'&&Date.now()>=p.until){this.stop('timeout');return true;}
+   const continuation=Date.now()<p.until&&!p.cancelled&&this.botEpoch===p.epoch&&this.bots.revision===p.revision&&this.state.phase==='connected';
+   if(reply.type==='bots.validated'&&continuation){
+    if(p.refs.includes(reply.offer.providerRef)){this.bots={...this.bots,notice:'Este bot ya está añadido.'};p.done=true;this.finishBot(p);return true;}
+    const {offer,...base}=reply;void offer;
+    const next=parseBotProvidersCommand({...base,type:'bots.setOrder',requestId:crypto.randomUUID(),expectedRevision:p.revision,providerRefs:[...p.refs,reply.offer.providerRef]});
+    if(!next||!p.current()||!continuation){this.stop('protocol');return true;}
+    p.command=next;this.publishBots();if(!p.current()){this.stop('cancelled');return true;}try{p.worker.postMessage(next);}catch{this.stop('protocol');}return true;
+   }
+   if(reply.type==='bots.ordered'&&continuation)this.bots={...this.bots,revision:reply.revision,providers:reply.providers,error:null,notice:reply.changed?'Orden de bots confirmado.':'El orden ya estaba confirmado.'};
+   else if(reply.type==='bots.error'&&continuation)this.bots={...this.bots,error:botErrorText(reply)};
+   else if(this.state.phase==='connected'&&!p.cancelled&&Date.now()>=p.until)this.bots={...this.bots,error:'La comprobación no terminó a tiempo.'};
+   p.result=reply;p.done=true;this.finishBot(p);return true;
+  }}
+  for(const old of this.retiredBots.values())if(parseBotProvidersBridgeReply(raw,old.command,old.refs))return true;
+  return false;
+ }
  private publishSources(){const snapshot=this.sourcesSnapshot();this.sourcesExpiryDirty=false;this.sourcesChanged(snapshot);}
  /** Expiry can be discovered during a render-time capture: notify later, without render callbacks. */
  private expireSources(){if(this.sourcesUntil===null||Date.now()<this.sourcesUntil)return false;if(this.sourcesIdle!==null)clearTimeout(this.sourcesIdle);this.sourcesIdle=null;this.sourcesUntil=null;this.projectionEpoch++;this.cursor=null;this.sources={...this.sources,rows:[],selected:[],error:'expired'};this.sourcesExpiryDirty=true;const worker=this.worker,epoch=this.projectionEpoch;queueMicrotask(()=>{if(this.worker===worker&&this.projectionEpoch===epoch&&this.sourcesExpiryDirty)this.publishSources();});return true;}
@@ -23,7 +101,7 @@ export class TelegramSessionClient {
  snapshot():SessionState{return {...this.state};}
  private current(){try{return !this.stopped&&this.guard();}catch{return false;}}
  private publish(state:SessionState){this.state={...state};this.changed(this.snapshot());}
- private drop(){const w=this.worker;this.worker=null;if(w){w.onmessage=w.onerror=w.onmessageerror=null;w.terminate();}if(this.pending){clearTimeout(this.pending.timer);this.pending.token.end();this.pending=null;}this.queuedLogout=null;this.session='';this.guard=()=>false;for(const p of [this.sourceRead,this.sourceControl])if(p){clearTimeout(p.timer);p.token.end();}this.sourceRead=this.sourceControl=null;this.cursor=null;this.retired.clear();if(this.sourcesIdle!==null)clearTimeout(this.sourcesIdle);this.sourcesIdle=null;this.sourcesUntil=null;this.projectionEpoch++;this.sources=emptySources();this.publishSources();}
+ private drop(){const w=this.worker;this.worker=null;if(w){w.onmessage=w.onerror=w.onmessageerror=null;w.terminate();}if(this.pending){clearTimeout(this.pending.timer);this.pending.token.end();this.pending=null;}this.queuedLogout=null;if(this.botPlan){clearTimeout(this.botPlan.timer);this.botPlan.token.end();this.botPlan=null;}this.botEpoch++;this.commandEpoch++;this.retiredBots.clear();this.remoteRetryAt=null;this.remoteRetryBlocked=false;this.bots=emptyBots();this.botBinding=null;this.publishBots();this.session='';this.guard=()=>false;for(const p of [this.sourceRead,this.sourceControl])if(p){clearTimeout(p.timer);p.token.end();}this.sourceRead=this.sourceControl=null;this.cursor=null;this.retired.clear();if(this.sourcesIdle!==null)clearTimeout(this.sourcesIdle);this.sourcesIdle=null;this.sourcesUntil=null;this.projectionEpoch++;this.sources=emptySources();this.publishSources();}
  stop(error:SessionError|null='cancelled'){this.drop();if(!this.stopped)this.publish(error?{...initialSessionState(),phase:'error',error}:initialSessionState());}
  dispose(){this.stopped=true;this.drop();}
  revalidate(){if(this.worker&&!this.current())this.stop('cancelled');else{this.expireSources();if(this.sourcesExpiryDirty)this.publishSources();}}
@@ -42,19 +120,19 @@ export class TelegramSessionClient {
   const command=parseSessionCommand({version:2,session:this.session,request:crypto.randomUUID(),type,value});if(!command)return;
   const token=this.activity.begin();if(!token)return;this.send(command,token,'authorizing');
  }
- logout(){if(!this.worker||this.pending||!this.current()||this.state.phase!=='connected')return;const current=this.captureCurrent();if(!current())return;const token=this.activity.begin();if(!token)return;this.sources={...this.sources,rows:[],selected:[]};this.send({version:2,session:this.session,request:crypto.randomUUID(),type:'logout',value:''},token,'disconnecting');this.publishSources();}
+ logout(){if(!this.worker||this.pending||!this.current()||this.state.phase!=='connected')return;const current=this.captureCurrent();if(!current())return;const token=this.activity.begin();if(!token)return;this.botEpoch++;if(this.botPlan)this.botPlan.cancelled=true;this.bots=emptyBots();this.publishBots();this.sources={...this.sources,rows:[],selected:[]};this.send({version:2,session:this.session,request:crypto.randomUUID(),type:'logout',value:''},token,'disconnecting');this.publishSources();}
  /** Capture on render/gesture; stale React closures cannot act on a replacement session or list. */
- captureSourcesCurrent():()=>boolean {this.expireSources();const worker=this.worker,session=this.session,binding=this.sources.binding,epoch=this.sources.listEpoch,operation=this.sources.operationId,revision=this.sources.revision,projectionEpoch=this.projectionEpoch,current=this.captureCurrent();return()=>{this.expireSources();return this.worker===worker&&this.session===session&&this.current()&&current()&&this.projectionEpoch===projectionEpoch&&(this.sourcesUntil===null||Date.now()<this.sourcesUntil)&&!!binding&&this.sources.binding?.accountRef===binding.accountRef&&this.sources.binding?.accountEpoch===binding.accountEpoch&&this.sources.listEpoch===epoch&&this.sources.operationId===operation&&this.sources.revision===revision;};}
- consult(folder:Folder,allowed:()=>boolean=this.captureSourcesCurrent()){if(!allowed()||!this.sourceReady()||this.sources.retryBlocked||this.sources.retryAt!==null&&Date.now()<this.sources.retryAt)return;this.sources={...this.sources,listEpoch:this.sources.listEpoch+1,operationId:crypto.randomUUID(),rows:[],selected:[],revision:0,folder,end:null};this.cursor=null;this.dispatchSource({type:'sources.page',folder,cursor:null});}
- more(allowed:()=>boolean=this.captureSourcesCurrent()){if(!allowed()||!this.sourceReady()||!this.cursor||!this.sources.folder)return;const cursor=this.cursor;this.cursor=null;this.dispatchSource({type:'sources.page',folder:this.sources.folder,cursor});}
+ captureSourcesCurrent():()=>boolean {this.expireSources();const worker=this.worker,session=this.session,binding=this.sources.binding,epoch=this.sources.listEpoch,operation=this.sources.operationId,revision=this.sources.revision,projectionEpoch=this.projectionEpoch,commands=this.commandEpoch,current=this.captureCurrent();return()=>{this.expireSources();return this.worker===worker&&this.session===session&&this.current()&&current()&&this.projectionEpoch===projectionEpoch&&this.commandEpoch===commands&&(this.sourcesUntil===null||Date.now()<this.sourcesUntil)&&!!binding&&this.sources.binding?.accountRef===binding.accountRef&&this.sources.binding?.accountEpoch===binding.accountEpoch&&this.sources.listEpoch===epoch&&this.sources.operationId===operation&&this.sources.revision===revision;};}
+ consult(folder:Folder,allowed:()=>boolean=this.captureSourcesCurrent()){if(!allowed()||!this.sourceReady()||!this.remoteAllowed())return;this.sources={...this.sources,listEpoch:this.sources.listEpoch+1,operationId:crypto.randomUUID(),rows:[],selected:[],revision:0,folder,end:null};this.cursor=null;this.dispatchSource({type:'sources.page',folder,cursor:null});}
+ more(allowed:()=>boolean=this.captureSourcesCurrent()){if(!allowed()||!this.sourceReady()||!this.remoteAllowed()||!this.cursor||!this.sources.folder)return;const cursor=this.cursor;this.cursor=null;this.dispatchSource({type:'sources.page',folder:this.sources.folder,cursor});}
  confirm(peerRefs:readonly string[],allowed:()=>boolean=this.captureSourcesCurrent()){if(!allowed()||!this.sourceReady()||peerRefs.length>20||new Set(peerRefs).size!==peerRefs.length||peerRefs.some(ref=>!this.sources.rows.some(row=>row.peerRef===ref)))return;this.dispatchSource({type:'sources.select',peerRefs});}
  clear(allowed:()=>boolean=this.captureSourcesCurrent()){if(allowed()&&this.sourceReady())this.dispatchSource({type:'sources.clear'});}
  cancel(){const read=this.sourceRead,worker=this.worker;if(!worker||!read||this.sourceControl||this.state.phase!=='connected')return;read.cancelled=true;this.cursor=null;clearTimeout(read.timer);read.timer=setTimeout(()=>{if(this.worker===worker&&this.sourceRead===read)this.stop(this.state.phase==='disconnecting'?'logout-unconfirmed':'timeout');},this.graceMs);this.dispatchSource({type:'sources.cancel',targetRequestId:read.command.requestId},true);}
  private touchSources(){if(this.sourcesIdle!==null)clearTimeout(this.sourcesIdle);const worker=this.worker;this.sourcesUntil=Date.now()+SOURCES_BOUNDS.idleMs;this.sourcesIdle=setTimeout(()=>{if(this.worker!==worker)return;if(!this.current()){this.stop('cancelled');return;}if(this.expireSources()||this.sourcesExpiryDirty)this.publishSources();},SOURCES_BOUNDS.idleMs);}
- private sourceReady(){this.expireSources();return !!this.worker&&!this.pending&&!this.sourceRead&&!this.sourceControl&&this.state.phase==='connected'&&this.current()&&!!this.sources.binding;}
+ private sourceReady(){this.expireSources();return !!this.worker&&!this.pending&&!this.botPlan&&!this.sourceRead&&!this.sourceControl&&this.state.phase==='connected'&&this.current()&&!!this.sources.binding;}
  private dispatchSource(fields:{type:'sources.page';folder:Folder;cursor:string|null}|{type:'sources.select';peerRefs:readonly string[]}|{type:'sources.clear'}|{type:'sources.cancel';targetRequestId:string},cancel=false){
   const worker=this.worker,binding=this.sources.binding;if(!worker||!binding)return;
-  const current=cancel?this.sourceRead!.current:this.captureSourcesCurrent();if(!cancel&&!current())return;
+  if(!cancel)this.commandEpoch++;const current=cancel?this.sourceRead!.current:this.captureSourcesCurrent();if(!cancel&&!current())return;
   const command=parseSourcesCommand({protocol:'pulso-sources',version:1,sessionId:this.session,...binding,listEpoch:this.sources.listEpoch,operationId:this.sources.operationId,requestId:crypto.randomUUID(),...fields});if(!command)return;
   const token=this.activity.begin();if(!token){if(cancel)this.stop('cancelled');return;}
   if(!cancel&&!current()){token.end();this.stop('cancelled');return;}
@@ -65,7 +143,7 @@ export class TelegramSessionClient {
    }else this.stop(this.state.phase==='disconnecting'?'logout-unconfirmed':'timeout');
   },cancel?this.graceMs:this.sourcesTimeoutMs)};
   if(command.type==='sources.page')this.sourceRead=p;else this.sourceControl=p;
-  this.sources={...this.sources,pending:true,reading:!!this.sourceRead,cancelling:cancel,error:null};this.publishSources();
+  this.sources={...this.sources,pending:true,reading:!!this.sourceRead,cancelling:cancel,error:null};this.publishSources();this.publishBots();
   if(!cancel)this.touchSources();
   if(!cancel&&!current()){this.stop('cancelled');return;}
   try{worker.postMessage(command);}catch{this.stop('protocol');}
@@ -76,12 +154,12 @@ export class TelegramSessionClient {
   for(const p of candidates){
    const bridge=parseSourcesBridgeReply(raw,p.command);if(!bridge)continue;
    if(!this.current()||!p.current()||!p.token.current()){this.stop(this.state.phase==='disconnecting'?'logout-unconfirmed':'cancelled');return true;}
-   const reply=bridge.reply,offeredSaved=this.sources.rows.find(row=>row.kind==='saved');
+   const reply=bridge.reply;if(reply.type==='sources.error')this.observeRemote(reply);const offeredSaved=this.sources.rows.find(row=>row.kind==='saved');
    if(bridge.saved&&offeredSaved&&bridge.saved.peerRef!==offeredSaved.peerRef&&!(p.command.type==='sources.page'&&p.command.cursor===null)){this.stop('protocol');return true;}
    clearTimeout(p.timer);p.token.end();this.retired.set(p.command.requestId,p.command);if(this.retired.size>256)this.retired.delete(this.retired.keys().next().value!);
    if(this.sourceRead===p)this.sourceRead=null;if(this.sourceControl===p)this.sourceControl=null;
    if(bridge.sessionClosed){this.stop(this.state.phase==='disconnecting'?'logout-unconfirmed':'cancelled');return true;}
-   if(this.state.phase==='disconnecting'){if(!this.sourceControl&&this.queuedLogout){const command=this.queuedLogout;this.queuedLogout=null;try{this.worker!.postMessage(command);}catch{this.stop('logout-unconfirmed');}}return true;}
+   if(this.state.phase==='disconnecting'){this.flushLogout();return true;}
    if((reply.type==='sources.selected'||reply.type==='sources.cleared')&&reply.revision<=this.sources.revision){this.stop('protocol');return true;}
    if(reply.type==='sources.page'&&p.cancelled){this.cursor=null;this.sources={...this.sources,error:'cancelled'};}
    else if(reply.type==='sources.page'){
@@ -93,7 +171,7 @@ export class TelegramSessionClient {
    // Fresh list resets Saved even on an honest page error; never keep the obsolete bootstrap ref.
    if(!bridge.saved){this.cursor=null;this.sources={...this.sources,rows:[],selected:[],error:reply.type==='sources.error'?reply.error:'expired'};}
    if(bridge.saved&&!this.sources.rows.some(row=>row.peerRef===bridge.saved!.peerRef))this.sources={...this.sources,rows:[bridge.saved,...this.sources.rows.filter(row=>row.kind!=='saved')]};
-   this.sources={...this.sources,pending:!!(this.sourceRead||this.sourceControl),reading:!!this.sourceRead,cancelling:!!this.sourceControl&&this.sourceControl.command.type==='sources.cancel'};this.publishSources();return true;
+   this.sources={...this.sources,pending:!!(this.sourceRead||this.sourceControl),reading:!!this.sourceRead,cancelling:!!this.sourceControl&&this.sourceControl.command.type==='sources.cancel'};this.publishSources();this.publishBots();return true;
   }
   for(const command of this.retired.values())if(parseSourcesBridgeReply(raw,command))return true;
   return false;
@@ -102,18 +180,20 @@ export class TelegramSessionClient {
   if(!this.current()){token.end();this.stop('cancelled');return;}
   const timer=setTimeout(()=>this.stop(command.type==='logout'?'logout-unconfirmed':'timeout'),this.timeoutMs);
   this.pending={request:command.request,token,timer};this.publish({...this.state,phase,error:null});
-  if(command.type==='logout'&&this.sourceControl){this.queuedLogout=command;return;}
+  if(command.type==='logout'&&(this.sourceControl||this.botPlan?.cancelCommand)){this.queuedLogout=command;return;}
   try{this.worker!.postMessage(command);}catch{this.stop(command.type==='logout'?'logout-unconfirmed':'protocol');}
  }
  private receive(raw:unknown){
   if(!this.worker)return;
-  if(this.receiveSources(raw))return;
+  if(this.receiveBots(raw)||this.receiveSources(raw))return;
   const pending=this.pending;if(!pending){this.stop('protocol');return;}
   if(!this.current()){this.stop('cancelled');return;}
   const reply=parseSessionReply(raw,this.session,pending.request);if(!reply){this.stop('protocol');return;}
   clearTimeout(pending.timer);pending.token.end();this.pending=null;
-  if(reply.phase==='connected'){this.sources={...emptySources(),binding:reply.binding,rows:[reply.saved!],listEpoch:1,operationId:crypto.randomUUID()};this.touchSources();this.publishSources();}
+  if(reply.phase==='connected'){this.botBinding=reply.binding;this.bots={...emptyBots(),binding:reply.binding,scopeKey:crypto.randomUUID()};this.botEpoch++;this.publishBots();this.sources={...emptySources(),binding:reply.binding,rows:[reply.saved!],listEpoch:1,operationId:crypto.randomUUID()};this.touchSources();this.publishSources();}
   if(reply.phase==='error'||reply.phase==='disconnected'){this.drop();}
   this.publish({phase:reply.phase,error:reply.error,retryAt:reply.retryAt,delivery:reply.delivery});
  }
 }
+
+function botErrorText(reply:Extract<BotProvidersReply,{type:'bots.error'}>):string {const errors={cancelled:'Cambio detenido.',timeout:'La comprobación no terminó a tiempo.',busy:'Hay otra consulta pendiente.',expired:'El cambio ya no está vigente. Vuelve a intentarlo.', 'session-expired':'La conexión temporal ha caducado.',limit:'Se alcanzó el límite de bots o de esta sesión.',unsupported:'No se pudo comprobar un perfil de bot válido.', 'identity-changed':'El identificador ha cambiado de propietario. Vuelve a conectar.', 'rate-limit':'Telegram ha limitado las consultas. No se reintentará automáticamente.',network:'No se pudo comprobar el perfil.'};return errors[reply.error];}
