@@ -55,7 +55,7 @@ try{
     assert.equal(await number.isDisabled(),true);assert.equal(await consent.isDisabled(),true);
     report.cases.push({engine,version,name:'Original two-tab blocker reproduced with native ownership',passed:true,desiredBehavior:false,numberDisabled:true,consentDisabled:true});
    }else{
-    await number.fill('+15555550123');await consent.check();assert.equal(await send.isDisabled(),true);
+    await draft.getByLabel('País y prefijo',{exact:true}).selectOption('US');await number.fill('+15555550123');await consent.check();assert.equal(await send.isDisabled(),true);
     await draft.evaluate(()=>{
      const form=document.querySelector('.telegram-panel form');
      const key=Object.keys(form).find(k=>k.startsWith('__reactProps'));
@@ -65,7 +65,7 @@ try{
     assert.equal(await draft.evaluate(()=>draftAuthWorkers),0);
     report.cases.push({engine,version,name:'Non-owner can type/check; submit bypass creates no worker',passed:true});
     await owner.close();await draft.getByRole('region',{name:'Conexión a Telegram'}).getByRole('button',{name:'Comprobar control',exact:true}).click();await ready(draft);
-    assert.equal(await number.inputValue(),'+15555550123');assert.equal(await consent.isChecked(),true);assert.equal(await send.isEnabled(),true);
+    assert.equal(await draft.getByLabel('País y prefijo',{exact:true}).inputValue(),'US');assert.equal(await number.inputValue(),'+15555550123');assert.equal(await consent.isChecked(),true);assert.equal(await send.isEnabled(),true);
     await draft.evaluate(()=>oldDraftSubmit({preventDefault(){}}));assert.equal(await draft.evaluate(()=>draftAuthWorkers),0);
     report.cases.push({engine,version,name:'Explicit real acquisition preserves draft; old denied callback remains denied',passed:true});
    }
@@ -78,7 +78,7 @@ try{
       await page.goto(origin+'/__test_blank');await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('pulso-web-local-v1',999);r.onsuccess=()=>{r.result.close();resolve();};r.onerror=()=>reject(Error('fixture-open'));}));
      }
      await page.goto(origin);await page.getByRole('heading',{name:'Tu cuenta de Telegram',exact:true}).waitFor();
-     await page.locator('.telegram-panel input[type=tel]').fill('+15555550123');await page.locator('.telegram-panel input[type=checkbox]').check();
+     await page.getByLabel('País y prefijo',{exact:true}).selectOption('US');await page.locator('.telegram-panel input[type=tel]').fill('+15555550123');await page.locator('.telegram-panel input[type=checkbox]').check();
      assert.equal(await page.getByRole('button',{name:'Enviar código de acceso',exact:true}).isDisabled(),true);
      await page.locator('.telegram-panel form').evaluate(form=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
      assert.equal(await page.evaluate(()=>draftAuthWorkers),0);

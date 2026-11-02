@@ -32,3 +32,10 @@ La entrega privada puede recibir `/telegram-config.json` mediante `writePrivateT
 La política de red se amplía exclusivamente en la respuesta del worker `session.worker-*.js`: cinco hosts WSS concretos de Telegram y `wasm-unsafe-eval`, sin `unsafe-eval` JavaScript ni comodines. La página, SW y workers de archivos conservan su política anterior. En otro alojamiento debe aplicarse la misma política a ese worker. El SDK y los WASM se acompañan de avisos y `/telegram-sources.tar.gz`, con fuentes C/JS, integración, lockfile y receta de sustitución. No se afirma reconstrucción binaria idéntica ni aceptación jurídica integral.
 
 Pruebas focales y límites se registran en `docs/evidence-telegram-session-web.json`. Preparar un SDK con la identidad local no valida la pareja contra Telegram. Las respuestas positivas de los tests de interfaz son sintéticas e identificadas; no acreditan autenticación real. La siguiente comprobación es que el propietario introduzca su propio número/código/2FA directamente en la web. Selección de fuentes, búsqueda, descarga, persistencia de sesión, iPhone y P0 completos continúan pendientes.
+
+
+### País y número separados
+
+El formulario permite elegir país/prefijo y escribir el número nacional al lado. No elige país por ubicación ni inspecciona otros datos. Al pegar un número con `+`, el código debe coincidir con el país elegido; el prefijo se añade una sola vez. Los ceros nacionales se conservan: esta comprobación de sintaxis no sustituye el plan de numeración del país. Hay que marcar la autorización y disponer del control de la pestaña antes de enviar. Si otra pestaña conserva el control, ciérrala o cédelo allí y pulsa «Comprobar control».
+
+Los245 pares territorio/código proceden de la fuente Google libphonenumber fijada en `vendor/phone-countries/SOURCE.json`; su licencia y avisos originales acompañan `/THIRD-PARTY-NOTICES.txt` y `/telegram-sources.tar.gz`. No se hacen consultas de red para llenar el selector. Evidencia y límites: `docs/evidence-telegram-country-web.json`.

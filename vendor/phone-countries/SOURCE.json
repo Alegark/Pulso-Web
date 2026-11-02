@@ -1,0 +1,13 @@
+{
+  "upstream": "google/libphonenumber",
+  "commit": "1ae0d623301b302f828628dfc368c983e8d27141",
+  "sourceURL": "https://github.com/google/libphonenumber/blob/1ae0d623301b302f828628dfc368c983e8d27141/resources/PhoneNumberMetadata.xml",
+  "licenseURL": "https://github.com/google/libphonenumber/blob/1ae0d623301b302f828628dfc368c983e8d27141/LICENSE",
+  "sourceBytes": 975909,
+  "sourceSHA256": "b6491939ddaeb9d585a34fe0f0ebd096e83c5ac9a1c5d6dddf38ba4b162b28ca",
+  "territories": 245,
+  "excludes": [
+    "001 (non-geographic services)"
+  ],
+  "derivation": "Only territory id/countryCode facts; names from runtime Intl.DisplayNames es, fallback ISO. Shared calling codes retained. No national validation metadata."
+}

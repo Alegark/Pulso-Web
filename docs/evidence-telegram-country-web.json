@@ -1,0 +1,901 @@
+{
+  "project": "Pulso-Web",
+  "recordedAt": "2026-11-02T02:36:16.438977+00:00",
+  "release": "78f367fdea3358bb",
+  "previousRelease": "af8492dd1f29883e",
+  "status": "COUNTRY_SELECTOR_DELIVERED_PHYSICAL_SAFARI_AND_ACCOUNT_AUTH_PENDING",
+  "unit": {
+    "passed": 50,
+    "failed": 0,
+    "includesCountryGroups": 12,
+    "selectedSuitesOnly": true
+  },
+  "checks": {
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "build": "PASS"
+  },
+  "browser": {
+    "cases": [
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "245 Spanish-labelled countries; no inferred selection or auth worker",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Country, national number and consent independently gate submission",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Mismatched prefix, exit prefix, extension and length fail closed even with direct submit",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Same-prefix international paste reaches synthetic worker with exactly one prefix",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "National +58/shared +1 compose correctly; native single Audio remains paused",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Phone fields alongside; 320/390/landscape and enlarged text fit with 44px targets",
+        "passed": true,
+        "layouts": [
+          {
+            "width": 390,
+            "height": 844,
+            "font": "default",
+            "viewport": 390,
+            "documentWidth": 390,
+            "items": [
+              {
+                "top": 154.453125,
+                "left": 29,
+                "right": 172.640625,
+                "width": 143.640625,
+                "height": 47
+              },
+              {
+                "top": 157.453125,
+                "left": 185.4375,
+                "right": 361,
+                "width": 175.5625,
+                "height": 44
+              }
+            ]
+          },
+          {
+            "width": 320,
+            "height": 568,
+            "font": "default",
+            "viewport": 320,
+            "documentWidth": 320,
+            "items": [
+              {
+                "top": 367.453125,
+                "left": 29,
+                "right": 141.140625,
+                "width": 112.140625,
+                "height": 47
+              },
+              {
+                "top": 370.453125,
+                "left": 153.9375,
+                "right": 291,
+                "width": 137.0625,
+                "height": 44
+              }
+            ]
+          },
+          {
+            "width": 568,
+            "height": 320,
+            "font": "200%",
+            "viewport": 568,
+            "documentWidth": 568,
+            "items": [
+              {
+                "top": 267.859375,
+                "left": 45,
+                "right": 248.578125,
+                "width": 203.578125,
+                "height": 66
+              },
+              {
+                "top": 267.859375,
+                "left": 274.171875,
+                "right": 523,
+                "width": 248.828125,
+                "height": 66
+              }
+            ]
+          },
+          {
+            "width": 320,
+            "height": 568,
+            "font": "200%",
+            "viewport": 320,
+            "documentWidth": 320,
+            "items": [
+              {
+                "top": 2307.859375,
+                "left": 45,
+                "right": 136.96875,
+                "width": 91.96875,
+                "height": 66
+              },
+              {
+                "top": 2307.859375,
+                "left": 162.5625,
+                "right": 275,
+                "width": 112.4375,
+                "height": 66
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Native ownership loss cancels active synthetic auth and clears phone/country/consent",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "245 Spanish-labelled countries; no inferred selection or auth worker",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "Country, national number and consent independently gate submission",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "Mismatched prefix, exit prefix, extension and length fail closed even with direct submit",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "Same-prefix international paste reaches synthetic worker with exactly one prefix",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "National +58/shared +1 compose correctly; native single Audio remains paused",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "Phone fields alongside; 320/390/landscape and enlarged text fit with 44px targets",
+        "passed": true,
+        "layouts": [
+          {
+            "width": 390,
+            "height": 844,
+            "font": "default",
+            "viewport": 390,
+            "documentWidth": 390,
+            "items": [
+              {
+                "top": 115.453125,
+                "left": 29,
+                "right": 172.640625,
+                "width": 143.640625,
+                "height": 44
+              },
+              {
+                "top": 115.453125,
+                "left": 185.4375,
+                "right": 361,
+                "width": 175.5625,
+                "height": 44
+              }
+            ]
+          },
+          {
+            "width": 320,
+            "height": 568,
+            "font": "default",
+            "viewport": 320,
+            "documentWidth": 320,
+            "items": [
+              {
+                "top": 163.453125,
+                "left": 29,
+                "right": 141.140625,
+                "width": 112.140625,
+                "height": 44
+              },
+              {
+                "top": 163.453125,
+                "left": 153.9375,
+                "right": 291,
+                "width": 137.0625,
+                "height": 44
+              }
+            ]
+          },
+          {
+            "width": 568,
+            "height": 320,
+            "font": "200%",
+            "viewport": 568,
+            "documentWidth": 568,
+            "items": [
+              {
+                "top": 2001.859375,
+                "left": 45,
+                "right": 248.578125,
+                "width": 203.578125,
+                "height": 58
+              },
+              {
+                "top": 1993.859375,
+                "left": 274.171875,
+                "right": 523,
+                "width": 248.828125,
+                "height": 66
+              }
+            ]
+          },
+          {
+            "width": 320,
+            "height": 568,
+            "font": "200%",
+            "viewport": 320,
+            "documentWidth": 320,
+            "items": [
+              {
+                "top": 3609.859375,
+                "left": 45,
+                "right": 136.96875,
+                "width": 91.96875,
+                "height": 58
+              },
+              {
+                "top": 3601.859375,
+                "left": 162.5625,
+                "right": 275,
+                "width": 112.4375,
+                "height": 66
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "Native ownership loss cancels active synthetic auth and clears phone/country/consent",
+        "passed": true
+      }
+    ],
+    "errors": [],
+    "external": [],
+    "physicalIphone": false,
+    "realTelegramAuthentication": false,
+    "cleanup": true,
+    "webkitNativeStyleReports": [
+      {
+        "nativeControl": [
+          {
+            "directive": "style-src-attr",
+            "source": "",
+            "line": 1,
+            "sample": "",
+            "blocked": "inline"
+          }
+        ],
+        "main": {
+          "events": [
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            },
+            {
+              "directive": "style-src-attr",
+              "source": "http://127.0.0.1:33541/assets/style-Dfme1HpY.js",
+              "line": 8,
+              "sample": "",
+              "blocked": "inline"
+            }
+          ],
+          "inlineWrites": 0
+        },
+        "interpretation": "Minimal native controls also report style-src-attr; policy unchanged, reports retained, no zero-CSP claim for WebKit."
+      }
+    ],
+    "layoutObservations": [
+      {
+        "engine": "webkit",
+        "width": 390,
+        "height": 844,
+        "font": "default",
+        "viewport": 390,
+        "documentWidth": 390,
+        "items": [
+          {
+            "top": 154.453125,
+            "left": 29,
+            "right": 172.640625,
+            "width": 143.640625,
+            "height": 47
+          },
+          {
+            "top": 157.453125,
+            "left": 185.4375,
+            "right": 361,
+            "width": 175.5625,
+            "height": 44
+          }
+        ]
+      },
+      {
+        "engine": "webkit",
+        "width": 320,
+        "height": 568,
+        "font": "default",
+        "viewport": 320,
+        "documentWidth": 320,
+        "items": [
+          {
+            "top": 367.453125,
+            "left": 29,
+            "right": 141.140625,
+            "width": 112.140625,
+            "height": 47
+          },
+          {
+            "top": 370.453125,
+            "left": 153.9375,
+            "right": 291,
+            "width": 137.0625,
+            "height": 44
+          }
+        ]
+      },
+      {
+        "engine": "webkit",
+        "width": 568,
+        "height": 320,
+        "font": "200%",
+        "viewport": 568,
+        "documentWidth": 568,
+        "items": [
+          {
+            "top": 267.859375,
+            "left": 45,
+            "right": 248.578125,
+            "width": 203.578125,
+            "height": 66
+          },
+          {
+            "top": 267.859375,
+            "left": 274.171875,
+            "right": 523,
+            "width": 248.828125,
+            "height": 66
+          }
+        ]
+      },
+      {
+        "engine": "webkit",
+        "width": 320,
+        "height": 568,
+        "font": "200%",
+        "viewport": 320,
+        "documentWidth": 320,
+        "items": [
+          {
+            "top": 2307.859375,
+            "left": 45,
+            "right": 136.96875,
+            "width": 91.96875,
+            "height": 66
+          },
+          {
+            "top": 2307.859375,
+            "left": 162.5625,
+            "right": 275,
+            "width": 112.4375,
+            "height": 66
+          }
+        ]
+      },
+      {
+        "engine": "chromium",
+        "width": 390,
+        "height": 844,
+        "font": "default",
+        "viewport": 390,
+        "documentWidth": 390,
+        "items": [
+          {
+            "top": 115.453125,
+            "left": 29,
+            "right": 172.640625,
+            "width": 143.640625,
+            "height": 44
+          },
+          {
+            "top": 115.453125,
+            "left": 185.4375,
+            "right": 361,
+            "width": 175.5625,
+            "height": 44
+          }
+        ]
+      },
+      {
+        "engine": "chromium",
+        "width": 320,
+        "height": 568,
+        "font": "default",
+        "viewport": 320,
+        "documentWidth": 320,
+        "items": [
+          {
+            "top": 163.453125,
+            "left": 29,
+            "right": 141.140625,
+            "width": 112.140625,
+            "height": 44
+          },
+          {
+            "top": 163.453125,
+            "left": 153.9375,
+            "right": 291,
+            "width": 137.0625,
+            "height": 44
+          }
+        ]
+      },
+      {
+        "engine": "chromium",
+        "width": 568,
+        "height": 320,
+        "font": "200%",
+        "viewport": 568,
+        "documentWidth": 568,
+        "items": [
+          {
+            "top": 2001.859375,
+            "left": 45,
+            "right": 248.578125,
+            "width": 203.578125,
+            "height": 58
+          },
+          {
+            "top": 1993.859375,
+            "left": 274.171875,
+            "right": 523,
+            "width": 248.828125,
+            "height": 66
+          }
+        ]
+      },
+      {
+        "engine": "chromium",
+        "width": 320,
+        "height": 568,
+        "font": "200%",
+        "viewport": 320,
+        "documentWidth": 320,
+        "items": [
+          {
+            "top": 3609.859375,
+            "left": 45,
+            "right": 136.96875,
+            "width": 91.96875,
+            "height": 58
+          },
+          {
+            "top": 3601.859375,
+            "left": 162.5625,
+            "right": 275,
+            "width": 112.4375,
+            "height": 66
+          }
+        ]
+      }
+    ],
+    "countryNoticesByteExact": true,
+    "passed": true
+  },
+  "draftRegression": {
+    "baseline": false,
+    "physicalIphone": false,
+    "cases": [
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Non-owner can type/check; submit bypass creates no worker",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Explicit real acquisition preserves draft; old denied callback remains denied",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "unsupported: draft editable without granting send authority",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "future-storage: draft editable without granting send authority",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "Non-owner can type/check; submit bypass creates no worker",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "Explicit real acquisition preserves draft; old denied callback remains denied",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "unsupported: draft editable without granting send authority",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "future-storage: draft editable without granting send authority",
+        "passed": true
+      }
+    ],
+    "errors": [],
+    "external": [],
+    "cleanup": true,
+    "passed": true
+  },
+  "sessionRegression": {
+    "version": 1,
+    "cases": [
+      {
+        "name": "Cold main starts no auth worker/network and keeps Telegram-only audio entry",
+        "passed": true,
+        "kind": "native-main"
+      },
+      {
+        "name": "Real worker rejects missing config without SDK/network/session DB",
+        "passed": true,
+        "kind": "native-worker"
+      },
+      {
+        "name": "Legitimate identity constructs/prepares real SDK and WASM with memory storage; close shared, zero network/IDB",
+        "passed": true,
+        "kind": "native-worker",
+        "result": {
+          "passed": true,
+          "realSdkConstructed": true,
+          "networkConnected": false,
+          "accountAuthenticated": false,
+          "memoryOnly": true,
+          "external": 0,
+          "idb": 0,
+          "sockets": 0,
+          "releaseShared": true
+        }
+      },
+      {
+        "name": "Code error, retry, two-step password and focus use closed messages",
+        "passed": true,
+        "kind": "TESTONLY-synthetic-auth"
+      },
+      {
+        "name": "Explicit logout confirmation resets only temporary auth",
+        "passed": true,
+        "kind": "TESTONLY-synthetic-auth"
+      },
+      {
+        "name": "Native Audio source/play/pause and existing favorite/playlist stay intact across synthetic auth/logout",
+        "passed": true,
+        "kind": "TESTONLY-auth+native-audio"
+      },
+      {
+        "name": "Cancel clears inputs; 320/landscape with enlarged text stays within viewport",
+        "passed": true,
+        "kind": "TESTONLY-synthetic-auth+native-layout"
+      },
+      {
+        "name": "Delayed synthetic code response respects subsequent focus outside the auth panel",
+        "passed": true,
+        "kind": "TESTONLY-worker-barrier+native-focus"
+      }
+    ],
+    "externalRequests": 0,
+    "pageErrors": 0,
+    "realTelegramAuthentication": false,
+    "cleanup": true,
+    "browser": "154.0.8037.57",
+    "passed": true,
+    "cspViolations": 0,
+    "sourceUnchanged": true,
+    "chromiumSandbox": true,
+    "privateConfigurationRemoved": true,
+    "serviceWorkerExecuted": false,
+    "serviceWorkerCapabilityExplicitlyAbsent": true,
+    "allExternalHttpAndWebSocketsBlocked": true
+  },
+  "nativeUpdate": {
+    "passed": true,
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "oldEntrySHA256": "af8492dd1f29883eaf4277dc63bf3c1caea8eacdc679c0721d59d552baeb8fa9",
+      "newEntry": "/releases/78f367fdea3358bb.html",
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    }
+  },
+  "privateWebKit": {
+    "passed": true,
+    "physicalIphone": false,
+    "realTelegramAuthentication": false,
+    "urlRecorded": false,
+    "errors": [],
+    "authRequests": 0,
+    "engine": "WebKit",
+    "version": "27.2",
+    "release": "78f367fdea3358bb",
+    "numberAndConsentEditable": true,
+    "sendEnabledAfterNormalReadiness": true,
+    "cleanup": true
+  },
+  "delivery": {
+    "release": "/releases/78f367fdea3358bb.html",
+    "filesVerified": 37,
+    "previousImmutableFilesPreserved": 169,
+    "privateConfigurationPreserved": true,
+    "runtimeConfigurationExcludedFromManifest": true,
+    "countrySourcesAndNoticesAccompanyBundle": true,
+    "sourceArchiveContainsNoRuntimeIdentity": true
+  },
+  "independentReview": {
+    "verdict": "FAVORABLE_LIMITADO",
+    "P1": 0,
+    "P2": 0,
+    "ownGroupsPassed": 10,
+    "receiptSHA256": "f2273e7fa3b512fce006082155439a037a86b33ff1a3976be9b7763030cc205a"
+  },
+  "sources": {
+    ".gitattributes": {
+      "bytes": 177,
+      "sha256": "3fb17486da71da51a2c91033be968acee4cfadc2eed01e203ad561d5d517bc79"
+    },
+    "scripts/telegram-source.mjs": {
+      "bytes": 4251,
+      "sha256": "8b10c1435b29903c2c201eafa607c18e7be55a872baf1f10061d46f96c156d63"
+    },
+    "src/main.tsx": {
+      "bytes": 95083,
+      "sha256": "e96a4fb28a048a0830912c86f0118eb513bfce1dd7852ee2f478ab5d63fd3219"
+    },
+    "src/telegram/admission.ts": {
+      "bytes": 1639,
+      "sha256": "a9e9fe1e9806390a4a620797c3138205fb89233973761d0e096ee72756036a2f"
+    },
+    "src/telegram/session-client.ts": {
+      "bytes": 4750,
+      "sha256": "f49779805decb571776b3dcea22644122df227cc0dd8ff81fe233baeb373ae1d"
+    },
+    "src/telegram/session-protocol.ts": {
+      "bytes": 6189,
+      "sha256": "718339706630bb63ca08efdff92059eab3b59235cbf6abd9905beab113c9e615"
+    },
+    "src/telegram/session.worker.ts": {
+      "bytes": 3626,
+      "sha256": "9a895cda91cc3a16384a838e680023a30ba5ce36b1f61488b21349eac54db27e"
+    },
+    "src/telegram/phone-number.ts": {
+      "bytes": 2411,
+      "sha256": "9b839450da15cc8ed1fb8ec5f7fc4fde29880c7446f3be57abf8d7428b53d502"
+    },
+    "src/telegram/phone-countries.ts": {
+      "bytes": 3424,
+      "sha256": "79db5ae2c4bdf110b61b82a45c822e873052158ef5ac3a0420846292481ad5b3"
+    },
+    "src/ui/TelegramPanel.tsx": {
+      "bytes": 8790,
+      "sha256": "81ab4ae6eb03511e25b96c4866a4ebb54f73812eeb041adde898c5068ed7a950"
+    },
+    "src/ui/telegram.css": {
+      "bytes": 1109,
+      "sha256": "0d2844bccac7c59b3345e974431f8f80516c1383feac2b63edf30232fb518add"
+    },
+    "tests/unit/telegram-phone-number.test.ts": {
+      "bytes": 5094,
+      "sha256": "b079e18787439c39d5a086dafd92956c55d5b8d8bd0d46275b3e8c3493bbefdc"
+    },
+    "tests/integration/check-telegram-country.mjs": {
+      "bytes": 10217,
+      "sha256": "fbc303f4e94cb0cfd3def7c5fc3ca4e30438c8dead6bf13598cfac33fc4daac9"
+    },
+    "tests/integration/check-telegram-draft.mjs": {
+      "bytes": 6962,
+      "sha256": "1e72ba2bf4e6cd276134b0ce52d45f5048a19a7b485d4fe4f45d5e96ab627235"
+    },
+    "tests/integration/check-telegram-session.mjs": {
+      "bytes": 16848,
+      "sha256": "047de689d32372507336c0e4bfe7275ea66c53dc210ffcedb0717f7d8017465d"
+    },
+    "vendor/phone-countries/SOURCE.json": {
+      "bytes": 716,
+      "sha256": "ead1d484313f6581024c6c48cf906f3cd7ab70a7f15862b872e34128796297ba"
+    },
+    "vendor/phone-countries/UPSTREAM-HEADER.txt": {
+      "bytes": 2210,
+      "sha256": "24ac808638093a5d0977685025649d17bcad4a39bc93ea0efab54a78561403d2"
+    },
+    "vendor/phone-countries/LICENSE": {
+      "bytes": 10173,
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    }
+  },
+  "limitations": [
+    "Native Linux WebKit is not physical iPhone Safari.",
+    "Auth-positive browser replies are synthetic. No real Telegram account, phone, code or password was used.",
+    "Country calling codes and E.164 syntax are not a complete national numbering-plan validator. Trunk zeros are not guessed.",
+    "WebKit emits style-src-attr reports also reproduced in minimal native controls under unchanged CSP; reports retained. Zero-CSP is not claimed for WebKit.",
+    "Enlarged font is not a real zoom or VoiceOver test.",
+    "Search/download, persistent session, offline private and P0-W remain pending."
+  ],
+  "preservedHistory": [
+    "R112 original freeze and unit typing harness failures (missing Node types).",
+    "Initial flex stacked phone fields; root grid fixes alongside layout.",
+    "After-grid top alignment assertion was corrected to actual alongside geometry (native select 47px vs input44px).",
+    "Native-CSP-control observation race and earlier WebKit reports remain in local artifacts."
+  ]
+}
