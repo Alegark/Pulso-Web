@@ -1,0 +1,72 @@
+{
+  "project": "Pulso-Web",
+  "release": "/releases/c7f4189340719290.html",
+  "scope": "Explicit cooperative tab transfer by Play or Use here; no transfer on focus",
+  "sources": {
+    "src/main.tsx": {
+      "bytes": 99323,
+      "sha256": "18b07104c3c7289b3885b4c9a7b37bc5e17b60eaa0c7a3c13110082daa43dc7b"
+    },
+    "src/playback/ownership.ts": {
+      "bytes": 12655,
+      "sha256": "89964166e50d98b801cd55a4bf38293e078e14034c59d7ea62490448320a9143"
+    },
+    "src/ui/TelegramPanel.tsx": {
+      "bytes": 9992,
+      "sha256": "7a55fa423937d349756be5b38138305a26843f7579c99e6db8da66e4ed2c78ce"
+    }
+  },
+  "checks": {
+    "unitSuite": {
+      "passed": 386,
+      "failed": 0
+    },
+    "coreBrowser": {
+      "passedGroups": 15,
+      "browser": "Chromium154",
+      "nativeWebLocksBroadcastChannel": true
+    },
+    "integratedBrowser": {
+      "passedGroups": 17,
+      "untransformedMainGroups": 2,
+      "observedBarrierGroups": 15,
+      "sourceFilesVerified": 135,
+      "pageErrors": 0,
+      "csp": 0,
+      "external": 0,
+      "cleanup": true,
+      "reportSha256": "fa696ac026f5249f6bb0c76f5a59ba45cd129c814a6961218cd84c769c07aa1e"
+    },
+    "releaseChecks": {
+      "production": {
+        "bytes": 2855,
+        "sha256": "85904b565a5680a4bb8550013a481f62fbac7e417904513f237e073faf63cc41"
+      },
+      "update": {
+        "bytes": 495,
+        "sha256": "bad98cfe9e560cab1a451f41badbf0a052096f47b4960e0228a2fed5ccb24661"
+      },
+      "transfer-smoke": {
+        "bytes": 2056,
+        "sha256": "661c2df54d260a3c3363ab98106808ca5ca6418e4a764f0963acdc52e9cf8ece"
+      },
+      "private-webkit": {
+        "bytes": 334,
+        "sha256": "72c32039b592a00dca0cbb61028052d85c053456cd1ad2a7305cfb3e723828e7"
+      }
+    },
+    "sourceCompanionFilesRead": 3563,
+    "privateLiteralsAbsent": true
+  },
+  "review": {
+    "R137RetryPlay": "baseline defect fixed; R138 limited favorable; final browser condition satisfied",
+    "R136StaleTelegramCallback": "native baseline defect fixed; R139 limited favorable; final browser condition satisfied"
+  },
+  "limits": [
+    "Chromium integration is not physical iPhone/Safari acceptance.",
+    "WebKit production check covers shell/auth guard, not native tab-transfer matrix.",
+    "Current Telegram authorization remains per-tab RAM; no authenticated session migration or persistence tested.",
+    "Synthetic lifecycle/barrier cases are declared TESTONLY, not physical suspension/BFCache.",
+    "No real Telegram account, bot search, provider request, private offline or P0/T13 global acceptance."
+  ]
+}
