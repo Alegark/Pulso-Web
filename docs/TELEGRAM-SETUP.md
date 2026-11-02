@@ -17,3 +17,6 @@ Guardar esta configuración no construye un cliente, no abre una sesión y no co
 En una arquitectura íntegramente web, los parámetros de aplicación que utiliza el cliente son inspeccionables por quien ejecute ese cliente. Esto se distingue de las claves y la sesión privada de cada usuario. La recepción local no publica ni incorpora automáticamente los parámetros al bundle del producto.
 
 Estado al preparar este incremento: identidad API todavía ausente. Cuatro pruebas unitarias del formato y cuatro comprobaciones de filesystem en una copia temporal relocalizada pasan; las entradas de esos tests son fixtures de formato, nunca credenciales reales ni parámetros utilizados para construir un cliente. El producto entregado sigue sin SDK/sesión/red Telegram activos.
+
+
+Actualización 2026-11-02: identidad API recibida del responsable y almacenada mediante el receptor privado. Se verificaron formato, lectura posterior, permisos 0600/0700 y exclusión de Git; no se publican los valores ni sus huellas. Estado local `configured:true`, `connected:false`, `userSessionLoaded:false`. Esta comprobación no valida la pareja contra Telegram: no se ha construido el cliente SDK ni iniciado una sesión en Pulso. La entrega del producto no cambia.
