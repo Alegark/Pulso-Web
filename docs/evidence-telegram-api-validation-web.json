@@ -1,0 +1,87 @@
+{
+  "project": "Pulso-Web",
+  "recordedAt": "2026-11-02T04:01:14.144320+00:00",
+  "status": "APPLICATION_PAIR_REJECTED_BY_TELEGRAM_REGISTRY_SESSION_REQUIRED",
+  "publicConnection": {
+    "probe": "single-public-config-rpc",
+    "userAccountUsed": false,
+    "codeRequested": false,
+    "privateKeysRecorded": false,
+    "result": {
+      "explicitRpc": "help.getConfig",
+      "accountAuthenticated": false,
+      "phoneUsed": false,
+      "codeRequested": false,
+      "sessionPersisted": false,
+      "apiHashSentToTelegram": false,
+      "sdkCredentialsMatchPrivateConfiguration": true,
+      "passed": true,
+      "responseType": "config",
+      "production": true,
+      "dc": 2,
+      "sdkClosed": true,
+      "remainingNativeSockets": 1,
+      "websocketHosts": [
+        "venus.web.telegram.org"
+      ],
+      "indexedDbOpenCalls": 0
+    },
+    "pageErrors": 0,
+    "browser": "154.0.8037.57",
+    "cleanup": true
+  },
+  "pairValidation": {
+    "probe": "single-application-pair-rpc",
+    "userAccountUsed": false,
+    "codeRequested": false,
+    "privateKeysRecorded": false,
+    "result": {
+      "explicitRpc": "auth.exportLoginToken",
+      "accountAuthenticated": false,
+      "phoneUsed": false,
+      "codeRequested": false,
+      "sessionPersisted": false,
+      "apiHashSentToTelegram": true,
+      "tokenShown": false,
+      "tokenPersisted": false,
+      "sdkCredentialsMatchPrivateConfiguration": true,
+      "safeError": "api-invalid",
+      "passed": false,
+      "stage": "public-rpc",
+      "rpcCode": 400,
+      "rpcError": "API_ID_INVALID",
+      "failureKind": "sdk-or-transport",
+      "sdkClosed": true,
+      "remainingNativeSockets": 1,
+      "websocketHosts": [
+        "venus.web.telegram.org"
+      ],
+      "indexedDbOpenCalls": 0
+    },
+    "pageErrors": 0,
+    "browser": "154.0.8037.57",
+    "cleanup": true
+  },
+  "configurationMatchesPrivateHttps": true,
+  "sourcePortal": "https://my.telegram.org/apps",
+  "sourcePortalReportedByOwner": true,
+  "agentPortalState": "redirect-to-authentication",
+  "phoneOrCodesUsed": false,
+  "userAccountAuthenticated": false,
+  "configurationChanged": false,
+  "productChanged": false,
+  "applicationPairsTried": 1,
+  "explicitRpcMethods": [
+    "help.getConfig",
+    "auth.exportLoginToken"
+  ],
+  "tokensShownOrSaved": false,
+  "notes": [
+    "Public help.getConfig success checks transport; it does not prove API-key validity.",
+    "Unauthenticated auth.exportLoginToken returned400 API_ID_INVALID for the provided pair. No token was returned, shown or saved.",
+    "Native socket count in worker result was sampled before context/browser closure; both contexts, browsers and loopback servers were closed in finally.",
+    "The pair supplied by the owner matches a valid reading of the new photo and the actual private HTTPS configuration. No credential values or fingerprints are included.",
+    "Cannot inspect the live app registration because my.telegram.org redirects the shared browser to auth.",
+    "No regeneration/deletion of the Telegram application, no alternate credentials, no phone-based calls and no automatic retry."
+  ]
+}
