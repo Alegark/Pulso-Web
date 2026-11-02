@@ -1,0 +1,366 @@
+{
+  "status": "TEMPORARY_AUTH_LIBRARY_SEPARATION_DELIVERED_PHYSICAL_PHONE_NOT_VERIFIED",
+  "release": "/releases/6f54b6baa142bf14.html",
+  "baseline": {
+    "original": true,
+    "entry": "/releases/78f367fdea3358bb.html",
+    "cases": [
+      {
+        "engine": "webkit",
+        "kind": "removal-history",
+        "name": "Original locally unresolved record blocks even temporary memory-only auth",
+        "passed": true,
+        "desiredBehavior": false
+      },
+      {
+        "engine": "webkit",
+        "kind": "metadata-history",
+        "name": "Original locally unresolved record blocks even temporary memory-only auth",
+        "passed": true,
+        "desiredBehavior": false
+      },
+      {
+        "engine": "webkit",
+        "kind": "import-history",
+        "name": "Original locally unresolved record blocks even temporary memory-only auth",
+        "passed": true,
+        "desiredBehavior": false
+      },
+      {
+        "engine": "chromium",
+        "kind": "removal-history",
+        "name": "Original locally unresolved record blocks even temporary memory-only auth",
+        "passed": true,
+        "desiredBehavior": false
+      },
+      {
+        "engine": "chromium",
+        "kind": "metadata-history",
+        "name": "Original locally unresolved record blocks even temporary memory-only auth",
+        "passed": true,
+        "desiredBehavior": false
+      },
+      {
+        "engine": "chromium",
+        "kind": "import-history",
+        "name": "Original locally unresolved record blocks even temporary memory-only auth",
+        "passed": true,
+        "desiredBehavior": false
+      }
+    ],
+    "pageErrors": [],
+    "external": [],
+    "realTelegramAuthentication": false,
+    "physicalIphone": false,
+    "cleanup": true,
+    "passed": true
+  },
+  "browser": {
+    "original": false,
+    "entry": "/releases/6f54b6baa142bf14.html",
+    "cases": [
+      {
+        "engine": "webkit",
+        "kind": "removal-history",
+        "name": "Temporary synthetic auth allowed; unknown receipt, favorites, playlist and bytes unchanged; local mutations stay blocked",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "kind": "metadata-history",
+        "name": "Temporary synthetic auth allowed; unknown receipt, favorites, playlist and bytes unchanged; local mutations stay blocked",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "kind": "import-history",
+        "name": "Temporary synthetic auth allowed; unknown receipt, favorites, playlist and bytes unchanged; local mutations stay blocked",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "kind": "removal-history",
+        "name": "Temporary synthetic auth allowed; unknown receipt, favorites, playlist and bytes unchanged; local mutations stay blocked",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "kind": "metadata-history",
+        "name": "Temporary synthetic auth allowed; unknown receipt, favorites, playlist and bytes unchanged; local mutations stay blocked",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "kind": "import-history",
+        "name": "Temporary synthetic auth allowed; unknown receipt, favorites, playlist and bytes unchanged; local mutations stay blocked",
+        "passed": true
+      }
+    ],
+    "pageErrors": [],
+    "external": [],
+    "realTelegramAuthentication": false,
+    "physicalIphone": false,
+    "cleanup": true,
+    "passed": true
+  },
+  "draftRegression": {
+    "baseline": false,
+    "physicalIphone": false,
+    "cases": [
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Non-owner can type/check; submit bypass creates no worker",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Explicit real acquisition preserves draft; old denied callback remains denied",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "unsupported: draft editable without granting send authority",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "future-storage: draft editable without granting send authority",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "Non-owner can type/check; submit bypass creates no worker",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "Explicit real acquisition preserves draft; old denied callback remains denied",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "unsupported: draft editable without granting send authority",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "future-storage: draft editable without granting send authority",
+        "passed": true
+      }
+    ],
+    "errors": [],
+    "external": [],
+    "cleanup": true,
+    "passed": true
+  },
+  "sessionRegression": {
+    "version": 1,
+    "cases": [
+      {
+        "name": "Cold main starts no auth worker/network and keeps Telegram-only audio entry",
+        "passed": true,
+        "kind": "native-main"
+      },
+      {
+        "name": "Real worker rejects missing config without SDK/network/session DB",
+        "passed": true,
+        "kind": "native-worker"
+      },
+      {
+        "name": "Legitimate identity constructs/prepares real SDK and WASM with memory storage; close shared, zero network/IDB",
+        "passed": true,
+        "kind": "native-worker",
+        "result": {
+          "passed": true,
+          "realSdkConstructed": true,
+          "networkConnected": false,
+          "accountAuthenticated": false,
+          "memoryOnly": true,
+          "external": 0,
+          "idb": 0,
+          "sockets": 0,
+          "releaseShared": true
+        }
+      },
+      {
+        "name": "Code error, retry, two-step password and focus use closed messages",
+        "passed": true,
+        "kind": "TESTONLY-synthetic-auth"
+      },
+      {
+        "name": "Explicit logout confirmation resets only temporary auth",
+        "passed": true,
+        "kind": "TESTONLY-synthetic-auth"
+      },
+      {
+        "name": "Native Audio source/play/pause and existing favorite/playlist stay intact across synthetic auth/logout",
+        "passed": true,
+        "kind": "TESTONLY-auth+native-audio"
+      },
+      {
+        "name": "Cancel clears inputs; 320/landscape with enlarged text stays within viewport",
+        "passed": true,
+        "kind": "TESTONLY-synthetic-auth+native-layout"
+      },
+      {
+        "name": "Delayed synthetic code response respects subsequent focus outside the auth panel",
+        "passed": true,
+        "kind": "TESTONLY-worker-barrier+native-focus"
+      }
+    ],
+    "externalRequests": 0,
+    "pageErrors": 0,
+    "realTelegramAuthentication": false,
+    "cleanup": true,
+    "browser": "154.0.8037.57",
+    "passed": true,
+    "cspViolations": 0,
+    "sourceUnchanged": true,
+    "chromiumSandbox": true,
+    "privateConfigurationRemoved": true,
+    "serviceWorkerExecuted": false,
+    "serviceWorkerCapabilityExplicitlyAbsent": true,
+    "allExternalHttpAndWebSocketsBlocked": true
+  },
+  "update": {
+    "passed": true,
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "oldEntrySHA256": "78f367fdea3358bb50f3db004d872b7c8ff5ef31628210f96d07555bed0ce7b4",
+      "newEntry": "/releases/6f54b6baa142bf14.html",
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    }
+  },
+  "unit": {
+    "passed": 50,
+    "failed": 0
+  },
+  "typecheck": "PASS",
+  "lint": "PASS",
+  "build": "PASS",
+  "notes": [
+    "Recovery flags and all local mutation/reader/removal protocols unchanged. Only temporary MemoryStorage auth admission no longer depends on those passive flags.",
+    "Owner/scope/proof/Activity/database/reservation and nonreviving review/mutation captures remain. Busy/queue/country/consent/retry gates remain.",
+    "6 baseline/6 candidate native cases cover unknown copy-removal, metadata-rescan and import records across WebKit and Chromium; auth-positive replies synthetic; full library, settings and byte canary readback equal.",
+    "The screenshot proves reason=recovery, not which exact local record or scan failed on the phone.",
+    "R114 self-retained ownership finding is separate and remains open; ownership.ts unchanged.",
+    "Harness errors retained: eval blocked by Chromium CSP; initial baseline/candidate shared serving root; setup gap after closing only page opened empty v1 in some WebKit attempts; assumption all import pending flags imply Activity.resolved=false corrected (local mutation gates tested directly). Final uses one document seed then real reload, native data stores initialized by production main.",
+    "Sealed archive includes final executed runner; runtime assets equal validated assets."
+  ],
+  "project": "Pulso-Web",
+  "recordedAt": "2026-11-02T03:13:09.335628+00:00",
+  "delivery": {
+    "release": "/releases/6f54b6baa142bf14.html",
+    "filesVerified": 37,
+    "previousImmutableFilesPreserved": 172,
+    "privateConfigurationPreserved": true,
+    "runtimeConfigurationExcludedFromManifest": true,
+    "sourceArchiveContainsNoRuntimeIdentity": true
+  },
+  "privateWebKit": {
+    "passed": true,
+    "physicalIphone": false,
+    "realTelegramAuthentication": false,
+    "authRequests": 0,
+    "urlRecorded": false,
+    "pageErrors": [],
+    "engine": "WebKit",
+    "version": "27.2",
+    "release": "6f54b6baa142bf14",
+    "sendEnabledWithPendingLocalRecord": true,
+    "recordPreserved": true,
+    "cleanup": true
+  },
+  "independentReview": {
+    "verdict": "FAVORABLE_LIMITADO_AL_DELTA_CONGELADO",
+    "ownNodeGroupsPassed": 24,
+    "P1": 0,
+    "P2": 0,
+    "receiptSHA256": "7eba00a7c1b2f23c23a1c3fc5af8a95dcd0b9ce2cca3142e168ed423455ce5ae"
+  },
+  "sources": {
+    "src/main.tsx": {
+      "bytes": 95289,
+      "sha256": "09fdc83c407a53c7f14a973f8dae764d4996ee16bc602f1cb7a7caa75f90a347"
+    },
+    "src/telegram/admission.ts": {
+      "bytes": 1465,
+      "sha256": "6f372e272226bf0c81d6a57fbace53e8cc39f09deee289e92901a9976914ffe2"
+    },
+    "src/ui/TelegramPanel.tsx": {
+      "bytes": 9013,
+      "sha256": "60acbbdd1e519d1e903e6ba6a1857ec5c77828b10adab5879ea9ef993f02151a"
+    },
+    "src/telegram/session-client.ts": {
+      "bytes": 4750,
+      "sha256": "f49779805decb571776b3dcea22644122df227cc0dd8ff81fe233baeb373ae1d"
+    },
+    "src/telegram/session-protocol.ts": {
+      "bytes": 6189,
+      "sha256": "718339706630bb63ca08efdff92059eab3b59235cbf6abd9905beab113c9e615"
+    },
+    "src/telegram/session.worker.ts": {
+      "bytes": 3626,
+      "sha256": "9a895cda91cc3a16384a838e680023a30ba5ce36b1f61488b21349eac54db27e"
+    },
+    "src/telegram/temporary-sdk.ts": {
+      "bytes": 3646,
+      "sha256": "54d10621367f1e8edf1fe32acd24db6fd4a9b8f7086433a62d2f728fc5164504"
+    },
+    "src/playback/ownership.ts": {
+      "bytes": 6697,
+      "sha256": "13347bdec139dd72bd7f3bbe0ba699a65d3bde79450fe175ea5cb1c700d9e815"
+    },
+    "src/playback/source-review-admission.ts": {
+      "bytes": 2863,
+      "sha256": "d98ea476cfc227957ab3b1eda19cac9eca5f6535482b9838f44e23d65f5097f6"
+    },
+    "src/storage/database.ts": {
+      "bytes": 10911,
+      "sha256": "e71402b66784b75b606b7193703a674174d3dd147d4ecb0fa252053f75a3fa80"
+    },
+    "src/storage/import-operations.ts": {
+      "bytes": 27812,
+      "sha256": "546ff770b46bf3eb7a5936293a7264b136c08f38e7c7bfe8d1b5cefd154112dc"
+    },
+    "src/ui/MetadataRescanController.tsx": {
+      "bytes": 11094,
+      "sha256": "5161801fae365ddb01a8b3093c23173b6b272b5b6af6c128beee78323e04863f"
+    },
+    "src/ui/local-copy-removal-state.ts": {
+      "bytes": 17951,
+      "sha256": "dca7ce9eb65021e2a3f3f72d8b5ff7b6001cfae9090933e9ab61f0bac614a555"
+    },
+    "src/library/metadata-rescan.ts": {
+      "bytes": 20006,
+      "sha256": "1b170b758939266e9d7b0bdec3638dfcd5022185f0b9dbf3586c6a896bf79138"
+    },
+    "src/library/local-copy-removal.ts": {
+      "bytes": 24907,
+      "sha256": "5b67a9a81f2d097496219a47241f84e1852ce3b0c8d85a93962936e96c3e20ad"
+    },
+    "tests/integration/check-telegram-local-recovery.mjs": {
+      "bytes": 8638,
+      "sha256": "4b71a10e25cb80831fb0c830a7718f7ba50ea22598ca7f2becbc162e71e3cc62"
+    },
+    "tests/unit/telegram-session.test.ts": {
+      "bytes": 8522,
+      "sha256": "450c84090d5a9d18ec1ac33b878d90c9e9395fceb5efa93003d52ab36c466e22"
+    }
+  }
+}

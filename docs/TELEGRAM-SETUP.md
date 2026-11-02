@@ -39,3 +39,8 @@ Pruebas focales y límites se registran en `docs/evidence-telegram-session-web.j
 El formulario permite elegir país/prefijo y escribir el número nacional al lado. No elige país por ubicación ni inspecciona otros datos. Al pegar un número con `+`, el código debe coincidir con el país elegido; el prefijo se añade una sola vez. Los ceros nacionales se conservan: esta comprobación de sintaxis no sustituye el plan de numeración del país. Hay que marcar la autorización y disponer del control de la pestaña antes de enviar. Si otra pestaña conserva el control, ciérrala o cédelo allí y pulsa «Comprobar control».
 
 Los245 pares territorio/código proceden de la fuente Google libphonenumber fijada en `vendor/phone-countries/SOURCE.json`; su licencia y avisos originales acompañan `/THIRD-PARTY-NOTICES.txt` y `/telegram-sources.tar.gz`. No se hacen consultas de red para llenar el selector. Evidencia y límites: `docs/evidence-telegram-country-web.json`.
+
+
+### Comprobaciones locales pendientes y acceso temporal
+
+La conexión temporal a Telegram usa exclusivamente memoria y no escribe en la biblioteca. Una comprobación o un resultado musical anterior pendiente no impide por sí solo enviar el código de acceso. Esos pendientes siguen visibles y conservan sus restricciones de escritura, recuperación y retirada; autenticarse no los resuelve ni autoriza descargas. Propiedad de la pestaña, base disponible, operaciones incompatibles, reservas, cola, consentimiento y plazo de reintento conservan sus comprobaciones. Perder el ámbito invalida el cliente y sus callbacks como antes. Evidencia: docs/evidence-telegram-library-admission-web.json; cuenta real y teléfono físico pendientes.
