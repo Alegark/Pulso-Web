@@ -1,0 +1,362 @@
+{
+  "project": "Pulso-Web",
+  "recordedAt": "2026-11-02T05:57:50.064792+00:00",
+  "status": "SOURCE_SELECTOR_DELIVERED_PRIVATE_REAL_SOURCES_NOT_VERIFIED",
+  "release": "/releases/26596daeaf61d87b.html",
+  "previousRelease": "/releases/6f54b6baa142bf14.html",
+  "behavior": {
+    "authProtocol": 2,
+    "sourceProtocol": 1,
+    "explicitQueriesOnly": true,
+    "savedInitiallySelected": false,
+    "confirmOnlyAfterAck": true,
+    "perPageDialogs": 25,
+    "maximumSelected": 20,
+    "selectionRamOnly": true,
+    "getDialogsIncludesIncidentalMessages": true,
+    "incidentalContentExcludedFromAppModelsAndDiagnostics": true,
+    "musicSearchImplemented": false,
+    "musicDownloadImplemented": false,
+    "sessionPersistenceImplemented": false
+  },
+  "validation": {
+    "finalScopedUnits": {
+      "passed": 65,
+      "failed": 0,
+      "scope": "source protocol/page/driver, auth and source session; not full project suite"
+    },
+    "main": {
+      "passed": 16,
+      "failed": 0,
+      "mode": "FINAL_ROOT_GO",
+      "sdkBoundary": "fictional NoTelegram only; actual main, worker, core, Audio, IDB/OPFS and local SW",
+      "mainUntransformed": true,
+      "completeSourceAudit": {
+        "actualEqualsSnapshot": true,
+        "freezeCurrent": true,
+        "completeSrcPublic": true,
+        "mainBytes": {
+          "bytes": 95289,
+          "sha256": "09fdc83c407a53c7f14a973f8dae764d4996ee16bc602f1cb7a7caa75f90a347"
+        }
+      },
+      "limitations": [
+        "No DBclose to ready roundtrip",
+        "No partial React root unmount",
+        "Audio continuity assertions during paused native playback, not physical audibility"
+      ]
+    },
+    "reviews": {
+      "core": "R120 two P2 fixed R122 and reviewed R123",
+      "integration": "R125 one P2 fixed R126 and reviewed R127",
+      "conditionFinalR124Satisfied": true
+    },
+    "production": {
+      "passed": true,
+      "realTelegramAuthentication": false,
+      "actualCredentialsUsed": false,
+      "physicalIphone": false,
+      "cases": [
+        {
+          "engine": "chromium",
+          "version": "154.0.8037.57",
+          "name": "Production cold launcher: no auth worker/source query, country selector retained",
+          "passed": true
+        },
+        {
+          "engine": "chromium",
+          "name": "Production auth-v2 worker rejects missing configuration without network/session DB",
+          "passed": true
+        },
+        {
+          "engine": "chromium",
+          "name": "Actual SDK/WASM RAM prepare and shared close; syntax-only fixture, zero sockets/IDB/RPC",
+          "passed": true,
+          "result": {
+            "passed": true,
+            "realSdkConstructed": true,
+            "networkConnected": false,
+            "accountAuthenticated": false,
+            "memoryOnly": true,
+            "external": 0,
+            "idb": 0,
+            "sockets": 0,
+            "releaseShared": true
+          }
+        },
+        {
+          "engine": "webkit",
+          "version": "27.2",
+          "name": "Production cold launcher: no auth worker/source query, country selector retained",
+          "passed": true
+        },
+        {
+          "engine": "webkit",
+          "name": "Production auth-v2 worker rejects missing configuration without network/session DB",
+          "passed": true
+        },
+        {
+          "engine": "webkit",
+          "name": "Actual SDK/WASM RAM prepare and shared close; syntax-only fixture, zero sockets/IDB/RPC",
+          "passed": true,
+          "result": {
+            "passed": true,
+            "realSdkConstructed": true,
+            "networkConnected": false,
+            "accountAuthenticated": false,
+            "memoryOnly": true,
+            "external": 0,
+            "idb": 0,
+            "sockets": 0,
+            "releaseShared": true
+          }
+        }
+      ],
+      "external": [],
+      "pageErrors": [],
+      "csp": [
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        }
+      ],
+      "cleanup": true
+    },
+    "update": {
+      "passed": true,
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57",
+      "result": {
+        "oldEntrySHA256": "6f54b6baa142bf14a46cc7447d459646617117c02f5e50f13c3c619a528b016e",
+        "newEntry": "/releases/26596daeaf61d87b.html",
+        "newVersionBypassesOldShell": true,
+        "stableLauncherSelectsCurrentBuild": true,
+        "waitingBeforeClosingClients": true,
+        "oldStillPlaying": true,
+        "newIsPaused": true,
+        "activatedAfterClientClosure": true,
+        "restoredPaused": true
+      }
+    },
+    "build": {
+      "release": "26596daeaf61d87b",
+      "files": 37,
+      "archiveFiles": 3685,
+      "runtimeConfigurationAbsent": true,
+      "runtimeIdentityAbsentFromBuildAndCompanion": true,
+      "finalSourceReadback": true
+    },
+    "typecheck": "PASS R126 final unchanged sources",
+    "lint": "PASS R126 final unchanged sources",
+    "buildPassed": true,
+    "privateWebKit": {
+      "passed": true,
+      "physicalIphone": false,
+      "realTelegramAuthentication": false,
+      "authRequests": 0,
+      "urlRecorded": false,
+      "pageErrors": [],
+      "engine": "WebKit",
+      "version": "27.2",
+      "release": "26596daeaf61d87b",
+      "sendEnabledWithPendingLocalRecord": true,
+      "recordPreserved": true,
+      "cleanup": true
+    }
+  },
+  "evidenceReceipts": {
+    "telegram-sources-foundation-r119": {
+      "bytes": 16567,
+      "sha256": "4dcfce7e4a7548df250df5b0c6abcd748b55f090778a2fb344335dfc132ad8d2"
+    },
+    "telegram-sources-core-review-r120": {
+      "bytes": 5844,
+      "sha256": "4038206749035b5da0899dd9ab68db20e5814ad1acfc1973a84706e1051d48e3"
+    },
+    "telegram-sources-lifecycle-fix-r122": {
+      "bytes": 1986,
+      "sha256": "4880fa4a4ad840394ed884edfa38fa601d58bc1e8215cec8b8e0753d4d09308e"
+    },
+    "telegram-sources-lifecycle-review-r123": {
+      "bytes": 15446,
+      "sha256": "0612ef6f09593c07de563863a3c53b9adf4155c40c2a7005f4c64ade92c116bf"
+    },
+    "telegram-sources-integration-r121": {
+      "bytes": 9852,
+      "sha256": "c99dce1f6a3d8c37670e9c22190c05540947b314265aacebec19ec58d23d49d1"
+    },
+    "telegram-sources-integration-review-r125": {
+      "bytes": 14639,
+      "sha256": "77c2c1821ce69ce5329f1cf441df1909d311efe17261f4674e53c23bb0e33f96"
+    },
+    "telegram-sources-client-expiry-r126": {
+      "bytes": 3444,
+      "sha256": "404ca1f2cf028655f1416e4e5dad167e24614f86dc726d3f535fe548bb7b447b"
+    },
+    "telegram-sources-client-expiry-review-r127": {
+      "bytes": 9267,
+      "sha256": "84f7a7848b42b4fe19c52cb8f28bc5c20cb63147964da3e530bc9a373a30d3a1"
+    },
+    "telegram-sources-main-r124": {
+      "bytes": 12481,
+      "sha256": "945f6b9efa60d19ece6468299a87d614734d0c2f061f944b84c78493cd91051e"
+    }
+  },
+  "sources": {
+    "src/telegram/session-protocol.ts": {
+      "bytes": 6769,
+      "sha256": "95f147ff35763f46d842e39e32643b8835f561806085c75adaa3f9a39ff933f3"
+    },
+    "src/telegram/session-client.ts": {
+      "bytes": 16622,
+      "sha256": "820b18aded91abd0bc4730328237717287ee438d9a32104cb14762b862052fdc"
+    },
+    "src/telegram/session.worker.ts": {
+      "bytes": 6008,
+      "sha256": "eb18acf9b9cadbd9d0bde187cfe2b61504600a9ffd31a6c7afc1362a652a84b3"
+    },
+    "src/telegram/sources-bridge-protocol.ts": {
+      "bytes": 2106,
+      "sha256": "461249abbd31a6940c2b2a3a9605d1cfe01b954a5295dd101c0d1cf0c9e9e431"
+    },
+    "src/ui/TelegramPanel.tsx": {
+      "bytes": 9638,
+      "sha256": "7664bb33370a4070cbe46e1474c56273ec2592b2e2aa1b13c7066365b2d9aec6"
+    },
+    "src/ui/TelegramSourcesPanel.tsx": {
+      "bytes": 5797,
+      "sha256": "f596f9daaf7a8542039cae79becd6782d03870dfd1bbc0862c6ccbb5326322f2"
+    },
+    "src/ui/telegram-sources.css": {
+      "bytes": 717,
+      "sha256": "0ebaf47024bccff563b2fa3b2627f82133911f716e3cf14ecf3e791c675a9256"
+    },
+    "tests/unit/telegram-session.test.ts": {
+      "bytes": 8703,
+      "sha256": "c382881cb7a7a051695f79991d2147f42723125f7de0b2ceb6600d32ee63ffd3"
+    },
+    "tests/unit/telegram-sources-session.test.ts": {
+      "bytes": 20948,
+      "sha256": "3e5df38e7433fe886071863e44592b51f07d9b930442815fc9b63c23399c0e41"
+    },
+    "tests/integration/check-telegram-sources-session-worker.mjs": {
+      "bytes": 10072,
+      "sha256": "f0da53b55ca771ad2c69e42da5ee915d3fc4b3f7410fff68e7407d267c03c215"
+    },
+    "tests/integration/check-telegram-sources-session-ui.tsx": {
+      "bytes": 3778,
+      "sha256": "f71a066d624e93525ea3e38dfc44e03232237f74236ad8f5e76522e312e9ac47"
+    },
+    "tests/integration/check-telegram-sources-session-ui.html": {
+      "bytes": 468,
+      "sha256": "227d4b07444f441166808229c20c75aea4978695e00dc42824da1e938bac6393"
+    },
+    "tests/integration/check-telegram-sources-session-browser.mjs": {
+      "bytes": 9295,
+      "sha256": "25f0595fc542edf758facadf88c6fc4ca9425496009ababff0ab7bf890a4e825"
+    },
+    "src/telegram/sources-protocol.ts": {
+      "bytes": 9025,
+      "sha256": "ccc40c1d686c7a38ea94a94e9c7c78ca84f6cd6b566eaef6e709a95c5f4a4865"
+    },
+    "src/telegram/sources-page.ts": {
+      "bytes": 7961,
+      "sha256": "4f821737fb6e87f700fb1c2511e28084237115fda70d960c6e48711ccb573262"
+    },
+    "src/telegram/sources-driver.ts": {
+      "bytes": 12811,
+      "sha256": "1b9e67195fb17b96ab25081f2275d620dbbefc762446caaae0e9ff57366e8ef2"
+    },
+    "src/telegram/temporary-sdk.ts": {
+      "bytes": 5697,
+      "sha256": "b3286900ec5e7b2dc9156eb95e8bf65a0803eabe18604c6c26a55bed0b4b18a2"
+    }
+  },
+  "delivery": {
+    "verified": true,
+    "release": "/releases/26596daeaf61d87b.html",
+    "filesVerified": 37,
+    "previousImmutableFilesPreserved": 174,
+    "privateConfigurationPreserved": true,
+    "configurationExcludedFromManifest": true,
+    "privateHttpsLauncherAndEntryVerified": true,
+    "configurationNoStore": true,
+    "workerCspScoped": true,
+    "secretValuesOrFingerprintsRecorded": false
+  },
+  "ownerReport": {
+    "reportedConnectedOnPreviousRelease": true,
+    "independentlyInspected": false,
+    "accountDataRecorded": false
+  },
+  "limitations": [
+    "All positive auth/source data fixtures synthetic; no account or Telegram getDialogs used by tests/agents",
+    "getDialogs transports incidental messages/users/drafts and SDK RAM peer cache; projection budgets do not bound decoder/network/peak heap",
+    "WebKit Linux 27.2 is not physical Safari iPhone; native form controls emitted retained style-src-attr reports, no JS/worker CSP failures",
+    "Ownership self-retained after hide R114 remains open and outside this delta",
+    "Known original WASM gzip CRC/suffix limitations remain outside this selector delta"
+  ],
+  "acceptance": {
+    "P0-W": false,
+    "T4Complete": false,
+    "T9Complete": false,
+    "physicalIphone": false,
+    "realTelegramSources": false,
+    "privateOffline": false,
+    "physicalHeapBound": false
+  },
+  "secretsRecorded": false,
+  "usdSpent": 0
+}

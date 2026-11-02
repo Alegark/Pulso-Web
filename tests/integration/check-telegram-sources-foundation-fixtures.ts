@@ -1,0 +1,11 @@
+import Long from 'long';
+import {randomUUID} from 'node:crypto';
+export const binding=()=>({accountRef:randomUUID(),accountEpoch:1});
+export const envelope=(b=binding(),sessionId=randomUUID())=>({protocol:'pulso-sources' as const,version:1 as const,...b,sessionId,listEpoch:1,operationId:randomUUID(),requestId:randomUUID()});
+export const chat=(id=101,extra:Record<string,unknown>={})=>({_: 'channel',id,title:'Fuente ficticia',megagroup:true,accessHash:Long.fromNumber(12345),...extra});
+export const peer=(id=101)=>({_: 'peerChannel',channelId:id});
+export const dialog=(id=101,extra:Record<string,unknown>={})=>({_: 'dialog',peer:peer(id),topMessage:7,...extra});
+export const message=(id=101,extra:Record<string,unknown>={})=>({_: 'message',id:7,peerId:peer(id),date:1234,message:'CONTENIDO FICTICIO NO RETENIDO',...extra});
+export const page=(extra:Record<string,unknown>={})=>({_: 'messages.dialogsSlice',dialogs:[dialog()],chats:[chat()],users:[],messages:[message()],...extra});
+export const deferred=<T>()=>{let resolve!:(v:T)=>void,reject!:(e:unknown)=>void;const promise=new Promise<T>((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
+export const tick=()=>new Promise<void>(resolve=>setImmediate(resolve));
