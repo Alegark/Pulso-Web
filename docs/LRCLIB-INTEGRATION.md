@@ -1,6 +1,6 @@
 # LRCLIB: incremento preparado y activación pendiente
 
-Estado 2026-10-31: adaptador/panel e integración local revisados y probados con respuestas sintéticas; transporte público sin demostrar por dos preflights 502. El producto conserva `externalLyricsAvailable=false` y la CSP del origen no permite conexiones a LRCLIB. La copia privada sigue en `9cbcab4e444d7d6d`. No hay consultas de biblioteca activadas.
+Estado actualizado 2026-11-02: búsqueda pública y consulta de letras legibles desde Chromium154 y WebKit27.2 en orígenes loopback aislados. Los fallos históricos R63/R65 de preflight502 se conservan y no se reprodujeron en esta ronda. El producto mantiene `externalLyricsAvailable=false` y su CSP sin conexiones a LRCLIB; entrega privada37a273dc30111cee intacta. No hay consultas de biblioteca activadas. Véase [recibo actual](evidence-lrclib-browser-recheck.json).
 
 ## Comportamiento de este incremento
 
@@ -33,3 +33,14 @@ No hay aceptación física iPhone, offline de letras externas ni P0-W completo p
 
 
 Cotejo final del padre: `.local/evidence/lrclib-prepared-parent-verification.json` fija los recibos R57/R58/R60/R61/R59/R62/R64/R63/R65 y el snapshot preparado. La condición de navegador de R64 queda satisfecha por R62final11/11 y las cinco fuentes idénticas. No se actualizó la copia privada con este incremento deshabilitado. El objetivo completo continúa por T10 sin esperar al proveedor ni reintentar automáticamente.
+
+
+## 2026-11-02 · Revisión pública de búsqueda y letras
+
+El propietario pide revisar LRCLIB para sugerencias. Tres GET nativos acotados, sin reintentos: Chromium154 sandbox `/api/search` y WebKit27.2 `/api/search` + `/api/get`, con ejemplos públicos de la documentación, cabecera Lrclib-Client identificando la prueba y el proyecto real, credenciales omitidas, no-referrer y timeout15s. Chromium observa OPTIONS200/ACAO*/allow-headerlrclib-client y GET200 legible; Retry-After está expuesto por CORS. Search devuelve20 registros/152733bytes con campos título/artista/álbum/duración. WebKit también lee20 registros y un GET de firma200 concordante con letra normal y sincronizada. No se guardan letras ni respuestas crudas; sólo conteos, headers seleccionados y booleanos de validación. Navegadores/contextos/servidores propios cerrados. No teléfono, cuenta, Telegram, audio, biblioteca ni preferencias del usuario.
+
+Los fallos R63/R65 siguen históricos; no se atribuye su causa al código ni se promete que la disponibilidad actual sea permanente. El resultado nuevo demuestra transporte y lectura desde esos orígenes loopback; no prueba el origen HTTPS de producto ni iPhone físico. La documentación vigente mantiene lectura sin APIkey, identificación de cliente, registro opcional con límites mayores, solicitudes secuenciales y respeto de Retry-After. No se registró una aplicación ni se inventó una identidad/contacto.
+
+`/api/search?q=...` permite buscar por título/artista/álbum, hasta20 registros sin paginación. Se pueden derivar sugerencias y agrupar por metadatos, pero son registros de letras: no entidades independientes de artista/álbum, catálogo completo, grabación identificada, portada ni prueba de disponibilidad en Telegram. La respuesta contiene también letras aunque sólo se proyecte metadata, algo a incluir en límites y privacidad del futuro buscador.
+
+Pendiente de implementación/activación: adaptador de búsqueda separado del GET singular actual, identificación veraz en el transporte de producto, consentimiento antes de fetch/preflight, CSP específica, serialización/rate/cache/cancelación/consulta nueva gana y enlace por gesto al buscador Telegram. Ningún mensaje o búsqueda a bots al escribir sugerencias. No activar proveedor ni cambiar datos de canciones por esta revisión. Pruebas adicionales de esas funciones aún NO ejecutadas. Recibos `.local/lrclib-search-recheck/` y `docs/evidence-lrclib-browser-recheck.json`. Sin código, build, publicación ni cambio de la sesión del propietario.

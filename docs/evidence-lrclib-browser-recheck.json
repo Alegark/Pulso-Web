@@ -1,0 +1,108 @@
+{
+  "project": "Pulso-Web",
+  "date": "2026-11-02",
+  "status": "PUBLIC_BROWSER_LRCLIB_SEARCH_AND_LYRICS_PASS_NOT_PRODUCT_ACTIVATION",
+  "requests": {
+    "chromiumSearch": 1,
+    "webkitSearch": 1,
+    "webkitLyrics": 1,
+    "totalGet": 3,
+    "automaticRetries": 0
+  },
+  "identification": "Pulso-Web CompatibilityProbe v0.1.0 (https://github.com/Alegark/Pulso-Web)",
+  "officialContract": "https://lrclib.net/docs.txt",
+  "querySource": "Official documentation public examples, no user library or private search",
+  "chromium": {
+    "version": "154.0.8037.57",
+    "sandbox": true,
+    "searchStatus": 200,
+    "readableResponseType": "cors",
+    "records": 20,
+    "bytes": 152733,
+    "metadataValid": true,
+    "preflightStatus": 200,
+    "allowOrigin": "*",
+    "allowClientHeader": true,
+    "retryAfterHeaderExposed": true,
+    "cookiesAuthorizationRefererAbsent": true,
+    "pageErrors": 0,
+    "cleanup": {
+      "contextClosed": true,
+      "browserClosed": true,
+      "serverClosed": true
+    }
+  },
+  "webkit": {
+    "version": "27.2",
+    "searchStatus": 200,
+    "searchRecords": 20,
+    "searchMetadataValid": true,
+    "lyricsStatus": 200,
+    "signatureMatches": true,
+    "plainLyricsAvailable": true,
+    "syncedLyricsAvailable": true,
+    "pageErrors": 0,
+    "cleanup": {
+      "contextClosed": true,
+      "browserClosed": true,
+      "serverClosed": true
+    }
+  },
+  "historicalFailure": "R63/R65 OPTIONS502 absent CORS prevented GET; preserved unchanged. Not reproduced in this round, root cause of past failure remains unknown.",
+  "suggestionsFeasibility": {
+    "recordsContainTitleArtistAlbumDuration": true,
+    "maximumResultsDocumented": 20,
+    "paginationDocumented": false,
+    "artistAlbumEntitiesIndependent": false,
+    "groupingMayUseMetadataFromReturnedTracks": true,
+    "fullAlbumCompletenessOrAudioIdentityProved": false,
+    "nativeAudioDeliveredByLrclib": false
+  },
+  "privacy": {
+    "userLibrarySent": false,
+    "telegramAccessed": false,
+    "rawLyricsSaved": false,
+    "returnedRecordsContainLyricsFields": true,
+    "ipAndPublicQueryTransmittedToProvider": true,
+    "noCredentialsOrPrivateData": true
+  },
+  "preservation": {
+    "sourceTestsScriptsUnchangedFromGitHead": true,
+    "distFilesUnchanged": 37,
+    "productCspUntouched": true,
+    "externalLyricsAvailableStillFalse": true,
+    "noBuildOrDeployment": true
+  },
+  "limits": [
+    "Fresh loopback origins, not deployed HTTPS origin",
+    "WebKit Linux is not Safari/iPhone physical",
+    "No registered app, API key or provider account",
+    "No rate-limit provocation; Retry-After exposure observed without an actual429",
+    "The product adapter still needs truthful identification/header and D08 consent before activation; search adapter not implemented",
+    "Free public service availability and limits can change"
+  ],
+  "receipts": {
+    "result.json": {
+      "bytes": 3647,
+      "sha256": "274001ba696d3380886a0c6f362af2b30e355d6021fba4166c058a72ef565576"
+    },
+    "webkit-result.json": {
+      "bytes": 1662,
+      "sha256": "ff456eaf8ed90b6ae405b084616d5a55f14b17edbb4287301eac9508cb33d786"
+    },
+    "probe.mjs": {
+      "bytes": 6904,
+      "sha256": "c16874917b0fd6d0e85629844484556a1bf86ac2b5627f9ff6e6ca42e77468ab"
+    },
+    "webkit.mjs": {
+      "bytes": 4960,
+      "sha256": "e99cfded48c61fef4bc14cf1aee83bc2ac77eea7e75827e98f32061278cc0f22"
+    }
+  },
+  "acceptance": {
+    "productFeature": false,
+    "physicalIphone": false,
+    "P0-W": false
+  },
+  "usdSpent": 0
+}
