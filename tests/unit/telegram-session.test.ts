@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import {Activity} from '../../src/playback/ownership';
 import {TelegramSessionClient,type SessionWorker} from '../../src/telegram/session-client';
 import {parseSessionCommand,parseSessionReply,sessionFailure,type SessionCommand,type SessionReply,type SessionState} from '../../src/telegram/session-protocol';
+import {telegramBlockReason} from '../../src/telegram/admission';
 const phone='+15555550123'; // DTO fixture only; never used with the SDK or network.
+test('editable drafts never grant send authority over root safety gates',()=>{
+ const ready={supported:true,owner:true,acquiring:false,storageReady:true,busy:false,reserved:false,recoveryPending:false,queuePending:false};
+ assert.equal(telegramBlockReason(ready),null);
+ assert.equal(telegramBlockReason({...ready,owner:false,storageReady:false}),'storage');
+ for(const [change,reason] of [[{supported:false},'unsupported'],[{owner:false},'no-control'],[{owner:false,acquiring:true},'acquiring'],[{storageReady:false},'storage'],[{busy:true},'busy'],[{reserved:true},'busy'],[{queuePending:true},'busy'],[{recoveryPending:true},'recovery']] as const)assert.equal(telegramBlockReason({...ready,...change}),reason);
+});
 class WorkerFixture implements SessionWorker {
  onmessage:SessionWorker['onmessage']=null;onerror:SessionWorker['onerror']=null;onmessageerror:SessionWorker['onmessageerror']=null;messages:SessionCommand[]=[];terminations=0;
  postMessage(c:SessionCommand){this.messages.push(c);}terminate(){++this.terminations;}

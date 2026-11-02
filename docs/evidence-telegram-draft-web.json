@@ -1,0 +1,233 @@
+{
+  "project": "Pulso-Web",
+  "recordedAt": "2026-11-02T01:54:22.755929+00:00",
+  "release": "af8492dd1f29883e",
+  "previousRelease": "4d459aa4c10b6bb6",
+  "status": "DRAFT_INPUT_FIX_DELIVERED_PHYSICAL_SAFARI_NOT_VERIFIED",
+  "scope": "Number and consent are editable local drafts during startup or missing ownership. Send remains gated by current ownership/storage/recovery/reservation/queue checks; no automatic login.",
+  "baseline": {
+    "baseline": true,
+    "physicalIphone": false,
+    "cases": [
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Original two-tab blocker reproduced with native ownership",
+        "passed": true,
+        "desiredBehavior": false,
+        "numberDisabled": true,
+        "consentDisabled": true
+      }
+    ],
+    "errors": [],
+    "external": [],
+    "cleanup": true,
+    "passed": true
+  },
+  "browser": {
+    "baseline": false,
+    "physicalIphone": false,
+    "cases": [
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Non-owner can type/check; submit bypass creates no worker",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "Explicit real acquisition preserves draft; old denied callback remains denied",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "unsupported: draft editable without granting send authority",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "name": "future-storage: draft editable without granting send authority",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "Non-owner can type/check; submit bypass creates no worker",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "Explicit real acquisition preserves draft; old denied callback remains denied",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "unsupported: draft editable without granting send authority",
+        "passed": true
+      },
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "name": "future-storage: draft editable without granting send authority",
+        "passed": true
+      }
+    ],
+    "errors": [],
+    "external": [],
+    "cleanup": true,
+    "passed": true
+  },
+  "sessionRegression": {
+    "version": 1,
+    "cases": [
+      {
+        "name": "Cold main starts no auth worker/network and keeps Telegram-only audio entry",
+        "passed": true,
+        "kind": "native-main"
+      },
+      {
+        "name": "Real worker rejects missing config without SDK/network/session DB",
+        "passed": true,
+        "kind": "native-worker"
+      },
+      {
+        "name": "Legitimate identity constructs/prepares real SDK and WASM with memory storage; close shared, zero network/IDB",
+        "passed": true,
+        "kind": "native-worker",
+        "result": {
+          "passed": true,
+          "realSdkConstructed": true,
+          "networkConnected": false,
+          "accountAuthenticated": false,
+          "memoryOnly": true,
+          "external": 0,
+          "idb": 0,
+          "sockets": 0,
+          "releaseShared": true
+        }
+      },
+      {
+        "name": "Code error, retry, two-step password and focus use closed messages",
+        "passed": true,
+        "kind": "TESTONLY-synthetic-auth"
+      },
+      {
+        "name": "Explicit logout confirmation resets only temporary auth",
+        "passed": true,
+        "kind": "TESTONLY-synthetic-auth"
+      },
+      {
+        "name": "Native Audio source/play/pause and existing favorite/playlist stay intact across synthetic auth/logout",
+        "passed": true,
+        "kind": "TESTONLY-auth+native-audio"
+      },
+      {
+        "name": "Cancel clears inputs; 320/landscape with enlarged text stays within viewport",
+        "passed": true,
+        "kind": "TESTONLY-synthetic-auth+native-layout"
+      },
+      {
+        "name": "Delayed synthetic code response respects subsequent focus outside the auth panel",
+        "passed": true,
+        "kind": "TESTONLY-worker-barrier+native-focus"
+      }
+    ],
+    "externalRequests": 0,
+    "pageErrors": 0,
+    "realTelegramAuthentication": false,
+    "cleanup": true,
+    "browser": "154.0.8037.57",
+    "passed": true,
+    "cspViolations": 0,
+    "sourceUnchanged": true,
+    "chromiumSandbox": true,
+    "privateConfigurationRemoved": true,
+    "serviceWorkerExecuted": false,
+    "serviceWorkerCapabilityExplicitlyAbsent": true,
+    "allExternalHttpAndWebSocketsBlocked": true
+  },
+  "unit": {
+    "passed": 38,
+    "failed": 0
+  },
+  "update": {
+    "passed": true,
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "oldEntrySHA256": "4d459aa4c10b6bb6f2ff763787414e4ce553b5ab240f3d096b8d43c2930b4eb1",
+      "newEntry": "/releases/af8492dd1f29883e.html",
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    }
+  },
+  "privateWebKit": {
+    "passed": true,
+    "physicalIphone": false,
+    "realTelegramAuthentication": false,
+    "urlRecorded": false,
+    "errors": [],
+    "authRequests": 0,
+    "engine": "WebKit",
+    "version": "27.2",
+    "release": "af8492dd1f29883e",
+    "numberAndConsentEditable": true,
+    "sendEnabledAfterNormalReadiness": true,
+    "cleanup": true
+  },
+  "delivery": {
+    "release": "/releases/af8492dd1f29883e.html",
+    "filesVerified": 37,
+    "previousImmutableFilesPreserved": 167,
+    "privateConfigurationPreserved": true,
+    "runtimeConfigurationExcludedFromManifest": true,
+    "sourceArchiveContainsNoRuntimeIdentity": true
+  },
+  "checks": {
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "build": "PASS"
+  },
+  "limitations": [
+    "Linux WebKit 27.2 is not physical iPhone Safari.",
+    "Two-tab failure is reproduced; the owner has not confirmed this was the exact state of their phone.",
+    "Fresh WebKit startup originally enabled controls after readiness; initial disabled state was transient, not a separate confirmed defect.",
+    "No real Telegram login, search or download was tested."
+  ],
+  "sources": {
+    "src/main.tsx": {
+      "bytes": 95083,
+      "sha256": "e96a4fb28a048a0830912c86f0118eb513bfce1dd7852ee2f478ab5d63fd3219"
+    },
+    "src/ui/TelegramPanel.tsx": {
+      "bytes": 7312,
+      "sha256": "231f24aeea73945005b28b7b7c959e70d475b575150745d62bd08f97dc3d37fe"
+    },
+    "src/telegram/admission.ts": {
+      "bytes": 1639,
+      "sha256": "a9e9fe1e9806390a4a620797c3138205fb89233973761d0e096ee72756036a2f"
+    },
+    "tests/integration/check-telegram-draft.mjs": {
+      "bytes": 6728,
+      "sha256": "14e3b972cfe8806926e3d083c06715e22909ddb0cc74cd7b04a70bfa2cebaf52"
+    },
+    "tests/integration/check-telegram-session.mjs": {
+      "bytes": 16556,
+      "sha256": "93e53c8a28a4595d799da79ca7f48d03a449436cdfe90110dc73d49d4cfc9e75"
+    },
+    "tests/unit/telegram-session.test.ts": {
+      "bytes": 8580,
+      "sha256": "1adb2cadb26cf12d6ab4857a816aab9144401e7279357f155791fd598c8c94d1"
+    }
+  }
+}
