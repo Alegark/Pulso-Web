@@ -1198,3 +1198,10 @@ La pareja del portal se transfiere como entrada privada local y valida una sola 
 Sólo tras esa aceptación se actualiza la configuración privada canónica mediante receptor existente y la copia runtime mediante rename atómico/0600. Lectura HTTPS confirma igualdad con el portal y Cache-Control:no-store. Copia rechazada se conserva privada/0600 para rollback; descarga y entrada privada temporales y copia de prueba eliminadas. Sin credenciales ni sus huellas en recibos, Git, paquete, manifiestos o Engram. Producto/código/dist/entrega6f54b6baa142bf14 y datos musicales intactos; sin build ni suite de producto nuevos por este cambio de configuración.
 
 Recibo público docs/evidence-telegram-api-repair-web.json. El siguiente envío manual en Pulso crea otro worker y lee la configuración nueva sin recargar el bundle; aún falta que el propietario solicite y complete el acceso con su número/código/2FA en la propia interfaz. No se declara cuenta conectada, iPhone global, búsqueda/descarga ni P0 completo. USD0.
+
+
+## 2026-11-02 · Primer acceso reportado por el propietario
+
+Después de corregir la configuración desde el portal vivo y comprobar la aceptación de la pareja API sin teléfono, el propietario informa que conectó en su recorrido de prueba. Se registra como evidencia preliminar aportada por usuario, no inspección independiente de sesión/cuenta/Safari ni aceptación física global. No se leen ni registran teléfono, código, usuario, sesiones, chats, fuentes o audio reales. La sesión sigue RAM/temporal y la entrega6f54b6baa142bf14 no cambia.
+
+Siguiente trabajo autorizado del producto: preparar contrato de selección de fuentes, activadas expresamente por el usuario desde su navegador. No consultar la cuenta real desde herramientas/agentes, no indexar conversaciones ni descargar bytes al conectarse. Diseño inicial con SDK/local/fixtures, sin publicación ni cambios sobre la sesión que el propietario acaba de abrir; namespace/capturas/privacidad/consulta paginada y bibliotecas locales conservados. No anticipar PASS de fuentes/búsqueda/descarga/persistencia/T4/T5/P0. USD0.
