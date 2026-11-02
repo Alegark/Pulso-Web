@@ -1,0 +1,67 @@
+{
+  "project": "Pulso-Web",
+  "recordedAt": "2026-11-02T04:18:58.021962+00:00",
+  "status": "LIVE_PORTAL_API_HASH_CORRECTED_APPLICATION_PAIR_ACCEPTED_ACCOUNT_LOGIN_PENDING",
+  "portalComparison": {
+    "portal": "https://my.telegram.org/apps",
+    "signedInPageRead": true,
+    "formatValid": true,
+    "apiIdMatchesInstalled": true,
+    "apiHashMatchesInstalled": false,
+    "credentialValuesRecorded": false,
+    "applicationModified": false
+  },
+  "validation": {
+    "probe": "single-application-pair-rpc",
+    "userAccountUsed": false,
+    "codeRequested": false,
+    "privateKeysRecorded": false,
+    "result": {
+      "explicitRpc": "auth.exportLoginToken",
+      "accountAuthenticated": false,
+      "phoneUsed": false,
+      "codeRequested": false,
+      "sessionPersisted": false,
+      "apiHashSentToTelegram": true,
+      "tokenShown": false,
+      "tokenPersisted": false,
+      "sdkCredentialsMatchPrivateConfiguration": true,
+      "passed": true,
+      "responseType": "auth.loginToken",
+      "loginTokenDiscarded": true,
+      "sdkClosed": true,
+      "remainingNativeSockets": 1,
+      "websocketHosts": [
+        "venus.web.telegram.org"
+      ],
+      "indexedDbOpenCalls": 0
+    },
+    "pageErrors": 0,
+    "browser": "154.0.8037.57",
+    "cleanup": true
+  },
+  "privateRepair": {
+    "livePortalPairAcceptedByTelegram": true,
+    "canonicalPrivateConfigurationUpdated": true,
+    "privateHttpsConfigurationMatchesPortal": true,
+    "configurationNoStore": true,
+    "sourceMode0600": true,
+    "servedMode0600": true,
+    "appRegistrationModified": false,
+    "userSessionAuthenticated": false,
+    "phoneCodeRequestedByAgent": false,
+    "productReleaseUnchanged": true,
+    "secretValuesOrFingerprintsRecorded": false
+  },
+  "release": "6f54b6baa142bf14",
+  "credentialsOrFingerprintsRecorded": false,
+  "notes": [
+    "Only the app api_id/api_hash data-copy fields were read from the authenticated official /apps page. Hidden form hashes, phone, login code, cookies and other account data were not exported.",
+    "Private input transfer used a local browser download, chmod0600; only equality booleans were reported. Temporary input/download and probe configuration copies removed after use.",
+    "api_id matched the prior configuration; the live portal api_hash differed. The exact origin of the discrepancy with the earlier photo/text is not established.",
+    "One controlled auth.exportLoginToken validation with the live portal pair returned auth.loginToken. Token zeroed in memory and never shown or saved; no account authenticated or phone/code used.",
+    "Private canonical and HTTPS runtime configuration updated atomically and read back no-store; no product code, bundle, app registration, library or session migration changed.",
+    "The next user-initiated attempt reads fresh configuration in a new dedicated worker; no additional code was requested by the agent.",
+    "Native socket count was sampled before browser/context closure; finally cleanup closed the context/browser and loopback server."
+  ]
+}
