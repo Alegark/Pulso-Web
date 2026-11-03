@@ -76,6 +76,7 @@ export function MusicSearchController(props:Props){
   const live=()=>epoch===metadataEpoch.current&&mounted.current&&!abort.signal.aborted&&metadataAttempt.current===attempt&&latest.current.visible&&latest.current.scopeKey===scope;
   let timer:ReturnType<typeof setTimeout>|undefined;
   setSuggesting(true);setSuggestionNotice(null);
+  let fallback=false;
   const run=()=>{
    if(!live())return;
    const rate=suggestionsClient.getRateState(),wait=rate.retryAt===null?0:Math.max(0,rate.retryAt-Date.now());
@@ -83,20 +84,26 @@ export function MusicSearchController(props:Props){
    // This is dispatch of the latest draft, not retry of a failed remote request.
    if(rate.state==='busy'){
     if(Date.now()<waitUntil){timer=setTimeout(run,100);return;}
-    setSuggesting(false);setSuggestionError('La consulta anterior sigue cerrándose. Vuelve a intentar las sugerencias.');return;
+    clearTimeout(deadline);setSuggesting(false);setSuggestionError('La consulta anterior sigue cerrándose. Vuelve a intentar las sugerencias.');return;
    }
-   if(rate.state==='blocked'||wait>2000){setSuggesting(false);setSuggestionError('LRCLIB ha limitado las consultas. Espera antes de reintentar.');return;}
+   if(rate.state==='blocked'||wait>2000){clearTimeout(deadline);setSuggesting(false);setSuggestionError('LRCLIB ha limitado las consultas. Espera antes de reintentar.');return;}
    if(wait>0){timer=setTimeout(run,wait+1);return;}
-   void suggestionsClient.search(valid,{signal:abort.signal,current:live}).then(result=>{
-    if(!live())return;setSuggesting(false);
+   const words=valid.split(/\s+/u);
+   const request=fallback?words.slice(0,Math.ceil(words.length/2)).join(' '):valid;
+   void suggestionsClient.search(request,{signal:abort.signal,current:live}).then(result=>{
+    if(!live())return;
+    // One bounded, sequential prefix reformulation only after an empty successful response.
+    if(result.state==='ready'&&!result.tracks.length&&!fallback&&words.length>=2&&normalizeMusicSuggestionsQuery(words.slice(0,Math.ceil(words.length/2)).join(' '))&&Date.now()<waitUntil){fallback=true;timer=setTimeout(run,100);return;}
+    clearTimeout(deadline);setSuggesting(false);
     if(result.state==='ready'){setRemoteQuery(valid);setRemote(result.tracks);setSuggestionNotice(result.tracks.length?null:'No hay sugerencias para este nombre. Prueba con otro nombre de canción o álbum.');}
     else if(result.state==='rate-limited')setSuggestionError(result.retryAt===null?'LRCLIB ha limitado las consultas y no indicó una espera utilizable.':'LRCLIB ha limitado las consultas. Podrás reintentar después de '+new Date(result.retryAt).toLocaleTimeString()+'.');
     else if(result.state==='busy')setSuggestionError('La consulta anterior sigue cerrándose. Vuelve a intentar las sugerencias.');
     else if(result.state==='unavailable')setSuggestionError('No se pudieron obtener sugerencias. Puedes reintentarlo o ver las coincidencias de tu biblioteca.');
-   }).catch(()=>{if(live()){setSuggesting(false);setSuggestionError('No se pudieron obtener sugerencias.');}});
+   }).catch(()=>{if(live()){clearTimeout(deadline);setSuggesting(false);setSuggestionError('No se pudieron obtener sugerencias.');}});
   };
   timer=setTimeout(run,450);
-  return()=>{if(timer!==undefined)clearTimeout(timer);abort.abort();};
+  const deadline=setTimeout(()=>{if(live()){abort.abort();setSuggesting(false);setSuggestionError('La consulta de sugerencias agotó el plazo.');}},15000);
+  return()=>{if(timer!==undefined)clearTimeout(timer);clearTimeout(deadline);abort.abort();};
  },[query,props.visible,props.scopeKey,retry]);
  function search(chosen:BotSearchTarget,text:string){
   if(!current()||!ready||!provider||!action?.())return;

@@ -30,3 +30,8 @@
 
 .music-search-dropdown-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 .music-search-dropdown-heading button { width: auto; }
+@media (max-width: 600px) {
+ .music-search-query-bar { flex-wrap: wrap; }
+ .music-search-query-bar input[type="search"] { flex-basis: 100%; width: 100%; }
+ .music-search-dropdown { position: static; max-height: none; overflow: visible; margin-block-start: .5rem; box-shadow: none; }
+}

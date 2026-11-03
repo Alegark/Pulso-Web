@@ -1,71 +1,76 @@
 {
   "project": "Pulso-Web",
   "date": "2026-11-03",
-  "status": "PROTOTYPE_VERIFIED_NOT_P0",
-  "release": "/releases/3034ef0dd7d39387.html",
+  "status": "RELEVANCE_MOBILE_VERIFIED_NOT_P0",
+  "release": "/releases/6caf20bb8f11cb33.html",
   "flow": {
-    "typing": "automatic LRCLIB metadata; 450ms debounce",
-    "EnterAndBuscar": "catalogue only; no Telegram send",
-    "songChoice": "explicit title+artist to the first configured bot, only if its adapter is supported and session/authority are current; never skip to another bot",
-    "albumChoice": "catalogue refinement",
+    "typing": "automatic metadata, 450ms debounce; rank title/artist/album words and prefixes; full coverage before partial",
+    "EnterAndBuscar": "internal catalogue only, zero Telegram sends",
+    "songChoice": "one title+artist query to first configured compatible bot under existing guards",
+    "mobile": "suggestions in normal document flow below search bar, cancel draft",
+    "emptySuccessfulQuery": "at most one sequential first-half reformulation for >=2 words when prefix has >=3 characters; no error retries; <=15s total",
     "artistCategory": false,
-    "silentFallback": false
+    "botFallback": false
   },
   "verification": {
-    "unit": "457/457 PASS",
-    "lint": "PASS",
-    "main": "13/13 Chromium154; 2 unmodified main controls, 11 synthetic SDK in native worker; no real account",
-    "production": "Chromium154 and WebKit27.2 desktop, synthetic metadata route; 12 WebKit style-src-attr reports",
-    "update": "4fd6e510fedabf76 to 3034ef0dd7d39387; old audio continues, new paused, waiting until normal closure",
-    "privateHTTPS": "37 files exact; 194 old immutable preserved; private configuration 0600/no-store",
-    "publicMetadata": "one query, HTTP 200, 20 records, 17 suggestions, 0 auth requests, 0 OPTIONS observed, no body saved"
+    "unit": "20/20 root focal tests, including RED baseline same-title/performer",
+    "lintAndTypes": "PASS",
+    "main": "13/13 Chromium154; two unmodified main controls plus synthetic SDK in native worker; freeze146 exact; zero pageerrors/CSP/unexpected external requests; cleanup true",
+    "production": "Chromium154 + WebKit27.2 desktop PASS, synthetic metadata routes; 12 native style-src-attr reports retained",
+    "update": "3034ef0dd7d39387 -> /releases/6caf20bb8f11cb33.html; old audio continues, new paused, waiting until normal closure",
+    "privateCopy": {
+      "passed": true,
+      "currentFilesExact": 37,
+      "previousImmutablePreserved": 196
+    },
+    "privateHTTPS": "launcher, entry, main, auth worker, SW and separate no-store config exact; same private grant and service"
   },
   "limits": [
-    "No real Telegram bot protocol validation",
-    "No physical iPhone, Safari, VoiceOver or P0 acceptance",
-    "No callback, download, playback of bot results or fallback",
-    "Remote relevance is provider-ranked; no complete catalogue guarantee"
+    "Not real Telegram protocol or authentication acceptance",
+    "Not physical iPhone/Safari/VoiceOver/P0 acceptance",
+    "No new callback, download, playback of bot results or fallback",
+    "Bounded relevance/prefix matching, not semantic AI or exhaustive catalogue; reformulation may still find nothing"
   ],
   "evidence": {
-    ".local/music-search-prototype-parent/freeze.json": {
-      "bytes": 21815,
-      "sha256": "5b30d3080b1d439081b7e998616464f88b54369d0add8ccd15ea962f95b9f533"
+    ".local/music-search-relevance/freeze.json": {
+      "bytes": 21914,
+      "sha256": "c63256dfe3d77c35feedef0d61e750a3bb8ec3bcdbae00becd92c13de82a81b7"
     },
-    ".local/evidence/music-search-prototype.json": {
-      "bytes": 417727,
-      "sha256": "6f3786b125269e50dcc53572e372f8b8d5b53a5f2bedf601857bfde4ae787acf"
+    ".local/music-search-relevance/report-latest.json": {
+      "bytes": 420436,
+      "sha256": "6e4c6f322e3ea8f8660cb8d3fe4dac674adf93d700af0ce0497f59f55e5bf5b2"
     },
-    ".local/music-search-prototype-parent/unit.log": {
-      "bytes": 104425,
-      "sha256": "e79abdfa871b763b7e926c26a4e38874ae76026083ac904ba99a24e9a30c19ae"
+    ".local/music-search-relevance/root-review/red-green.json": {
+      "bytes": 69,
+      "sha256": "a28512f6563e21595afcdd456426b1325d492d2bf6f834ecd6a3ca8033a65e58"
     },
-    ".local/music-search-prototype-parent/lint.log": {
+    ".local/music-search-relevance/root-review/unit.log": {
+      "bytes": 4817,
+      "sha256": "51f1221c8eb5d7c90ae8e0bbeeb5b9f2ceb65ee5022695f6db55a545592e5063"
+    },
+    ".local/music-search-relevance/root-review/lint.log": {
       "bytes": 78,
       "sha256": "9115c612f4c31d6ab637706d69432895db03337b27fb395cca045cdacbcb168b"
     },
-    ".local/music-search-prototype-release/audit-build.json": {
+    ".local/music-search-relevance-release/audit-build.json": {
       "bytes": 5573,
-      "sha256": "35c9dad5ad9195a63b5cba3e86304ecfb4526432eedb3309631dc9281f877cf4"
+      "sha256": "ee86be49b08d2a27bf06826f05fc9d88c99a8fbd7d365620fe3b088124f5160b"
     },
-    ".local/music-search-prototype-release/search-production.json": {
+    ".local/music-search-relevance-release/search-production.json": {
       "bytes": 1723,
-      "sha256": "b0f9dad6c1ffbebefaced15b4edea5d0f9bb6e3abe4fc7baa173b8a9ce8545b5"
+      "sha256": "ad88a4033b62b6a01e84fecdc05ee5b251eea91d89c6fb7ab7d2057e6c4c2eb0"
     },
-    ".local/music-search-prototype-release/update.json": {
+    ".local/music-search-relevance-release/update.json": {
       "bytes": 495,
-      "sha256": "d22ddaf71fdf17adc8a822160000c7dcc552782ded0354f20e264dc92cef50e7"
+      "sha256": "752aeddac2bb04eabf49be7bac9ca08e87bd6f21b4c8959bfddea43fefb0b6ee"
     },
-    ".local/music-search-prototype-release/delivery-copy.json": {
-      "bytes": 113,
-      "sha256": "bcb64b62edd9bc888f83ed55d5c82b8e4abea2c0459802743c42ae955594fee9"
+    ".local/music-search-relevance-release/delivery-copy.json": {
+      "bytes": 85,
+      "sha256": "588215995b2b6aed09376a8f32036af8da3b1f80492c1b80c5f4f200aab8e869"
     },
-    ".local/music-search-prototype-release/https-readback.json": {
+    ".local/music-search-relevance-release/https-readback.json": {
       "bytes": 329,
-      "sha256": "64c3286caffa04e18584f577c66edeca82e829a5a8e23e7a19062c261d203334"
-    },
-    ".local/music-search-prototype-release/private-suggestions.json": {
-      "bytes": 409,
-      "sha256": "a74f219e0e4ce0fd095acd5775a241a789bbc02b2b56079b0735eacea59c8c36"
+      "sha256": "4e6035c74dfbe2128a7e6cd7c7103da2c4384666dc51d9afe0974410a3875ec5"
     }
   }
 }

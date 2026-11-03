@@ -41,3 +41,21 @@ test('local title matching tolerates accents and punctuation without broad punct
  const local={id:'owned',title:'Bésame, Mucho!',artist:'Own',album:null,duration:1} as Track;
  assert.equal(musicSearchCatalog('besame mucho',[local],[]).length,1);assert.deepEqual(musicSearchCatalog('---',[local],[]),[]);
 });
+
+test('cross-field words, order, punctuation and prefixes rank full title and performer first',()=>{
+ const local=[{id:'wrong',title:'Yo siempre contesto',artist:'Otro',album:null,duration:1},{id:'right',title:'Yo siempre contesto',artist:'LATIN MAFIA',album:null,duration:1}] as Track[];
+ for(const q of ['yo siempre contesto latin mafia','MAFIA, latin contésto siempre yo','yo siempre contes latin maf']){
+  const out=musicSearchCatalog(q,local,[row(200,'Yo siempre contesto','Another')]);assert.equal(out[0].id,'local:right');assert.ok(out.findIndex(r=>r.id==='local:wrong')>0);
+ }
+});
+test('best local match survives cap after a thousand earlier partial matches',()=>{
+ const local=Array.from({length:1000},(_,i)=>({id:String(i),title:'Yo siempre contesto',artist:'Otro',album:null,duration:1} as Track));
+ local.push({id:'best',title:'Yo siempre contesto',artist:'LATIN MAFIA',album:null,duration:1} as Track);
+ assert.equal(musicSearchCatalog('yo siempre contesto latin mafia',local,[])[0].id,'local:best');
+});
+
+
+test('a title identical to the performer remains searchable',()=>{
+ const t={id:'same-name',title:'Talk Talk',artist:'Talk Talk',album:null,duration:1} as Track;
+ assert.equal(musicSearchCatalog('talk talk',[t],[])[0]?.id,'local:same-name');
+});

@@ -17,10 +17,23 @@ export function musicCatalogKey(text:string):string {
   .replace(/[‘’ʼ]/gu,"'").replace(/[‐‑‒–—−]/gu,'-')
   .replace(/^["“”]+|["“”]+$/gu,'').replace(/\s*-\s*/gu,'-').replace(/\s+/gu,' ').trim();
 }
+function tokens(s:string|null):string[] {
+ return musicCatalogKey(s??'').normalize('NFD').replace(/\p{M}/gu,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim().split(/\s+/u).filter(Boolean);
+}
+function score(query:string,title:string,artist:string|null,album:string|null):number {
+ const words=tokens(query), names=[...tokens(title),...tokens(album)], performers=tokens(artist);
+ if(!words.length)return 0;
+ const match=(word:string,values:string[])=>values.some(value=>value===word||(word.length>=3&&value.startsWith(word)));
+ if(performers.length&&words.every(w=>match(w,performers))&&!words.every(w=>match(w,names)))return 0;
+ const named=words.filter(w=>match(w,names)).length;
+ if(!named)return 0; // Artist qualifies a song, never creates an artist result.
+ const covered=words.filter(w=>match(w,[...names,...performers])).length;
+ const artistMatches=words.filter(w=>match(w,performers)).length;
+ return (covered===words.length?10000:0)+covered*100+artistMatches*10+named;
+}
 function matches(text:string|null,query:string):boolean {
- const searchable=(s:string)=>musicCatalogKey(s).normalize('NFD').replace(/\p{M}/gu,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
- const needle=searchable(query);if(!needle)return false;
- const value=searchable(text??''),words=needle.split(' ');return words.every(word=>value.includes(word))||value.replace(/ /g,'').includes(needle.replace(/ /g,''));
+ const words=tokens(query), values=tokens(text);
+ return words.length>0&&words.every(w=>values.some(v=>v===w||(w.length>=3&&v.startsWith(w))));
 }
 /** A metadata grouping, not an acoustic identity claim. Album/duration differences
  * do not repeat a title/performer; literal live/remix/etc titles remain distinct.
@@ -28,11 +41,11 @@ function matches(text:string|null,query:string):boolean {
  */
 export function musicSearchCatalog(query:string,local:readonly Track[],remote:readonly MusicSuggestion[]):readonly MusicCatalogChoice[] {
  const q=musicCatalogKey(query);if(!q)return [];
- const songs=new Map<string,MusicCatalogChoice>(),albums=new Map<string,MusicCatalogChoice>();let localMatches=0;
+ const songs=new Map<string,MusicCatalogChoice>(),albums=new Map<string,MusicCatalogChoice>();
  const add=(id:string,title:string,artist:string|null,album:string|null,duration:number|null,source:'local'|'lrclib')=>{
   // LRCLIB has already ranked these candidates. Do not erase valid fuzzy/accent
   // matches with a stricter second title filter; the root binds them to the query.
-  if(source==='local'&&!matches(title,q)&&!matches(album,q))return;
+  if(source==='local'&&!score(q,title,artist,album))return;
   const key=JSON.stringify([musicCatalogKey(title),musicCatalogKey(artist??'')]);
   if(!songs.has(key)&&songs.size<MUSIC_CATALOG_LIMITS.tracks)songs.set(key,Object.freeze({id,kind:'track',title,artist,album,duration,source}));
   if(album&&matches(album,q)){
@@ -40,11 +53,11 @@ export function musicSearchCatalog(query:string,local:readonly Track[],remote:re
    if(!albums.has(albumKey)&&albums.size<MUSIC_CATALOG_LIMITS.albums)albums.set(albumKey,Object.freeze({id:'album:'+albumKey,kind:'album',title:album,artist,album,duration:null,source}));
   }
  };
- for(const t of local){
-  if(!matches(t.title,q)&&!matches(t.album,q))continue;
-  if(localMatches++>=MUSIC_CATALOG_LIMITS.localMatches)break;
-  add('local:'+t.id,t.title,t.artist,t.album,Number.isFinite(t.duration)?t.duration:null,'local');
- }
+ const rankedLocal=local.map((t,index)=>({t,index,score:score(q,t.title,t.artist,t.album)}))
+  .filter(item=>item.score>0).sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,MUSIC_CATALOG_LIMITS.localMatches);
+ for(const {t} of rankedLocal)add('local:'+t.id,t.title,t.artist,t.album,Number.isFinite(t.duration)?t.duration:null,'local');
  for(const t of remote)add('lrclib:'+t.id,t.trackName,t.artistName,t.albumName||null,t.duration,'lrclib');
- return Object.freeze([...songs.values(),...albums.values()]);
+ const ranked=[...songs.values()].map((choice,index)=>({choice,index,score:score(q,choice.title,choice.artist,choice.album)}))
+  .sort((a,b)=>b.score-a.score||a.index-b.index).map(item=>item.choice);
+ return Object.freeze([...ranked,...albums.values()]);
 }

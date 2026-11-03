@@ -34,7 +34,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
  const committed=React.useRef<MusicSearchPanelProps|null>(null);
  React.useLayoutEffect(()=>{committed.current=props;return()=>{committed.current=null;};});
  const id=React.useId(),queryRef=React.useRef<HTMLInputElement>(null),quickRef=React.useRef<HTMLDivElement>(null),resultsRef=React.useRef<HTMLHeadingElement>(null);
- const [open,setOpen]=React.useState(false),[filter,setFilter]=React.useState<'all'|'track'|'album'>('all');
+ const [open,setOpen]=React.useState(false),[focused,setFocused]=React.useState(false),[filter,setFilter]=React.useState<'all'|'track'|'album'>('all');
  const active=()=>committed.current===props&&props.current();
  const provider=props.primaryProvider;
  const ready=props.canSearch&&props.sessionReady&&!!provider?.supported&&!props.searchPending;
@@ -67,13 +67,14 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
     <div className="music-search-query-bar">
      <input ref={queryRef} id={`${id}-query`} type="search" role="combobox" aria-autocomplete="list" aria-expanded={expanded} aria-controls={expanded?`${id}-quick`:undefined}
       autoComplete="off" maxLength={640} value={props.query} aria-describedby={`${id}-query-help`}
-      onFocus={()=>setOpen(true)} onChange={event=>{if(active()){props.onQueryChange(event.currentTarget.value);setOpen(true);}}}
+      onFocus={()=>{setFocused(true);setOpen(true);}} onChange={event=>{if(active()){props.onQueryChange(event.currentTarget.value);setOpen(true);}}}
       onKeyDown={event=>{
        if(event.key==='Enter'&&event.nativeEvent.isComposing){event.preventDefault();return;}
        if(event.key==='Escape'){event.preventDefault();setOpen(false);}
        if(event.key==='ArrowDown'&&quick.length){event.preventDefault();setOpen(true);requestAnimationFrame(()=>quickRef.current?.querySelector<HTMLButtonElement>('[data-suggestion-id]')?.focus());}
       }}/>
      <button type="submit" disabled={!props.query.trim()}>Buscar</button>
+     {focused&&<button type="button" onClick={()=>{if(active()){props.onQueryChange('');setOpen(false);setFocused(false);queryRef.current?.blur();}}}>Cancelar búsqueda</button>}
     </div>
     {expanded&&<div ref={quickRef} className="music-search-dropdown" aria-label="Sugerencias rápidas">
      <div className="music-search-dropdown-heading"><strong>Sugerencias</strong><button type="button" onClick={()=>{if(active()){queryRef.current?.focus();setOpen(false);}}}>Cerrar sugerencias</button></div>
