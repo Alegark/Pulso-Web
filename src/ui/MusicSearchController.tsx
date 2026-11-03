@@ -1,0 +1,131 @@
+import React from 'react';
+import type {Track} from '../library/library';
+import {createMusicSuggestionsClient,normalizeMusicSuggestionsQuery,type MusicSuggestion} from '../library/music-suggestions';
+import type {TelegramSessionClient,BotsSnapshot,BotSearchSnapshot} from '../telegram/session-client';
+import type {SessionState} from '../telegram/session-protocol';
+import {isBotSearchQuery,parseBotSearchTarget,type BotSearchTarget,type BotSearchRow,type BotSearchError} from '../telegram/bot-search-protocol';
+import {MusicSearchPanel,type MusicSearchSuggestionRow,type MusicSearchResultRow} from './MusicSearchPanel';
+
+// One RAM-only transport per document, including cooldown across account/scope changes.
+// Construction performs no IO. Each mounted view owns only its request and AbortSignal.
+const suggestionsClient=createMusicSuggestionsClient();
+interface Props {
+ visible:boolean;scopeKey:string;client:TelegramSessionClient|null;phase:SessionState['phase'];
+ bots:BotsSnapshot|null;searchState:BotSearchSnapshot|null;canConnect:boolean;tracks:readonly Track[];
+}
+interface Choice {row:MusicSearchSuggestionRow;target?:BotSearchTarget|null;refine?:string}
+const fold=(s:string)=>s.normalize('NFC').trim().toLocaleLowerCase('es');
+const targetOf=(title:string,artist:string|null,album:string|null,duration:number|null)=>parseBotSearchTarget({title:title.normalize('NFC').trim(),artist:artist?.normalize('NFC').trim()||null,album:album?.normalize('NFC').trim()||null,durationSeconds:duration});
+function choicesFor(query:string,local:readonly Track[],remote:readonly MusicSuggestion[]):Choice[]{
+ const q=fold(query);if(!q)return [];
+ const tracks:Choice[]=[],artists=new Map<string,Choice>(),albums=new Map<string,Choice>(),seen=new Set<string>();
+ const add=(id:string,title:string,artist:string|null,album:string|null,duration:number|null,source:'local'|'lrclib')=>{
+  const key=JSON.stringify([fold(title),fold(artist??''),fold(album??'')]);if(seen.has(key))return;seen.add(key);
+  if(tracks.length<20)tracks.push({row:{id,kind:'track',title,subtitle:[artist,album].filter(Boolean).join(' · ')||null,source},target:targetOf(title,artist,album,duration)});
+  if(artist&&!artists.has(fold(artist))&&artists.size<5)artists.set(fold(artist),{row:{id:'artist:'+JSON.stringify([source,artist]),kind:'artist',title:artist,subtitle:null,source},refine:artist});
+  const albumKey=JSON.stringify([artist,album]);if(album&&!albums.has(albumKey)&&albums.size<5)albums.set(albumKey,{row:{id:'album:'+JSON.stringify([source,artist,album]),kind:'album',title:album,subtitle:artist,source},refine:[artist,album].filter(Boolean).join(' ')});
+ };
+ for(const t of local){if(!fold([t.title,t.artist,t.album].filter(Boolean).join(' ')).includes(q))continue;add('local:'+t.id,t.title,t.artist,t.album,Number.isFinite(t.duration)?t.duration:null,'local');}
+ for(const t of remote)add('lrclib:'+t.id,t.trackName,t.artistName,t.albumName||null,t.duration,'lrclib');
+ return [...tracks,...artists.values(),...albums.values()];
+}
+function resultView(row:BotSearchRow,target:BotSearchTarget|null):MusicSearchResultRow {
+ let title:string,subtitle:string|null,match:MusicSearchResultRow['match']='unknown';
+ if(row.kind==='audio'){
+  title=row.title??'Audio sin título informado';subtitle=[row.performer,row.durationSeconds+' s',Math.round(row.bytes/1024)+' KiB'].filter(Boolean).join(' · ');
+  if(target){const titleKnown=!!row.title,artistKnown=!!row.performer&&!!target.artist;
+   if(titleKnown&&fold(row.title!)!==fold(target.title)||artistKnown&&fold(row.performer!)!==fold(target.artist!))match='conflict';
+   else if(titleKnown&&artistKnown)match='compatible';
+  }
+ }else if(row.kind==='option'){title=row.label;subtitle='El bot no ha informado metadatos suficientes para confirmar la canción.';}
+ else{title=row.text;subtitle=null;}
+ return {id:row.rowRef,kind:row.kind,title,subtitle,correlation:row.correlation,match};
+}
+const searchErrors:Record<BotSearchError,string>={
+ cancelled:'Consulta detenida. Un mensaje ya enviado puede permanecer en tu chat.',timeout:'El bot no respondió dentro del plazo. No se repetirá la consulta automáticamente.',busy:'Hay otra operación de Telegram pendiente.',expired:'Estos resultados han caducado. Haz una consulta nueva si quieres continuar.',
+ 'session-expired':'La sesión de Telegram ha caducado. Vuelve a conectarla.',limit:'La consulta o la respuesta supera los límites admitidos.',unsupported:'Este bot o su respuesta todavía no son compatibles con este adaptador.','identity-changed':'El perfil del bot ha cambiado. Comprueba su identidad y vuelve a añadirlo.',
+ 'rate-limit':'Telegram ha limitado las consultas. Respeta la espera indicada antes de volver a buscar.',network:'No se pudo completar la consulta al bot.',uncertain:'No se pudo confirmar si el bot recibió o completó la consulta. Revisa su chat antes de repetirla.','needs-start':'Abre el chat del bot en Telegram e inícialo allí; después vuelve a buscar aquí.',
+};
+/** Root owns the session and the view. No playback, callback RPC, download or persistence. */
+export function MusicSearchController(props:Props){
+ const [query,setQuery]=React.useState(''),[externalConsent,setExternalConsent]=React.useState(false),[botConsent,setBotConsent]=React.useState(false);
+ const [provider,setProvider]=React.useState<string|null>(null),[target,setTarget]=React.useState<BotSearchTarget|null>(null);
+ const [remote,setRemote]=React.useState<readonly MusicSuggestion[]>([]),[suggesting,setSuggesting]=React.useState(false),[suggestionError,setSuggestionError]=React.useState<string|null>(null),[suggestionNotice,setSuggestionNotice]=React.useState<string|null>(null);
+ const [retry,setRetry]=React.useState(0),[notice,setNotice]=React.useState<string|null>(null),[displayedQuery,setDisplayedQuery]=React.useState<string|null>(null),[selectedResult,setSelectedResult]=React.useState<string|null>(null);
+ const [,pulse]=React.useReducer(n=>n+1,0);
+ const latest=React.useRef(props),mounted=React.useRef(false),viewEpoch=React.useRef(0),committed=React.useRef<object|null>(null),metadataAttempt=React.useRef<{abort:AbortController}|null>(null),metadataEpoch=React.useRef(0);
+ const chosenDraft=React.useRef<string|null>(null);
+ const renderToken={};const renderEpoch=viewEpoch.current;
+ React.useLayoutEffect(()=>{latest.current=props;mounted.current=true;committed.current=renderToken;return()=>{committed.current=null;};});
+ React.useEffect(()=>()=>{mounted.current=false;metadataAttempt.current?.abort.abort();},[]);
+ const current=()=>mounted.current&&committed.current===renderToken&&viewEpoch.current===renderEpoch&&latest.current.visible&&latest.current.scopeKey===props.scopeKey&&latest.current.client===props.client;
+ const client=props.client,state=client?.searchSnapshot()??props.searchState,action=client?.captureSearchActionCurrent(),cancel=client?.captureSearchCancel(),projection=client?.captureSearchCurrent();
+ const choices=React.useMemo(()=>choicesFor(query,props.tracks,remote),[query,props.tracks,remote]);
+ const providerRows=(props.bots?.providers??[]).map(row=>({id:row.providerRef,username:row.username,label:row.label,supported:row.username.toLowerCase()==='ivkmbot'}));
+ const selectedProvider=providerRows.find(row=>row.id===provider),ownPending=!!cancel||!!state?.cancelling;
+ const limited=!!state?.retryBlocked||state?.retryAt!==null&&state?.retryAt!==undefined&&Date.now()<state.retryAt;
+ const ready=props.canConnect&&props.phase==='connected'&&!!state?.available&&!state.pending&&!limited&&!!selectedProvider?.supported;
+ const rateNotice=state?.retryBlocked?'Telegram ha limitado las consultas sin indicar un plazo utilizable. No se reintentará automáticamente.':limited&&state?.retryAt?'Telegram permite reintentar después de '+new Date(state.retryAt).toLocaleTimeString()+'.':null;
+ const results=displayedQuery!==null&&state?.queryId===displayedQuery?state.rows.map(row=>resultView(row,state.expectedTarget)):[];
+ const revokeMetadata=()=>{++metadataEpoch.current;const attempt=metadataAttempt.current;metadataAttempt.current=null;attempt?.abort.abort();setSuggesting(false);};
+ const bump=()=>{++viewEpoch.current;revokeMetadata();pulse();};
+ const edit=()=>{bump();chosenDraft.current=null;setTarget(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);cancel?.();if(action?.())client?.clearSearch(action);};
+ React.useEffect(()=>{
+  bump();setDisplayedQuery(null);setSelectedResult(null);setBotConsent(false);setTarget(null);
+  setProvider(id=>props.bots?.providers.some(row=>row.providerRef===id)?id:null);
+ },[props.scopeKey,props.bots?.revision,props.bots?.scopeKey]);
+ React.useEffect(()=>{if(!props.visible){metadataAttempt.current?.abort.abort();client?.captureSearchCancel()?.();setDisplayedQuery(null);setSelectedResult(null);}},[props.visible,client]);
+ React.useEffect(()=>{const until=state?.retryAt;if(!until||until<=Date.now())return;const timer=setTimeout(()=>{if(mounted.current)pulse();},until-Date.now()+1);return()=>clearTimeout(timer);},[state?.retryAt]);
+ React.useEffect(()=>{
+  const expires=state?.expiresAt;if(!expires||!client)return;
+  const timer=setTimeout(()=>{if(latest.current.client===client){client.revalidate();pulse();}},Math.max(0,expires-Date.now()+1));return()=>clearTimeout(timer);
+ },[state?.expiresAt,client]);
+ React.useEffect(()=>{
+  const abort=new AbortController(),attempt={abort};metadataAttempt.current?.abort.abort();metadataAttempt.current=attempt;
+  setRemote([]);setSuggestionError(null);setSuggesting(false);
+  const valid=normalizeMusicSuggestionsQuery(query);
+  if(chosenDraft.current!==null&&query===chosenDraft.current){setSuggestionNotice('Canción elegida para consultar al bot.');return()=>abort.abort();}
+  if(!props.visible||!externalConsent||!valid){setSuggestionNotice(!externalConsent?'Las sugerencias locales no requieren consultar LRCLIB.':query?'Escribe entre 3 y 160 caracteres para obtener sugerencias.':null);return()=>abort.abort();}
+  const scope=props.scopeKey,epoch=metadataEpoch.current;
+  const live=()=>epoch===metadataEpoch.current&&mounted.current&&!abort.signal.aborted&&metadataAttempt.current===attempt&&latest.current.visible&&latest.current.scopeKey===scope;
+  const rate=suggestionsClient.getRateState(),wait=rate.retryAt===null?0:Math.max(0,rate.retryAt-Date.now());
+  if(rate.state==='busy'||rate.state==='blocked'||wait>2000){setSuggestionError(rate.state==='busy'?'Una consulta anterior todavía está terminando. Reintenta cuando termine.':'LRCLIB ha limitado las consultas. Espera antes de reintentar.');return()=>abort.abort();}
+  const timer=setTimeout(()=>{if(!live())return;setSuggesting(true);setSuggestionNotice(null);
+   void suggestionsClient.search(valid,{signal:abort.signal,current:live}).then(result=>{
+    if(!live())return;setSuggesting(false);
+    if(result.state==='ready'){setRemote(result.tracks);setSuggestionNotice(result.tracks.length?'Sugerencias de metadatos; disponibilidad en Telegram sin comprobar.':'No hay sugerencias externas para esta consulta. Puedes buscar el texto en el bot.');}
+    else if(result.state==='rate-limited')setSuggestionError(result.retryAt===null?'LRCLIB ha limitado las consultas y no indicó una espera utilizable.':'LRCLIB ha limitado las consultas. Podrás reintentar después de '+new Date(result.retryAt).toLocaleTimeString()+'.');
+    else if(result.state==='busy')setSuggestionError('Una consulta anterior todavía está terminando. Reintenta cuando termine.');
+    else if(result.state==='unavailable')setSuggestionError('No se pudieron obtener sugerencias de LRCLIB. Puedes seguir buscando el texto en Telegram.');
+   }).catch(()=>{if(live()){setSuggesting(false);setSuggestionError('No se pudieron obtener sugerencias externas.');}});
+  },Math.max(450,wait+1));
+  return()=>{clearTimeout(timer);abort.abort();};
+ },[query,externalConsent,props.visible,props.scopeKey,retry]);
+ function search(chosen:BotSearchTarget|null,text:string){
+  if(!current()||!ready||!botConsent||!provider||!action?.())return;
+  if(!isBotSearchQuery(text.trim())){setNotice('Escribe una consulta de hasta 160 caracteres, sin comandos ni saltos de línea.');return;}
+  const before=client!.searchSnapshot().queryId;
+  client!.searchBot({providerRef:provider,query:text.trim(),...(chosen?{target:chosen}:{}),consent:true},action);
+  const after=client!.searchSnapshot();
+  if(after.queryId&&after.queryId!==before){setDisplayedQuery(after.queryId);setSelectedResult(null);setNotice(null);}
+ }
+ function choose(id:string){
+  if(!current()||ownPending)return;const choice=choices.find(c=>c.row.id===id);if(!choice)return;
+  if(choice.row.kind!=='track'){edit();setQuery(choice.refine??choice.row.title);return;}
+  const chosen=choice.target;if(!chosen){setNotice('Los metadatos de esta sugerencia no se pueden enviar completos. Escribe una consulta más breve.');return;}
+  if(!ready||!botConsent)return;
+  // The choice itself is the explicit search gesture; no effect submits this draft.
+  revokeMetadata();search(chosen,chosen.title);bump();chosenDraft.current=[chosen.title,chosen.artist].filter(Boolean).join(' ');setTarget(chosen);setQuery(chosenDraft.current);
+ }
+ return <MusicSearchPanel query={query} onQueryChange={value=>{if(!current())return;edit();setQuery(value.slice(0,640));}}
+  suggestions={choices.map(c=>c.row)} suggestionsPending={suggesting} suggestionsError={suggestionError} suggestionsNotice={suggestionNotice}
+  externalConsent={externalConsent} onExternalConsentChange={value=>{if(!current())return;edit();setExternalConsent(value);}}
+  onRetrySuggestions={()=>{if(current()&&externalConsent&&!ownPending){edit();setRetry(n=>n+1);}}}
+  providerRows={providerRows} selectedProviderId={provider} onProviderChange={id=>{if(!current()||ownPending)return;edit();setProvider(id||null);setBotConsent(false);}}
+  sessionReady={props.phase==='connected'} canSearch={ready} searchPending={ownPending} botConsent={botConsent}
+  onBotConsentChange={value=>{if(!current()||ownPending)return;edit();setBotConsent(value);}}
+  onSearch={()=>search(target,target?target.title:query)} onChooseSuggestion={choose}
+  onCancel={()=>{cancel?.();if(mounted.current&&latest.current.client===client)setNotice('Consulta detenida. Revisa el chat del bot antes de repetir si el envío quedó incierto.');}}
+  results={results} selectedResultId={selectedResult} onSelectResult={id=>{if(current()&&projection?.()&&results.some(row=>row.id===id)){setSelectedResult(id);setNotice('Opción seleccionada sólo en Pulso. La descarga pertenece al siguiente paso.');}}}
+  status={rateNotice??notice??(displayedQuery&&state?.queryId===displayedQuery&&!state.error&&results.length?'Respuesta del bot recibida. Revisa las opciones; la identidad musical sigue sin confirmar.':null)} error={state?.error?searchErrors[state.error]:null} uncertain={state?.delivery==='uncertain'} current={current}/>;
+}

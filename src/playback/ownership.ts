@@ -171,7 +171,9 @@ export class Ownership {
   }
   private isBlocked(blocked: () => boolean) { try { return blocked(); } catch { return true; } }
   async cede(prepare: () => Promise<void>, extraBlocked: () => boolean) {
-    if (!this.owner || this.settling || this.restoring) return false;
+    // Refuse before notifying a temporary authority loss: an active operation
+    // retains its scope, session and original settlement when handoff is denied.
+    if (!this.owner || this.settling || this.restoring || !this.activity.idle || this.isBlocked(extraBlocked)) return false;
     this.settling = true;
     const intent = this.intent;
     if (this.outcome === 'acquired') this.outcome = 'idle';

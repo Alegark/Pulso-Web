@@ -1,4 +1,5 @@
 import Long from 'long';
+import type {tl} from '@mtcute/core';
 import {assertRawBudget} from './sources-page';
 import {dataArray,isUuid,parseAccountBinding,positive,sourceName,type AccountBinding} from './sources-protocol';
 import {BOT_PROVIDERS_BOUNDS as B,copyBotEnvelope,copyBotRow,parseBotProvidersCommand,parseBotUsername,type BotEnvelope,type BotProviderRow,type BotProvidersError,type BotProvidersReply,type BotProvidersSnapshot} from './bot-providers-protocol';
@@ -6,7 +7,15 @@ import {BOT_PROVIDERS_BOUNDS as B,copyBotEnvelope,copyBotRow,parseBotProvidersCo
 export interface BotProvidersDependency {resolveIdentity(username:string,signal:AbortSignal):Promise<unknown>;invalidateSession():void}
 export interface BotProvidersContext {readonly signal:AbortSignal;readonly current:()=>boolean}
 export interface BotProvidersClock {now():number;setTimeout(fn:()=>void,ms:number):ReturnType<typeof setTimeout>;clearTimeout(timer:ReturnType<typeof setTimeout>):void}
+/** Worker-private authority: never serialize this capture or expose it through session DTOs.
+ * Pure capture/accessors do no IO. Only a fresh exact identity can yield an approved peer. */
+export interface BotSearchProviderCapture {
+ readonly username:string;
+ current():boolean;
+ verifyIdentity(raw:unknown):{readonly botId:number;readonly peer:tl.TypeInputPeer}|null;
+}
 export interface BotProvidersDriver {
+ captureSearchProvider(providerRef:string,expectedRevision:number):BotSearchProviderCapture|null;
  getSnapshot():BotProvidersSnapshot|null;
  handle(raw:unknown,context:BotProvidersContext):Promise<BotProvidersReply|null>;
  close():void;
@@ -71,6 +80,18 @@ export function createBotProvidersDriver(bindingInput:AccountBinding,sessionId:s
  const snapshot=():BotProvidersSnapshot=>Object.freeze({revision,providers:Object.freeze(selected.map(ref=>copyBotRow(offers.get(ref)!.row)))});
  return Object.freeze({
   getSnapshot(){return closed?null:snapshot();},close,
+  captureSearchProvider(providerRef:string,expectedRevision:number){
+   const offer=offers.get(providerRef);
+   if(closed||flight||expectedRevision!==revision||!selected.includes(providerRef)||!offer||offer.revision!==revision)return null;
+   const capturedRevision=revision,held=offer;
+   const current=()=>!closed&&revision===capturedRevision&&selected.includes(providerRef)&&offers.get(providerRef)===held;
+   return Object.freeze({username:held.row.username,current,verifyIdentity(raw:unknown){
+    if(!current())return null;let fresh:Identity|null;try{fresh=identity(raw,held.row.username);}catch{return null;}
+    if(!fresh)return null;
+    if(fresh.id!==held.identity.id||fresh.hash.low!==held.identity.hash.low||fresh.hash.high!==held.identity.hash.high){invalidate();return null;}
+    return current()?Object.freeze({botId:fresh.id,peer:Object.freeze({_: 'inputPeerUser' as const,userId:fresh.id,accessHash:new Long(fresh.hash.low,fresh.hash.high,false)})}):null;
+   }});
+  },
   quiesce(){close();return settlement;},whenSettled(){return settlement;},
   async handle(raw:unknown,ctx:BotProvidersContext):Promise<BotProvidersReply|null>{
    // Capture the guard function and signal once; callers must capture monotonic root epochs.

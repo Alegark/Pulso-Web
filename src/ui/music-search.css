@@ -1,0 +1,18 @@
+.music-search { color: inherit; min-width: 0; max-width: 48rem; }
+.music-search *, .music-search *::before, .music-search *::after { box-sizing: border-box; }
+.music-search p, .music-search span, .music-search strong, .music-search a, .music-search bdi { overflow-wrap: anywhere; }
+.music-search form, .music-search li, .music-search-suggestions { min-width: 0; }
+.music-search input[type="search"], .music-search select { display: block; width: 100%; min-width: 0; min-height: 44px; font: inherit; margin-block: .5rem 1rem; color: inherit; background: var(--surface, Canvas); border: 1px solid currentColor; border-radius: .5rem; padding: .65rem; }
+.music-search button { min-height: 44px; min-width: 44px; max-width: 100%; padding: .65rem .8rem; font: inherit; color: inherit; background: var(--surface, Canvas); border: 1px solid currentColor; border-radius: .5rem; white-space: normal; overflow-wrap: anywhere; text-align: start; cursor: pointer; }
+.music-search button:disabled { opacity: .6; cursor: default; }
+.music-search :is(button,input,select,a):focus-visible { outline: 3px solid var(--accent, #8060e8); outline-offset: 3px; }
+.music-search-check { display: flex; align-items: start; gap: .6rem; margin-block: 1rem; }
+.music-search-check input { flex: 0 0 44px; width: 44px; height: 44px; margin: 0; accent-color: var(--accent, #8060e8); }
+.music-search-check span { min-width: 0; padding-block: .5rem; }
+.music-search ul { list-style: none; padding: 0; margin-block: .5rem 1rem; }
+.music-search li { margin-block: .65rem; }
+.music-search-suggestions button { display: flex; flex-direction: column; gap: .35rem; width: 100%; }
+.music-search-suggestions button > * { max-width: 100%; }
+.music-search-results li { padding: .8rem; border: 1px solid currentColor; border-radius: .5rem; }
+.music-search-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
+.music-search select { text-overflow: ellipsis; }

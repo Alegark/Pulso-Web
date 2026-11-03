@@ -5,6 +5,7 @@ import {sendCode,signIn,checkPassword} from '@mtcute/core/methods.js';
 import {getWasmUrl} from '@mtcute/wasm';
 import type {User} from '@mtcute/core';
 import Long from 'long';
+import {createBotSearchSdkDriver,type BotSearchDriver} from './bot-search-driver';
 import {createSourcesDriver,type SourcesDriver} from './sources-driver';
 import {botProvidersFailure,createBotProvidersDriver,type BotProvidersDriver} from './bot-providers-driver';
 import type {AccountBinding} from './sources-protocol';
@@ -25,6 +26,7 @@ export interface TemporaryTelegramDriver {
  getAccountCooldown?():TelegramAccountCooldown|null;
  createSources(sessionId:string):SourcesDriver;
  createBotProviders(sessionId:string):BotProvidersDriver;
+ createBotSearch?(sessionId:string):BotSearchDriver;
 }
 /** RAM-only storage is explicit: the SDK's default client.session database is never used. */
 export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:AbortSignal):Promise<TemporaryTelegramDriver>{
@@ -34,10 +36,15 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  const platform=new WebPlatform();platform.log=()=>{};platform.getDefaultLogLevel=()=>LogManager.OFF;platform.getDeviceModel=()=> 'Pulso Web';
  const client=new BaseTelegramClient({apiId:identity.apiId,apiHash:identity.apiHash,storage:new MemoryStorage(),platform,crypto,transport:new WebSocketTransport(),updates:false,disableUpdates:true,storageOptions:{peers:{updatesWriteInterval:0}},logLevel:LogManager.OFF,initConnectionOptions:{appVersion:'Pulso Web 0.1',deviceModel:'Pulso Web',systemVersion:'Web',langCode:'es',systemLangCode:'es'}});
  // Disable automatic RPC retries/flood sleeps. DC migration remains SDK-managed.
- const call=client.call.bind(client);client.call=(message,params)=>call(message,{floodSleepThreshold:0,maxRetryCount:0,timeout:30000,...params});
+ const call=client.call.bind(client);client.call=async(message,params)=>{
+  admitAccountRead();
+  try{return await call(message,{floodSleepThreshold:0,maxRetryCount:0,timeout:30000,...params});}
+  catch(error){observeAccountWait(error);throw error;}
+ };
  let closed=false,phone='',challenge='',closing:Promise<void>|undefined;
  let accountKey='',binding:AccountBinding|null=null,sources:SourcesDriver|undefined,sourcesSession='';
  let botProviders:BotProvidersDriver|undefined,botProvidersSession='';
+ let botSearch:BotSearchDriver|undefined,botSearchSession='';
  let accountCooldown:TelegramAccountCooldown|null=null;
  const getAccountCooldown=():TelegramAccountCooldown|null=>{
   if(closed||signal.aborted)return null;
@@ -56,12 +63,15 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
   // SDK-like data only; drivers retain their original first cause independently.
   throw {text:'FLOOD_WAIT',seconds:wait.retryBlocked?undefined:Math.max(1,Math.ceil((wait.retryAt!-Date.now())/1000))};
  };
- const accountRead:typeof client.call=async(message,params)=>{
-  admitAccountRead();
-  try{return await client.call(message,params);}catch(error){observeAccountWait(error);throw error;}
- };
+ const accountRead:typeof client.call=(message,params)=>client.call(message,params);
  const sourceLifetimeAbort=()=>{void close().catch(()=>{});};
- const close=()=>{if(closing)return closing;closed=true;phone=challenge='';signal.removeEventListener('abort',sourceLifetimeAbort);sources?.close();sources=undefined;sourcesSession='';botProviders?.close();botProviders=undefined;botProvidersSession='';binding=null;accountKey='';accountCooldown=null;closing=client.destroy();void closing.catch(()=>{});return closing;};
+ const close=()=>{if(closing)return closing;closed=true;phone=challenge='';signal.removeEventListener('abort',sourceLifetimeAbort);
+  // Invalidate publication first; keep original settlement before destroying its client.
+  const pendingSearch=botSearch;pendingSearch?.close();sources?.close();botProviders?.close();
+  binding=null;accountKey='';
+  closing=Promise.resolve().then(async()=>{if(pendingSearch)await pendingSearch.quiesce();await client.destroy();}).finally(()=>{botSearch=undefined;botSearchSession='';sources=undefined;sourcesSession='';botProviders=undefined;botProvidersSession='';accountCooldown=null;});
+  void closing.catch(()=>{});return closing;
+ };
  const current=(abort:AbortSignal)=>{if(closed||signal.aborted||abort.aborted)throw Error('cancelled');};
  const authorized=(user:User)=>{if(user.type!=='user'||!user.isSelf||user.isBot||!Number.isSafeInteger(user.id)||user.id<=0)throw Error('unsupported');
   const key=`telegram-user:${user.id}`;
@@ -73,11 +83,11 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
   async begin(number:string,abort:AbortSignal){current(abort);phone=number;const value=await sendCode(client,{phone,abortSignal:abort});current(abort);if(value.type==='user'){authorized(value);return null;}if(!['app','sms','call','email'].includes(value.type))throw Error('unsupported');challenge=value.phoneCodeHash;return value.type as Delivery;},
   async code(_number:string,code:string,abort:AbortSignal){current(abort);if(!phone||!challenge)throw Error('unsupported');const user=await signIn(client,{phone,phoneCodeHash:challenge,phoneCode:code,abortSignal:abort});current(abort);authorized(user);},
   async password(value:string,abort:AbortSignal){current(abort);const user=await checkPassword(client,{password:value,abortSignal:abort});current(abort);authorized(user);},
-  async logout(abort:AbortSignal){current(abort);if(botProviders){const settled=await botProviders.quiesce();current(abort);if(!settled)throw Error('logout-unconfirmed');}if(sources){const settled=await sources.quiesce();current(abort);if(!settled)throw Error('logout-unconfirmed');}await client.call({_: 'auth.logOut'},{abortSignal:abort});current(abort);await close();},
+  async logout(abort:AbortSignal){current(abort);if(botSearch){const settled=await botSearch.quiesce();current(abort);if(!settled)throw Error('logout-unconfirmed');}if(botProviders){const settled=await botProviders.quiesce();current(abort);if(!settled)throw Error('logout-unconfirmed');}if(sources){const settled=await sources.quiesce();current(abort);if(!settled)throw Error('logout-unconfirmed');}await client.call({_: 'auth.logOut'},{abortSignal:abort});current(abort);await close();},
   getAccountBinding(){return closed||signal.aborted?null:binding;},
   getAccountCooldown,
   createSources(sessionId:string){
-   current(signal);if(!binding||!isUuid(sessionId)||botProvidersSession&&botProvidersSession!==sessionId)throw Error('unsupported');
+   current(signal);if(!binding||!isUuid(sessionId)||botProvidersSession&&botProvidersSession!==sessionId||botSearchSession&&botSearchSession!==sessionId)throw Error('unsupported');
    if(sources){if(sourcesSession!==sessionId)throw Error('unsupported');return sources;}
    sourcesSession=sessionId;
    signal.addEventListener('abort',sourceLifetimeAbort,{once:true});
@@ -93,7 +103,7 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
    return sources;
   },
   createBotProviders(sessionId:string){
-   current(signal);if(!binding||!isUuid(sessionId)||sourcesSession&&sourcesSession!==sessionId)throw Error('unsupported');
+   current(signal);if(!binding||!isUuid(sessionId)||sourcesSession&&sourcesSession!==sessionId||botSearchSession&&botSearchSession!==sessionId)throw Error('unsupported');
    if(botProviders){if(botProvidersSession!==sessionId)throw Error('unsupported');return botProviders;}
    botProvidersSession=sessionId;
    signal.addEventListener('abort',sourceLifetimeAbort,{once:true});
@@ -107,6 +117,15 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
     invalidateSession(){void close().catch(()=>{});},
    });
    return botProviders;
+  },
+  createBotSearch(sessionId:string){
+   current(signal);if(!binding||!isUuid(sessionId)||!botProviders||botProvidersSession!==sessionId||sourcesSession&&sourcesSession!==sessionId)throw Error('unsupported');
+   if(botSearch){if(botSearchSession!==sessionId)throw Error('unsupported');return botSearch;}
+   botSearchSession=sessionId;signal.addEventListener('abort',sourceLifetimeAbort,{once:true});
+   botSearch=createBotSearchSdkDriver(binding,sessionId,{
+    call:accountRead,providers:botProviders,current,getAccountCooldown,
+    invalidateSession(){void close().catch(()=>{});},
+   });return botSearch;
   },
   close,
  });

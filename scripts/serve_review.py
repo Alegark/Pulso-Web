@@ -71,6 +71,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
         policy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        if resolved.suffix == '.html':
+            policy = policy.replace("connect-src 'self';", "connect-src 'self' https://lrclib.net;")
         if resolved.name.startswith('session.worker-') and resolved.suffix == '.js':
             # Only this dedicated worker can open the five SDK WebSocket origins.
             # The document, import workers and SW keep the existing policy.
