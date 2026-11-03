@@ -1,4 +1,4 @@
-import {BOT_SEARCH_BOUNDS,parseBotSearchCommand,type BotSearchCommand,type BotSearchRow,type BotSearchTarget,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
+import {BOT_SEARCH_BOUNDS,parseBotSearchCommand,type BotSearchCommand,type BotSearchRow,type BotSearchTarget,type BotSearchError,type BotSearchDelivery,type BotDownloadedAudio} from './bot-search-protocol';
 import {parseBotSearchBridgeReply} from './bot-search-bridge-protocol';
 import {parseBotProvidersCommand,parseBotUsername,type BotProvidersCommand,type BotProviderRow,type BotProvidersReply} from './bot-providers-protocol';
 import {parseBotProvidersBridgeReply} from './bot-providers-bridge-protocol';
@@ -12,9 +12,9 @@ interface SourcesPending {command:SourcesCommand;token:ActivityToken;current:()=
 export interface BotsSnapshot {binding:AccountBinding|null;providers:readonly BotProviderRow[];revision:number;scopeKey:string;pending:boolean;cancelling:boolean;error:string|null;notice:string|null;retryAt:number|null;retryBlocked:boolean}
 const emptyBots=():BotsSnapshot=>({binding:null,providers:[],revision:0,scopeKey:'',pending:false,cancelling:false,error:null,notice:null,retryAt:null,retryBlocked:false});
 interface BotPlan {worker:SessionWorker;command:BotProvidersCommand;refs:readonly string[];operationId:string;revision:number;epoch:number;token:ActivityToken;current:()=>boolean;timer:ReturnType<typeof setTimeout>;cancelled:boolean;cancelCommand:BotProvidersCommand|null;cancelAck:boolean;done:boolean;result:BotProvidersReply|null;until:number}
-export interface BotSearchSnapshot {binding:AccountBinding|null;scopeKey:string;pending:boolean;cancelling:boolean;rows:readonly BotSearchRow[];queryId:string|null;providerRef:string|null;providerRevision:number;expectedTarget:BotSearchTarget|null;delivery:BotSearchDelivery;expiresAt:number|null;error:BotSearchError|null;retryAt:number|null;retryBlocked:boolean;available:boolean}
+export interface BotSearchSnapshot {binding:AccountBinding|null;scopeKey:string;pending:boolean;cancelling:boolean;rows:readonly BotSearchRow[];queryId:string|null;providerRef:string|null;providerRevision:number;expectedTarget:BotSearchTarget|null;delivery:BotSearchDelivery;expiresAt:number|null;error:BotSearchError|null;retryAt:number|null;retryBlocked:boolean;available:boolean;downloadProgress?:{bytes:number;total:number}|null}
 const emptySearch=():BotSearchSnapshot=>({binding:null,scopeKey:'',pending:false,cancelling:false,rows:[],queryId:null,providerRef:null,providerRevision:0,expectedTarget:null,delivery:'not-dispatched',expiresAt:null,error:null,retryAt:null,retryBlocked:false,available:false});
-interface SearchPlan {worker:SessionWorker;command:Extract<BotSearchCommand,{type:'bot-search.search'}>;token:ActivityToken;current:()=>boolean;timer:ReturnType<typeof setTimeout>;until:number;cancelCommand:BotSearchCommand|null;cancelAck:boolean;done:boolean;cancelled:boolean}
+interface SearchPlan {worker:SessionWorker;command:Exclude<BotSearchCommand,{type:'bot-search.cancel'}>;token:ActivityToken;current:()=>boolean;timer:ReturnType<typeof setTimeout>;until:number;cancelCommand:BotSearchCommand|null;cancelAck:boolean;done:boolean;cancelled:boolean;resolveDownload?:(audio:BotDownloadedAudio|null)=>void;audio?:BotDownloadedAudio|null}
 export interface SessionWorker {onmessage:((event:MessageEvent)=>void)|null;onerror:((event:ErrorEvent)=>void)|null;onmessageerror:((event:MessageEvent)=>void)|null;postMessage(message:SessionCommand|SourcesCommand|BotProvidersCommand|BotSearchCommand):void;terminate():void}
 interface Pending {request:string;token:ActivityToken;timer:ReturnType<typeof setTimeout>}
 /** One RAM-only session/worker, created only by an explicit valid phone submission. */
@@ -46,6 +46,20 @@ export class TelegramSessionClient {
   this.searchPlan=p;this.search={...this.search,binding:{...binding},queryId:command.queryId,providerRef:command.providerRef,providerRevision:revision,expectedTarget:command.target??null};this.publishSearch();this.publishBots();this.publishSources();
   if(!p.current()||this.searchEpoch!==epoch){this.stop('cancelled');return;}try{worker.postMessage(command);}catch{this.stop('protocol');}
  }
+ downloadBot(rowRef:string,allowed:()=>boolean):Promise<BotDownloadedAudio|null> {
+  const root=this.searchGuards.get(allowed);this.expireSearch();
+  if(!root||!allowed()||!this.botReady()||!this.remoteAllowed()||!this.search.queryId||!this.search.providerRef||!this.search.expectedTarget||!this.search.rows.some(r=>r.rowRef===rowRef&&r.kind!=='message'))return Promise.resolve(null);
+  const worker=this.worker!,binding=this.botBinding!,session=this.session,revision=this.bots.revision;
+  const command=parseBotSearchCommand({protocol:'pulso-bot-search',version:1,sessionId:session,...binding,providerRevision:revision,queryId:this.search.queryId,requestId:crypto.randomUUID(),type:'bot-search.download',providerRef:this.search.providerRef,rowRef,target:this.search.expectedTarget,consent:true});
+  if(command?.type!=='bot-search.download'||!root()||!allowed())return Promise.resolve(null);
+  const token=this.activity.begin();if(!token)return Promise.resolve(null);
+  this.searchEpoch++;this.commandEpoch++;
+  let resolveDownload!:(audio:BotDownloadedAudio|null)=>void;const done=new Promise<BotDownloadedAudio|null>(r=>resolveDownload=r);
+  const p:SearchPlan={worker,command,token,current:()=>root()&&token.current()&&this.worker===worker&&this.session===session&&this.botBinding?.accountRef===binding.accountRef&&this.botBinding?.accountEpoch===binding.accountEpoch&&(this.state.phase==='disconnecting'||this.bots.revision===revision),timer:setTimeout(()=>{if(this.searchPlan===p)this.cancelSearch(p,true);},BOT_SEARCH_BOUNDS.downloadMs),until:Date.now()+BOT_SEARCH_BOUNDS.downloadMs,cancelCommand:null,cancelAck:false,done:false,cancelled:false,resolveDownload};
+  this.searchPlan=p;this.search={...this.search,error:null,delivery:'not-dispatched',expiresAt:null,downloadProgress:{bytes:0,total:0}};if(this.searchExpiry!==null)clearTimeout(this.searchExpiry);this.searchExpiry=null;
+  this.publishSearch();this.publishBots();this.publishSources();
+  if(!p.current()){this.stop('cancelled');return done;}try{worker.postMessage(command);}catch{this.stop('protocol');}return done;
+ }
  captureSearchCancel():(()=>void)|undefined {const p=this.searchPlan;if(!p||p.cancelled)return undefined;return()=>{if(this.searchPlan===p&&this.state.phase==='connected')this.cancelSearch(p);};}
  private cancelSearch(p:SearchPlan,timeout=false){
   if(this.searchPlan!==p||p.cancelled||this.worker!==p.worker)return;if(!p.current()){this.quarantineSearch('cancelled');return;}
@@ -55,7 +69,7 @@ export class TelegramSessionClient {
   this.publishSearch();if(!p.current()){this.quarantineSearch('cancelled');return;}try{p.worker.postMessage(command);}catch{this.quarantineSearch('protocol');}
  }
  private quarantineSearch(error:SessionError){if(this.searchPlan)this.search={...this.search,delivery:'uncertain'};this.stop(error);}
- private finishSearch(p:SearchPlan){if(this.searchPlan!==p||!p.done||p.cancelCommand&&!p.cancelAck)return;clearTimeout(p.timer);p.token.end();this.searchPlan=null;this.retiredSearch.set(p.command.requestId,p.command);if(p.cancelCommand)this.retiredSearch.set(p.cancelCommand.requestId,p.cancelCommand);while(this.retiredSearch.size>256)this.retiredSearch.delete(this.retiredSearch.keys().next().value!);this.publishSearch();this.publishBots();this.publishSources();this.flushLogout();}
+ private finishSearch(p:SearchPlan){if(this.searchPlan!==p||!p.done||p.cancelCommand&&!p.cancelAck)return;clearTimeout(p.timer);p.token.end();this.searchPlan=null;this.retiredSearch.set(p.command.requestId,p.command);if(p.cancelCommand)this.retiredSearch.set(p.cancelCommand.requestId,p.cancelCommand);while(this.retiredSearch.size>256)this.retiredSearch.delete(this.retiredSearch.keys().next().value!);this.publishSearch();this.publishBots();this.publishSources();this.flushLogout();p.resolveDownload?.(p.cancelled?null:p.audio??null);}
  private receiveSearch(raw:unknown):boolean {
   const p=this.searchPlan;
   if(p)for(const command of [p.command,p.cancelCommand]){if(!command)continue;const bridge=parseBotSearchBridgeReply(raw,command);if(!bridge)continue;
@@ -66,7 +80,9 @@ export class TelegramSessionClient {
    if(p.done)return true;
    if(reply.type==='bot-search.error'&&reply.delivery==='not-dispatched'&&this.search.delivery!=='not-dispatched'){this.quarantineSearch('protocol');return true;}
    if(reply.type==='bot-search.sending'){this.search={...this.search,delivery:'uncertain'};this.publishSearch();return true;}
+   if(reply.type==='bot-search.download-progress'){const prev=this.search.downloadProgress;if(prev&&reply.bytes<prev.bytes){this.quarantineSearch('protocol');return true;}this.search={...this.search,downloadProgress:{bytes:reply.bytes,total:reply.total}};this.publishSearch();return true;}
    p.done=true;
+   if(reply.type==='bot-search.downloaded'){if(p.command.type!=='bot-search.download'){this.quarantineSearch('protocol');return true;}if(!p.cancelled&&Date.now()<p.until){p.audio=reply.audio;this.search={...this.search,error:null,rows:[],downloadProgress:null};}}
    if(this.state.phase==='connected'){
     if(reply.type==='bot-search.error')this.search={...this.search,delivery:reply.delivery,error:p.cancelled?this.search.error:reply.error};
     else if(reply.type==='bot-search.result'){
@@ -160,7 +176,7 @@ export class TelegramSessionClient {
  snapshot():SessionState{return {...this.state};}
  private current(){try{return !this.stopped&&this.guard();}catch{return false;}}
  private publish(state:SessionState){this.state={...state};this.changed(this.snapshot());}
- private drop(){if(this.searchPlan){clearTimeout(this.searchPlan.timer);this.searchPlan.token.end();this.searchPlan=null;}this.invalidateSearch();this.retiredSearch.clear();this.search=emptySearch();const w=this.worker;this.worker=null;if(w){w.onmessage=w.onerror=w.onmessageerror=null;w.terminate();}if(this.pending){clearTimeout(this.pending.timer);this.pending.token.end();this.pending=null;}this.queuedLogout=null;if(this.botPlan){clearTimeout(this.botPlan.timer);this.botPlan.token.end();this.botPlan=null;}this.botEpoch++;this.commandEpoch++;this.retiredBots.clear();this.remoteRetryAt=null;this.remoteRetryBlocked=false;this.bots=emptyBots();this.botBinding=null;this.publishBots();this.session='';this.guard=()=>false;for(const p of [this.sourceRead,this.sourceControl])if(p){clearTimeout(p.timer);p.token.end();}this.sourceRead=this.sourceControl=null;this.cursor=null;this.retired.clear();if(this.sourcesIdle!==null)clearTimeout(this.sourcesIdle);this.sourcesIdle=null;this.sourcesUntil=null;this.projectionEpoch++;this.sources=emptySources();this.publishSources();}
+ private drop(){if(this.searchPlan){clearTimeout(this.searchPlan.timer);this.searchPlan.token.end();this.searchPlan.resolveDownload?.(null);this.searchPlan=null;}this.invalidateSearch();this.retiredSearch.clear();this.search=emptySearch();const w=this.worker;this.worker=null;if(w){w.onmessage=w.onerror=w.onmessageerror=null;w.terminate();}if(this.pending){clearTimeout(this.pending.timer);this.pending.token.end();this.pending=null;}this.queuedLogout=null;if(this.botPlan){clearTimeout(this.botPlan.timer);this.botPlan.token.end();this.botPlan=null;}this.botEpoch++;this.commandEpoch++;this.retiredBots.clear();this.remoteRetryAt=null;this.remoteRetryBlocked=false;this.bots=emptyBots();this.botBinding=null;this.publishBots();this.session='';this.guard=()=>false;for(const p of [this.sourceRead,this.sourceControl])if(p){clearTimeout(p.timer);p.token.end();}this.sourceRead=this.sourceControl=null;this.cursor=null;this.retired.clear();if(this.sourcesIdle!==null)clearTimeout(this.sourcesIdle);this.sourcesIdle=null;this.sourcesUntil=null;this.projectionEpoch++;this.sources=emptySources();this.publishSources();}
  stop(error:SessionError|null='cancelled'){const uncertain=!!this.searchPlan&&this.search.delivery!=='not-dispatched';this.drop();if(uncertain)this.search={...emptySearch(),delivery:'uncertain',error:'uncertain'};if(!this.stopped)this.publish(error?{...initialSessionState(),phase:'error',error}:initialSessionState());if(uncertain)this.publishSearch();}
  dispose(){this.stopped=true;this.drop();}
  revalidate(){if(this.worker&&!this.current())this.stop('cancelled');else{this.expireSearch();this.expireSources();if(this.sourcesExpiryDirty)this.publishSources();}}

@@ -1,0 +1,98 @@
+{
+  "project": "Pulso-Web",
+  "status": "IMPLEMENTED_FOCAL_VERIFIED_NOT_P0",
+  "release": "/releases/e68d53050c00bbaf.html",
+  "flow": {
+    "catalogueSubmit": "never Telegram send",
+    "chooseSong": "one search to configured primary bot",
+    "chooseBotOption": "one explicit current callback, no auto first result",
+    "replyAudio": "download only if metadata compatible; recent/multiple requires explicit second choice",
+    "chooseAudio": "fresh private document revalidation, sequential 64KiB parts",
+    "store": "explicit local copy via importer worker v2, expected SHA/tag checks, journal and readback before success",
+    "playback": "no autoplay; existing Audio/source/queue preserved"
+  },
+  "limits": {
+    "maxBytes": 8388608,
+    "formats": [
+      "audio/mpeg",
+      "audio/mp4",
+      "audio/wav"
+    ],
+    "oneActiveDownload": true,
+    "deadlineMs": 120000,
+    "rowTtlMs": 120000,
+    "networkRetries": 0,
+    "cloudStorage": false,
+    "saveToSystemFiles": false,
+    "realBotProtocol": "OWNER_REPORTED, NOT_RUNTIME_VERIFIED",
+    "acousticIdentity": false,
+    "physicalIPhone": false,
+    "P0": false
+  },
+  "verification": {
+    "unit": "470/470 PASS",
+    "lintAndTypes": "PASS",
+    "main": "20/20 Chromium154 sandbox groups; native worker/IDB/OPFS/Audio, SDK synthetic; clean resources",
+    "cancelSupplement": "separate selected group: network cancel + native worker FIFO test barrier + real commit/Cancel ordering; not 21 unique groups",
+    "sourceAudit": "147 sources; after tests only trailing whitespace removed in panel; exact JS/CSS runtime bytes unchanged; generated SW version varies as expected",
+    "production": "Chromium154/WebKit27.2 desktop PASS on actual dist with synthetic metadata only; WebKit 12 native style-src-attr reports retained; no bot account used",
+    "privateDelivery": {
+      "passed": true,
+      "currentFilesExact": 38,
+      "oldImmutablePreserved": 199,
+      "sameGrantAndService": true
+    },
+    "update": "6caf20bb8f11cb33 -> e68d53050c00bbaf PASS: old Audio plays, new paused, SW waiting until normal client closure, restore paused",
+    "privateHTTPS": "launcher/current entry/main/session worker/SW exact; configuration exact/no-store checked without storing its values"
+  },
+  "evidence": {
+    ".local/bot-download-root/report-full20.json": {
+      "bytes": 810734,
+      "sha256": "54fb458dfa820edc6c3d7b895c79d60f3e9feba723b0e756fb2dedb851ae9fbd"
+    },
+    ".local/bot-download-root/report-cancel-extra.json": {
+      "bytes": 178017,
+      "sha256": "9b6eb77f732aaa15fad5d1f290e6c510b1f563defd2f152a87c8cf59394e43e6"
+    },
+    ".local/bot-download-root/freeze.json": {
+      "bytes": 22090,
+      "sha256": "df122eecee539ff163cb2133efd08ac911c67794aa199941c2b16bd143c195d5"
+    },
+    ".local/bot-download-root/unit-all-final.log": {
+      "bytes": 107291,
+      "sha256": "98ec9b9efdd5ea1f198ae8f0dc9b0c2128884ee6569ddd2e31b335ffd73cdfc7"
+    },
+    ".local/bot-download-root/lint-final2.log": {
+      "bytes": 78,
+      "sha256": "9115c612f4c31d6ab637706d69432895db03337b27fb395cca045cdacbcb168b"
+    },
+    ".local/bot-download-release/audit-build.json": {
+      "bytes": 5728,
+      "sha256": "6bd530e660d138eeb5162654583e14e8af583e6fc30be466008319a131f1cdd0"
+    },
+    ".local/bot-download-release/source-equivalence.json": {
+      "bytes": 300,
+      "sha256": "cfe640b40817ab915e38d20e2bfdc81d0923b426bb941e68dd69df91a50414da"
+    },
+    ".local/bot-download-release/runtime-equivalence.json": {
+      "bytes": 244,
+      "sha256": "aca38e178f82f59396df9c90b09d2c2fa25be7a4fa9e100368f9b49308ef4f03"
+    },
+    ".local/bot-download-release/search-production.json": {
+      "bytes": 1723,
+      "sha256": "06e3abbb4290e4b504566faa2f284b142f5d0ad03c8496bb9d7ea096bde3eb2d"
+    },
+    ".local/bot-download-release/update.json": {
+      "bytes": 495,
+      "sha256": "b069dddbdc06949cd52ba7baa009ea4ed896fc4db4f9e4684131f4f1951d2f15"
+    },
+    ".local/bot-download-release/delivery-copy.json": {
+      "bytes": 111,
+      "sha256": "04581f877130a403e7a6f981531b46cba828d4b51012ffbab228b8876313644e"
+    },
+    ".local/bot-download-release/https-readback.json": {
+      "bytes": 329,
+      "sha256": "482227dc74e8ea6e42f7f859b54b69d6af83672ac1229f06f5cc9bb82d6c74aa"
+    }
+  }
+}

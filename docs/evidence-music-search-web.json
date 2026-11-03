@@ -1,7 +1,7 @@
 {
   "project": "Pulso-Web",
   "date": "2026-11-03",
-  "status": "RELEVANCE_MOBILE_VERIFIED_NOT_P0",
+  "status": "RELEVANCE_BASELINE_BEFORE_BOT_DOWNLOADS",
   "release": "/releases/6caf20bb8f11cb33.html",
   "flow": {
     "typing": "automatic metadata, 450ms debounce; rank title/artist/album words and prefixes; full coverage before partial",
@@ -28,7 +28,6 @@
   "limits": [
     "Not real Telegram protocol or authentication acceptance",
     "Not physical iPhone/Safari/VoiceOver/P0 acceptance",
-    "No new callback, download, playback of bot results or fallback",
     "Bounded relevance/prefix matching, not semantic AI or exhaustive catalogue; reformulation may still find nothing"
   ],
   "evidence": {
@@ -72,5 +71,6 @@
       "bytes": 329,
       "sha256": "4e6035c74dfbe2128a7e6cd7c7103da2c4384666dc51d9afe0974410a3875ec5"
     }
-  }
+  },
+  "nextFeatureEvidence": "docs/evidence-bot-download-web.json"
 }

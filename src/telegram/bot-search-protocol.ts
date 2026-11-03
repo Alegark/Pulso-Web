@@ -1,18 +1,22 @@
 import {dataArray,dataRecord,isUuid,parseAccountBinding,utf8Bytes,type AccountBinding} from './sources-protocol';
-export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:16,requestIds:256,settlementMs:2000,resultTtlMs:15000});
+export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:16,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadMs:120000});
 export interface BotSearchEnvelope extends AccountBinding {readonly protocol:'pulso-bot-search';readonly version:1;readonly sessionId:string;readonly providerRevision:number;readonly queryId:string;readonly requestId:string}
 export interface BotSearchTarget {readonly title:string;readonly artist:string|null;readonly album:string|null;readonly durationSeconds:number|null}
 export type BotSearchCommand=
  |(BotSearchEnvelope&{readonly type:'bot-search.search';readonly providerRef:string;readonly query:string;readonly consent:true;readonly target?:BotSearchTarget})
+ |(BotSearchEnvelope&{readonly type:'bot-search.download';readonly providerRef:string;readonly rowRef:string;readonly target:BotSearchTarget;readonly consent:true})
  |(BotSearchEnvelope&{readonly type:'bot-search.cancel';readonly targetRequestId:string});
-export type BotSearchError='cancelled'|'timeout'|'busy'|'expired'|'session-expired'|'limit'|'unsupported'|'identity-changed'|'rate-limit'|'network'|'uncertain'|'needs-start';
+export type BotSearchError='cancelled'|'timeout'|'busy'|'expired'|'session-expired'|'limit'|'unsupported'|'identity-changed'|'rate-limit'|'network'|'uncertain'|'needs-start'|'file-too-large'|'file-invalid'|'conflict';
 export type BotSearchDelivery='not-dispatched'|'uncertain'|'acknowledged';
 interface Row {readonly rowRef:string;readonly correlation:'reply'|'recent'}
 export type BotSearchRow=
  |(Row&{readonly kind:'audio';readonly title:string|null;readonly performer:string|null;readonly durationSeconds:number;readonly mimeType:string;readonly bytes:number})
  |(Row&{readonly kind:'option';readonly label:string})
  |(Row&{readonly kind:'message';readonly text:string});
+export type BotDownloadedAudio=Readonly<{blob:Blob;bytes:number;mime:'audio/mpeg'|'audio/mp4'|'audio/wav';sha256:string;target:BotSearchTarget}>;
 export type BotSearchReply=
+ |(BotSearchEnvelope&{readonly type:'bot-search.download-progress';readonly bytes:number;readonly total:number})
+ |(BotSearchEnvelope&{readonly type:'bot-search.downloaded';readonly audio:BotDownloadedAudio})
  |(BotSearchEnvelope&{readonly type:'bot-search.sending';readonly delivery:'uncertain'})
  |(BotSearchEnvelope&{readonly type:'bot-search.result';readonly delivery:'acknowledged';readonly rows:readonly BotSearchRow[];readonly expiresAt:number;readonly expectedTarget:BotSearchTarget|null})
  |(BotSearchEnvelope&{readonly type:'bot-search.error';readonly error:BotSearchError;readonly delivery:BotSearchDelivery;readonly retryAt:number|null;readonly retryBlocked:boolean})
@@ -59,19 +63,28 @@ function row(raw:unknown):BotSearchRow|null {
 export function parseBotSearchCommand(raw:unknown):BotSearchCommand|null {
  try{const r=dataRecord(raw);if(!r)return null;const e=envelope(r);if(!e)return null;let extra:string[],out:BotSearchCommand;
  if(r.type==='bot-search.search'){if(!isUuid(r.providerRef)||!isBotSearchQuery(r.query)||r.consent!==true)return null;const target=r.target===undefined?undefined:parseBotSearchTarget(r.target);if(target===null)return null;extra=['providerRef','query','consent',...(target?['target']:[])];out={...e,type:r.type,providerRef:r.providerRef,query:r.query,consent:true,...(target?{target}:{})};}
+ else if(r.type==='bot-search.download'){const target=parseBotSearchTarget(r.target);if(!isUuid(r.providerRef)||!isUuid(r.rowRef)||!target||r.consent!==true)return null;extra=['providerRef','rowRef','target','consent'];out={...e,type:r.type,providerRef:r.providerRef,rowRef:r.rowRef,target,consent:true};}
  else if(r.type==='bot-search.cancel'){if(!isUuid(r.targetRequestId))return null;extra=['targetRequestId'];out={...e,type:r.type,targetRequestId:r.targetRequestId};}else return null;
  return dataRecord(raw,[...keys,'type',...extra])&&utf8Bytes(JSON.stringify(out))<=BOT_SEARCH_BOUNDS.dtoBytes?Object.freeze(out):null;}catch{return null;}
 }
 export function parseBotSearchReply(raw:unknown,expected:BotSearchEnvelope):BotSearchReply|null {
  try{const r=dataRecord(raw);if(!r)return null;const e=envelope(r);if(!e||keys.some(k=>e[k]!==expected[k]))return null;let extra:string[],out:BotSearchReply;
  switch(r.type){
+ case 'bot-search.download-progress':if(!revision(r.bytes)||!revision(r.total)||r.total<=0||r.total>8388608||r.bytes>r.total)return null;extra=['bytes','total'];out={...e,type:r.type,bytes:r.bytes,total:r.total};break;
+ case 'bot-search.downloaded':{const audio=parseBotDownloadedAudio(r.audio);if(!audio)return null;extra=['audio'];out={...e,type:r.type,audio};break;}
  case 'bot-search.sending':if(r.delivery!=='uncertain')return null;extra=['delivery'];out={...e,type:r.type,delivery:'uncertain'};break;
  case 'bot-search.cancelled':if(!isUuid(r.targetRequestId))return null;extra=['targetRequestId'];out={...e,type:r.type,targetRequestId:r.targetRequestId};break;
  case 'bot-search.result':{const a=dataArray(r.rows,20);if(!a||!a.length||r.delivery!=='acknowledged'||!timestamp(r.expiresAt))return null;const rows=a.map(row);if(!rows.every((x):x is BotSearchRow=>x!==null)||new Set(rows.map(x=>x.rowRef)).size!==rows.length)return null;const expectedTarget=r.expectedTarget===null?null:parseBotSearchTarget(r.expectedTarget);if(r.expectedTarget!==null&&!expectedTarget)return null;extra=['delivery','rows','expiresAt','expectedTarget'];out={...e,type:r.type,delivery:'acknowledged',rows:Object.freeze(rows),expiresAt:r.expiresAt,expectedTarget};break;}
  case 'bot-search.error':
-  if(!['cancelled','timeout','busy','expired','session-expired','limit','unsupported','identity-changed','rate-limit','network','uncertain','needs-start'].includes(r.error as string)||!['not-dispatched','uncertain','acknowledged'].includes(r.delivery as string)||r.retryAt!==null&&!timestamp(r.retryAt)||typeof r.retryBlocked!=='boolean'||(r.error==='rate-limit'?(r.retryBlocked!==(r.retryAt===null)):(r.retryAt!==null||r.retryBlocked)))return null;
+  if(!['cancelled','timeout','busy','expired','session-expired','limit','unsupported','identity-changed','rate-limit','network','uncertain','needs-start','file-too-large','file-invalid','conflict'].includes(r.error as string)||!['not-dispatched','uncertain','acknowledged'].includes(r.delivery as string)||r.retryAt!==null&&!timestamp(r.retryAt)||typeof r.retryBlocked!=='boolean'||(r.error==='rate-limit'?(r.retryBlocked!==(r.retryAt===null)):(r.retryAt!==null||r.retryBlocked)))return null;
   extra=['error','delivery','retryAt','retryBlocked'];out={...e,type:r.type,error:r.error as BotSearchError,delivery:r.delivery as BotSearchDelivery,retryAt:r.retryAt as number|null,retryBlocked:r.retryBlocked};break;
  default:return null;
  }
  return dataRecord(raw,[...keys,'type',...extra])&&utf8Bytes(JSON.stringify(out))<=BOT_SEARCH_BOUNDS.dtoBytes?Object.freeze(out):null;}catch{return null;}
+}
+
+const blobSize=Object.getOwnPropertyDescriptor(Blob.prototype,'size')!.get!;
+const blobType=Object.getOwnPropertyDescriptor(Blob.prototype,'type')!.get!;
+export function parseBotDownloadedAudio(raw:unknown):BotDownloadedAudio|null {
+ try{const r=dataRecord(raw,['blob','bytes','mime','sha256','target']);if(!r||!revision(r.bytes)||r.bytes<=0||r.bytes>8388608||!['audio/mpeg','audio/mp4','audio/wav'].includes(r.mime as string)||typeof r.sha256!=='string'||! /^[a-f0-9]{64}$/.test(r.sha256)||blobSize.call(r.blob)!==r.bytes||blobType.call(r.blob)!==r.mime)return null;const target=parseBotSearchTarget(r.target);return target?Object.freeze({blob:r.blob as Blob,bytes:r.bytes,mime:r.mime as BotDownloadedAudio['mime'],sha256:r.sha256,target}):null;}catch{return null;}
 }

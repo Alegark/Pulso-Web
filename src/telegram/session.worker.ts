@@ -33,13 +33,13 @@ async function searchCommand(command:BotSearchCommand){
  let terminal=false,sending=false;
  const run=async()=>{try{
   refreshCooldown();let reply:BotSearchReply|null;
-  if(command.type==='bot-search.search'&&(!core||!remoteAllowed()))reply={...copyBotSearchEnvelope(command),type:'bot-search.error',error:core?'rate-limit':'unsupported',delivery:'not-dispatched',retryAt:core?retryAt:null,retryBlocked:core?retryBlocked:false};
+  if(command.type!=='bot-search.cancel'&&(!core||!remoteAllowed()))reply={...copyBotSearchEnvelope(command),type:'bot-search.error',error:core?'rate-limit':'unsupported',delivery:'not-dispatched',retryAt:core?retryAt:null,retryBlocked:core?retryBlocked:false};
   else reply=await core!.handle(command,{signal:abort.signal,current,publish:raw=>{
-   if(terminal||sending)return;const progress=parseBotSearchReply(raw,command);if(progress?.type!=='bot-search.sending'||command.type!=='bot-search.search'||!current()){closeLocal();return;}
-   sending=true;post(progress,false);
+   if(terminal)return;const progress=parseBotSearchReply(raw,command);if(!progress||!['bot-search.sending','bot-search.download-progress'].includes(progress.type)||command.type==='bot-search.cancel'||!current()){closeLocal();return;}
+   if(progress.type==='bot-search.sending'){if(sending)return;sending=true;}post(progress,false);
   }});
-  const settled=command.type==='bot-search.search'&&core?await core.whenSettled():true;
-  if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type==='bot-search.search'&&reply.type!=='bot-search.error'&&reply.type!=='bot-search.result'||command.type==='bot-search.cancel'&&(reply.type!=='bot-search.cancelled'||reply.targetRequestId!==command.targetRequestId)){closeLocal();return;}observeRemote(reply);refreshCooldown();
+  const settled=command.type!=='bot-search.cancel'&&core?await core.whenSettled():true;
+  if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&(reply.type!=='bot-search.cancelled'||reply.targetRequestId!==command.targetRequestId)){closeLocal();return;}observeRemote(reply);refreshCooldown();
   const sessionClosed=!settled||!current()||!driver.getAccountBinding();post(reply,sessionClosed);if(sessionClosed)closeLocal();
  }catch{closeLocal();}};
  if(command.type==='bot-search.cancel'){const flight=run();searchControl=flight;try{await flight;}finally{if(searchControl===flight)searchControl=null;}}

@@ -13,8 +13,10 @@ export function parseBotSearchBridgeReply(raw:unknown,command:BotSearchCommand):
   if(command.type==='bot-search.cancel'){
    if(reply.type!=='bot-search.cancelled'||reply.targetRequestId!==command.targetRequestId)return null;
   }else if(reply.type==='bot-search.cancelled')return null;
-  if(reply.type==='bot-search.sending'&&r.sessionClosed)return null;
-  if(reply.type==='bot-search.result'&&JSON.stringify(reply.expectedTarget)!==JSON.stringify(command.type==='bot-search.search'?command.target??null:null))return null;
+  if((reply.type==='bot-search.sending'||reply.type==='bot-search.download-progress')&&r.sessionClosed)return null;
+  if(reply.type==='bot-search.result'&&JSON.stringify(reply.expectedTarget)!==JSON.stringify(command.type==='bot-search.cancel'?null:command.target??null))return null;
+  if(reply.type==='bot-search.downloaded'&&(command.type!=='bot-search.download'||JSON.stringify(reply.audio.target)!==JSON.stringify(command.target)))return null;
+  if(reply.type==='bot-search.download-progress'&&command.type!=='bot-search.download')return null;
   return Object.freeze({protocol:'pulso-bot-search',version:1,reply,sessionClosed:r.sessionClosed,retryAt:r.retryAt as number|null,retryBlocked:r.retryBlocked});
  }catch{return null;}
 }

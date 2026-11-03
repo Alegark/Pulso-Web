@@ -51,9 +51,9 @@ export function botSearchAck(raw:unknown,botId:number,randomId:Long):number|null
  for(const u of a){if(searchOwn(u,'_')!=='updateNewMessage')continue;const m=searchOwn(u,'message');if(searchOwn(m,'id')===ids[0]&&(!samePeer(searchOwn(m,'peerId'),botId)||searchOwn(m,'out')!==true))return null;}
  return ids[0];
 }
-export interface BotSearchPrivateRef {readonly messageId:number;readonly callbackData?:Uint8Array}
+export interface BotSearchPrivateRef {readonly messageId:number;readonly callbackData?:Uint8Array;readonly fingerprint?:string;readonly row?:BotSearchRow}
 export interface BotSearchPage {readonly rows:readonly BotSearchRow[];readonly refs:ReadonlyMap<string,BotSearchPrivateRef>;readonly concurrent:boolean;readonly unrecognized:boolean}
-export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,outgoing:number):BotSearchPage {
+export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,outgoing:number,additionalReplies:readonly number[]=[]):BotSearchPage {
  const messages=history(raw,botId,20),rows:BotSearchRow[]=[],refs=new Map<string,BotSearchPrivateRef>();let concurrent=false,unrecognized=false;
  const add=(m:number,row:Omit<Extract<BotSearchRow,{kind:'option'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'message'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'audio'}>,'rowRef'>,data?:Uint8Array)=>{
   if(rows.length>=B.rows)bad('limit');const rowRef=crypto.randomUUID();rows.push(Object.freeze({...row,rowRef}));refs.set(rowRef,Object.freeze({messageId:m,...(data?{callbackData:data.slice()}: {})}));
@@ -62,8 +62,8 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
   if(searchOwn(m,'out')===true){if(id!==outgoing)concurrent=true;continue;}
   if(id<=outgoing||searchOwn(m,'_')!=='message'||!samePeer(searchOwn(m,'fromId'),botId))continue;
   const reply=searchOwn(m,'replyTo');let correlation:'reply'|'recent'='recent';
-  if(reply!==undefined){const peer=searchOwn(reply,'replyToPeerId');if(searchOwn(reply,'_')!=='messageReplyHeader'||searchOwn(reply,'replyToMsgId')!==outgoing||peer!==undefined&&!samePeer(peer,botId))continue;correlation='reply';}
-  const start=rows.length,markup=searchOwn(m,'replyMarkup');
+  if(reply!==undefined){const peer=searchOwn(reply,'replyToPeerId');if(searchOwn(reply,'_')!=='messageReplyHeader'||searchOwn(reply,'replyToMsgId')!==outgoing&&!additionalReplies.includes(searchOwn(reply,'replyToMsgId') as number)||peer!==undefined&&!samePeer(peer,botId))continue;correlation='reply';}
+  const fingerprint=botSearchMessageFingerprint(m);const start=rows.length,markup=searchOwn(m,'replyMarkup');
   if(searchOwn(markup,'_')==='replyInlineMarkup'){
    const keyboard=dataArray(searchOwn(markup,'rows'),20);if(!keyboard)bad('limit');
    for(const r of keyboard){if(searchOwn(r,'_')!=='keyboardInlineButtonRow')bad();const buttons=dataArray(searchOwn(r,'buttons'),20);if(!buttons)bad('limit');
@@ -87,7 +87,23 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
    }
   }
   const text=botSearchText(searchOwn(m,'message'),1000);if(text)add(id,{kind:'message',correlation,text});
+  for(const row of rows.slice(start)){const previous=refs.get(row.rowRef)!;refs.set(row.rowRef,Object.freeze({...previous,fingerprint,row}));}
   if(rows.length===start)unrecognized=true;
  }
  return Object.freeze({rows:Object.freeze(rows),refs,concurrent,unrecognized});
 }
+
+/** Canonical own-data snapshot; no SDK toJSON/accessor invocation. Caller validates raw budget first. */
+export function botSearchMessageFingerprint(message:unknown):string {
+ const clean=(v:unknown):unknown=>{if(v===undefined)return null;if(v===null||typeof v!=='object')return v;if(v instanceof Uint8Array)return Array.from(v);if(Array.isArray(v))return v.map(clean);const out:Record<string,unknown>={};for(const k of Object.keys(v).sort()){const d=Object.getOwnPropertyDescriptor(v,k);if(!d||!('value'in d))throw new BotSearchProjectionError('unsupported');out[k]=clean(d.value);}return out;};
+ // Exclude mutable view counters, include exact peer, text, markup and document.
+ return JSON.stringify(['id','peerId','fromId','message','replyMarkup','media','replyTo'].map(k=>clean(searchOwn(message,k))));
+}
+export function botSearchDocument(message:unknown):{location:{_: 'inputDocumentFileLocation';id:Long;accessHash:Long;fileReference:Uint8Array;thumbSize:string};dcId:number}|null {
+ const media=searchOwn(message,'media'),d=searchOwn(media,'document');
+ if(searchOwn(media,'_')!=='messageMediaDocument'||searchOwn(d,'_')!=='document')return null;
+ const id=searchLong(searchOwn(d,'id')),accessHash=searchLong(searchOwn(d,'accessHash')),ref=searchOwn(d,'fileReference'),dcId=searchOwn(d,'dcId');
+ if(!id||!accessHash||!(ref instanceof Uint8Array)||ref.length>4096||typeof dcId!=='number'||!Number.isSafeInteger(dcId)||dcId<1||dcId>5)return null;
+ return {location:{_:'inputDocumentFileLocation',id,accessHash,fileReference:ref.slice(),thumbSize:''},dcId};
+}
+export function botSearchKnownMessage(raw:unknown,botId:number,id:number):unknown {return history(raw,botId,20).find(m=>searchOwn(m,'id')===id&&samePeer(searchOwn(m,'fromId'),botId)&&searchOwn(m,'out')!==true);}

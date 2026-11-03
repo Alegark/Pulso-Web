@@ -1,3 +1,4 @@
+import type {BotDownloadedAudio} from './telegram/bot-search-protocol';
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {Ownership} from './playback/ownership';
@@ -36,7 +37,7 @@ import './ui/shell.css';
 import './style.css';
 import {createDiagnosticSession,type Handle} from './diagnostics/session';
 import {domFailure,failureText,result,type Operation,type Phase,type Result} from './diagnostics/contract';
-import {createResponseGate,type RecoveryRequest,type WorkerResponse} from './imports/import-protocol';
+import {createResponseGate,type ImportRequest,type RecoveryRequest,type WorkerResponse} from './imports/import-protocol';
 import {workerFailureOutcome,makeOutcome,type OutcomeV1} from './imports/import-outcome';
 import {toDiagnosticResults} from './diagnostics/import-mapping';
 import {AppFailure,copyFailureV1,fromKnownError,makeFailure} from './errors/app-failure';
@@ -100,7 +101,7 @@ const control=new Ownership(()=>{owner=control.owner;if(control.state==='sin-con
  ++scopeId;diagnostics.resetScope();copyRemovalPending=true;copyRemovalStartup=null;metadataRescanBlocked=true;control.activity.block('metadata-rescan',true);
  if(databaseState!=='ready'){if(databaseReloadRequired())control.activity.invalidate();return;}
  suspendedSnapshot=undefined;configuring=true;player.suspend();sourceProtection.invalidateScope();player.setQueue([]);configuring=false;installMediaSession();const opening=control.activity.begin();const scope=scopeId,proof=control.proof;const current=()=>scope===scopeId&&proof===control.proof&&control.owner&&!!opening?.current();const diagnostic=beginDiagnostic('open-library');
- try{await sourceProtection.releaseUnused();if(!current())return;await refresh();if(!current())return;await readRemovalStartup(current);if(!current())return;status='Biblioteca local. Puedes iniciar sesión en Telegram y buscar opciones del bot desde Buscar. La descarga de sus resultados sigue en preparación.';
+ try{await sourceProtection.releaseUnused();if(!current())return;await refresh();if(!current())return;await readRemovalStartup(current);if(!current())return;status='Biblioteca local. Puedes iniciar sesión en Telegram y buscar opciones del bot desde Buscar. Elige una opción musical para obtener su archivo y guardar una copia de hasta 8 MiB en este navegador.';
  const raw=await readRecord<unknown>('settings','library-playback');
  if(!current())return;
  if(raw!==undefined){const normalized=normalizeSnapshot(raw);if(normalized){if(!copyRemovalPending&&normalized.snapshot.entries.length){deferredQueueRestore={saved:normalized.snapshot,warnings:normalized.warnings,current:captureRemovalRaw()};}else if(copyRemovalPending)status='Hay una retirada pendiente. La cola guardada se conserva sin prepararla ni reproducirla.';}else status='La cola guardada no es válida. Se conserva sin cambios; prepara una nueva selección para reproducir.';}
@@ -115,7 +116,7 @@ const sourceProtection=createLocalCopyProtection({
 // Private root admission for explicit copy review and recovery.
 const sourceReview=createSourceReviewAdmission({
  protection:sourceProtection,activity:control.activity,
- canReserve:()=>control.owner&&!busy&&databaseState==='ready'&&!importRecoveryPending()&&!metadataRescanBlocked,
+ canReserve:()=>control.owner&&!busy&&databaseState==='ready'&&!importRecoveryPending()&&!metadataRescanBlocked&&!botImportActive,
  captureCurrent:()=>{const scope=scopeId,proof=control.proof,admission=databaseGeneration,activityScope=control.activity.scope();return()=>scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&activityScope()&&control.owner&&databaseState==='ready';},
  changed:()=>emit(),
 });
@@ -162,7 +163,8 @@ const retainProblem=(...args:Parameters<typeof retainProblemWork>)=>admitted('re
 const act=(...args:Parameters<typeof actWork>)=>admitted('edit-organization',actWork,...args);
 const queue=(...args:Parameters<typeof queueWork>)=>replaceQueue(...args);
 const importRecoveryPending=()=>unverifiedImportResponses.size>0||operations.some(job=>!terminal(job))||importProblems.some(issue=>!issue.retained);
-const importsBlocked=()=>databaseState!=='ready'||importRecoveryPending()||metadataRescanBlocked||sourceReview.hasReservation();
+let botImportActive:object|null=null;
+const importsBlocked=()=>!!botImportActive||databaseState!=='ready'||importRecoveryPending()||metadataRescanBlocked||sourceReview.hasReservation();
 const copyRemovalBlocked=()=>importsBlocked()||copyRemovalPending;
 let copyRemovalPending=true;
 let copyRemovalStartup:{key:string;snapshot:CopyRemovalStartup}|null=null;
@@ -280,9 +282,11 @@ type DomainTerminal=Exclude<WorkerResponse,{type:'progress'}>;
 interface DomainSettlement {response:DomainTerminal|null;outcome:OutcomeV1}
 /** Keep the exact request receiver until a terminal receipt or observed transport
  * failure, even if lifecycle already invalidated business publication. */
-async function invokeDomainWorker(kind:'recovery',exactWorker:Worker,request:RecoveryRequest,current:()=>boolean,onProgress?:(bytes:number)=>void):Promise<DomainSettlement>{
+async function invokeDomainWorker(kind:'recovery'|'import',exactWorker:Worker,request:RecoveryRequest|ImportRequest,current:()=>boolean,onProgress?:(bytes:number)=>void,signal?:AbortSignal):Promise<DomainSettlement>{
  let bridge:RealmAttempt|null=null,sendAttempted=false;
  let detachTransport:()=>void=()=>{};
+ const cancel=()=>{if(request.type==='import')try{exactWorker.postMessage({version:2,type:'cancel',operationId:request.operationId});}catch{/* Original terminal receiver remains owned. */}};
+ if(request.type==='cancel')throw Error('unsupported');
  const id=request.operationId;
  const settle=(value:DomainSettlement)=>{if(value.outcome.recoveryRequired)unverifiedResponse(id);else if(value.response&&value.outcome.status==='confirmed')verifiedResponse(id);return value;};
  try{
@@ -309,16 +313,44 @@ async function invokeDomainWorker(kind:'recovery',exactWorker:Worker,request:Rec
    if(!bridge!.current()){
     finish({response:null,outcome:makeOutcome({status:'failed',primary:makeFailure('admit','storage-unavailable','storage-unavailable','idb'),cleanup:null,reconcile:null,writeState:'not-started',closeState:'not-applicable',recoveryRequired:false})});return;
    }
-   try{sendAttempted=true;exactWorker.postMessage(request);}catch{failed('worker-failed');}
+   try{if(signal?.aborted){finish({response:null,outcome:workerFailureOutcome('worker-failed',false)});return;}sendAttempted=true;exactWorker.postMessage(request);signal?.addEventListener('abort',cancel,{once:true});if(signal?.aborted)cancel();}catch{failed('worker-failed');}
   });
  }catch(error){
   const failure=fromKnownError(error,{phase:null,backend:'unknown'});
   return settle({response:null,outcome:makeOutcome({status:sendAttempted?'uncertain':'failed',primary:failure.code==='unknown'?makeFailure(null,'internal','worker-failed','unknown'):failure,cleanup:null,reconcile:null,writeState:sendAttempted?'unknown':'not-started',closeState:sendAttempted?'unknown':'not-applicable',recoveryRequired:sendAttempted})});
  }finally{
   exactWorker.onmessage=null;exactWorker.onerror=null;exactWorker.onmessageerror=null;
-  detachTransport();
+  signal?.removeEventListener('abort',cancel);detachTransport();
   if(bridge)bridge.closeAfterSettlement();else exactWorker.terminate();
  }
+}
+/** A user-chosen Telegram file is an explicit personal LOCAL copy, not an auth side effect. */
+function captureBotAudioSave(){
+ const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();let used=false;
+ const allowed=()=>admitted()&&raw()&&review()&&!busy&&!importRecoveryPending()&&!metadataRescanBlocked&&!copyRemovalPending&&!sourceReview.hasReservation()&&!queueForeignBlocked();
+ if(!allowed()||botImportActive||!control.activity.idle)return null;
+ return async(audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void):Promise<'saved'|'failed'|'uncertain'>=>{
+  if(used||!allowed()||botImportActive||!control.activity.idle||signal.aborted)return 'failed';used=true;
+  const operation=control.activity.begin();if(!operation)return 'failed';const own={};botImportActive=own;emit();
+  const current=()=>admitted()&&raw()&&review()&&operation.current()&&botImportActive===own&&!sourceReview.hasReservation()&&!queueForeignBlocked();
+  const operationId=crypto.randomUUID();let outcome:OutcomeV1|undefined,confirmed=false;const diagnostic=beginDiagnostic('import-audio');
+  try{
+   if(!current()||signal.aborted)return 'failed';
+   const suffix=audio.mime==='audio/mpeg'?'.mp3':audio.mime==='audio/mp4'?'.m4a':'.wav';
+   const file=new File([audio.blob],audio.target.title.replace(/[\/\\]/g,' ').slice(0,160)+suffix,{type:audio.mime});
+   const request:ImportRequest={version:2,type:'import',operationId,file,expected:{sha256:audio.sha256,title:audio.target.title,artist:audio.target.artist}};
+   const worker=new Worker(new URL('./imports/import.worker.ts',import.meta.url),{type:'module'});
+   const settled=await invokeDomainWorker('import',worker,request,current,bytes=>{if(current()&&!signal.aborted)onProgress(bytes);},signal);outcome=settled.outcome;
+   confirmed=settled.response?.type==='complete'&&outcome.status==='confirmed'&&outcome.writeState==='published';outcomeDiagnostic(diagnostic,outcome);
+   if(!current())return confirmed||outcome.recoveryRequired?'uncertain':'failed';
+   if(confirmed)verifiedResponse(operationId);else if(outcome.recoveryRequired)unverifiedResponse(operationId);
+   // Even a cancellation that loses to commit must reconcile the confirmed receipt.
+   try{await refresh(true,false,diagnostic,'refresh');}catch{control.activity.block('import-state',true);return 'uncertain';}
+   status=confirmed?'Canción descargada, verificada y guardada en este navegador.':outcome.recoveryRequired?'La copia requiere revisión antes de volver a descargar.':'No se pudo guardar la canción.';emit();
+   return confirmed?'saved':outcome.recoveryRequired?'uncertain':'failed';
+  }catch{return confirmed||outcome?.recoveryRequired?'uncertain':'failed';}
+  finally{diagnostics.finish(diagnostic);if(botImportActive===own)botImportActive=null;operation.end();emit();}
+ };
 }
 async function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failurePhase?:'refresh'){
  const scope=scopeId,proof=control.proof,activityScope=control.activity.scope(),diagnostic=parent===undefined?beginDiagnostic('refresh-library'):parent;
@@ -599,7 +631,7 @@ function App(){
  const removalKey=removalScopeKey();
  const removalHost=React.useMemo<CopyRemovalHost>(()=>({activity:control.activity,
   canStart:()=>owner&&!busy&&!copyRemovalBlocked()&&control.activity.idle,
-  canRecover:()=>owner&&!busy&&databaseState==='ready'&&!importRecoveryPending()&&!metadataRescanBlocked,
+  canRecover:()=>owner&&!busy&&databaseState==='ready'&&!importRecoveryPending()&&!metadataRescanBlocked&&!botImportActive,
   captureRaw:captureRemovalRaw,reserve:target=>sourceReview.reserve(target),
   blocking:(blocked,inactive)=>setCopyRemovalBlocking(removalKey,blocked,inactive),
   refresh:()=>refresh(true,false,null),changed:()=>{},
@@ -770,8 +802,8 @@ function App(){
  <div ref={setMusicSearchTarget} hidden={page!=='buscar'} aria-label="Buscador musical"/>
  <section aria-label="Control de esta pestaña"><h2>Control de reproducción</h2><p role="status">{control.state}</p>{transferText&&<p role="status">{transferText}</p>}{owner?<><button onClick={()=>{if(!playCurrent())return;transferPlayIntent=null;void cede();}}>Ceder control</button>{control.requests.length>0&&<div><p>{control.requests.length} pestañas solicitan el control.</p><button onClick={()=>{if(playCurrent())control.retain();}}>Conservar control</button></div>}<p>{control.activity.count} operaciones activas. La cesión espera a que las operaciones estén resueltas.</p></>:<><button disabled={!canUseThisTab} onClick={()=>{if(playCurrent())void useThisTab();}}>Usar en esta pestaña</button>{['pending','acquiring'].includes(control.transferState)&&<button onClick={()=>{if(playCurrent())cancelTabTransfer();}}>Cancelar solicitud de control</button>}<button disabled={!control.supported||control.state!=='sin-control'||control.transferState==='pending'} onClick={()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}}>Comprobar disponible</button><p>Puedes mantener varias pestañas abiertas. Al usar esta, la anterior guarda la cola y se detiene antes de ceder. Cambiar de pestaña no inicia música. Si hay operaciones pendientes o una versión anterior, cede el control allí o cierra esa entrada.{!control.messaging?' Los avisos entre pestañas no están disponibles; cede manualmente en la otra pestaña.':''}</p></>}</section>
  {databaseState!=='ready'&&<section aria-label="Estado de la base local"><h2>{databaseRecoverable()?'Apertura pendiente de revisión':'Es necesario volver a abrir Pulso'}</h2><p role="alert">{databaseState==='connection-closed'?'Se interrumpió el acceso al almacenamiento local. Reintenta la apertura antes de continuar.':databaseState==='blocked'?'Otra entrada de Pulso mantiene la base local ocupada. Ciérrala y reintenta la apertura.':databaseState==='version-incompatible'?'Esta versión de Pulso no admite la versión de la base local. Abre una versión actualizada para continuar.':'La base local cambió de versión. El acceso queda detenido hasta volver a abrir la aplicación.'}</p>{databaseRecoverable()?<button disabled={!owner||busy} onClick={()=>void admitted('refresh-library',checkFiles)}>Reintentar apertura</button>:<><button disabled={control.activity.count>0||activeDatabaseWorkerAttempts()>0} onClick={()=>{if(control.activity.count===0&&activeDatabaseWorkerAttempts()===0)location.assign('/open.html');}}>Abrir versión actual</button>{(control.activity.count>0||activeDatabaseWorkerAttempts()>0)&&<p>Espera a que termine la operación pendiente antes de volver a abrir.</p>}</>}</section>}
- <section aria-label="Música de Telegram"><p>En Buscar puedes consultar sugerencias musicales y las opciones del bot que elijas. Conecta tu cuenta de Telegram y configura tus bots para consultarlos. La descarga de sus resultados sigue en preparación.</p><p role="status">{status}</p></section>
- <TelegramPanel activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} searchTarget={musicSearchTarget} searchVisible={page==='buscar'} localTracks={tracks}/>
+ <section aria-label="Música de Telegram"><p>En Buscar puedes consultar sugerencias musicales y las opciones del bot que elijas. Conecta tu cuenta de Telegram y configura tus bots para consultarlos. Elige una opción musical para obtener su archivo y guardar una copia de hasta 8 MiB en este navegador.</p><p role="status">{status}</p></section>
+ <TelegramPanel activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} searchTarget={musicSearchTarget} searchVisible={page==='buscar'} localTracks={tracks} captureDownloadSave={captureBotAudioSave}/>
 
  <section aria-label="Almacenamiento"><h2>Archivos locales</h2><p>{storageEstimate&&Number.isFinite(storageEstimate.usage)&&Number.isFinite(storageEstimate.quota)?`${(storageEstimate.usage!/1048576).toFixed(1)} MiB usados de ${(storageEstimate.quota!/1048576).toFixed(1)} MiB estimados para este origen.`:'El navegador no informó una estimación de espacio.'} El espacio disponible y la conservación no están garantizados.</p><button disabled={!owner||busy} onClick={()=>void admitted('refresh-library',checkFiles)}>Comprobar archivos locales</button></section>
  {unverifiedImportResponses.size>0&&<section aria-label="Respuestas de copias pendientes"><h2>Hay respuestas sin confirmar</h2><p>No se pudo confirmar el resultado de una operación. Conservamos los datos y pausamos las descargas y los cambios de organización. Revisaremos los registros locales sin repetir descargas ni borrar archivos.</p><button disabled={!owner||busy} onClick={()=>void admitted('refresh-library',checkFiles)}>Revisar respuestas pendientes</button></section>}
@@ -792,7 +824,7 @@ function App(){
  </div></li>;})}</ol>
  <form onSubmit={e=>{e.preventDefault();void viewAct(async()=>{const list=await createPlaylist(name);setTarget(list.id);setName('');});}}><label>Nueva playlist<input ref={createInput} value={name} onChange={e=>setName(e.target.value)} maxLength={100} required/></label><button disabled={!canOrganize}>Crear playlist</button></form></section>
  <LocalCopyRemovalController key={removalKey} host={removalHost} startup={copyRemovalStartup?.key===removalKey?copyRemovalStartup.snapshot:null} request={removalRequest} canUse={owner&&databaseState==='ready'} headingRef={removalHeading} onOpen={openPendingRemoval} onVisible={focusRemoval} onClose={closeRemoval}/>
- <MetadataRescanController key={`metadata-rescan:${scopeId}:${control.proof}:${databaseGeneration}`} activity={control.activity} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} canUse={owner&&databaseState==='ready'&&!sourceReview.hasReservation()&&!queueForeignBlocked()} canStart={owner&&!busy&&databaseState==='ready'&&!importRecoveryPending()&&!copyRemovalPending&&!sourceReview.hasReservation()&&control.activity.idle} track={rescanTrackId?trackIndex.get(rescanTrackId)??null:null} headingRef={rescanHeading} captureCurrent={captureRescanCurrent} captureAdmission={captureForeignMutationCurrent} onBlocking={setMetadataRescanBlocking} onCommitted={()=>refresh(true,false,null)} onClose={closeRescan}/>
+ <MetadataRescanController key={`metadata-rescan:${scopeId}:${control.proof}:${databaseGeneration}`} activity={control.activity} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} canUse={owner&&!botImportActive&&databaseState==='ready'&&!sourceReview.hasReservation()&&!queueForeignBlocked()} canStart={owner&&!busy&&!botImportActive&&databaseState==='ready'&&!importRecoveryPending()&&!copyRemovalPending&&!sourceReview.hasReservation()&&control.activity.idle} track={rescanTrackId?trackIndex.get(rescanTrackId)??null:null} headingRef={rescanHeading} captureCurrent={captureRescanCurrent} captureAdmission={captureForeignMutationCurrent} onBlocking={setMetadataRescanBlocking} onCommitted={()=>refresh(true,false,null)} onClose={closeRescan}/>
  <LocalBatchPanel key={`local-batch:${control.proof}`} activity={control.activity} beginDiagnostic={beginPanelDiagnostic} playlist={selected??null} canStart={canOrganize} captureWriteCurrent={captureForeignMutationCurrent} onStatus={text=>{status=text;emit();}}/>
  <section id="player" aria-label="Reproductor">{playerOpen&&<button onClick={closePlayer}>Volver</button>}<h2 ref={playerHeading} tabIndex={-1}>{player.current?.title??'Sin selección'}</h2>{player.current&&<ArtworkPanel activity={control.activity} key={`artwork:${control.proof}:${player.current.trackId}`} trackId={player.current.trackId} title={player.current.title} refreshToken={artworkRefreshToken}/>}{player.current&&<LyricsPanel activity={control.activity} key={`lyrics:${control.proof}:${player.current.trackId}`} trackId={player.current.trackId} title={player.current.title} timeSeconds={audio.currentTime} canEdit={canOrganize} captureWriteCurrent={captureLyricsWriteCurrent} onStatus={text=>{status=text;emit();}} external={{artist:trackIndex.get(player.current.trackId)?.artist??null,album:trackIndex.get(player.current.trackId)?.album??null,durationSeconds:trackIndex.get(player.current.trackId)?.duration??0,available:externalLyricsAvailable,canRequest:owner&&!busy&&!copyRemovalBlocked(),captureCurrent:captureLyricsCurrent}}/>}<p role="status">{player.state}{player.error&&` · ${player.error}`}</p><div className="controls"><button disabled={!owner||busy||!player.current} onClick={()=>player.previous()}>Anterior</button><button disabled={!canPlayHere} onClick={play}>Reproducir</button><button disabled={!owner||busy||!player.current} onClick={pause}>Pausar</button><button disabled={!owner||busy||player.following()<0} onClick={()=>player.next()}>Siguiente</button></div><label>Posición: {audio.currentTime.toFixed(1)} / {duration.toFixed(1)} s<input aria-label="Posición en segundos" type="range" min="0" max={duration} step="0.1" value={Math.min(audio.currentTime,duration)} disabled={!owner||busy||!duration} onChange={e=>player.seek(Number(e.target.value))}/></label><label>Repetición<select value={player.repeat} disabled={!owner||busy} onChange={e=>player.setRepeat(e.target.value as 'off'|'one'|'all')}><option value="off">Desactivada</option><option value="one">Una pista</option><option value="all">Toda la cola</option></select></label><button disabled={!owner||busy} aria-pressed={!!player.shuffleOrder} onClick={()=>player.setShuffle(!player.shuffleOrder)}>Aleatorio</button><h3>Cola independiente</h3>{queueInsertions.pendingCount>0&&<div><p role="status">{queueInsertions.pendingCount} adiciones pendientes; la reproducción sigue disponible.</p><button onClick={()=>queueInsertions.cancelAll('user')}>Detener adiciones pendientes</button></div>}{queueInsertionUncertain&&<p role="alert">No se ha confirmado el cierre de algunos recursos. Espera antes de iniciar otra operación; conserva tus archivos originales.</p>}<button disabled={!owner||busy||copyRemovalBlocked()||queueInsertionUncertain||!player.entries.length} onClick={()=>{if(replacementCurrent())void clearQueue();}}>Vaciar cola</button><ol>{player.entries.map((e,i)=><li key={e.id}><button aria-current={i===player.index?'true':undefined} disabled={!owner||busy} onClick={()=>player.select(i,true)}>{e.title}</button><button aria-label={`Subir en cola ${e.title}`} disabled={!owner||busy||i===0} onClick={()=>player.moveEntry(e.id,-1)}>Subir</button><button aria-label={`Bajar en cola ${e.title}`} disabled={!owner||busy||i===player.entries.length-1} onClick={()=>player.moveEntry(e.id,1)}>Bajar</button><button aria-label={`Quitar de cola ${e.title}`} disabled={!owner||busy||i===player.index} onClick={()=>player.removeFuture(e.id)}>Quitar</button></li>)}</ol></section>
  <LocalCopiesController key={`copies:${control.proof}`} activity={control.activity} canUse={owner&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()} scopeKey={`${scopeId}:${control.proof}:${databaseState}`} captureCurrent={captureCopyCurrent} tracks={tracks} beginDiagnostic={beginCopyDiagnostic}/>

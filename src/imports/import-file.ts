@@ -17,7 +17,7 @@ import {ASSET_DIRECTORY,openAssetReader,WRITER_LOCK} from '../storage/asset-read
 import {assertImportsResolved,validImportOperation,deduplicateOperation,cleanupOperation,createOperation,importOperation,publishOperation,updateOperation,type ImportOperation,type ImportResult} from '../storage/import-operations';
 export {importOperations,importOperation,recoverImportOperation,importIssues,retainImportIssue} from '../storage/import-operations';
 export type ImportLyricsWarning=EmbeddedLyricsFailure|LyricsFailure;
-export interface ImportOptions {backend?:'idb'|'opfs'|'auto';operationId?:string}
+export interface ImportOptions {backend?:'idb'|'opfs'|'auto';operationId?:string;expected?:{sha256:string;title:string;artist:string|null}}
 const CHUNK=65536;
 async function writeDirectory(){return atBoundary('open','opfs',async()=>{assertDatabaseUse('write');const root=await navigator.storage.getDirectory();assertDatabaseUse('write');return root.getDirectoryHandle(ASSET_DIRECTORY,{create:true});});}
 /** Owns WRITER_LOCK internally, including recovery gating and final outcome resolution. */
@@ -79,6 +79,8 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
   try{metadata=await parseBlob(await atBoundary('read','none',()=>metadataView(file,mime,true,omitted)),parserOptions);}
   catch(error){if(isMetadataLimit(error))fail('parse','internal','limit-exceeded','none');if(issuedFailure(error)||nativeDOMName(error))throw AppFailure.create(fromKnownError(error,{phase:'parse',backend:'none'}));throw AppFailure.create(fromKnownError(error,{phase:'parse',backend:'none'}));}
  }
+ const normalized=(s:string)=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+ if(options.expected&&(metadata.common.title&&normalized(metadata.common.title)!==normalized(options.expected.title)||options.expected.artist&&metadata.common.artist&&normalized(metadata.common.artist)!==normalized(options.expected.artist)))fail('parse','integrity','metadata-invalid','none');
  checkCancelled(signal); const duration=metadata.format.duration;
  if(!duration||!Number.isFinite(duration)||duration<=0||!metadata.format.codec)fail('parse','integrity','metadata-invalid','none');
  // Capability selection happens before creating staging. Runtime OPFS failures never switch backend.
@@ -109,6 +111,7 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
  count++;await atBoundary('transport','none',()=>progress(offset+bytes.length));
  }
  const digest=bytesToHex(hash.digest());
+ if(options.expected&&digest!==options.expected.sha256)fail('verify','integrity','digest-mismatch',backend);
  const candidates=await atBoundary('read','idb',()=>all<LocalAsset>('assets'));const existing=candidates.find(a=>validAsset(a)&&a.sha256===digest&&a.bytes===file.size);
  const text=(s:string|undefined)=>s?.trim().slice(0,300)||null;
  const asset:LocalAsset={id:existing?.id??crypto.randomUUID(),namespace:'local',storageKey:job.storageKey,bytes:file.size,sha256:digest,mime,chunks:count,state:'complete',revision:(existing?.revision??0)+1,backend,chunkSize:CHUNK,retention:'kept'};

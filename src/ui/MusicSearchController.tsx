@@ -1,3 +1,4 @@
+import type {BotDownloadedAudio} from '../telegram/bot-search-protocol';
 import React from 'react';
 import type {Track} from '../library/library';
 import {createMusicSuggestionsClient,normalizeMusicSuggestionsQuery,type MusicSuggestion} from '../library/music-suggestions';
@@ -12,6 +13,7 @@ import {MusicSearchPanel,type MusicSearchResultRow} from './MusicSearchPanel';
 const suggestionsClient=createMusicSuggestionsClient();
 interface Props {
  visible:boolean;scopeKey:string;client:TelegramSessionClient|null;phase:SessionState['phase'];
+ captureDownloadSave?:()=>((audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void)=>Promise<'saved'|'failed'|'uncertain'>)|null;
  bots:BotsSnapshot|null;searchState:BotSearchSnapshot|null;canConnect:boolean;tracks:readonly Track[];
 }
 const fold=(s:string)=>s.normalize('NFC').trim().toLocaleLowerCase('es');
@@ -28,6 +30,7 @@ function resultView(row:BotSearchRow,target:BotSearchTarget|null):MusicSearchRes
  return {id:row.rowRef,kind:row.kind,title,subtitle,correlation:row.correlation,match};
 }
 const searchErrors:Record<BotSearchError,string>={
+ 'file-too-large':'Esta primera versión admite canciones de hasta 8 MiB.', 'file-invalid':'El archivo está incompleto o no es un audio compatible.', conflict:'La opción, el documento o sus metadatos cambiaron. Busca y elige de nuevo.',
  cancelled:'Consulta detenida. Un mensaje ya enviado puede permanecer en tu chat.',timeout:'El bot no respondió dentro del plazo. No se repetirá la consulta automáticamente.',busy:'Hay otra operación de Telegram pendiente.',expired:'Estos resultados han caducado. Haz una consulta nueva si quieres continuar.',
  'session-expired':'La sesión de Telegram ha caducado. Vuelve a conectarla.',limit:'La consulta o la respuesta supera los límites admitidos.',unsupported:'Este bot o su respuesta todavía no son compatibles con este adaptador.','identity-changed':'El perfil del bot ha cambiado. Comprueba su identidad y vuelve a añadirlo.',
  'rate-limit':'Telegram ha limitado las consultas. Respeta la espera indicada antes de volver a buscar.',network:'No se pudo completar la consulta al bot.',uncertain:'No se pudo confirmar si el bot recibió o completó la consulta. Revisa su chat antes de repetirla.','needs-start':'Abre el chat del bot en Telegram e inícialo allí; después vuelve a buscar aquí.',
@@ -38,6 +41,9 @@ export function MusicSearchController(props:Props){
  const [chosenId,setChosenId]=React.useState<string|null>(null),[resultsVisible,setResultsVisible]=React.useState(false);
  const [remote,setRemote]=React.useState<readonly MusicSuggestion[]>([]),[remoteQuery,setRemoteQuery]=React.useState<string|null>(null),[suggesting,setSuggesting]=React.useState(false),[suggestionError,setSuggestionError]=React.useState<string|null>(null),[suggestionNotice,setSuggestionNotice]=React.useState<string|null>(null);
  const [retry,setRetry]=React.useState(0),[notice,setNotice]=React.useState<string|null>(null),[displayedQuery,setDisplayedQuery]=React.useState<string|null>(null),[selectedResult,setSelectedResult]=React.useState<string|null>(null);
+ const downloadAbort=React.useRef<AbortController|null>(null);
+ const [download,setDownload]=React.useState<{phase:'network'|'saving'|'saved'|'failed'|'uncertain';bytes:number;total:number}|null>(null);
+ const saving=download?.phase==='saving';
  const [,pulse]=React.useReducer(n=>n+1,0);
  const latest=React.useRef(props),mounted=React.useRef(false),viewEpoch=React.useRef(0),committed=React.useRef<object|null>(null),metadataAttempt=React.useRef<{abort:AbortController}|null>(null),metadataEpoch=React.useRef(0);
  const chosenDraft=React.useRef<string|null>(null);
@@ -56,10 +62,11 @@ export function MusicSearchController(props:Props){
  const results=displayedQuery!==null&&state?.queryId===displayedQuery?state.rows.map(row=>resultView(row,state.expectedTarget)):[];
  const revokeMetadata=()=>{++metadataEpoch.current;const attempt=metadataAttempt.current;metadataAttempt.current=null;attempt?.abort.abort();setSuggesting(false);};
  const bump=()=>{++viewEpoch.current;pulse();};
- const edit=(queryChanged=false)=>{bump();chosenDraft.current=null;if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);setResultsVisible(false);}setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);cancel?.();if(action?.())client?.clearSearch(action);};
+ const edit=(queryChanged=false)=>{downloadAbort.current?.abort();setDownload(null);bump();chosenDraft.current=null;if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);setResultsVisible(false);}setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);cancel?.();if(action?.())client?.clearSearch(action);};
  React.useEffect(()=>{
   bump();setDisplayedQuery(null);setSelectedResult(null);setChosenId(null);
  },[props.scopeKey,props.bots?.revision,props.bots?.scopeKey]);
+ React.useEffect(()=>()=>{downloadAbort.current?.abort();client?.captureSearchCancel()?.();},[props.scopeKey,props.bots?.revision,client,props.visible]);
  React.useEffect(()=>{if(!props.visible){metadataAttempt.current?.abort.abort();client?.captureSearchCancel()?.();setDisplayedQuery(null);setSelectedResult(null);}},[props.visible,client]);
  React.useEffect(()=>{const until=state?.retryAt;if(!until||until<=Date.now())return;const timer=setTimeout(()=>{if(mounted.current)pulse();},until-Date.now()+1);return()=>clearTimeout(timer);},[state?.retryAt]);
  React.useEffect(()=>{
@@ -128,13 +135,32 @@ export function MusicSearchController(props:Props){
   else setNotice(!primary?'Añade un bot en «Bots de música» para consultar esta canción.':!selectedProvider?.supported?'El bot principal todavía no es compatible. Cambia su orden en «Bots de música».':'Conecta Telegram y vuelve a elegir la canción para consultarla.');
   bump();chosenDraft.current=query;setChosenId(id);setResultsVisible(true);
  }
+ async function downloadResult(id:string){
+  if(!current()||ownPending||saving||!projection?.()||!client||!action)return;
+  const row=results.find(row=>row.id===id);if(!row||row.kind==='message')return;
+  const save=props.captureDownloadSave?.();if(!save){setNotice('La biblioteca tiene una operación pendiente. Resuélvela antes de descargar.');return;}
+  const lifetime=client.captureBotsCurrent(),scope=props.scopeKey,revision=props.bots?.revision,queryId=state?.queryId;
+  const abort=new AbortController();downloadAbort.current?.abort();downloadAbort.current=abort;
+  const live=()=>mounted.current&&downloadAbort.current===abort&&!abort.signal.aborted&&latest.current.visible&&latest.current.scopeKey===scope&&latest.current.client===client&&latest.current.bots?.revision===revision&&lifetime()&&client.searchSnapshot().queryId===queryId;
+  setSelectedResult(id);setDownload({phase:'network',bytes:0,total:0});setNotice('Obteniendo el audio elegido…');
+  try{
+   const audio=await client.downloadBot(id,action);
+   if(!live())return;
+   if(!audio){setDownload(null);setNotice('Comprueba la respuesta del bot. Si ha entregado un archivo, elígelo para guardarlo.');return;}
+   setDownload({phase:'saving',bytes:0,total:audio.bytes});setNotice('Verificando y guardando en este navegador…');
+   const outcome=await save(audio,abort.signal,bytes=>{if(live())setDownload({phase:'saving',bytes,total:audio.bytes});});
+   // A confirmed local commit is authoritative even if a late Cancel loses the race.
+   if(mounted.current&&downloadAbort.current===abort){setDownload({phase:outcome==='saved'?'saved':outcome==='uncertain'?'uncertain':'failed',bytes:audio.bytes,total:audio.bytes});setNotice(outcome==='saved'?'Canción descargada y guardada. Ya está en Biblioteca; la reproducción actual se conserva.':outcome==='uncertain'?'La copia requiere revisión. No repitas la descarga hasta comprobar la biblioteca.':'No se guardó la canción. Revisa el estado antes de reintentar.');}
+  }catch{if(live()){setDownload({phase:'failed',bytes:0,total:0});setNotice('No se pudo completar la descarga.');}}
+ }
  return <MusicSearchPanel query={query} onQueryChange={value=>{if(!current())return;edit(true);setQuery(value.slice(0,640));}}
   suggestions={choices.map(c=>({id:c.id,kind:c.kind,title:c.title,subtitle:(c.kind==='track'?[c.artist,c.album]:[c.artist]).filter(Boolean).join(' · ')||null,source:c.source}))} resultsVisible={resultsVisible} selectedSuggestionId={chosenId} suggestionsPending={suggesting} suggestionsError={suggestionError} suggestionsNotice={suggestionNotice}
   onRetrySuggestions={()=>{if(current()&&!ownPending){edit();setRetry(n=>n+1);}}}
   primaryProvider={selectedProvider}
-  sessionReady={props.phase==='connected'} canSearch={ready} searchPending={ownPending}
+  sessionReady={props.phase==='connected'} canSearch={ready} searchPending={ownPending||saving}
   onSearch={showResults} onChooseSuggestion={choose}
-  onCancel={()=>{cancel?.();if(mounted.current&&latest.current.client===client)setNotice('Consulta detenida. Revisa el chat del bot antes de repetir si el envío quedó incierto.');}}
-  results={results} selectedResultId={selectedResult} onSelectResult={id=>{if(current()&&projection?.()&&results.some(row=>row.id===id)){setSelectedResult(id);setNotice('Opción seleccionada sólo en Pulso. La descarga pertenece al siguiente paso.');}}}
+  onCancel={()=>{downloadAbort.current?.abort();cancel?.();if(mounted.current&&latest.current.client===client)setNotice('Consulta detenida. Revisa el chat del bot antes de repetir si el envío quedó incierto.');}}
+  downloadStatus={download?.phase==='saving'?'Guardando copia verificada…':null} downloadProgress={saving?download:state?.downloadProgress??null} onCancelDownload={saving?()=>downloadAbort.current?.abort():undefined}
+  results={results} selectedResultId={selectedResult} onSelectResult={id=>void downloadResult(id)}
   status={rateNotice??notice??(displayedQuery&&state?.queryId===displayedQuery&&!state.error&&results.length?'Respuesta del bot recibida. Revisa las opciones; la identidad musical sigue sin confirmar.':null)} error={state?.error?searchErrors[state.error]:null} uncertain={state?.delivery==='uncertain'} current={current}/>;
 }

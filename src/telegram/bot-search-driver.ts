@@ -1,16 +1,20 @@
+import {assembleBotDownloadBytes,BotDownloadBytesFailure} from './bot-download-bytes';
 import Long from 'long';
 import type {tl} from '@mtcute/core';
 import type {BaseTelegramClient} from '@mtcute/core/client.js';
 import {botProvidersFailure,type BotProvidersClock,type BotSearchProviderCapture,type BotProvidersDriver} from './bot-providers-driver';
 import {isUuid,parseAccountBinding,type AccountBinding} from './sources-protocol';
 import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,formatBotSearchQuery,parseBotSearchCommand,type BotSearchEnvelope,type BotSearchReply,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
-import {assertBotSearchRawBudget,botSearchAck,botSearchBaseline,BotSearchProjectionError,projectBotSearchPage,type BotSearchPrivateRef} from './bot-search-page';
+import {assertBotSearchRawBudget,botSearchAck,botSearchBaseline,BotSearchProjectionError,projectBotSearchPage,botSearchKnownMessage,botSearchMessageFingerprint,botSearchDocument,type BotSearchPrivateRef} from './bot-search-page';
 /** Inject only inside the worker. No generic RPC, root peers or arbitrary message identifiers. */
 export interface BotSearchDependency {
  captureProvider(ref:string,revision:number):BotSearchProviderCapture|null;
  resolveIdentity(username:string,signal:AbortSignal,timeoutMs:number):Promise<unknown>;
  readHistory(peer:tl.TypeInputPeer,minId:number,limit:1|20,signal:AbortSignal,timeoutMs:number):Promise<unknown>;
  sendQuery(peer:tl.TypeInputPeer,query:string,randomId:Long,signal:AbortSignal,timeoutMs:number):Promise<unknown>;
+ readKnown?(peer:tl.TypeInputPeer,messageId:number,signal:AbortSignal):Promise<unknown>;
+ callback?(peer:tl.TypeInputPeer,messageId:number,data:Uint8Array,signal:AbortSignal):Promise<unknown>;
+ readDocumentPart?(document:NonNullable<ReturnType<typeof botSearchDocument>>,offset:number,limit:number,signal:AbortSignal):Promise<Uint8Array>;
  invalidateSession():void;
  getAccountCooldown?():{readonly retryAt:number|null;readonly retryBlocked:boolean}|null;
 }
@@ -33,9 +37,10 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
  let closed=false,invalidated=false,settlement=Promise.resolve(true),cooldown:Failure|null=null;
  const requests=new Set<string>(),queries=new Set<string>();
  // Future selection is intentionally unavailable. These bounded opaque handles have no public accessor.
+ let retainedSearch:{providerRef:string;queryId:string;revision:number;baseline:number;outgoing:number;target:import('./bot-search-protocol').BotSearchTarget|null}|null=null;
  let retained:ReadonlyMap<string,BotSearchPrivateRef>=new Map(),retainedUntil=0;
  type Flight={e:BotSearchEnvelope;delivery:BotSearchDelivery;cause:Failure|null;stop(f:Failure):void};let flight:Flight|null=null;
- const close=()=>{if(closed)return;closed=true;retained=new Map();retainedUntil=0;requests.clear();queries.clear();flight?.stop(fail('cancelled'));};
+ const close=()=>{if(closed)return;closed=true;retainedSearch=null;retained=new Map();retainedUntil=0;requests.clear();queries.clear();flight?.stop(fail('cancelled'));};
  const invalidate=()=>{close();if(!invalidated){invalidated=true;dependency.invalidateSession();}};
  const live=(ctx:BotSearchContext,capture?:BotSearchProviderCapture)=>{try{return !closed&&!ctx.signal.aborted&&ctx.current()&&(!capture||capture.current());}catch{return false;}};
  const response=(e:BotSearchEnvelope,f:Failure,delivery:BotSearchDelivery):BotSearchReply=>Object.freeze({...copyBotSearchEnvelope(e),type:'bot-search.error',...f,delivery});
@@ -52,17 +57,21 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
     flight.stop(fail('cancelled'));return Object.freeze({...e,type:'bot-search.cancelled',targetRequestId:c.targetRequestId});
    }
    if(flight)return response(e,fail('busy'),'not-dispatched');
-   if(queries.has(c.queryId))return response(e,fail('expired'),'not-dispatched');queries.add(c.queryId);
+   const selection=c.type==='bot-search.download'?retained.get(c.rowRef):null, previous=retainedSearch;
+   if(c.type==='bot-search.download'&&(!selection||!previous||time.now()>=retainedUntil||previous.queryId!==c.queryId||previous.revision!==c.providerRevision||previous.providerRef!==c.providerRef||JSON.stringify(previous.target)!==JSON.stringify(c.target)))return response(e,fail('expired'),'not-dispatched');
+   if(c.type==='bot-search.search'){if(queries.has(c.queryId))return response(e,fail('expired'),'not-dispatched');queries.add(c.queryId);}
+
    // Expiry is absolute and cannot be revived by reuse/reorder; no retained raw chat transcript.
    if(time.now()>=retainedUntil||retained.size){retained=new Map();retainedUntil=0;}
    const capture=dependency.captureProvider(c.providerRef,c.providerRevision);
    if(!capture)return response(e,fail('expired'),'not-dispatched');
    if(capture.username!=='ivkmbot')return response(e,fail('unsupported'),'not-dispatched');
-   const query=formatBotSearchQuery(c);if(!query)return response(e,fail('limit'),'not-dispatched');
+   const query=c.type==='bot-search.search'?formatBotSearchQuery(c):null;if(c.type==='bot-search.search'&&!query)return response(e,fail('limit'),'not-dispatched');
    const shared=dependency.getAccountCooldown?.();
    if(shared)return response(e,{error:'rate-limit',...shared},'not-dispatched');
    if(cooldown&&(cooldown.retryBlocked||cooldown.retryAt!==null&&time.now()<cooldown.retryAt))return response(e,cooldown,'not-dispatched');
-   const abort=new AbortController(),deadline=time.now()+B.timeoutMs;
+   const duration=c.type==='bot-search.download'?B.downloadMs:B.timeoutMs;
+   const abort=new AbortController(),deadline=time.now()+duration;
    let wake!:(v:BotSearchReply)=>void;const stopped=new Promise<BotSearchReply>(r=>{wake=r;});
    let settle!:(v:boolean)=>void;settlement=new Promise<boolean>(r=>{settle=r;});
    let timer:ReturnType<typeof setTimeout>|undefined,grace:ReturnType<typeof setTimeout>|undefined,delay:ReturnType<typeof setTimeout>|undefined,delayWake:(()=>void)|undefined,finished=false;
@@ -79,6 +88,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    const budget=(v:unknown)=>{decoded+=assertBotSearchRawBudget(v);if(decoded>B.rawBytes)throw new BotSearchProjectionError('limit');};
    const observe=(error:unknown):Failure=>{
     if(error instanceof BotSearchProjectionError)return fail(error.code);
+    if(error instanceof BotDownloadBytesFailure)return fail(error.code==='size'?'file-too-large':error.code==='cancelled'?'cancelled':'file-invalid');
     // SDK late failures are observed independently of a winning cancel/deadline cause.
     const cause=botProvidersFailure(error,time.now());
     if(cause.error==='session-expired'){if(!f.cause)f.cause=cause;invalidate();}
@@ -88,24 +98,65 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
     }
     return cause.error==='network'&&f.delivery==='uncertain'?fail('uncertain'):cause;
    };
-   const rpc=async(fn:(ms:number)=>Promise<unknown>)=>{check();try{const v=await fn(Math.max(1,deadline-time.now()));check();budget(v);check();return v;}catch(error){
+   const rpc=async(fn:(ms:number)=>Promise<unknown>,count=true)=>{check();try{const v=await fn(Math.max(1,deadline-time.now()));check();if(count)budget(v);check();return v;}catch(error){
     if(error===f.cause)throw error;const cause=observe(error);if(!f.cause)f.cause=cause;throw f.cause;
    }};
    const work=Promise.resolve().then(async():Promise<BotSearchReply>=>{
     try{
      check();const identity=await rpc(ms=>dependency.resolveIdentity(capture.username,abort.signal,ms));
      const approved=capture.verifyIdentity(identity);if(!approved){if(!capture.current())throw fail('identity-changed');throw fail('unsupported');}check();
+     if(c.type==='bot-search.download'){
+      if(!dependency.readKnown||!dependency.readDocumentPart||!selection?.row||!previous)throw fail('unsupported');
+      const known=async(ref:BotSearchPrivateRef)=>{const raw=await rpc(()=>dependency.readKnown!(approved.peer,ref.messageId,abort.signal));const message=botSearchKnownMessage(raw,approved.botId,ref.messageId);if(!message||botSearchMessageFingerprint(message)!==ref.fingerprint)throw fail('conflict');return message;};
+      let selected=selection,message=await known(selected);
+      if(selected.row?.kind==='option'){
+       const fold=(v:string)=>v.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+       if(!dependency.callback||!selected.callbackData||!fold(selected.row.label).includes(fold(c.target.title))||fold(c.target.title).length<3)throw fail('unsupported');
+       const baseline=botSearchBaseline(await rpc(ms=>dependency.readHistory(approved.peer,0,1,abort.signal,ms)),approved.botId);
+       f.delivery='uncertain';if(ctx.publish&&live(ctx,capture))try{ctx.publish({...e,type:'bot-search.sending',delivery:'uncertain'});}catch{/* Observers cannot own or repeat the callback. */}
+       const answer=await rpc(()=>dependency.callback!(approved.peer,selected.messageId,selected.callbackData!.slice(),abort.signal));
+       if((answer as {_?:string})._!=='messages.botCallbackAnswer'||Object.getOwnPropertyDescriptor(answer as object,'url')?.value||Object.getOwnPropertyDescriptor(answer as object,'alert')?.value)throw fail('unsupported');
+       f.delivery='acknowledged';
+       for(let read=0;;read++){
+        check();if(read>=60)throw fail('timeout');
+        const raw=await rpc(ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms));
+        const page=projectBotSearchPage(raw,approved.botId,baseline,previous.outgoing,[selection.messageId]);if(page.concurrent)throw fail('uncertain');
+        const audio=page.rows.filter(row=>row.kind==='audio');
+        if(audio.length){
+         // No causal claim for a merely recent document: offer it for an explicit second choice.
+         if(audio.length!==1||audio[0].correlation!=='reply'){
+          retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={...previous,baseline};
+          return {...e,type:'bot-search.result',delivery:'acknowledged',rows:audio,expiresAt:retainedUntil,expectedTarget:c.target};
+         }
+         selected=page.refs.get(audio[0].rowRef)!;message=await known(selected);break;
+        }
+        await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},B.pollMs);});
+       }
+      }
+      const row=selected.row;if(row?.kind!=='audio')throw fail('unsupported');
+      const fold=(v:string)=>v.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+      if(!row.title||fold(row.title)!==fold(c.target.title)||c.target.artist&&(!row.performer||fold(row.performer)!==fold(c.target.artist)))throw fail('conflict');
+      const document=botSearchDocument(message);if(!document)throw fail('unsupported');
+      const result=await assembleBotDownloadBytes({bytes:row.bytes,mime:row.mimeType},async(offset,limit)=>{
+       const bytes=await rpc(()=>dependency.readDocumentPart!(document,offset,limit,abort.signal),false);
+       if(!(bytes instanceof Uint8Array)||bytes.length!==Math.min(limit,row.bytes-offset))throw new BotDownloadBytesFailure('short');
+       if(ctx.publish&&live(ctx,capture))try{ctx.publish({...e,type:'bot-search.download-progress',bytes:offset+bytes.length,total:row.bytes});}catch{/* Observation does not own transport. */}
+       return bytes;
+      },()=>live(ctx,capture)&&!f.cause&&time.now()<deadline);
+      await known(selected);check();retained=new Map();retainedSearch=null;
+      return {...e,type:'bot-search.downloaded',audio:{...result,target:c.target}};
+     }
      const baseline=botSearchBaseline(await rpc(ms=>dependency.readHistory(approved.peer,0,1,abort.signal,ms)),approved.botId);check();
      const randomId=randomLong();check();
      f.delivery='uncertain';
      // Progress is advisory only, guarded immediately; it contains neither query nor peer.
      if(ctx.publish&&live(ctx,capture)){try{ctx.publish(Object.freeze({...e,type:'bot-search.sending',delivery:'uncertain'}));}catch{/* UI observers cannot change authority. */}}
-     const ack=botSearchAck(await rpc(ms=>dependency.sendQuery(approved.peer,query,randomId,abort.signal,ms)),approved.botId,randomId);
+     const ack=botSearchAck(await rpc(ms=>dependency.sendQuery(approved.peer,query!,randomId,abort.signal,ms)),approved.botId,randomId);
      if(!ack||ack<=baseline)throw fail('uncertain');f.delivery='acknowledged';check();
      for(let reads=0;reads<B.reads;reads++){
       const page=projectBotSearchPage(await rpc(ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms)),approved.botId,baseline,ack);check();
       if(page.concurrent)throw fail('uncertain');
-      if(page.rows.length){retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;check();
+      if(page.rows.length){retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={providerRef:c.providerRef,queryId:c.queryId,revision:c.providerRevision,baseline,outgoing:ack,target:c.target??null};check();
        return Object.freeze({...e,type:'bot-search.result',delivery:'acknowledged',rows:page.rows,expiresAt:retainedUntil,expectedTarget:c.target??null});
       }
       if(page.unrecognized)throw fail('unsupported');
@@ -141,6 +192,9 @@ export function createBotSearchSdkDriver(binding:AccountBinding,sessionId:string
   async resolveIdentity(username,abort,_timeout){sdk.current(abort);const r=await sdk.call({_: 'contacts.resolveUsername',username},{timeout:0,floodSleepThreshold:0,maxRetryCount:0});sdk.current(abort);return r;},
   async readHistory(peer,minId,limit,abort,_timeout){sdk.current(abort);const r=await sdk.call({_: 'messages.getHistory',peer,offsetId:0,offsetDate:0,addOffset:0,limit,maxId:0,minId,hash:Long.ZERO},{timeout:0,floodSleepThreshold:0,maxRetryCount:0});sdk.current(abort);return r;},
   async sendQuery(peer,query,randomId,abort,_timeout){sdk.current(abort);const r=await sdk.call({_: 'messages.sendMessage',peer,message:query,randomId,noWebpage:true},{timeout:0,floodSleepThreshold:0,maxRetryCount:0});sdk.current(abort);return r;},
+  async readKnown(_peer,id,abort){sdk.current(abort);const r=await sdk.call({_:'messages.getMessages',id:[{_:'inputMessageID',id}]},{timeout:0,maxRetryCount:0,floodSleepThreshold:0});sdk.current(abort);return r;},
+  async callback(peer,msgId,data,abort){sdk.current(abort);const r=await sdk.call({_:'messages.getBotCallbackAnswer',peer,msgId,data},{timeout:0,maxRetryCount:0,floodSleepThreshold:0});sdk.current(abort);return r;},
+  async readDocumentPart(document,offset,limit,abort){sdk.current(abort);const r=await sdk.call({_:'upload.getFile',location:document.location,offset,limit,precise:true},{dcId:document.dcId,kind:'download',timeout:0,maxRetryCount:0,floodSleepThreshold:0});sdk.current(abort);if(r._!=='upload.file')throw new BotSearchProjectionError('unsupported');return r.bytes;},
   getAccountCooldown:sdk.getAccountCooldown,invalidateSession:sdk.invalidateSession,
  },time);
 }
