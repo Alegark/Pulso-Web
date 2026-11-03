@@ -18,17 +18,21 @@ export function musicCatalogKey(text:string):string {
   .replace(/^["“”]+|["“”]+$/gu,'').replace(/\s*-\s*/gu,'-').replace(/\s+/gu,' ').trim();
 }
 function matches(text:string|null,query:string):boolean {
- const value=musicCatalogKey(text??'');return query.split(' ').every(word=>value.includes(word));
+ const searchable=(s:string)=>musicCatalogKey(s).normalize('NFD').replace(/\p{M}/gu,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+ const needle=searchable(query);if(!needle)return false;
+ const value=searchable(text??''),words=needle.split(' ');return words.every(word=>value.includes(word))||value.replace(/ /g,'').includes(needle.replace(/ /g,''));
 }
 /** A metadata grouping, not an acoustic identity claim. Album/duration differences
  * do not repeat a title/performer; literal live/remix/etc titles remain distinct.
- * Artist names are context only: they are neither search categories nor matches.
+ * Artist names are context, never separate categories. Local matching uses song/album names; remote candidates keep provider relevance.
  */
 export function musicSearchCatalog(query:string,local:readonly Track[],remote:readonly MusicSuggestion[]):readonly MusicCatalogChoice[] {
  const q=musicCatalogKey(query);if(!q)return [];
  const songs=new Map<string,MusicCatalogChoice>(),albums=new Map<string,MusicCatalogChoice>();let localMatches=0;
  const add=(id:string,title:string,artist:string|null,album:string|null,duration:number|null,source:'local'|'lrclib')=>{
-  if(!matches(title,q)&&!matches(album,q))return;
+  // LRCLIB has already ranked these candidates. Do not erase valid fuzzy/accent
+  // matches with a stricter second title filter; the root binds them to the query.
+  if(source==='local'&&!matches(title,q)&&!matches(album,q))return;
   const key=JSON.stringify([musicCatalogKey(title),musicCatalogKey(artist??'')]);
   if(!songs.has(key)&&songs.size<MUSIC_CATALOG_LIMITS.tracks)songs.set(key,Object.freeze({id,kind:'track',title,artist,album,duration,source}));
   if(album&&matches(album,q)){

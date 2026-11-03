@@ -1,168 +1,71 @@
 {
   "project": "Pulso-Web",
   "date": "2026-11-03",
-  "status": "CORRECTED_CATALOGUE_FIRST_WEB_VERIFIED_NOT_P0",
-  "release": "/releases/4fd6e510fedabf76.html",
+  "status": "PROTOTYPE_VERIFIED_NOT_P0",
+  "release": "/releases/3034ef0dd7d39387.html",
   "flow": {
-    "typing": "bounded overlay of song/album suggestions",
-    "EnterAndBuscar": "internal catalogue only; zero bot sends",
-    "songChoice": "one explicit title+artist query, only with current permission/session/provider",
-    "albumChoice": "catalogue refinement only",
-    "artistSearch": false,
-    "artistDisplay": "context for identifying songs",
-    "botResultChoice": "local only; no callback/download/play implemented"
-  },
-  "catalogue": {
-    "previewLimit": 6,
-    "externalProviderRecordLimit": 20,
-    "localMatchLimit": 50,
-    "deduplication": "normalized title + performer; album/duration differences do not repeat a song",
-    "distinct": "literal live/remix/version qualifiers and different or unknown performers",
-    "identityGuarantee": false,
-    "completeCatalogueOrAlbumGuarantee": false
+    "typing": "automatic LRCLIB metadata; 450ms debounce",
+    "EnterAndBuscar": "catalogue only; no Telegram send",
+    "songChoice": "explicit title+artist to the first configured bot, only if its adapter is supported and session/authority are current; never skip to another bot",
+    "albumChoice": "catalogue refinement",
+    "artistCategory": false,
+    "silentFallback": false
   },
   "verification": {
-    "unit": {
-      "passed": 455,
-      "failed": 0,
-      "newCatalogueTests": 6
-    },
+    "unit": "457/457 PASS",
     "lint": "PASS",
-    "main": {
-      "groups": 13,
-      "passed": 13,
-      "failed": 0,
-      "sourceFilesExact": 146,
-      "sourceTransformations": 0,
-      "unmodifiedSDKControls": 2,
-      "syntheticSDKBoundaryGroups": 11,
-      "nativeWorkerOwnershipStorageAudio": true,
-      "pageErrors": 0,
-      "csp": 0,
-      "unexpectedNetwork": 0,
-      "cleanup": true,
-      "importantCases": [
-        "authenticated Enter/Buscar zero sends",
-        "preview song choice one title+artist send",
-        "release/duration duplicates grouped; live/other performers distinct",
-        "full12 catalogue after preview6",
-        "albums filter and Enter reset",
-        "stale consent/provider/matching metadata rejected",
-        "native15s timeout/cancel ACK settlement",
-        "native busy transfer and old callback denial",
-        "DBclose/retry guard",
-        "paused Audio/queue preserved",
-        "320/568 font200/keyboard",
-        "native source reservation"
-      ]
-    },
-    "production": {
-      "engines": [
-        "Chromium154",
-        "WebKit27.2 desktop"
-      ],
-      "actualDistChecks": 2,
-      "nativeFetch": "synthetic route only",
-      "WebKitNativeStyleSrcAttrReports": 16,
-      "otherCSPorJSErrors": 0
-    },
-    "publicPrivateOriginMetadata": {
-      "queries": 1,
-      "HTTP": 200,
-      "providerRecords": 20,
-      "displayedSongMatches": 17,
-      "authRequests": 0,
-      "OPTIONSObserved": 0,
-      "bodyStored": false,
-      "noAutomaticRetry": true
-    },
-    "update": {
-      "previous": "55d75631a57dea23",
-      "oldAudioContinues": true,
-      "newClientPaused": true,
-      "waitingUntilNormalClosure": true,
-      "restoredPaused": true,
-      "forcedActivation": false
-    }
-  },
-  "delivery": {
-    "filesExact": 37,
-    "oldImmutableFilesPreserved": 191,
-    "privateConfigurationUnchangedAndExcluded": true,
-    "samePrivateAccess": true,
-    "madePublic": false,
-    "serverRestarted": false,
-    "httpsLauncherEntryMainWorkerSWExact": true,
-    "sourceArchiveFiles": 3594,
-    "sourceArchiveCurrentRuntimeMembers": 146,
-    "allArchiveFilesMatchCurrent": true,
-    "noPrivateIdentity": true,
-    "noticesExact": true
-  },
-  "history": {
-    "firstAttempt": "8/13; four ambiguous Buscar locators and preview dismissal before consent",
-    "secondAttempt": "12/13; cumulative counter compared to0 instead of baseline",
-    "corrections": "harness scoped selectors/counters; mobile dismissal added; Enter resets result filter",
-    "negativeRawsPreserved": true,
-    "noAggregateOfAttempts": true,
-    "previous17GroupSearchContract": "superseded; retained separately, not claimed as current13"
+    "main": "13/13 Chromium154; 2 unmodified main controls, 11 synthetic SDK in native worker; no real account",
+    "production": "Chromium154 and WebKit27.2 desktop, synthetic metadata route; 12 WebKit style-src-attr reports",
+    "update": "4fd6e510fedabf76 to 3034ef0dd7d39387; old audio continues, new paused, waiting until normal closure",
+    "privateHTTPS": "37 files exact; 194 old immutable preserved; private configuration 0600/no-store",
+    "publicMetadata": "one query, HTTP 200, 20 records, 17 suggestions, 0 auth requests, 0 OPTIONS observed, no body saved"
   },
   "limits": [
-    "No real Telegram account/bot protocol validation",
-    "No physical iPhone/Safari/VoiceOver/zoom/heap/private-offline/P0 acceptance",
-    "Album and artist metadata are not catalogue identities",
-    "Download/playback of bot results and automatic fallback are not implemented"
+    "No real Telegram bot protocol validation",
+    "No physical iPhone, Safari, VoiceOver or P0 acceptance",
+    "No callback, download, playback of bot results or fallback",
+    "Remote relevance is provider-ranked; no complete catalogue guarantee"
   ],
   "evidence": {
-    ".local/music-search-flow-parent/main-parent-final.json": {
-      "bytes": 479777,
-      "sha256": "6f4980a265614c8e07a48c44227cfd81cdb6469f41fc04aa6143f488c3818a6c"
+    ".local/music-search-prototype-parent/freeze.json": {
+      "bytes": 21815,
+      "sha256": "5b30d3080b1d439081b7e998616464f88b54369d0add8ccd15ea962f95b9f533"
     },
-    ".local/music-search-flow-parent/freeze.json": {
-      "bytes": 21884,
-      "sha256": "19ded19e148fbf6df1ca707678bbe3d66ee2f96514dc29c1fd35a76158ad060a"
+    ".local/evidence/music-search-prototype.json": {
+      "bytes": 417727,
+      "sha256": "6f3786b125269e50dcc53572e372f8b8d5b53a5f2bedf601857bfde4ae787acf"
     },
-    ".local/music-search-flow-parent/unit.log": {
-      "bytes": 103929,
-      "sha256": "7da7d5ce609518768605cf3ba738a6d916dfec038d0c8c78aef6c466125897e4"
+    ".local/music-search-prototype-parent/unit.log": {
+      "bytes": 104425,
+      "sha256": "e79abdfa871b763b7e926c26a4e38874ae76026083ac904ba99a24e9a30c19ae"
     },
-    ".local/music-search-flow-parent/lint-final3.log": {
+    ".local/music-search-prototype-parent/lint.log": {
       "bytes": 78,
       "sha256": "9115c612f4c31d6ab637706d69432895db03337b27fb395cca045cdacbcb168b"
     },
-    ".local/music-search-flow-release/audit-build.json": {
+    ".local/music-search-prototype-release/audit-build.json": {
       "bytes": 5573,
-      "sha256": "35ab0d5d1a2a98473cf90831fb76e2e81e899c32cbde7411c26c51c65b2ea489"
+      "sha256": "35c9dad5ad9195a63b5cba3e86304ecfb4526432eedb3309631dc9281f877cf4"
     },
-    ".local/music-search-flow-release/search-production.json": {
-      "bytes": 2023,
-      "sha256": "82475d0b2fc5c98fba0a5f3ee8d5186f93e7507fc10eea9187166bc123815c5f"
+    ".local/music-search-prototype-release/search-production.json": {
+      "bytes": 1723,
+      "sha256": "b0f9dad6c1ffbebefaced15b4edea5d0f9bb6e3abe4fc7baa173b8a9ce8545b5"
     },
-    ".local/music-search-flow-release/private-suggestions.json": {
-      "bytes": 409,
-      "sha256": "5dae2df42967c83d2b18d7ea853654604bb2f28ba02265bfc3a83347a70cd1d0"
-    },
-    ".local/music-search-flow-release/delivery-copy.json": {
-      "bytes": 236,
-      "sha256": "e70d92f917040fb13422496229861352694fd42f74011c97efe3b7ed5e82b2c5"
-    },
-    ".local/music-search-flow-release/https-readback.json": {
-      "bytes": 329,
-      "sha256": "beb6a9476b2a89034b53aa9df1f35cbde79505ffcd4aefbb35b2f90cc03052e8"
-    },
-    ".local/music-search-flow-release/update.json": {
+    ".local/music-search-prototype-release/update.json": {
       "bytes": 495,
-      "sha256": "909c3b91a55f8247bd2fd0ef4c113a8798d9b70930ba361f2b67b27f0277d0b7"
+      "sha256": "d22ddaf71fdf17adc8a822160000c7dcc552782ded0354f20e264dc92cef50e7"
     },
-    ".local/music-search-flow-parent/engram-delivery-read.json": {
-      "bytes": 3477,
-      "sha256": "fc14ce8f7e3b549b71edd8d19f3bd5ccbdad984e743386209eeac4752210664b"
+    ".local/music-search-prototype-release/delivery-copy.json": {
+      "bytes": 113,
+      "sha256": "bcb64b62edd9bc888f83ed55d5c82b8e4abea2c0459802743c42ae955594fee9"
+    },
+    ".local/music-search-prototype-release/https-readback.json": {
+      "bytes": 329,
+      "sha256": "64c3286caffa04e18584f577c66edeca82e829a5a8e23e7a19062c261d203334"
+    },
+    ".local/music-search-prototype-release/private-suggestions.json": {
+      "bytes": 409,
+      "sha256": "a74f219e0e4ce0fd095acd5775a241a789bbc02b2b56079b0735eacea59c8c36"
     }
-  },
-  "memory": {
-    "project": "Pulso-Web",
-    "files": 14,
-    "FullContentVerified": true,
-    "actualBytesAndShaMatched": true
   }
 }

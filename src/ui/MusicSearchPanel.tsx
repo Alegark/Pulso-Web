@@ -15,9 +15,8 @@ export interface MusicSearchPanelProps {
  suggestions:readonly MusicSearchSuggestionRow[];suggestionsPending:boolean;
  suggestionsError?:string|null;suggestionsNotice?:string|null;onRetrySuggestions?:()=>void;
  resultsVisible:boolean;selectedSuggestionId:string|null;
- externalConsent:boolean;onExternalConsentChange:(consent:boolean)=>void;
- providerRows:readonly MusicSearchProviderRow[];selectedProviderId:string|null;onProviderChange:(id:string)=>void;
- sessionReady:boolean;canSearch:boolean;searchPending:boolean;botConsent:boolean;onBotConsentChange:(consent:boolean)=>void;
+ primaryProvider:MusicSearchProviderRow|null;
+ sessionReady:boolean;canSearch:boolean;searchPending:boolean;
  /** Catalogue results only. This callback never submits a Telegram query. */
  onSearch:()=>void;
  onChooseSuggestion:(id:string)=>void;onCancel:()=>void;
@@ -37,8 +36,8 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
  const id=React.useId(),queryRef=React.useRef<HTMLInputElement>(null),quickRef=React.useRef<HTMLDivElement>(null),resultsRef=React.useRef<HTMLHeadingElement>(null);
  const [open,setOpen]=React.useState(false),[filter,setFilter]=React.useState<'all'|'track'|'album'>('all');
  const active=()=>committed.current===props&&props.current();
- const provider=props.providerRows.find(row=>row.id===props.selectedProviderId);
- const ready=props.canSearch&&props.sessionReady&&!!provider?.supported&&props.botConsent&&!props.searchPending;
+ const provider=props.primaryProvider;
+ const ready=props.canSearch&&props.sessionReady&&!!provider?.supported&&!props.searchPending;
  const albums=props.suggestions.filter(row=>row.kind==='album');
  const songPreview=props.suggestions.filter(row=>row.kind==='track').slice(0,albums.length?4:MUSIC_CATALOG_LIMITS.preview);
  const quick=[...songPreview,...albums.slice(0,MUSIC_CATALOG_LIMITS.preview-songPreview.length)];
@@ -83,14 +82,11 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
      <button type="button" className="music-search-see-all" onClick={showAll}>Ver todos los resultados</button>
     </div>}
    </div>
-   <p id={`${id}-query-help`}>Enter y Buscar muestran resultados en Pulso. Sólo al elegir una canción se consulta el bot seleccionado, con tu permiso.</p>
+   <p id={`${id}-query-help`}>Enter y Buscar muestran resultados en Pulso. Sólo al elegir una canción se consulta el bot principal que configuraste.</p>
   </form>
-  <label className="music-search-check"><input type="checkbox" checked={props.externalConsent}
-   onChange={event=>{if(active())props.onExternalConsentChange(event.currentTarget.checked);}}/>
-   <span>Permitir sugerencias de LRCLIB: se envían la consulta, tu IP y el identificador de la app. Sólo usamos metadatos; no enviamos audio, letras ni datos de cuenta.</span></label>
   <div role="status">{props.suggestionsPending?'Buscando sugerencias…':props.suggestionsNotice}</div>
   {props.suggestionsError&&<p role="alert">{props.suggestionsError}</p>}
-  {props.onRetrySuggestions&&props.externalConsent&&props.query.trim().length>=3&&<button type="button" disabled={props.suggestionsPending||props.searchPending}
+  {props.onRetrySuggestions&&props.query.trim().length>=3&&<button type="button" disabled={props.suggestionsPending||props.searchPending}
    onClick={()=>{if(active()&&!props.suggestionsPending&&!props.searchPending)props.onRetrySuggestions?.();}}>{props.suggestionsError?'Reintentar sugerencias':'Actualizar sugerencias'}</button>}
   {props.resultsVisible&&<section className="music-search-catalog" aria-labelledby={`${id}-catalog-heading`} aria-busy={props.suggestionsPending}>
    <h3 id={`${id}-catalog-heading`} ref={resultsRef} tabIndex={-1}>Resultados para «{props.query}»</h3>
@@ -108,18 +104,9 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
   </section>}
   <section className="music-search-bot" aria-label="Consulta al bot">
    <h3>Bot para la canción elegida</h3>
-   <label htmlFor={`${id}-provider`}>Bot para consultar</label>
-   <select id={`${id}-provider`} value={props.selectedProviderId??''} disabled={props.searchPending||props.providerRows.length===0}
-    onChange={event=>{if(active()&&!props.searchPending)props.onProviderChange(event.currentTarget.value);}}>
-    <option value="">Elige un bot</option>{props.providerRows.map(row=><option key={row.id} value={row.id}>{row.label} · @{row.username.replace(/^@/,'')}{row.supported?'':' · Adaptador pendiente'}</option>)}
-   </select>
-   {props.providerRows.length===0&&<p>Añade tus bots en «Bots de música» de la conexión a Telegram.</p>}
-   {provider&&<p>Bot elegido: <bdi dir="auto">@{provider.username.replace(/^@/,'')}</bdi>. {provider.supported?'La consulta se enviará cuando elijas una canción.':'Adaptador pendiente: todavía no se puede consultar este bot.'}</p>}
-   <label className="music-search-check"><input type="checkbox" checked={props.botConsent} disabled={props.searchPending}
-    onChange={event=>{if(active()&&!props.searchPending)props.onBotConsentChange(event.currentTarget.checked);}}/>
-    <span>Permitir enviar el título y artista al chat del bot elegido sólo cuando seleccione una canción sugerida. Marcar esta casilla no envía mensajes.</span></label>
-   {!props.sessionReady&&<p>Conecta Telegram para consultar el bot. Puedes explorar las sugerencias sin conectarlo.</p>}
-   {props.sessionReady&&!ready&&<p>Elige un bot compatible y autoriza la consulta antes de seleccionar la canción.</p>}
+   {provider?<p>Bot principal: <bdi dir="auto">@{provider.username.replace(/^@/,'')}</bdi>. {provider.supported?'Se usará al elegir una canción.':'Este bot todavía no es compatible; cambia el orden en «Bots de música».'}</p>:<p>Añade un bot en «Bots de música». Aquí se usará automáticamente el primero de tu lista.</p>}
+   {!props.sessionReady&&<p>Conecta Telegram para consultar tu bot. Las sugerencias musicales ya están disponibles.</p>}
+   {props.sessionReady&&provider?.supported&&!ready&&!props.searchPending&&<p>La consulta estará disponible cuando termine la operación pendiente.</p>}
    {props.searchPending&&<button type="button" onClick={()=>{if(committed.current===props&&props.searchPending)props.onCancel();}}>Cancelar consulta</button>}
    <div role="status">{props.searchPending?'Consultando la canción elegida…':props.status}</div>
    {props.error&&<p role="alert">{props.error}</p>}

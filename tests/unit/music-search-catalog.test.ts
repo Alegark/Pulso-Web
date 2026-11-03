@@ -14,8 +14,9 @@ test('presentation keys normalize Unicode quotes/dashes and spacing, not words o
  assert.notEqual(musicCatalogKey('Hello (Live)'),musicCatalogKey('Hello'));
  assert.notEqual(musicCatalogKey('El'),musicCatalogKey('Él'));
 });
-test('artist names are display context, never categories or name-only matches',()=>{
- assert.deepEqual(musicSearchCatalog('Own Artist',[],[row(1)]),[]);
+test('artist names are display context, never separate categories or local name-only matches',()=>{
+ const local={id:'owned',title:'Hello',artist:'Own Artist',album:'Album',duration:200} as Track;
+ assert.deepEqual(musicSearchCatalog('Own Artist',[local],[]),[]);
  const result=musicSearchCatalog('hello',[],[row(1)]);assert.equal(result[0].artist,'Own Artist');assert.equal(result.some(r=>(r.kind as string)==='artist'),false);
 });
 test('albums appear only for matching album names and group by title plus performer',()=>{
@@ -27,8 +28,16 @@ test('local metadata wins the duplicate group and unknown performers are not sil
  const result=musicSearchCatalog('hello',[local,{...local,id:'unknown',artist:null}],[row(1)]);
  assert.equal(result.length,2);assert.equal(result[0].id,'local:owned-track');assert.equal(result[0].source,'local');assert.equal(result[1].artist,null);
 });
-test('empty queries and unrelated records do not leak into the catalog; local selection is bounded',()=>{
- assert.deepEqual(musicSearchCatalog(' ',[],[row(1)]),[]);assert.deepEqual(musicSearchCatalog('missing',[],[row(1)]),[]);
+test('empty queries stay empty; unrelated local records are excluded and local selection is bounded',()=>{
+ assert.deepEqual(musicSearchCatalog(' ',[],[row(1)]),[]);assert.deepEqual(musicSearchCatalog('missing',[{id:'owned',title:'Hello',artist:null,album:null,duration:1} as Track],[]),[]);
  const local=Array.from({length:1000},(_,i)=>({id:String(i),title:'Song '+i,artist:'Own',album:null,duration:1} as Track));
  const out=musicSearchCatalog('song',local,[]);assert.equal(out.length,MUSIC_CATALOG_LIMITS.localMatches);
+});
+
+test('provider-ranked fuzzy/accent candidates survive without a stricter second filter',()=>{
+ const result=musicSearchCatalog('besame mucho own artist',[],[row(99,'Bésame Mucho')]);assert.equal(result.length,1);assert.equal(result[0].title,'Bésame Mucho');
+});
+test('local title matching tolerates accents and punctuation without broad punctuation-only matches',()=>{
+ const local={id:'owned',title:'Bésame, Mucho!',artist:'Own',album:null,duration:1} as Track;
+ assert.equal(musicSearchCatalog('besame mucho',[local],[]).length,1);assert.deepEqual(musicSearchCatalog('---',[local],[]),[]);
 });

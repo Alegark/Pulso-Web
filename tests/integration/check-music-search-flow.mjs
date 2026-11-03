@@ -9,11 +9,11 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {createServer} from 'node:http';
 const project=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
-const owned=resolve(project,'.local/music-search-flow-parent'),helpers=resolve(project,'tests/integration/music-search-flow');
+const owned=resolve(project,'.local/music-search-prototype-parent/main'),helpers=resolve(project,'tests/integration/music-search-flow');
 const args=process.argv.slice(2),prepare=args.includes('--prepare');
 assert(args.every((a,i)=>['--prepare','--freeze','--go','--groups'].includes(a)||['--freeze','--go','--groups'].includes(args[i-1])),'Unknown option');
 const selected=args.includes('--groups')?args[args.indexOf('--groups')+1].split(','):null;assert(!selected||selected.every(n=>/^(0[1-9]|1[0-3])$/.test(n)));
-const freezePath=resolve(project,args.includes('--freeze')?args[args.indexOf('--freeze')+1]:'.local/music-search-flow-parent/freeze.json');
+const freezePath=resolve(project,args.includes('--freeze')?args[args.indexOf('--freeze')+1]:'.local/music-search-prototype-parent/freeze.json');
 assert(prepare||args[args.indexOf('--go')+1]==='MUSIC_FLOW-FINAL','Explicit GO MUSIC_FLOW-FINAL required');
 await mkdir(owned,{recursive:true});
 const stamp=new Date().toISOString().replace(/[:.]/g,'-'),run=resolve(owned,`${prepare?'prepare':'final'}-${stamp}`);await mkdir(run);
@@ -91,5 +91,5 @@ finally{
  report.resources={contexts:contexts.size,browserConnected:browser?.isConnected()??false,serverListening:server?.listening??false,pending:pending.size};report.cleanup=contexts.size===0&&!report.resources.browserConnected&&!report.resources.serverListening&&pending.size===0;
  try{const now=await sourceMap(project);assert.deepEqual(now,before);assert.deepEqual(await readFile(freezePath),frozenBytes);const snap=await sourceMap(root);delete snap['src/telegram/MUSIC_FLOW-TESTONLY-sdk.ts'];assert.deepEqual(snap,before);report.sourceFinal=now;report.sourceUnchanged=true;report.buildFinal={control:await tree(outControl),fixture:await tree(outFixture)};assert.deepEqual(report.buildFinal,report.buildStart);report.memoryFinal=await memory('final');}catch(e){report.status='ABORTED_FREEZE_OR_AUDIT_FAILED';report.auditFailure=e.message;process.exitCode=1;}
  if(!report.cleanup){report.status='FAIL_CLEANUP';process.exitCode=1;}
- report.counts={uniquePlanned:selected?.length??13,executed:report.groups.length,passed:report.groups.filter(g=>g.status==='PASS').length,failed:report.groups.filter(g=>g.status==='FAIL').length};report.finished=new Date().toISOString();await writeFile(resolve(run,'report.json'),JSON.stringify(report,null,2));await writeFile(resolve(project,'.local/evidence/music-search-flow-parent.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({run,status:report.status,counts:report.counts,cleanup:report.cleanup,fatal:report.fatal,auditFailure:report.auditFailure},null,2));
+ report.counts={uniquePlanned:selected?.length??13,executed:report.groups.length,passed:report.groups.filter(g=>g.status==='PASS').length,failed:report.groups.filter(g=>g.status==='FAIL').length};report.finished=new Date().toISOString();await writeFile(resolve(run,'report.json'),JSON.stringify(report,null,2));await writeFile(resolve(project,'.local/evidence/music-search-prototype.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({run,status:report.status,counts:report.counts,cleanup:report.cleanup,fatal:report.fatal,auditFailure:report.auditFailure},null,2));
 }
