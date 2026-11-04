@@ -17,3 +17,5 @@ La sesión sigue en RAM por pestaña. Resultados y acciones antiguas no reviven 
 La evidencia de la versión comprobada se registra en `docs/evidence-music-search-web.json`. Las comprobaciones sintéticas no acreditan el protocolo de un bot real ni el funcionamiento físico de iPhone. Los recibos y RED de la versión anterior se conservan; no se reinterpretan como pruebas del flujo nuevo.
 
 Las coincidencias completas preceden a las parciales; se normalizan tildes y puntuación y se admiten prefijos de al menos tres caracteres. Se ordenan todos los candidatos locales antes de seleccionar hasta 50; los locales ganan duplicados remotos. No se descartan candidatos remotos por un segundo filtro estricto.
+
+Los rechazos por límites muestran un código cerrado y la entrada pública para distinguir la guarda y la versión, sin contenido del chat. [Diagnóstico D1 y alcance](BOT-SEARCH-DIAGNOSTICS.md). Identificar ese código no demuestra que el caso real esté reparado.

@@ -51,7 +51,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    if(closed||e.sessionId!==sessionId||e.accountRef!==binding.accountRef||e.accountEpoch!==binding.accountEpoch)return response(e,fail('session-expired'),'not-dispatched');
    if(!live(ctx))return response(e,fail('cancelled'),'not-dispatched');
    if(requests.has(c.requestId))return response(e,fail('expired'),'not-dispatched');
-   if(requests.size>=B.requestIds){invalidate();return response(e,fail('limit'),'not-dispatched');}requests.add(c.requestId);
+   if(requests.size>=B.requestIds){invalidate();return response(e,fail('limit-requests'),'not-dispatched');}requests.add(c.requestId);
    if(c.type==='bot-search.cancel'){
     if(!flight||flight.e.requestId!==c.targetRequestId||flight.e.queryId!==c.queryId||flight.e.providerRevision!==c.providerRevision)return response(e,fail('expired'),'not-dispatched');
     flight.stop(fail('cancelled'));return Object.freeze({...e,type:'bot-search.cancelled',targetRequestId:c.targetRequestId});
@@ -66,7 +66,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    const capture=dependency.captureProvider(c.providerRef,c.providerRevision);
    if(!capture)return response(e,fail('expired'),'not-dispatched');
    if(capture.username!=='ivkmbot')return response(e,fail('unsupported'),'not-dispatched');
-   const query=c.type==='bot-search.search'?formatBotSearchQuery(c):null;if(c.type==='bot-search.search'&&!query)return response(e,fail('limit'),'not-dispatched');
+   const query=c.type==='bot-search.search'?formatBotSearchQuery(c):null;if(c.type==='bot-search.search'&&!query)return response(e,fail('limit-query'),'not-dispatched');
    const shared=dependency.getAccountCooldown?.();
    if(shared)return response(e,{error:'rate-limit',...shared},'not-dispatched');
    if(cooldown&&(cooldown.retryBlocked||cooldown.retryAt!==null&&time.now()<cooldown.retryAt))return response(e,cooldown,'not-dispatched');
@@ -85,9 +85,9 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    flight=f;ctx.signal.addEventListener('abort',onAbort,{once:true});timer=time.setTimeout(()=>f.stop(fail('timeout')),duration);
    let decoded=0;
    const check=()=>{if(f.cause)throw f.cause;if(!live(ctx,capture)){f.stop(fail('cancelled'));throw f.cause;}if(time.now()>=deadline){f.stop(fail('timeout'));throw f.cause;}};
-   const budget=(v:unknown)=>{decoded+=assertBotSearchRawBudget(v);if(decoded>B.rawBytes)throw new BotSearchProjectionError('limit');};
+   const budget=(v:unknown)=>{decoded+=assertBotSearchRawBudget(v);if(decoded>B.rawBytes)throw new BotSearchProjectionError('limit','limit-attempt');};
    const observe=(error:unknown):Failure=>{
-    if(error instanceof BotSearchProjectionError)return fail(error.code);
+    if(error instanceof BotSearchProjectionError)return fail(error.limit??error.code);
     if(error instanceof BotDownloadBytesFailure)return fail(error.code==='size'?'file-too-large':error.code==='cancelled'?'cancelled':'file-invalid');
     // SDK late failures are observed independently of a winning cancel/deadline cause.
     const cause=botProvidersFailure(error,time.now());

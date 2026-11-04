@@ -32,7 +32,7 @@ test('typed SDK foundation performs exact identity, baseline1, one plaintext sta
 });
 test('unsupported selected provider never substitutes ivkm; missing consent/target query do zero IO',async()=>{
  const other=await setup(undefined,'otherbot');const x=other.command();assert.equal((await other.check(x.p,x.c)).error,'unsupported');assert.equal(other.calls.length,0);other.driver.close();
- const s=await setup();const a=s.command({consent:false});assert.equal(await a.p,null);const b=s.command({target:{title:'/start',artist:null,album:null,durationSeconds:null}});assert.equal((await s.check(b.p,b.c)).error,'limit');assert.equal(s.calls.length,0);s.driver.close();
+ const s=await setup();const a=s.command({consent:false});assert.equal(await a.p,null);const b=s.command({target:{title:'/start',artist:null,album:null,durationSeconds:null}});assert.equal((await s.check(b.p,b.c)).error,'limit-query');assert.equal(s.calls.length,0);s.driver.close();
 });
 test('fresh identity must match approved id AND signed hash; username transfer invalidates exact session',async()=>{
  for(const raw of [identity('ivkmbot',202),identity('ivkmbot',101,124)]){const s=await setup(async()=>raw);const {c,p}=s.command();assert.equal((await s.check(p,c)).error,'identity-changed');assert.equal(s.calls.length,1);assert.equal(s.pool.getSnapshot(),null);assert.ok(s.invalidations>=1);s.driver.close();}
@@ -80,10 +80,16 @@ test('concurrent external outgoing makes response uncertain even with a valid bo
  const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(11,{out:true}),msg()]));const {c,p}=s.command();assert.equal((await s.check(p,c)).error,'uncertain');s.driver.close();
 });
 test('raw projection budget accumulates across calls; no send after oversized identity, no truncated success',async()=>{
- const s=await setup(async()=>({...identity(),incidental:'x'.repeat(40000)}));const x=s.command();assert.equal((await s.check(x.p,x.c)).error,'limit');assert.equal(s.calls.length,1);s.driver.close();
+ const s=await setup(async()=>({...identity(),incidental:'x'.repeat(40000)}));const x=s.command();assert.equal((await s.check(x.p,x.c)).error,'limit-raw-bytes');assert.equal(s.calls.length,1);s.driver.close();
  const t=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(12,{message:'',replyMarkup:undefined,media:{_: 'unknownMedia'}})]));const y=t.command();assert.equal((await t.check(y.p,y.c)).error,'unsupported');assert.equal(t.calls.length,4);t.driver.close();
 });
 test('request/query IDs finite; replay rejected; static accessors do no IO, quiesce invalidates',async()=>{
  const s=await setup();const x=s.command();await x.p;assert.equal((await s.driver.handle(x.c,s.ctx) as any).error,'expired');const y=s.command({queryId:x.c.queryId});assert.equal((await s.check(y.p,y.c)).error,'expired');const calls=s.calls.length;
- for(let n=0;n<254;n++){const z=s.command({providerRef:randomUUID()});await z.p;}const z=s.command();assert.equal((await s.check(z.p,z.c)).error,'limit');assert.equal(s.invalidations,1);assert.equal(s.calls.length,calls);assert.equal(await s.driver.quiesce(),true);
+ for(let n=0;n<254;n++){const z=s.command({providerRef:randomUUID()});await z.p;}const z=s.command();assert.equal((await s.check(z.p,z.c)).error,'limit-requests');assert.equal(s.invalidations,1);assert.equal(s.calls.length,calls);assert.equal(await s.driver.quiesce(),true);
+});
+
+
+test('cumulative decoded budget reports its own code, not the individual response byte guard',async()=>{
+ const s=await setup(async r=>({... (r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg()])),note:'x'.repeat(8192)}));
+ const z=s.command();const r=await s.check(z.p,z.c);assert.equal(r.error,'limit-attempt');assert.equal(s.calls.length,4);s.driver.close();
 });

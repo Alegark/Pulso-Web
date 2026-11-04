@@ -1,28 +1,28 @@
 import Long from 'long';
 import {dataArray,positive} from './sources-protocol';
-import {BOT_SEARCH_BOUNDS as B,botSearchText,matchingSongRows,type BotSearchTarget,type BotSearchRow} from './bot-search-protocol';
+import {BOT_SEARCH_BOUNDS as B,botSearchText,matchingSongRows,type BotSearchLimitError,type BotSearchTarget,type BotSearchRow} from './bot-search-protocol';
 /** Raw SDK values are worker-private. No getters, JSON hooks, bigint coercion or raw logging. */
 export const searchOwn=(v:unknown,k:string):unknown=>v&&typeof v==='object'?Object.getOwnPropertyDescriptor(v,k)?.value:undefined;
-export class BotSearchProjectionError extends Error {constructor(readonly code:'limit'|'unsupported'){super(code);}}
-function bad(code:'limit'|'unsupported'='unsupported'):never {throw new BotSearchProjectionError(code);}
+export class BotSearchProjectionError extends Error {constructor(readonly code:'limit'|'unsupported',readonly limit:BotSearchLimitError|undefined=undefined){super(code);}}
+function bad(code:'limit'|'unsupported'='unsupported',limit?:BotSearchLimitError):never {throw new BotSearchProjectionError(code,limit);}
 /** 64 KiB approximate decoded data budget, including incidental SDK response fields. NOT a
  * transport/WASM allocation or peak heap bound. Caller accumulates returned cost per attempt. */
 export function assertBotSearchRawBudget(raw:unknown):number {
  const pending=[{v:raw,depth:0}],seen=new Set<object>();let bytes=0,nodes=0,slots=0;
  const byteLength=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype),'byteLength')!.get!;
- while(pending.length){const {v,depth}=pending.pop()!;if(++nodes>4096||depth>20)bad('limit');
+ while(pending.length){const {v,depth}=pending.pop()!;if(++nodes>4096)bad('limit','limit-raw-nodes');if(depth>20)bad('limit','limit-raw-depth');
   if(v===null||v===undefined||typeof v==='number'||typeof v==='boolean')bytes+=8;
-  else if(typeof v==='string'){if(v.length>B.rawBytes/2)bad('limit');bytes+=v.length*2+8;}
+  else if(typeof v==='string'){if(v.length>B.rawBytes/2)bad('limit','limit-raw-bytes');bytes+=v.length*2+8;}
   else if(typeof v==='object'){
-   if(seen.has(v))bad('limit');seen.add(v);bytes+=32;const proto=Object.getPrototypeOf(v);
-   if(proto===Uint8Array.prototype){const n=byteLength.call(v);bytes+=n;if(n>4096||bytes>B.rawBytes)bad('limit');if(Reflect.ownKeys(v).length!==n)bad();}
+   if(seen.has(v))bad('limit','limit-raw-references');seen.add(v);bytes+=32;const proto=Object.getPrototypeOf(v);
+   if(proto===Uint8Array.prototype){const n=byteLength.call(v);bytes+=n;if(n>4096)bad('limit','limit-binary');if(bytes>B.rawBytes)bad('limit','limit-raw-bytes');if(Reflect.ownKeys(v).length!==n)bad();}
    else {if(proto!==Object.prototype&&proto!==null&&proto!==Array.prototype&&proto!==Long.prototype)bad();
     if(proto===Long.prototype&&!searchLong(v))bad();
-    const keys=Reflect.ownKeys(v);slots+=keys.length;if(keys.length>2048||slots>4096)bad('limit');
+    const keys=Reflect.ownKeys(v);slots+=keys.length;if(keys.length>2048||slots>4096)bad('limit','limit-raw-slots');
     for(const key of keys){if(typeof key!=='string'||['__proto__','constructor','prototype'].includes(key))bad();const d=Object.getOwnPropertyDescriptor(v,key)!;if(!('value'in d))bad();bytes+=key.length*2+8;pending.push({v:d.value,depth:depth+1});}
    }
   }else bad();
-  if(bytes>B.rawBytes)bad('limit');
+  if(bytes>B.rawBytes)bad('limit','limit-raw-bytes');
  }return bytes;
 }
 /** Exact same installed signed-Long data validation used for approved peers. */
@@ -44,7 +44,7 @@ function incomingBot(message:unknown,botId:number):boolean {
 }
 function history(raw:unknown,botId:number,limit:number):readonly unknown[] {
  if(!['messages.messages','messages.messagesSlice'].includes(searchOwn(raw,'_') as string))bad();
- const a=dataArray(searchOwn(raw,'messages'),limit);if(!a)bad('limit');
+ const a=dataArray(searchOwn(raw,'messages'),limit);if(!a)bad('limit',limit===1?'limit-baseline':'limit-history');
  for(const m of a){if(!['message','messageService'].includes(searchOwn(m,'_') as string)||!messageId(searchOwn(m,'id'))||!samePeer(searchOwn(m,'peerId'),botId))bad();}
  return a;
 }
@@ -65,7 +65,7 @@ export interface BotSearchPage {readonly rows:readonly BotSearchRow[];readonly r
 export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,outgoing:number,additionalReplies:readonly number[]=[],target:BotSearchTarget|null=null):BotSearchPage {
  const messages=history(raw,botId,20),rows:BotSearchRow[]=[],refs=new Map<string,BotSearchPrivateRef>();let concurrent=false,unrecognized=false;
  const add=(m:number,row:Omit<Extract<BotSearchRow,{kind:'option'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'message'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'audio'}>,'rowRef'>,data?:Uint8Array)=>{
-  if(rows.length>=B.candidateRows)bad('limit');const rowRef=crypto.randomUUID();rows.push(Object.freeze({...row,rowRef}));refs.set(rowRef,Object.freeze({messageId:m,...(data?{callbackData:data.slice()}: {})}));
+  if(rows.length>=B.candidateRows)bad('limit','limit-candidates');const rowRef=crypto.randomUUID();rows.push(Object.freeze({...row,rowRef}));refs.set(rowRef,Object.freeze({messageId:m,...(data?{callbackData:data.slice()}: {})}));
  };
  for(const m of messages){const id=searchOwn(m,'id') as number;if(id<=baseline)continue;
   if(searchOwn(m,'out')===true){if(id!==outgoing)concurrent=true;continue;}
@@ -74,8 +74,8 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
   if(reply!==undefined){const peer=searchOwn(reply,'replyToPeerId');if(searchOwn(reply,'_')!=='messageReplyHeader'||searchOwn(reply,'replyToMsgId')!==outgoing&&!additionalReplies.includes(searchOwn(reply,'replyToMsgId') as number)||peer!==undefined&&!samePeer(peer,botId))continue;correlation='reply';}
   const fingerprint=botSearchMessageFingerprint(m);const start=rows.length,markup=searchOwn(m,'replyMarkup');
   if(searchOwn(markup,'_')==='replyInlineMarkup'){
-   const keyboard=dataArray(searchOwn(markup,'rows'),B.keyboardRows);if(!keyboard)bad('limit');
-   for(const r of keyboard){if(searchOwn(r,'_')!=='keyboardInlineButtonRow')bad();const buttons=dataArray(searchOwn(r,'buttons'),20);if(!buttons)bad('limit');
+   const keyboard=dataArray(searchOwn(markup,'rows'),B.keyboardRows);if(!keyboard)bad('limit','limit-keyboard-rows');
+   for(const r of keyboard){if(searchOwn(r,'_')!=='keyboardInlineButtonRow')bad();const buttons=dataArray(searchOwn(r,'buttons'),20);if(!buttons)bad('limit','limit-keyboard-buttons');
     for(const b of buttons){
      // Installed layer232: callback is a nested type, never the legacy button constructor.
      const type=searchOwn(b,'type');if(searchOwn(b,'_')!=='keyboardInlineButton'||searchOwn(type,'_')!=='inlineButtonTypeCallback'||searchOwn(type,'requiresPassword')===true)continue;
@@ -88,7 +88,7 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
   }
   const media=searchOwn(m,'media'),doc=searchOwn(media,'document');
   if(searchOwn(media,'_')==='messageMediaDocument'&&searchOwn(doc,'_')==='document'){
-   const attrs=dataArray(searchOwn(doc,'attributes'),20);if(!attrs)bad('limit');const audio=attrs.filter(a=>searchOwn(a,'_')==='documentAttributeAudio');
+   const attrs=dataArray(searchOwn(doc,'attributes'),20);if(!attrs)bad('limit','limit-document-attributes');const audio=attrs.filter(a=>searchOwn(a,'_')==='documentAttributeAudio');
    const mime=searchOwn(doc,'mimeType'),size=searchOwn(doc,'size');
    if(audio.length===1&&searchOwn(audio[0],'voice')!==true&&typeof mime==='string'&&/^audio\/[a-z0-9.+-]{1,64}$/.test(mime)&&typeof size==='number'){
     const bytes=size,duration=searchOwn(audio[0],'duration');

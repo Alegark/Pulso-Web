@@ -6,7 +6,16 @@ export type BotSearchCommand=
  |(BotSearchEnvelope&{readonly type:'bot-search.search';readonly providerRef:string;readonly query:string;readonly consent:true;readonly target?:BotSearchTarget})
  |(BotSearchEnvelope&{readonly type:'bot-search.download';readonly providerRef:string;readonly rowRef:string;readonly target:BotSearchTarget;readonly consent:true})
  |(BotSearchEnvelope&{readonly type:'bot-search.cancel';readonly targetRequestId:string});
-export type BotSearchError='cancelled'|'timeout'|'busy'|'expired'|'session-expired'|'limit'|'unsupported'|'identity-changed'|'rate-limit'|'network'|'uncertain'|'needs-start'|'file-too-large'|'file-invalid'|'conflict';
+/** Closed non-content diagnostics. No counts, query, peer or account data. */
+export const BOT_SEARCH_LIMIT_DIAGNOSTICS=Object.freeze({
+ 'limit-requests':'L01','limit-query':'L02','limit-raw-bytes':'L03','limit-raw-nodes':'L04',
+ 'limit-raw-depth':'L05','limit-raw-references':'L06','limit-binary':'L07','limit-raw-slots':'L08',
+ 'limit-baseline':'L09','limit-history':'L10','limit-updates':'L11','limit-keyboard-rows':'L12',
+ 'limit-keyboard-buttons':'L13','limit-candidates':'L14','limit-attempt':'L15','limit-document-attributes':'L16',
+} as const);
+export type BotSearchLimitError=keyof typeof BOT_SEARCH_LIMIT_DIAGNOSTICS;
+export function isBotSearchLimitError(value:unknown):value is BotSearchLimitError {return typeof value==='string'&&Object.hasOwn(BOT_SEARCH_LIMIT_DIAGNOSTICS,value);}
+export type BotSearchError='cancelled'|'timeout'|'busy'|'expired'|'session-expired'|'limit'|'unsupported'|'identity-changed'|'rate-limit'|'network'|'uncertain'|'needs-start'|'file-too-large'|'file-invalid'|'conflict'|BotSearchLimitError;
 export type BotSearchDelivery='not-dispatched'|'uncertain'|'acknowledged';
 interface Row {readonly rowRef:string;readonly correlation:'reply'|'recent'}
 export type BotSearchRow=
@@ -76,7 +85,7 @@ export function parseBotSearchReply(raw:unknown,expected:BotSearchEnvelope):BotS
  case 'bot-search.cancelled':if(!isUuid(r.targetRequestId))return null;extra=['targetRequestId'];out={...e,type:r.type,targetRequestId:r.targetRequestId};break;
  case 'bot-search.result':{const a=dataArray(r.rows,20);if(!a||!a.length||r.delivery!=='acknowledged'||!timestamp(r.expiresAt))return null;const rows=a.map(row);if(!rows.every((x):x is BotSearchRow=>x!==null)||new Set(rows.map(x=>x.rowRef)).size!==rows.length)return null;const expectedTarget=r.expectedTarget===null?null:parseBotSearchTarget(r.expectedTarget);if(r.expectedTarget!==null&&!expectedTarget)return null;extra=['delivery','rows','expiresAt','expectedTarget'];out={...e,type:r.type,delivery:'acknowledged',rows:Object.freeze(rows),expiresAt:r.expiresAt,expectedTarget};break;}
  case 'bot-search.error':
-  if(!['cancelled','timeout','busy','expired','session-expired','limit','unsupported','identity-changed','rate-limit','network','uncertain','needs-start','file-too-large','file-invalid','conflict'].includes(r.error as string)||!['not-dispatched','uncertain','acknowledged'].includes(r.delivery as string)||r.retryAt!==null&&!timestamp(r.retryAt)||typeof r.retryBlocked!=='boolean'||(r.error==='rate-limit'?(r.retryBlocked!==(r.retryAt===null)):(r.retryAt!==null||r.retryBlocked)))return null;
+  if(!(['cancelled','timeout','busy','expired','session-expired','limit','unsupported','identity-changed','rate-limit','network','uncertain','needs-start','file-too-large','file-invalid','conflict'].includes(r.error as string)||isBotSearchLimitError(r.error))||!['not-dispatched','uncertain','acknowledged'].includes(r.delivery as string)||r.retryAt!==null&&!timestamp(r.retryAt)||typeof r.retryBlocked!=='boolean'||(r.error==='rate-limit'?(r.retryBlocked!==(r.retryAt===null)):(r.retryAt!==null||r.retryBlocked)))return null;
   extra=['error','delivery','retryAt','retryBlocked'];out={...e,type:r.type,error:r.error as BotSearchError,delivery:r.delivery as BotSearchDelivery,retryAt:r.retryAt as number|null,retryBlocked:r.retryBlocked};break;
  default:return null;
  }

@@ -1,0 +1,103 @@
+{
+  "project": "Pulso-Web",
+  "status": "D1_DELIVERED_OWNER_FAILURE_NOT_YET_DIAGNOSED",
+  "release": "/releases/e22c29994e87deca.html",
+  "ownerCaseResolved": false,
+  "product": "Closed diagnostic variants identify existing limit guards. No budget change, retry, telemetry or chat-content diagnostic. Stale searching notice cleared on terminal query error.",
+  "validation": {
+    "unit": {
+      "passed": 487,
+      "failed": 0
+    },
+    "lintAndTypes": true,
+    "nativeMain": {
+      "passed": 23,
+      "planned": 23,
+      "run": "/data/home/Proyectos/Pulso-Web/.local/bot-limit-diagnostics/main/final-2026-11-04T21-11-15-384Z",
+      "receiptBytes": 1022266,
+      "receiptSHA256": "6414c9996d45b9dfaeeb3184b024b08450be00db8bb805f23cf57faab28933e1",
+      "mainTransformed": false,
+      "sdk": "SYNTHETIC_ONLY",
+      "sourceFilesExact": 148,
+      "sourcesUnchanged": true,
+      "pageErrors": 0,
+      "csp": 0,
+      "cleanup": true
+    },
+    "production": {
+      "passed": true,
+      "cases": [
+        {
+          "engine": "chromium",
+          "version": "154.0.8037.57",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        },
+        {
+          "engine": "webkit",
+          "version": "27.2",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        }
+      ],
+      "webkitStyleSrcAttrReports": 12,
+      "otherCspReports": 0,
+      "realTelegram": false
+    },
+    "normalUpdate": {
+      "oldEntrySHA256": "bdfa17d42a6aad8b854d372ebe613a55c728cb25b3458c86e25f4d6561051514",
+      "newEntry": "/releases/e22c29994e87deca.html",
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    },
+    "buildAudit": {
+      "archiveFiles": 3611,
+      "currentSourceMembersExact": 148,
+      "privateIdentityAbsent": true
+    },
+    "privateDelivery": {
+      "passed": true,
+      "release": "/releases/e22c29994e87deca.html",
+      "copiedFilesExact": 38,
+      "previousImmutableFilesPreserved": 212,
+      "configurationUnchanged": true,
+      "serviceRestarted": false,
+      "grantChanged": false
+    },
+    "https": {
+      "passed": true,
+      "urlRecorded": false,
+      "credentialsRecorded": false,
+      "realTelegram": false,
+      "release": "/releases/e22c29994e87deca.html",
+      "launcherEntryMainWorkerSWExact": true,
+      "documentMetadataCsp": true,
+      "workerCspUnchanged": true,
+      "privateConfigurationExact": true,
+      "privateConfigurationNoStore": true
+    }
+  },
+  "limits": [
+    "No real Telegram account or physical iPhone verification",
+    "The owner generic error persisted after the prior release; synthetic tests do not identify its real branch",
+    "D1 requires only the non-content L-code and public entry to identify the next repair",
+    "No changed guards, budgets, grant, service, account or automatic retries"
+  ]
+}

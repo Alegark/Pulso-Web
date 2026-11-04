@@ -4,7 +4,7 @@ import type {Track} from '../library/library';
 import {createMusicSuggestionsClient,normalizeMusicSuggestionsQuery,type MusicSuggestion} from '../library/music-suggestions';
 import type {TelegramSessionClient,BotsSnapshot,BotSearchSnapshot} from '../telegram/session-client';
 import type {SessionState} from '../telegram/session-protocol';
-import {isBotSearchQuery,parseBotSearchTarget,type BotSearchTarget,type BotSearchRow,type BotSearchError} from '../telegram/bot-search-protocol';
+import {isBotSearchQuery,parseBotSearchTarget,BOT_SEARCH_LIMIT_DIAGNOSTICS,isBotSearchLimitError,type BotSearchLimitError,type BotSearchTarget,type BotSearchRow,type BotSearchError} from '../telegram/bot-search-protocol';
 import {musicSearchCatalog} from '../library/music-search-catalog';
 import {songChoiceKey,matchingSongRows,type SongChoice,type SongPlaybackAttempt} from '../library/selected-song';
 import {MusicSearchPanel,type MusicSearchResultRow} from './MusicSearchPanel';
@@ -31,12 +31,20 @@ function resultView(row:BotSearchRow,target:BotSearchTarget|null):MusicSearchRes
  else{title=row.text;subtitle=null;}
  return {id:row.rowRef,kind:row.kind,title,subtitle,correlation:row.correlation,match};
 }
-const searchErrors:Record<BotSearchError,string>={
+const searchErrors:Record<Exclude<BotSearchError,BotSearchLimitError>,string>={
  'file-too-large':'Esta primera versión admite canciones de hasta 8 MiB.', 'file-invalid':'El archivo está incompleto o no es un audio compatible.', conflict:'La opción, el documento o sus metadatos cambiaron. Busca y elige de nuevo.',
  cancelled:'Consulta detenida. Un mensaje ya enviado puede permanecer en tu chat.',timeout:'El bot no respondió dentro del plazo. No se repetirá la consulta automáticamente.',busy:'Hay otra operación de Telegram pendiente.',expired:'Estos resultados han caducado. Haz una consulta nueva si quieres continuar.',
  'session-expired':'La sesión de Telegram ha caducado. Vuelve a conectarla.',limit:'La consulta o la respuesta supera los límites admitidos.',unsupported:'Este bot o su respuesta todavía no son compatibles con este adaptador.','identity-changed':'El perfil del bot ha cambiado. Comprueba su identidad y vuelve a añadirlo.',
  'rate-limit':'Telegram ha limitado las consultas. Respeta la espera indicada antes de volver a buscar.',network:'No se pudo completar la consulta al bot.',uncertain:'No se pudo confirmar si el bot recibió o completó la consulta. Revisa su chat antes de repetirla.','needs-start':'Abre el chat del bot en Telegram e inícialo allí; después vuelve a buscar aquí.',
 };
+function searchErrorText(error:BotSearchError):string {
+ const entry=location.pathname.match(/\/releases\/([a-f0-9]{16})\.html$/)?.[1]??'local';
+ if(isBotSearchLimitError(error)||error==='limit'){
+  const code=isBotSearchLimitError(error)?BOT_SEARCH_LIMIT_DIAGNOSTICS[error]:'L00';
+  return `No se pudo leer la consulta o respuesta del bot. Código ${code} · entrada ${entry} · diagnóstico D1. No se repetirá automáticamente.`;
+ }
+ return searchErrors[error];
+}
 /** A song gesture owns one pipeline. Root retains local publication/playback authority. */
 interface SongFlight {key:string;choice:SongChoice;target:BotSearchTarget;attempt:SongPlaybackAttempt;abort:AbortController;scope:string;client:TelegramSessionClient|null;networkCurrent:(()=>boolean)|null;revision:number|undefined;queryId:string|null;phase:'lookup'|'query'|'choice'|'download'|'saving'|'play'|'done'|'error'}
 export function MusicSearchController(props:Props){
@@ -153,7 +161,7 @@ export function MusicSearchController(props:Props){
  React.useEffect(()=>{
   const f=flight.current;if(!f||f.phase!=='query'||!live(f)||!f.client)return;
   const now=f.client.searchSnapshot();if(now.queryId!==f.queryId||now.pending)return;
-  if(now.error){f.phase='error';pulse();return;}
+  if(now.error){f.phase='error';setNotice(null);pulse();return;}
   const matches=matchingSongRows(now.rows,f.target);
   if(matches.length===1)void downloadRow(f,matches[0].rowRef);
   else{f.phase='choice';setNotice('Elige la versión correcta entre las opciones del bot.');pulse();}
@@ -197,5 +205,5 @@ export function MusicSearchController(props:Props){
   onCancel={cancelSong}
   downloadStatus={download?.phase==='saving'?'Guardando copia verificada…':null} downloadProgress={saving?download:state?.downloadProgress??null} onCancelDownload={saving?cancelSong:undefined}
   results={results} selectedResultId={selectedResult} onSelectResult={id=>{const f=flight.current;if(current()&&f)void downloadRow(f,id);}}
-  status={rateNotice??notice??(displayedQuery&&state?.queryId===displayedQuery&&!state.error&&results.length?'Respuesta del bot recibida. Revisa las opciones; la identidad musical sigue sin confirmar.':null)} error={state?.error?searchErrors[state.error]:null} uncertain={state?.delivery==='uncertain'} current={current}/>;
+  status={rateNotice??notice??(displayedQuery&&state?.queryId===displayedQuery&&!state.error&&results.length?'Respuesta del bot recibida. Revisa las opciones; la identidad musical sigue sin confirmar.':null)} error={state?.error?searchErrorText(state.error):null} uncertain={state?.delivery==='uncertain'} current={current}/>;
 }

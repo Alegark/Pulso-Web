@@ -61,6 +61,7 @@ export async function openTemporaryTelegram(_identity:unknown,lifetime:AbortSign
   // Native await barrier deliberately ignores abort, so cancel ACK cannot stand for settlement.
   const r=await nativeFetch('/__musicflow/rpc',{method:'POST',body:JSON.stringify(payload)});const v=await r.json();wireMode=v.mode;await event('rpc-settled',{method:request._});
   if(v.error){const e={errorMessage:v.error};const f=botProvidersFailure(e,Date.now());if(f.error==='rate-limit')cooldown={retryAt:f.retryAt,retryBlocked:f.retryBlocked};throw e;}
+  if(v.mode==='diagnostic-binary'&&request._==='messages.getHistory'&&request.limit===20)return {...page('menu'),incidental:new Uint8Array(4097)};
   if(request._==='contacts.resolveUsername')return identity(request.username,v.label);
   if(request._==='messages.getDialogs')return {_:'messages.dialogs',dialogs:[],messages:[],users:[],chats:[]};
   if(request._==='upload.getFile'){if(options.dcId!==2||options.kind!=='download'||request.location._!=='inputDocumentFileLocation'||request.location.thumbSize!=='')throw Error('Unbound file location');const b=await ownAudio();return {_:'upload.file',bytes:v.mode==='download-corrupt'?new Uint8Array(Math.min(request.limit,b.length-request.offset)):b.slice(request.offset,request.offset+request.limit),mtime:0};}
