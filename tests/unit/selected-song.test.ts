@@ -8,7 +8,7 @@ const audio=(title='A Song (Live)',performer:string|null='An Artist',durationSec
 test('automatic exact title and performer matching retains live/remix and punctuation semantics',()=>{
  const exact=option('A Song (Live) — An Artist');
  const rows=[exact,option('A Song — An Artist'),option('A Song (Live Remix) — An Artist'),option('A Song (Live) — Another Artist'),option('A Song (Live) — An Artist ▶'),option('Next page'),option('A Song (Live) — An Artist','recent')];
- assert.deepEqual(matchingSongRows(rows,target),[exact]);
+ assert.deepEqual(matchingSongRows(rows,target),[exact,rows.at(-1)]);
  assert.equal(matchingSongRows([option('A Sóng (Live) - AN ARTIST')],target).length,1);
 });
 test('ambiguous options stay ambiguous, unknown or foreign-version audio never automatic',()=>{

@@ -4,7 +4,7 @@ import type {tl} from '@mtcute/core';
 import type {BaseTelegramClient} from '@mtcute/core/client.js';
 import {botProvidersFailure,type BotProvidersClock,type BotSearchProviderCapture,type BotProvidersDriver} from './bot-providers-driver';
 import {isUuid,parseAccountBinding,type AccountBinding} from './sources-protocol';
-import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,formatBotSearchQuery,parseBotSearchCommand,type BotSearchEnvelope,type BotSearchReply,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
+import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,formatBotSearchQuery,parseBotSearchCommand,matchingSongRows,type BotSearchEnvelope,type BotSearchReply,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
 import {assertBotSearchRawBudget,botSearchAck,botSearchBaseline,BotSearchProjectionError,projectBotSearchPage,botSearchKnownMessage,botSearchMessageFingerprint,botSearchDocument,type BotSearchPrivateRef} from './bot-search-page';
 /** Inject only inside the worker. No generic RPC, root peers or arbitrary message identifiers. */
 export interface BotSearchDependency {
@@ -111,7 +111,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       let selected=selection,message=await known(selected);
       if(selected.row?.kind==='option'){
        const fold=(v:string)=>v.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
-       if(!dependency.callback||!selected.callbackData||!fold(selected.row.label).includes(fold(c.target.title))||fold(c.target.title).length<3)throw fail('unsupported');
+       if(!dependency.callback||!selected.callbackData||!(matchingSongRows([selected.row],c.target).length===1||fold(c.target.title).length>=3&&fold(selected.row.label).includes(fold(c.target.title))))throw fail('unsupported');
        const baseline=botSearchBaseline(await rpc(ms=>dependency.readHistory(approved.peer,0,1,abort.signal,ms)),approved.botId);
        f.delivery='uncertain';if(ctx.publish&&live(ctx,capture))try{ctx.publish({...e,type:'bot-search.sending',delivery:'uncertain'});}catch{/* Observers cannot own or repeat the callback. */}
        const answer=await rpc(()=>dependency.callback!(approved.peer,selected.messageId,selected.callbackData!.slice(),abort.signal));
@@ -120,15 +120,16 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        for(let read=0;;read++){
         check();if(read>=60)throw fail('timeout');
         const raw=await rpc(ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms));
-        const page=projectBotSearchPage(raw,approved.botId,baseline,previous.outgoing,[selection.messageId]);if(page.concurrent)throw fail('uncertain');
-        const audio=page.rows.filter(row=>row.kind==='audio');
+        const page=projectBotSearchPage(raw,approved.botId,baseline,previous.outgoing,[selection.messageId],c.target);if(page.concurrent)throw fail('uncertain');
+        const audio=page.rows.filter(row=>row.kind==='audio'),matches=matchingSongRows(audio,c.target);
         if(audio.length){
-         // No causal claim for a merely recent document: offer it for an explicit second choice.
-         if(audio.length!==1||audio[0].correlation!=='reply'){
+         // Correlation may be recent. Fresh exact-peer window plus ONE compatible
+         // recording permits continuation; timing alone or ambiguity never does.
+         if(matches.length!==1){
           retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={...previous,baseline};
           return {...e,type:'bot-search.result',delivery:'acknowledged',rows:audio,expiresAt:retainedUntil,expectedTarget:c.target};
          }
-         selected=page.refs.get(audio[0].rowRef)!;message=await known(selected);break;
+         selected=page.refs.get(matches[0].rowRef)!;message=await known(selected);break;
         }
         await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},B.pollMs);});
        }
@@ -154,7 +155,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      const ack=botSearchAck(await rpc(ms=>dependency.sendQuery(approved.peer,query!,randomId,abort.signal,ms)),approved.botId,randomId);
      if(!ack||ack<=baseline)throw fail('uncertain');f.delivery='acknowledged';check();
      for(let reads=0;reads<B.reads;reads++){
-      const page=projectBotSearchPage(await rpc(ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms)),approved.botId,baseline,ack);check();
+      const page=projectBotSearchPage(await rpc(ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms)),approved.botId,baseline,ack,[],c.target??null);check();
       if(page.concurrent)throw fail('uncertain');
       if(page.rows.some(row=>row.kind==='option'||row.kind==='audio')){retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={providerRef:c.providerRef,queryId:c.queryId,revision:c.providerRevision,baseline,outgoing:ack,target:c.target??null};check();
        return Object.freeze({...e,type:'bot-search.result',delivery:'acknowledged',rows:page.rows,expiresAt:retainedUntil,expectedTarget:c.target??null});

@@ -31,7 +31,7 @@ test('post-decoder budget rejects accessors/cycles/oversize/raw long without exe
  const cycle:unknown[]=[];cycle.push(cycle);
  for(const raw of [x,badLong,typed,cycle,{text:'x'.repeat(40000)},{data:new Uint8Array(4097)},new Long(1,0,true),{fn(){}}])assert.throws(()=>assertBotSearchRawBudget(raw));assert.equal(getters,0);
  assert.throws(()=>projectBotSearchPage(history(Array.from({length:21},(_,i)=>msg(i+20))),bot,9,10));
- assert.throws(()=>projectBotSearchPage(history([msg(12,{replyMarkup:menu(Array.from({length:20},()=>button()))})]),bot,9,10));
+ assert.equal(projectBotSearchPage(history([msg(12,{replyMarkup:menu(Array.from({length:20},()=>button()))})]),bot,9,10).rows.length,20);
 });
 test('ACK known randomId mapping or exact short response; no guessing ID from unrelated updates',()=>{
  const random=new Long(3,4);assert.equal(botSearchAck({_: 'updateShortSentMessage',out:true,id:10},bot,random),10);

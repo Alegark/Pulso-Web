@@ -1,6 +1,6 @@
 import Long from 'long';
 import {dataArray,positive} from './sources-protocol';
-import {BOT_SEARCH_BOUNDS as B,botSearchText,type BotSearchRow} from './bot-search-protocol';
+import {BOT_SEARCH_BOUNDS as B,botSearchText,matchingSongRows,type BotSearchTarget,type BotSearchRow} from './bot-search-protocol';
 /** Raw SDK values are worker-private. No getters, JSON hooks, bigint coercion or raw logging. */
 export const searchOwn=(v:unknown,k:string):unknown=>v&&typeof v==='object'?Object.getOwnPropertyDescriptor(v,k)?.value:undefined;
 export class BotSearchProjectionError extends Error {constructor(readonly code:'limit'|'unsupported'){super(code);}}
@@ -33,6 +33,15 @@ export function searchLong(v:unknown):Long|null {
 }
 const messageId=(v:unknown):v is number=>positive(v)&&v<=2147483647;
 const samePeer=(v:unknown,botId:number)=>searchOwn(v,'_')==='peerUser'&&searchOwn(v,'userId')===botId;
+/** In a private incoming peerUser chat, omitted fromId means that peer.
+ * Telegram TL makes it optional; explicit foreign/malformed senders never fall back. */
+function incomingBot(message:unknown,botId:number):boolean {
+ const from=message&&typeof message==='object'?Object.getOwnPropertyDescriptor(message,'fromId'):undefined;
+ if(from&&!('value'in from))return false;
+ const sender=searchOwn(message,'fromId'),out=searchOwn(message,'out');
+ return searchOwn(message,'_')==='message'&&samePeer(searchOwn(message,'peerId'),botId)&&
+  (out===undefined||out===false)&&(sender===undefined||samePeer(sender,botId));
+}
 function history(raw:unknown,botId:number,limit:number):readonly unknown[] {
  if(!['messages.messages','messages.messagesSlice'].includes(searchOwn(raw,'_') as string))bad();
  const a=dataArray(searchOwn(raw,'messages'),limit);if(!a)bad('limit');
@@ -53,25 +62,25 @@ export function botSearchAck(raw:unknown,botId:number,randomId:Long):number|null
 }
 export interface BotSearchPrivateRef {readonly messageId:number;readonly callbackData?:Uint8Array;readonly fingerprint?:string;readonly row?:BotSearchRow}
 export interface BotSearchPage {readonly rows:readonly BotSearchRow[];readonly refs:ReadonlyMap<string,BotSearchPrivateRef>;readonly concurrent:boolean;readonly unrecognized:boolean}
-export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,outgoing:number,additionalReplies:readonly number[]=[]):BotSearchPage {
+export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,outgoing:number,additionalReplies:readonly number[]=[],target:BotSearchTarget|null=null):BotSearchPage {
  const messages=history(raw,botId,20),rows:BotSearchRow[]=[],refs=new Map<string,BotSearchPrivateRef>();let concurrent=false,unrecognized=false;
  const add=(m:number,row:Omit<Extract<BotSearchRow,{kind:'option'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'message'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'audio'}>,'rowRef'>,data?:Uint8Array)=>{
-  if(rows.length>=B.rows)bad('limit');const rowRef=crypto.randomUUID();rows.push(Object.freeze({...row,rowRef}));refs.set(rowRef,Object.freeze({messageId:m,...(data?{callbackData:data.slice()}: {})}));
+  if(rows.length>=B.candidateRows)bad('limit');const rowRef=crypto.randomUUID();rows.push(Object.freeze({...row,rowRef}));refs.set(rowRef,Object.freeze({messageId:m,...(data?{callbackData:data.slice()}: {})}));
  };
  for(const m of messages){const id=searchOwn(m,'id') as number;if(id<=baseline)continue;
   if(searchOwn(m,'out')===true){if(id!==outgoing)concurrent=true;continue;}
-  if(id<=outgoing||searchOwn(m,'_')!=='message'||!samePeer(searchOwn(m,'fromId'),botId))continue;
+  if(id<=outgoing||!incomingBot(m,botId))continue;
   const reply=searchOwn(m,'replyTo');let correlation:'reply'|'recent'='recent';
   if(reply!==undefined){const peer=searchOwn(reply,'replyToPeerId');if(searchOwn(reply,'_')!=='messageReplyHeader'||searchOwn(reply,'replyToMsgId')!==outgoing&&!additionalReplies.includes(searchOwn(reply,'replyToMsgId') as number)||peer!==undefined&&!samePeer(peer,botId))continue;correlation='reply';}
   const fingerprint=botSearchMessageFingerprint(m);const start=rows.length,markup=searchOwn(m,'replyMarkup');
   if(searchOwn(markup,'_')==='replyInlineMarkup'){
-   const keyboard=dataArray(searchOwn(markup,'rows'),20);if(!keyboard)bad('limit');
+   const keyboard=dataArray(searchOwn(markup,'rows'),B.keyboardRows);if(!keyboard)bad('limit');
    for(const r of keyboard){if(searchOwn(r,'_')!=='keyboardInlineButtonRow')bad();const buttons=dataArray(searchOwn(r,'buttons'),20);if(!buttons)bad('limit');
     for(const b of buttons){
      // Installed layer232: callback is a nested type, never the legacy button constructor.
      const type=searchOwn(b,'type');if(searchOwn(b,'_')!=='keyboardInlineButton'||searchOwn(type,'_')!=='inlineButtonTypeCallback'||searchOwn(type,'requiresPassword')===true)continue;
      const label=botSearchText(searchOwn(b,'text')),data=searchOwn(type,'data');
-     if(!label||!data||typeof data!=='object'||Object.getPrototypeOf(data)!==Uint8Array.prototype||!(data as Uint8Array).length||(data as Uint8Array).length>64)continue;
+     if(!label||!/[\p{L}\p{N}]/u.test(label)||!data||typeof data!=='object'||Object.getPrototypeOf(data)!==Uint8Array.prototype||!(data as Uint8Array).length||(data as Uint8Array).length>64)continue;
      // Labels only: callback data is opaque even when it happens to resemble a title/URL.
      add(id,{kind:'option',label,correlation},data as Uint8Array);
     }
@@ -90,7 +99,14 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
   for(const row of rows.slice(start)){const previous=refs.get(row.rowRef)!;refs.set(row.rowRef,Object.freeze({...previous,fingerprint,row}));}
   if(rows.length===start)unrecognized=true;
  }
- return Object.freeze({rows:Object.freeze(rows),refs,concurrent,unrecognized});
+ // Decode and inspect every bounded candidate BEFORE truncating so concurrency
+ // and duplicate exact matches cannot be hidden by display limits. Keep a matching
+ // song even when a long ordinary menu places it after the first twenty rows.
+ const matched=new Set(target?matchingSongRows(rows,target).map(row=>row.rowRef):[]);
+ const rank=(row:BotSearchRow)=>matched.has(row.rowRef)?0:row.kind==='audio'?1:row.kind==='option'?2:3;
+ const selected=rows.map((row,index)=>({row,index})).sort((a,b)=>rank(a.row)-rank(b.row)||a.index-b.index).slice(0,B.rows).map(p=>p.row);
+ const selectedRefs=new Map(selected.map(row=>[row.rowRef,refs.get(row.rowRef)!]));
+ return Object.freeze({rows:Object.freeze(selected),refs:selectedRefs,concurrent,unrecognized});
 }
 
 /** Canonical own-data snapshot; no SDK toJSON/accessor invocation. Caller validates raw budget first. */
@@ -106,4 +122,4 @@ export function botSearchDocument(message:unknown):{location:{_: 'inputDocumentF
  if(!id||!accessHash||!(ref instanceof Uint8Array)||ref.length>4096||typeof dcId!=='number'||!Number.isSafeInteger(dcId)||dcId<1||dcId>5)return null;
  return {location:{_:'inputDocumentFileLocation',id,accessHash,fileReference:ref.slice(),thumbSize:''},dcId};
 }
-export function botSearchKnownMessage(raw:unknown,botId:number,id:number):unknown {return history(raw,botId,20).find(m=>searchOwn(m,'id')===id&&samePeer(searchOwn(m,'fromId'),botId)&&searchOwn(m,'out')!==true);}
+export function botSearchKnownMessage(raw:unknown,botId:number,id:number):unknown {return history(raw,botId,20).find(m=>searchOwn(m,'id')===id&&incomingBot(m,botId));}

@@ -1,5 +1,5 @@
 import {dataArray,dataRecord,isUuid,parseAccountBinding,utf8Bytes,type AccountBinding} from './sources-protocol';
-export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:16,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadMs:120000});
+export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:16,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadMs:120000});
 export interface BotSearchEnvelope extends AccountBinding {readonly protocol:'pulso-bot-search';readonly version:1;readonly sessionId:string;readonly providerRevision:number;readonly queryId:string;readonly requestId:string}
 export interface BotSearchTarget {readonly title:string;readonly artist:string|null;readonly album:string|null;readonly durationSeconds:number|null}
 export type BotSearchCommand=
@@ -87,4 +87,23 @@ const blobSize=Object.getOwnPropertyDescriptor(Blob.prototype,'size')!.get!;
 const blobType=Object.getOwnPropertyDescriptor(Blob.prototype,'type')!.get!;
 export function parseBotDownloadedAudio(raw:unknown):BotDownloadedAudio|null {
  try{const r=dataRecord(raw,['blob','bytes','mime','sha256','target']);if(!r||!revision(r.bytes)||r.bytes<=0||r.bytes>8388608||!['audio/mpeg','audio/mp4','audio/wav'].includes(r.mime as string)||typeof r.sha256!=='string'||! /^[a-f0-9]{64}$/.test(r.sha256)||blobSize.call(r.blob)!==r.bytes||blobType.call(r.blob)!==r.mime)return null;const target=parseBotSearchTarget(r.target);return target?Object.freeze({blob:r.blob as Blob,bytes:r.bytes,mime:r.mime as BotDownloadedAudio['mime'],sha256:r.sha256,target}):null;}catch{return null;}
+}
+
+// Presentation normalization; never acoustic identity or a substitute for worker peer/epoch checks.
+export const musicIdentityText=(s:string)=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+
+/** Unknown performers, different versions and navigation buttons never auto-match. */
+export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTarget):readonly BotSearchRow[] {
+ if(!target.artist)return [];
+ const title=musicIdentityText(target.title),artist=musicIdentityText(target.artist);
+ return rows.filter(row=>{
+  // Recent is not relabelled as reply. The worker already restricts it to the
+  // exact bot and post-send/callback window; metadata must still match uniquely.
+  if(row.kind==='audio')return !!row.title&&!!row.performer&&musicIdentityText(row.title)===title&&musicIdentityText(row.performer)===artist&&
+   (target.durationSeconds===null||Math.abs(target.durationSeconds-row.durationSeconds)<=3);
+  if(row.kind!=='option'||/\p{S}/u.test(row.label))return false;
+  // Parse only the visible, entire title–performer label; no callback byte grammar.
+  return row.label.split(/\s+[–—−-]\s+/u).some((_,i,parts)=>i<parts.length-1&&
+   musicIdentityText(parts.slice(0,i+1).join(' - '))===title&&musicIdentityText(parts.slice(i+1).join(' - '))===artist);
+ });
 }

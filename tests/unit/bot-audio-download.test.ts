@@ -40,11 +40,19 @@ test('changed menu and foreign known peer reject before callback or bytes',async
 test('oversize rejected before bytes; short and wrong headers never return a file',async()=>{
  for(const mode of ['size','short','header']){const s=await setup(false,(r,v)=>mode==='size'&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([msg(doc(8388609))]):r._==='upload.getFile'?{...v,bytes:mode==='short'?bytes.slice(1):new Uint8Array(100)}:v);const r=await s.download();assert.equal(r?.type,'bot-search.error');if(r?.type==='bot-search.error')assert.equal(r.error,mode==='size'?'file-too-large':'file-invalid');if(mode==='size')assert.equal(s.calls.some(x=>x.r._==='upload.getFile'),false);s.driver.close();}
 });
-test('recent callback document is offered for explicit second selection, never downloaded automatically',async()=>{
- const s=await setup(true,(r,v,clicked)=>clicked&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([{...msg(doc()),replyTo:undefined}]):v);
- const r=await s.download();assert.equal(r?.type,'bot-search.result');if(r?.type==='bot-search.result')assert.equal(r.rows[0].correlation,'recent');
- assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,0);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);s.driver.close();
+test('unthreaded exact private audio can complete the chosen-song operation without a second click',async()=>{
+ let baselines=0;
+ const s=await setup(true,(r,v,clicked)=>{
+  if(r._==='messages.getHistory'&&r.limit===1){baselines++;return history([{...msg(),id:baselines===1?9:12,fromId:undefined,replyTo:undefined}]);}
+  if(['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1)return history([{...msg(clicked?doc():undefined),id:clicked?13:12,fromId:undefined,replyTo:undefined}]);
+  return v;
+ });
+ const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);s.driver.close();
  assert.equal(BOT_SEARCH_BOUNDS.downloadMs,120000);
+});
+test('multiple exact unthreaded audio candidates remain an explicit choice, never a blind download',async()=>{
+ const s=await setup(true,(r,v,clicked)=>clicked&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([{...msg(doc()),id:13,fromId:undefined,replyTo:undefined},{...msg(doc()),id:14,fromId:undefined,replyTo:undefined}]):v);
+ const r=await s.download();assert.equal(r?.type,'bot-search.result');if(r?.type==='bot-search.result'){assert.equal(r.rows.length,2);assert(r.rows.every(row=>row.correlation==='recent'));}assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,0);s.driver.close();
 });
 test('cancel preserves the file RPC lane and observes a late revocation without a second request',async()=>{
  let reject!:(e:unknown)=>void;const pending=new Promise((_,r)=>reject=r);const s=await setup(false,(r,v)=>r._==='upload.getFile'?pending:v);

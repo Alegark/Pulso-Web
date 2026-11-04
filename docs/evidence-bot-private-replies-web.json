@@ -1,0 +1,86 @@
+{
+  "project": "Pulso-Web",
+  "status": "PASS_FOCAL_NOT_P0",
+  "release": "/releases/bdfa17d42a6aad8b.html",
+  "native": {
+    "passed": 22,
+    "total": 22,
+    "newGroups": 5,
+    "mainTransformed": false,
+    "SDK": "SYNTHETIC_NO_REAL_TELEGRAM",
+    "nativeIDBOPFSAndAudio": true,
+    "unexpectedExternal": 0,
+    "pageErrors": 0,
+    "CSP": 0,
+    "cleanup": true,
+    "bytes": 1006718,
+    "SHA256": "f5f9248fb44d95424424212f5f1d75cb89cd06bdad1cb5393a560afad08622e1"
+  },
+  "unit": {
+    "passed": 483,
+    "failed": 0
+  },
+  "typesLint": "PASS",
+  "build": "PASS",
+  "archive": {
+    "files": 3610,
+    "runtimeExact": 148,
+    "privateIdentityAbsent": true,
+    "noticesExact": true
+  },
+  "production": {
+    "engines": [
+      "chromium",
+      "webkit"
+    ],
+    "actualBundleNativeLocalPlayback": true,
+    "authRequests": 0,
+    "WebKitStyleAttributeReports": 12,
+    "otherJSOrCSP": 0,
+    "cleanup": true
+  },
+  "update": {
+    "oldEntrySHA256": "645b073458a2a786770d1f4fc99f1752e8f01d1c4033ba4322007a7fd0f06354",
+    "newEntry": "/releases/bdfa17d42a6aad8b.html",
+    "newVersionBypassesOldShell": true,
+    "stableLauncherSelectsCurrentBuild": true,
+    "waitingBeforeClosingClients": true,
+    "oldStillPlaying": true,
+    "newIsPaused": true,
+    "activatedAfterClientClosure": true,
+    "restoredPaused": true
+  },
+  "delivery": {
+    "passed": true,
+    "files": 38,
+    "previousImmutablePreserved": 209,
+    "release": {
+      "version": 1,
+      "entry": "/releases/bdfa17d42a6aad8b.html"
+    }
+  },
+  "HTTPSExact": true,
+  "observedOwnerIssue": "Generic limit error shown after choosing a song. No private screenshot, query, account or chat persisted.",
+  "reproductions": [
+    "Baseline 25-song/26-row menu reproduced identical limit message; original raw report retained",
+    "Baseline private messages missing fromId were dropped",
+    "Baseline unthreaded menu/audio did not advance automatically despite exact metadata"
+  ],
+  "changes": [
+    "Bounded input64 keyboard rows/128 candidates; still output20 rows and old raw/DTO byte/node limits",
+    "Priority exact musical match before truncation, symbol navigation ignored",
+    "Absent sender inferred only for incoming exact private bot peer; explicit foreign, outbound, malformed denied",
+    "Recent remains recent, not fake reply; unique exact metadata within current peer/baseline/cohort can advance, ambiguous/unknown requires choice",
+    "One pure music matcher shared by root and worker; field schema/envelope unchanged"
+  ],
+  "sources": [
+    "https://core.telegram.org/constructor/message",
+    "Installed @mtcute/core/highlevel/types/messages/message.js sender getter"
+  ],
+  "limits": [
+    "Actual raw shape that triggered the owner limit is not known",
+    "No real Telegram account or physical iPhone test",
+    "8MiB file and24MiB Blob queue limits unchanged",
+    "Strict version/performer matching, uncertainty, expiry and first-cause settlement preserved"
+  ]
+}
