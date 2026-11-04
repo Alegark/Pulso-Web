@@ -45,3 +45,16 @@ test('strict bridge rejects hostile DTO accessors, variant, duplicate refs, targ
 test('malformed input accessor is denied before reads, Activity or dispatch',()=>{const s=setup();try{const r=add(s);let reads=0;const input=Object.defineProperty({providerRef:r.providerRef,consent:true},'query',{get(){reads++;throw Error('private');},enumerable:true}),n=s.w.messages.length;assert.doesNotThrow(()=>s.client.searchBot(input as never));assert.equal(reads,0);assert.equal(s.w.messages.length,n);assert.equal(s.activity.count,0);}finally{s.client.dispose();}});
 test('delivery cannot regress from sending to not-dispatched, even with a syntactic closed DTO',()=>{const s=setup();try{const c=start(s);s.w.sending(c);s.w.error(c,'network','not-dispatched');assert.equal(s.w.terminations,1);assert.equal(s.client.searchSnapshot().delivery,'uncertain');}finally{s.client.dispose();}});
 test('captured target is a closed copy and response must preserve exact expectation',()=>{const s=setup();try{const r=add(s),target={title:'Synthetic title',artist:'Synthetic artist',album:'Synthetic album',durationSeconds:123};s.client.searchBot({providerRef:r.providerRef,query:'Synthetic title',target,consent:true});const c=s.w.last();target.title='Changed';assert.equal(s.client.searchSnapshot().expectedTarget!.title,'Synthetic title');s.w.result(c);const snap=s.client.searchSnapshot();snap.expectedTarget!.title='Changed again';assert.equal(s.client.searchSnapshot().expectedTarget!.title,'Synthetic title');}finally{s.client.dispose();}});
+
+test('transient command denial does not end the RAM session; old command captures never revive',()=>{
+ const activity=new Activity();activity.open();const w=new Fixture();let generation=0,blocked=false;
+ const captureAdmission=()=>{const g=generation;return()=>g===generation&&!blocked;};
+ const client=new TelegramSessionClient(activity,()=>activity.scope(),()=>{},()=>w,1000,()=>{},1000,30,()=>{},()=>{},captureAdmission);
+ try{
+  client.begin('+15550000000');w.auth();assert.equal(client.snapshot().phase,'connected');
+  const old=client.captureSearchActionCurrent();blocked=true;generation++;client.revalidate();
+  assert.equal(client.snapshot().phase,'connected');assert.equal(w.terminations,0);assert.equal(old(),false);
+  blocked=false;generation++;client.revalidate();assert.equal(old(),false);assert.equal(client.captureSearchActionCurrent()(),true);
+  activity.invalidate();client.revalidate();assert.equal(w.terminations,1);
+ }finally{client.dispose();}
+});

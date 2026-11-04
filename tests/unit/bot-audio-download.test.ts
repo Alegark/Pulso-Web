@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {randomUUID,createHash} from 'node:crypto';import Long from 'long';
 import {createBotProvidersDriver} from '../../src/telegram/bot-providers-driver';
+import type {BotProvidersClock} from '../../src/telegram/bot-providers-driver';
 import {createBotSearchSdkDriver} from '../../src/telegram/bot-search-driver';
 import {parseBotSearchReply,BOT_SEARCH_BOUNDS} from '../../src/telegram/bot-search-protocol';
 const identity=()=>({_:'contacts.resolvedPeer',peer:{_:'peerUser',userId:101},chats:[],users:[{_:'user',id:101,bot:true,username:'ivkmbot',accessHash:new Long(123,45),firstName:'Own fixture'}]});
@@ -8,7 +9,7 @@ const target={title:'Own Song',artist:'Own Artist',album:null,durationSeconds:1}
 const bytes=new Uint8Array(100);bytes.set(new TextEncoder().encode('RIFF'));bytes.set(new TextEncoder().encode('WAVE'),8);
 const doc=(size=100)=>({_:'document',id:new Long(11,3),accessHash:new Long(25,4),fileReference:new Uint8Array([1,3]),dcId:2,mimeType:'audio/wav',size,attributes:[{_:'documentAttributeAudio',duration:1,title:target.title,performer:target.artist}]});
 const msg=(media?:unknown,peer=101)=>({_:'message',id:12,peerId:{_:'peerUser',userId:peer},fromId:{_:'peerUser',userId:peer},message:'',replyTo:{_:'messageReplyHeader',replyToMsgId:10},...(media?{media:{_:'messageMediaDocument',document:media}}:{replyMarkup:{_:'replyInlineMarkup',rows:[{_:'keyboardInlineButtonRow',buttons:[{_:'keyboardInlineButton',text:'Own Song — Own Artist',type:{_:'inlineButtonTypeCallback',data:new Uint8Array([8,9])}}]}]}})});
-async function setup(option=false,mutate?:(r:any,defaultValue:any,callbackDone:boolean)=>any){
+async function setup(option=false,mutate?:(r:any,defaultValue:any,callbackDone:boolean)=>any,time?:BotProvidersClock){
  const binding={accountRef:randomUUID(),accountEpoch:1},sessionId=randomUUID(),ctx={signal:new AbortController().signal,current:()=>true};let invalidations=0,callbackDone=false;
  const pool=createBotProvidersDriver(binding,sessionId,{resolveIdentity:async()=>identity(),invalidateSession(){invalidations++;}});
  const env=()=>({protocol:'pulso-bot-providers',version:1,...binding,sessionId,providerRevision:0,operationId:randomUUID(),requestId:randomUUID()});
@@ -19,7 +20,7 @@ async function setup(option=false,mutate?:(r:any,defaultValue:any,callbackDone:b
   calls.push({r,o});let v:any;
   switch(r._){case 'contacts.resolveUsername':v=identity();break;case 'messages.sendMessage':v={_:'updateShortSentMessage',out:true,id:10};break;case 'messages.getHistory':v=r.limit===1?history():history([msg(option&&!callbackDone?undefined:doc())]);break;case 'messages.getMessages':v=history([msg(option&&!callbackDone?undefined:doc())]);break;case 'messages.getBotCallbackAnswer':assert.deepEqual(r.data,new Uint8Array([8,9]));callbackDone=true;v={_:'messages.botCallbackAnswer',cacheTime:0};break;case 'upload.getFile':assert.equal(o.dcId,2);assert.equal(o.kind,'download');v={_:'upload.file',bytes:bytes.slice(),mtime:0};break;default:throw Error('unexpected');}
   return mutate?await mutate(r,v,callbackDone):v;
- }} as never);
+ }} as never,time);
  const command={protocol:'pulso-bot-search' as const,version:1 as const,...binding,sessionId,providerRevision:1,queryId:randomUUID(),requestId:randomUUID(),type:'bot-search.search',providerRef:ref,query:target.title,target,consent:true};
  const response=await driver.handle(command,ctx);assert.equal(response?.type,'bot-search.result');
  const dl={...command,type:'bot-search.download',requestId:randomUUID(),rowRef:response?.type==='bot-search.result'?response.rows[0].rowRef:''};delete (dl as any).query;
@@ -56,4 +57,16 @@ test('cancel preserves the file RPC lane and observes a late revocation without 
 
 test('a file part larger than the remaining document never emits invalid progress',async()=>{
  const s=await setup(false,(r,v)=>r._==='upload.getFile'?{...v,bytes:new Uint8Array(101)}:v);const r=await s.download();assert.equal(r?.type,'bot-search.error');assert.equal(s.progress.some(p=>p.type==='bot-search.download-progress'),false);s.driver.close();
+});
+test('download deadline is 120 seconds and keeps the RPC lane until settlement',async()=>{
+ let now=0,id=0;const timers=new Map<number,{at:number;fn:()=>void}>();
+ const clock={now:()=>now,setTimeout(fn:()=>void,ms:number){const key=++id;timers.set(key,{at:now+ms,fn});return key;},clearTimeout(key:number){timers.delete(key);}} as unknown as BotProvidersClock;
+ const advance=(ms:number)=>{const end=now+ms;for(;;){const due=[...timers].filter(([,t])=>t.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;};
+ let finish!:(value:unknown)=>void;const pending=new Promise(resolve=>{finish=resolve;});
+ const s=await setup(false,(r,v)=>r._==='upload.getFile'?pending:v,clock);let resolved=false;const result=s.download().then(value=>{resolved=true;return value;});
+ while(!s.calls.some(x=>x.r._==='upload.getFile'))await new Promise(r=>setImmediate(r));
+ advance(15000);await new Promise(r=>setImmediate(r));assert.equal(resolved,false);
+ advance(105000);const timed=await result;assert.equal(timed?.type,'bot-search.error');if(timed?.type==='bot-search.error')assert.equal(timed.error,'timeout');
+ let settled=false;void s.driver.whenSettled().then(()=>{settled=true;});await new Promise(r=>setImmediate(r));assert.equal(settled,false);
+ finish({_:'upload.file',bytes,mtime:0});assert.equal(await s.driver.whenSettled(),true);s.driver.close();
 });

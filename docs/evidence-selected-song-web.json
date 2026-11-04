@@ -1,0 +1,93 @@
+{
+  "project": "Pulso-Web",
+  "status": "PASS_FOCAL_WEB_NOT_P0",
+  "candidateRelease": "/releases/3a4ecbb8825ed7e0.html",
+  "sourceFiles": 148,
+  "nativeMain": {
+    "runner": "tests/integration/check-selected-song.mjs",
+    "uniqueGroups": 16,
+    "passed": 16,
+    "failed": 0,
+    "syntheticSDK": true,
+    "mainTransformed": false,
+    "nativeIDBOPFSAudio": true,
+    "unexpectedExternalRequests": 0,
+    "pageErrors": 0,
+    "CSP": 0,
+    "cleanup": true,
+    "receiptSHA256": "c57c99d54ae235cb4019e7b5b5ff0900c53d6146756d0ba2a2509eb5fda8bad0",
+    "receiptBytes": 758879
+  },
+  "unit": {
+    "passed": 476,
+    "failed": 0
+  },
+  "lint": "PASS",
+  "build": "PASS",
+  "sourceArchive": {
+    "files": 3609,
+    "runtimeExact": 148,
+    "noticesExact": true,
+    "noPrivateIdentityOrConfig": true
+  },
+  "production": {
+    "actualBundle": true,
+    "engines": [
+      {
+        "engine": "chromium",
+        "version": "154.0.8037.57",
+        "nativeLocalPlayback": true,
+        "autoStarted": true
+      },
+      {
+        "engine": "webkit",
+        "version": "27.2",
+        "nativeLocalPlayback": true,
+        "autoStarted": true
+      }
+    ],
+    "metadataSynthetic": true,
+    "authRequests": 0,
+    "WebKitNativeStyleAttributeReports": 12,
+    "otherCSPErrors": 0,
+    "cleanup": true
+  },
+  "update": {
+    "oldEntrySHA256": "e68d53050c00bbafb42785a26bb563f60848945a12c059255fa618f608c4236a",
+    "newEntry": "/releases/3a4ecbb8825ed7e0.html",
+    "newVersionBypassesOldShell": true,
+    "stableLauncherSelectsCurrentBuild": true,
+    "waitingBeforeClosingClients": true,
+    "oldStillPlaying": true,
+    "newIsPaused": true,
+    "activatedAfterClientClosure": true,
+    "restoredPaused": true
+  },
+  "privateDelivery": {
+    "status": "UPDATED_VERIFIED",
+    "release": "/releases/3a4ecbb8825ed7e0.html",
+    "files": 38,
+    "previousImmutablePreserved": 204,
+    "sameServiceGrantOrigin": true,
+    "HTTPSExact": true,
+    "privateConfigSeparateNoStore": true
+  },
+  "realTelegram": false,
+  "physicalIphone": false,
+  "P0": false,
+  "limits": [
+    "8MiB per audio, bounded Blob24MiB across queue",
+    "Unknown/recent or ambiguous versions require explicit choice",
+    "Native Telegram cache is separate; no access to it",
+    "Public catalogue alias is not acoustic identity",
+    "Different encodings do not automatically relink an older fingerprint",
+    "Physical Safari/autoplay/background/offline private unverified"
+  ],
+  "history": [
+    "Terra delivered two backend fixes only, incomplete report preserved under .local/selected-song-implementation",
+    "Earlier native harness metadata grouping, panel state and hold/release observations preserved; no aggregation of final groups",
+    "Root premature retirement of queue guard reproduced natively, aborted run and verified manual process cleanup preserved",
+    "Root cancel-before-commit UI pending latch observed in old native trace; final G11 requires pending=false after both outcomes",
+    "Production local-play probe originally blocked all Service Workers; failed raw observations preserved; final permits actual native SW transport"
+  ]
+}

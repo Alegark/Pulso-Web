@@ -82,7 +82,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
     grace=time.setTimeout(()=>{finish(false);invalidate();},B.settlementMs);
    }};
    const onAbort=()=>f.stop(fail('cancelled'));
-   flight=f;ctx.signal.addEventListener('abort',onAbort,{once:true});timer=time.setTimeout(()=>f.stop(fail('timeout')),B.timeoutMs);
+   flight=f;ctx.signal.addEventListener('abort',onAbort,{once:true});timer=time.setTimeout(()=>f.stop(fail('timeout')),duration);
    let decoded=0;
    const check=()=>{if(f.cause)throw f.cause;if(!live(ctx,capture)){f.stop(fail('cancelled'));throw f.cause;}if(time.now()>=deadline){f.stop(fail('timeout'));throw f.cause;}};
    const budget=(v:unknown)=>{decoded+=assertBotSearchRawBudget(v);if(decoded>B.rawBytes)throw new BotSearchProjectionError('limit');};
@@ -156,7 +156,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      for(let reads=0;reads<B.reads;reads++){
       const page=projectBotSearchPage(await rpc(ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms)),approved.botId,baseline,ack);check();
       if(page.concurrent)throw fail('uncertain');
-      if(page.rows.length){retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={providerRef:c.providerRef,queryId:c.queryId,revision:c.providerRevision,baseline,outgoing:ack,target:c.target??null};check();
+      if(page.rows.some(row=>row.kind==='option'||row.kind==='audio')){retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={providerRef:c.providerRef,queryId:c.queryId,revision:c.providerRevision,baseline,outgoing:ack,target:c.target??null};check();
        return Object.freeze({...e,type:'bot-search.result',delivery:'acknowledged',rows:page.rows,expiresAt:retainedUntil,expectedTarget:c.target??null});
       }
       if(page.unrecognized)throw fail('unsupported');

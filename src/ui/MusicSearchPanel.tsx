@@ -84,7 +84,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
      <button type="button" className="music-search-see-all" onClick={showAll}>Ver todos los resultados</button>
     </div>}
    </div>
-   <p id={`${id}-query-help`}>Enter y Buscar muestran resultados en Pulso. Sólo al elegir una canción se consulta el bot principal que configuraste.</p>
+   <p id={`${id}-query-help`}>Enter y Buscar muestran resultados en Pulso. Al elegir una canción se reutiliza tu copia o se consigue desde el bot principal para escucharla.</p>
   </form>
   <div role="status">{props.suggestionsPending?'Buscando sugerencias…':props.suggestionsNotice}</div>
   {props.suggestionsError&&<p role="alert">{props.suggestionsError}</p>}
@@ -115,13 +115,13 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    <div role="status">{props.searchPending?'Consultando la canción elegida…':props.status}</div>
    {props.error&&<p role="alert">{props.error}</p>}
    {props.uncertain&&<p>Resultado incierto: no se ha confirmado la respuesta del bot. No se reintentará ni cambiará de bot automáticamente.</p>}
-   {props.results.length>0&&<><h3>Respuesta del bot</h3><p>Elige la canción para obtener su archivo y guardar una copia en este navegador. Límite inicial: 8 MiB. No se inicia la reproducción automáticamente.</p>
+   {props.results.length>0&&<><h3>Respuesta del bot</h3><p>Si hay varias opciones, elige la versión correcta: se descargará y reproducirá una única copia en Pulso. Límite inicial: 8 MiB; no hace falta exportar a Archivos.</p>
     <ul className="music-search-results">{props.results.map(row=><li key={row.id} data-result-id={row.id}>
      <strong><bdi dir="auto">{row.title}</bdi></strong>{row.subtitle&&<p><bdi dir="auto">{row.subtitle}</bdi></p>}
      <p>{row.kind==='audio'?'Referencia de audio; disponibilidad sin verificar.':row.kind==='option'?'Botón del bot: se pulsa sólo al elegir esta opción.':'Mensaje del bot.'}</p>
      <p>{correlationLabels[row.correlation]}</p><p>{matchLabels[row.match]}</p>
      <button type="button" aria-pressed={props.selectedResultId===row.id} disabled={props.searchPending||row.kind==='message'}
-      onClick={()=>{if(active()&&!props.searchPending)props.onSelectResult(row.id);}}>{row.kind==='audio'?'Descargar y guardar':'Obtener audio de esta opción'}</button>
+      onClick={()=>{if(active()&&!props.searchPending)props.onSelectResult(row.id);}}>{row.kind==='audio'?'Escuchar esta versión':'Elegir esta versión'}</button>
 
     </li>)}</ul></>}
   </section>

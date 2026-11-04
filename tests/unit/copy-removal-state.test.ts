@@ -79,7 +79,7 @@ test('return focus uses fallback for connected disabled opener',()=>{
  const begin=main.indexOf(' function focusRemoval(){'),end=main.indexOf(' function closeRemoval()',begin);assert.ok(begin>=0&&end>begin);const fragment=main.slice(begin,end);
  const focused:string[]=[];const scrolled:string[]=[];const opener={isConnected:true,disabled:true,getClientRects:()=>[{}],focus(){if(!this.disabled)focused.push('opener');},scrollIntoView(){scrolled.push('opener');}};
  const fallback={focus(){focused.push('fallback');},scrollIntoView(){scrolled.push('fallback');}};
- const env={removalFocus:{current:{kind:'close',current:()=>true,opener}},playerOpen:false,playerHeading:{current:null},page:'biblioteca',document:{getElementById:()=>null},routeHeading:{current:fallback},removalHeading:{current:null}};
+ const env={settingsOpen:false,settingsHeading:{current:null},removalFocus:{current:{kind:'close',current:()=>true,opener}},playerOpen:false,playerHeading:{current:null},page:'biblioteca',document:{getElementById:()=>null},routeHeading:{current:fallback},removalHeading:{current:null}};
  const fn=new Function('env','with(env){'+fragment+';return focusRemoval;}')(env);
  // Adjacent controls distinguish disabled from a legitimately focusable opener.
  opener.disabled=false;fn();assert.deepEqual(focused,['opener']);

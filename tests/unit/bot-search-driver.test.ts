@@ -7,7 +7,7 @@ const tick=()=>new Promise<void>(r=>setImmediate(r));
 function fakeClock(){let now=1000,id=0;const timers=new Map<number,{at:number;fn:()=>void}>();return {now:()=>now,setTimeout(fn:()=>void,ms:number){const n=++id;timers.set(n,{at:now+ms,fn});return n;},clearTimeout(n:number){timers.delete(n);},jump(ms:number){now+=ms;},advance(ms:number){const end=now+ms;for(;;){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;},timers} as unknown as BotProvidersClock&{jump(ms:number):void;advance(ms:number):void;timers:Map<number,unknown>};}
 const identity=(username='ivkmbot',id=101,hash=123)=>({_: 'contacts.resolvedPeer',peer:{_: 'peerUser',userId:id},chats:[],users:[{_: 'user',id,bot:true,username,accessHash:new Long(hash,45,false),firstName:'Fixture bot'}]});
 const history=(messages:unknown[]=[])=>({_: 'messages.messages',messages,users:[],chats:[]});
-const msg=(id=12,extra:Record<string,unknown>={})=>({_: 'message',id,peerId:{_: 'peerUser',userId:101},fromId:{_: 'peerUser',userId:101},message:'Fixture recent reply',...extra});
+const msg=(id=12,extra:Record<string,unknown>={})=>({_: 'message',id,peerId:{_: 'peerUser',userId:101},fromId:{_: 'peerUser',userId:101},message:'Fixture recent reply',replyMarkup:{_:'replyInlineMarkup',rows:[{_:'keyboardInlineButtonRow',buttons:[{_:'keyboardInlineButton',text:'Fixture song — Fixture artist',type:{_:'inlineButtonTypeCallback',data:new Uint8Array([1])}}]}]},...extra});
 const ack=()=>({_: 'updateShortSentMessage',out:true,id:10});
 async function setup(hook?:(request:any,options:any)=>Promise<unknown>,username='ivkmbot'){
  const binding={accountRef:randomUUID(),accountEpoch:1},sessionId=randomUUID(),time=fakeClock(),ctx={signal:new AbortController().signal,current:()=>true};let invalidations=0;
@@ -41,6 +41,11 @@ test('fresh identity must match approved id AND signed hash; username transfer i
 test('baseline only before send; nonzero baseline is exact minID, unrelated old rows cannot satisfy query',async()=>{
  let polls=0;const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():r.limit===1?history([msg(8)]):(++polls===1?history([msg(8)]):history([msg()])));
  const {c,p}=s.command();await tick();assert.equal(s.calls.at(-1).request.minId,8);s.time.advance(1000);assert.equal((await s.check(p,c)).type,'bot-search.result');assert.equal(polls,2);s.driver.close();
+});
+test('progress text waits for an edited musical menu on the same message',async()=>{
+ let polls=0;const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():r.limit===1?history():history([++polls===1?msg(12,{message:'Buscando…',replyMarkup:undefined}):msg(12)]));
+ const {c,p}=s.command();await tick();assert.equal(polls,1);let done=false;void p.then(()=>{done=true;});await tick();assert.equal(done,false);
+ s.time.advance(1000);const result=await s.check(p,c);assert.equal(result.type,'bot-search.result');assert.ok(result.rows.some((row:{kind:string})=>row.kind==='option'));assert.equal(s.calls.filter(x=>x.request._==='messages.sendMessage').length,1);s.driver.close();
 });
 test('lost send ACK is uncertain, never empty/retried/fallback; malformed ACK also uncertain',async()=>{
  for(const sendResult of [Promise.reject({text:'NETWORK_ERROR'}),Promise.resolve({_: 'updatesTooLong'})]){void sendResult.catch(()=>{});const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?sendResult:history());const {c,p}=s.command();const r=await s.check(p,c);assert.equal(r.error,'uncertain');assert.equal(r.delivery,'uncertain');assert.equal(s.calls.filter(x=>x.request._==='messages.sendMessage').length,1);assert.equal(s.calls.length,3);s.driver.close();}
@@ -76,7 +81,7 @@ test('concurrent external outgoing makes response uncertain even with a valid bo
 });
 test('raw projection budget accumulates across calls; no send after oversized identity, no truncated success',async()=>{
  const s=await setup(async()=>({...identity(),incidental:'x'.repeat(40000)}));const x=s.command();assert.equal((await s.check(x.p,x.c)).error,'limit');assert.equal(s.calls.length,1);s.driver.close();
- const t=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(12,{message:'',media:{_: 'unknownMedia'}})]));const y=t.command();assert.equal((await t.check(y.p,y.c)).error,'unsupported');assert.equal(t.calls.length,4);t.driver.close();
+ const t=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(12,{message:'',replyMarkup:undefined,media:{_: 'unknownMedia'}})]));const y=t.command();assert.equal((await t.check(y.p,y.c)).error,'unsupported');assert.equal(t.calls.length,4);t.driver.close();
 });
 test('request/query IDs finite; replay rejected; static accessors do no IO, quiesce invalidates',async()=>{
  const s=await setup();const x=s.command();await x.p;assert.equal((await s.driver.handle(x.c,s.ctx) as any).error,'expired');const y=s.command({queryId:x.c.queryId});assert.equal((await s.check(y.p,y.c)).error,'expired');const calls=s.calls.length;

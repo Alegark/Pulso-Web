@@ -62,7 +62,7 @@ const reasons: Record<RemovalPanelReason, string> = {
   'runtime-unknown': 'No podemos comprobar el estado de esta copia. Revisa su estado.',
   'transport-incompatible': 'No podemos comprobar que esta copia sea apta para retirarla en esta sesión.',
   busy: 'Hay otra operación en curso. Vuelve a revisar la copia cuando termine.',
-  missing: 'La copia ya no está disponible. Conservamos tus fichas y listas. La descarga desde Telegram todavía no está disponible.',
+  missing: 'La copia ya no está disponible. Conservamos tus fichas y listas. Puedes buscarla de nuevo en Telegram si sigue disponible; no se descargará por sí sola.',
   corrupt: 'No podemos comprobar que esta copia sea apta para retirarla. Revisa su estado.',
   'ownership-unknown': 'No podemos comprobar que esta copia sea apta para retirarla. Revisa su estado.',
   'shared-generation': 'No podemos comprobar que esta copia sea apta para retirarla. Revisa su estado.',
@@ -89,7 +89,7 @@ export function LocalCopyRemovalPanel(props: LocalCopyRemovalPanelProps) {
   return <section className="copy-removal-panel" aria-labelledby="copy-removal-heading">
     <h2 id="copy-removal-heading" ref={props.headingRef} tabIndex={-1}>Quitar esta copia local</h2>
     <p className="copy-removal-panel__title">{props.title}</p>
-    <p>Se quitará el audio de este navegador. Las fichas, favoritos y listas se conservan. La descarga desde Telegram todavía no está disponible; esta versión no puede recuperar automáticamente el audio retirado.</p>
+    <p>Se quitará el audio de este navegador. Las fichas, favoritos y listas se conservan. Para volver a escucharla necesitarás conseguir una copia de nuevo; el bot podría dejar de ofrecerla.</p>
     <p>Este archivo puede ser tu único original. Preparar o descargar una exportación no demuestra que tengas otra copia fuera de este navegador.</p>
     <dl className="copy-removal-panel__summary">
       <div><dt>Tamaño en bytes</dt><dd>{count(summary?.bytes ?? null)}</dd></div>
@@ -105,7 +105,7 @@ export function LocalCopyRemovalPanel(props: LocalCopyRemovalPanelProps) {
     {state === 'blocked' && props.reason && <p role="status">{reasons[props.reason]}</p>}
     {state === 'uncertain' && <p role="status">No pudimos confirmar hasta dónde llegó la operación. Revisa el estado antes de tomar otra decisión.</p>}
     {outcome && <div role="status">
-      {success ? <p>Copia local retirada. Fichas, favoritos y listas conservados. La descarga desde Telegram todavía no está disponible. El espacio que libere el navegador puede variar.</p> : <>
+      {success ? <p>Copia local retirada. Fichas, favoritos y listas conservados. Puedes buscarla de nuevo en Telegram si sigue disponible; no se descargará por sí sola. El espacio que libere el navegador puede variar.</p> : <>
         {outcome.publication === 'unpublished' && <p>Las fichas ya no enlazan esta copia. La retirada del audio no está confirmada.</p>}
         {outcome.state === 'not-committed' && outcome.publication === 'linked' && <p>La retirada no se confirmó; la copia sigue enlazada.</p>}
         {(outcome.state === 'unknown' || outcome.publication === 'unknown' || outcome.physical === 'unknown' || outcome.recoveryRequired || outcome.state === 'removed') && <p>El resultado necesita revisión; no se puede confirmar la retirada completa.</p>}

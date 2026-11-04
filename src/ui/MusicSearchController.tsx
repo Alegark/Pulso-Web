@@ -6,12 +6,14 @@ import type {TelegramSessionClient,BotsSnapshot,BotSearchSnapshot} from '../tele
 import type {SessionState} from '../telegram/session-protocol';
 import {isBotSearchQuery,parseBotSearchTarget,type BotSearchTarget,type BotSearchRow,type BotSearchError} from '../telegram/bot-search-protocol';
 import {musicSearchCatalog} from '../library/music-search-catalog';
+import {songChoiceKey,matchingSongRows,type SongChoice,type SongPlaybackAttempt} from '../library/selected-song';
 import {MusicSearchPanel,type MusicSearchResultRow} from './MusicSearchPanel';
 
 // One RAM-only transport per document, including cooldown across account/scope changes.
 // Construction performs no IO. Each mounted view owns only its request and AbortSignal.
 const suggestionsClient=createMusicSuggestionsClient();
 interface Props {
+ captureSongPlayback?:()=>SongPlaybackAttempt|null;
  visible:boolean;scopeKey:string;client:TelegramSessionClient|null;phase:SessionState['phase'];
  captureDownloadSave?:()=>((audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void)=>Promise<'saved'|'failed'|'uncertain'>)|null;
  bots:BotsSnapshot|null;searchState:BotSearchSnapshot|null;canConnect:boolean;tracks:readonly Track[];
@@ -35,15 +37,16 @@ const searchErrors:Record<BotSearchError,string>={
  'session-expired':'La sesión de Telegram ha caducado. Vuelve a conectarla.',limit:'La consulta o la respuesta supera los límites admitidos.',unsupported:'Este bot o su respuesta todavía no son compatibles con este adaptador.','identity-changed':'El perfil del bot ha cambiado. Comprueba su identidad y vuelve a añadirlo.',
  'rate-limit':'Telegram ha limitado las consultas. Respeta la espera indicada antes de volver a buscar.',network:'No se pudo completar la consulta al bot.',uncertain:'No se pudo confirmar si el bot recibió o completó la consulta. Revisa su chat antes de repetirla.','needs-start':'Abre el chat del bot en Telegram e inícialo allí; después vuelve a buscar aquí.',
 };
-/** Root owns the session and the view. No playback, callback RPC, download or persistence. */
+/** A song gesture owns one pipeline. Root retains local publication/playback authority. */
+interface SongFlight {key:string;choice:SongChoice;target:BotSearchTarget;attempt:SongPlaybackAttempt;abort:AbortController;scope:string;client:TelegramSessionClient|null;networkCurrent:(()=>boolean)|null;revision:number|undefined;queryId:string|null;phase:'lookup'|'query'|'choice'|'download'|'saving'|'play'|'done'|'error'}
 export function MusicSearchController(props:Props){
  const [query,setQuery]=React.useState('');
  const [chosenId,setChosenId]=React.useState<string|null>(null),[resultsVisible,setResultsVisible]=React.useState(false);
  const [remote,setRemote]=React.useState<readonly MusicSuggestion[]>([]),[remoteQuery,setRemoteQuery]=React.useState<string|null>(null),[suggesting,setSuggesting]=React.useState(false),[suggestionError,setSuggestionError]=React.useState<string|null>(null),[suggestionNotice,setSuggestionNotice]=React.useState<string|null>(null);
  const [retry,setRetry]=React.useState(0),[notice,setNotice]=React.useState<string|null>(null),[displayedQuery,setDisplayedQuery]=React.useState<string|null>(null),[selectedResult,setSelectedResult]=React.useState<string|null>(null);
- const downloadAbort=React.useRef<AbortController|null>(null);
+ const downloadAbort=React.useRef<AbortController|null>(null),flight=React.useRef<SongFlight|null>(null);
  const [download,setDownload]=React.useState<{phase:'network'|'saving'|'saved'|'failed'|'uncertain';bytes:number;total:number}|null>(null);
- const saving=download?.phase==='saving';
+ const saving=download?.phase==='saving',localPending=['lookup','saving','play'].includes(flight.current?.phase??'');
  const [,pulse]=React.useReducer(n=>n+1,0);
  const latest=React.useRef(props),mounted=React.useRef(false),viewEpoch=React.useRef(0),committed=React.useRef<object|null>(null),metadataAttempt=React.useRef<{abort:AbortController}|null>(null),metadataEpoch=React.useRef(0);
  const chosenDraft=React.useRef<string|null>(null);
@@ -51,7 +54,7 @@ export function MusicSearchController(props:Props){
  React.useLayoutEffect(()=>{latest.current=props;mounted.current=true;committed.current=renderToken;return()=>{committed.current=null;};});
  React.useEffect(()=>()=>{mounted.current=false;metadataAttempt.current?.abort.abort();},[]);
  const current=()=>mounted.current&&committed.current===renderToken&&viewEpoch.current===renderEpoch&&latest.current.visible&&latest.current.scopeKey===props.scopeKey&&latest.current.client===props.client;
- const client=props.client,state=client?.searchSnapshot()??props.searchState,action=client?.captureSearchActionCurrent(),cancel=client?.captureSearchCancel(),projection=client?.captureSearchCurrent();
+ const client=props.client,state=client?.searchSnapshot()??props.searchState,action=client?.captureSearchActionCurrent(),cancel=client?.captureSearchCancel();
  const choices=React.useMemo(()=>musicSearchCatalog(query,props.tracks,remoteQuery===normalizeMusicSuggestionsQuery(query)?remote:[]),[query,props.tracks,remote,remoteQuery]);
  const primary=props.bots?.providers[0]??null;
  const selectedProvider=primary?{id:primary.providerRef,username:primary.username,label:primary.label,supported:primary.username.toLowerCase()==='ivkmbot'}:null;
@@ -62,9 +65,9 @@ export function MusicSearchController(props:Props){
  const results=displayedQuery!==null&&state?.queryId===displayedQuery?state.rows.map(row=>resultView(row,state.expectedTarget)):[];
  const revokeMetadata=()=>{++metadataEpoch.current;const attempt=metadataAttempt.current;metadataAttempt.current=null;attempt?.abort.abort();setSuggesting(false);};
  const bump=()=>{++viewEpoch.current;pulse();};
- const edit=(queryChanged=false)=>{downloadAbort.current?.abort();setDownload(null);bump();chosenDraft.current=null;if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);setResultsVisible(false);}setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);cancel?.();if(action?.())client?.clearSearch(action);};
+ const edit=(queryChanged=false)=>{flight.current?.abort.abort();flight.current=null;downloadAbort.current?.abort();setDownload(null);bump();chosenDraft.current=null;if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);setResultsVisible(false);}setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);cancel?.();if(action?.())client?.clearSearch(action);};
  React.useEffect(()=>{
-  bump();setDisplayedQuery(null);setSelectedResult(null);setChosenId(null);
+  flight.current?.abort.abort();flight.current=null;bump();setDownload(null);setDisplayedQuery(null);setSelectedResult(null);setChosenId(null);
  },[props.scopeKey,props.bots?.revision,props.bots?.scopeKey]);
  React.useEffect(()=>()=>{downloadAbort.current?.abort();client?.captureSearchCancel()?.();},[props.scopeKey,props.bots?.revision,client,props.visible]);
  React.useEffect(()=>{if(!props.visible){metadataAttempt.current?.abort.abort();client?.captureSearchCancel()?.();setDisplayedQuery(null);setSelectedResult(null);}},[props.visible,client]);
@@ -112,55 +115,78 @@ export function MusicSearchController(props:Props){
   const deadline=setTimeout(()=>{if(live()){abort.abort();setSuggesting(false);setSuggestionError('La consulta de sugerencias agotó el plazo.');}},15000);
   return()=>{if(timer!==undefined)clearTimeout(timer);clearTimeout(deadline);abort.abort();};
  },[query,props.visible,props.scopeKey,retry]);
- function search(chosen:BotSearchTarget,text:string){
-  if(!current()||!ready||!provider||!action?.())return;
-  if(!isBotSearchQuery(text.trim())){setNotice('Escribe una consulta de hasta 160 caracteres, sin comandos ni saltos de línea.');return;}
-  const before=client!.searchSnapshot().queryId;
-  client!.searchBot({providerRef:provider,query:text.trim(),...(chosen?{target:chosen}:{}),consent:true},action);
-  const after=client!.searchSnapshot();
-  if(after.queryId&&after.queryId!==before){setDisplayedQuery(after.queryId);setSelectedResult(null);setNotice(null);}
- }
- function showResults(){
-  if(!current()||!query.trim())return;
-  setResultsVisible(true);
- }
- function choose(id:string){
-  if(!current()||ownPending)return;const choice=choices.find(c=>c.id===id);if(!choice)return;
-  if(choice.kind==='album'){edit();setQuery(choice.title);setResultsVisible(true);return;}
-  const chosen=parseBotSearchTarget({title:choice.title.normalize('NFC').trim(),artist:choice.artist?.normalize('NFC').trim()||null,album:choice.album?.normalize('NFC').trim()||null,durationSeconds:choice.duration});
-  if(!chosen){setNotice('Los metadatos de esta sugerencia no se pueden enviar completos. Prueba otra canción.');return;}
-  // Only a selected metadata song can reach Telegram. Submit/Enter never calls this.
-  revokeMetadata();
-  if(ready)search(chosen,chosen.title);
-  else setNotice(!primary?'Añade un bot en «Bots de música» para consultar esta canción.':!selectedProvider?.supported?'El bot principal todavía no es compatible. Cambia su orden en «Bots de música».':'Conecta Telegram y vuelve a elegir la canción para consultarla.');
-  bump();chosenDraft.current=query;setChosenId(id);setResultsVisible(true);
- }
- async function downloadResult(id:string){
-  if(!current()||ownPending||saving||!projection?.()||!client||!action)return;
-  const row=results.find(row=>row.id===id);if(!row||row.kind==='message')return;
-  const save=props.captureDownloadSave?.();if(!save){setNotice('La biblioteca tiene una operación pendiente. Resuélvela antes de descargar.');return;}
-  const lifetime=client.captureBotsCurrent(),scope=props.scopeKey,revision=props.bots?.revision,queryId=state?.queryId;
-  const abort=new AbortController();downloadAbort.current?.abort();downloadAbort.current=abort;
-  const live=()=>mounted.current&&downloadAbort.current===abort&&!abort.signal.aborted&&latest.current.visible&&latest.current.scopeKey===scope&&latest.current.client===client&&latest.current.bots?.revision===revision&&lifetime()&&client.searchSnapshot().queryId===queryId;
-  setSelectedResult(id);setDownload({phase:'network',bytes:0,total:0});setNotice('Obteniendo el audio elegido…');
+ const viewLive=(f:SongFlight)=>mounted.current&&flight.current===f&&!f.abort.signal.aborted&&latest.current.visible&&latest.current.scopeKey===f.scope&&latest.current.client===f.client;
+ const live=(f:SongFlight)=>viewLive(f)&&f.attempt.current()&&(!f.networkCurrent||f.networkCurrent()&&latest.current.bots?.revision===f.revision);
+ const finishPlay=async(f:SongFlight,id:string)=>{
+  if(!live(f))return;f.phase='play';setNotice('Preparando la canción para reproducir…');pulse();
+  const outcome=await f.attempt.play(id,()=>live(f),f.abort.signal);
+  if(!viewLive(f))return;f.phase='done';setDownload(null);setNotice(outcome==='playing'?'Reproduciendo la canción desde la copia de este navegador.':outcome==='gesture-required'?'Canción disponible. Toca Reproducir para continuar; el navegador necesita ese gesto.':'La canción se conserva. No se pudo iniciar la reproducción; comprueba el reproductor.');pulse();
+ };
+ async function downloadRow(f:SongFlight,id:string){
+  if(!live(f)||!f.client||!['query','choice'].includes(f.phase))return;
+  const now=f.client.searchSnapshot();if(now.pending||now.queryId!==f.queryId||!now.rows.some(r=>r.rowRef===id&&r.kind!=='message'))return;
+  const allowed=f.client.captureSearchActionCurrent();if(!allowed())return;
+  f.phase='download';setSelectedResult(id);downloadAbort.current=f.abort;setDownload({phase:'network',bytes:0,total:0});setNotice('Obteniendo la canción elegida…');pulse();
   try{
-   const audio=await client.downloadBot(id,action);
-   if(!live())return;
-   if(!audio){setDownload(null);setNotice('Comprueba la respuesta del bot. Si ha entregado un archivo, elígelo para guardarlo.');return;}
-   setDownload({phase:'saving',bytes:0,total:audio.bytes});setNotice('Verificando y guardando en este navegador…');
-   const outcome=await save(audio,abort.signal,bytes=>{if(live())setDownload({phase:'saving',bytes,total:audio.bytes});});
-   // A confirmed local commit is authoritative even if a late Cancel loses the race.
-   if(mounted.current&&downloadAbort.current===abort){setDownload({phase:outcome==='saved'?'saved':outcome==='uncertain'?'uncertain':'failed',bytes:audio.bytes,total:audio.bytes});setNotice(outcome==='saved'?'Canción descargada y guardada. Ya está en Biblioteca; la reproducción actual se conserva.':outcome==='uncertain'?'La copia requiere revisión. No repitas la descarga hasta comprobar la biblioteca.':'No se guardó la canción. Revisa el estado antes de reintentar.');}
-  }catch{if(live()){setDownload({phase:'failed',bytes:0,total:0});setNotice('No se pudo completar la descarga.');}}
+   const audio=await f.client.downloadBot(id,allowed);if(!live(f))return;
+   if(!audio){f.phase=f.client.searchSnapshot().error?'error':'choice';setDownload(null);setNotice('No hay una respuesta inequívoca. Elige el audio correcto de las opciones disponibles.');pulse();return;}
+   f.phase='saving';setDownload({phase:'saving',bytes:0,total:audio.bytes});setNotice('Verificando la única copia local…');
+   const result=await f.attempt.save(audio,f.choice,f.abort.signal,bytes=>{if(live(f))setDownload({phase:'saving',bytes,total:audio.bytes});});
+   // The file may have committed even when Cancel wins the presentation/Play intent.
+   if(mounted.current&&flight.current===f&&f.abort.signal.aborted){f.phase=result.state==='uncertain'?'error':'done';setDownload(null);setNotice(result.state==='saved'?'La copia ya estaba confirmada y se conserva. No se iniciará la reproducción.':result.state==='uncertain'?'La copia requiere revisión. No repitas la descarga hasta comprobar Almacenamiento.':'Operación detenida sin publicar otra copia ni iniciar música.');pulse();return;}
+   if(!live(f))return;
+   if(result.state==='saved'&&result.trackId){await finishPlay(f,result.trackId);return;}
+   f.phase='error';setDownload({phase:result.state==='uncertain'?'uncertain':'failed',bytes:0,total:audio.bytes});setNotice(result.state==='uncertain'?'La copia requiere revisión. No repitas la descarga hasta comprobar Almacenamiento.':'No se pudo guardar la canción.');pulse();
+  }catch{if(viewLive(f)){f.phase='error';setDownload(null);setNotice('No se pudo completar la canción. Revisa el estado antes de volver a elegirla.');pulse();}}
  }
+ // React receives only closed worker snapshots. This continuation belongs to the
+ // original song gesture, not to renders, timers, navigation or catalogue submit.
+ React.useEffect(()=>{
+  const f=flight.current;if(!f||f.phase!=='query'||!live(f)||!f.client)return;
+  const now=f.client.searchSnapshot();if(now.queryId!==f.queryId||now.pending)return;
+  if(now.error){f.phase='error';pulse();return;}
+  const matches=matchingSongRows(now.rows,f.target);
+  if(matches.length===1)void downloadRow(f,matches[0].rowRef);
+  else{f.phase='choice';setNotice('Elige la versión correcta entre las opciones del bot.');pulse();}
+ });
+ function showResults(){if(current()&&query.trim())setResultsVisible(true);}
+ async function choose(id:string){
+  if(!current())return;const choice=choices.find(c=>c.id===id);if(!choice)return;
+  if(choice.kind==='album'){if(ownPending||localPending)return;edit();setQuery(choice.title);setResultsVisible(true);return;}
+  const key=songChoiceKey(choice)??JSON.stringify([choice.source,choice.id,choice.title,choice.artist]);
+  const old=flight.current;
+  if(old?.key===key&&old.scope===props.scopeKey&&old.client===client&&!old.abort.signal.aborted&&!['done','error'].includes(old.phase)&&(old.phase!=='choice'||old.client?.searchSnapshot().queryId===old.queryId&&old.client?.searchSnapshot().expiresAt!==null)){setNotice('Esta canción ya está en proceso. Se usará la misma copia.');return;}
+  if(ownPending||localPending)return;
+  const chosen=parseBotSearchTarget({title:choice.title.normalize('NFC').trim(),artist:choice.artist?.normalize('NFC').trim()||null,album:choice.album?.normalize('NFC').trim()||null,durationSeconds:choice.duration});
+  if(!chosen){setNotice('Los metadatos de esta sugerencia no permiten identificar la canción.');return;}
+  const attempt=props.captureSongPlayback?.();if(!attempt){setNotice('La biblioteca está ocupada o requiere revisión. Comprueba Almacenamiento.');return;}
+  old?.abort.abort();const abort=new AbortController();downloadAbort.current=abort;
+  const f:SongFlight={key,choice,target:chosen,attempt,abort,scope:props.scopeKey,client,networkCurrent:null,revision:props.bots?.revision,queryId:null,phase:'lookup'};flight.current=f;
+  revokeMetadata();bump();chosenDraft.current=query;setChosenId(id);setResultsVisible(true);setDownload(null);setSelectedResult(null);setNotice('Comprobando si ya tienes esta canción…');
+  try{
+   const local=await attempt.lookup(choice,abort.signal);if(!live(f))return;
+   if(local){await finishPlay(f,local);return;}
+   if(!ready||!provider||!client){f.phase='error';setNotice(!primary?'Añade un bot en «Bots de música» para conseguir esta canción.':!selectedProvider?.supported?'El bot principal todavía no es compatible. Cambia su orden en «Bots de música».':'Conecta Telegram para conseguir esta canción. Las copias ya descargadas no necesitan conexión.');pulse();return;}
+   f.networkCurrent=client.captureBotsCurrent();if(!live(f))return;
+   const now=client.searchSnapshot();
+   if(now.providerRef===provider&&now.providerRevision===props.bots?.revision&&now.expiresAt!==null&&now.expiresAt>Date.now()&&JSON.stringify(now.expectedTarget)===JSON.stringify(chosen)&&now.rows.some(r=>r.kind!=='message')){
+    f.queryId=now.queryId;f.phase='choice';setDisplayedQuery(f.queryId);const matches=matchingSongRows(now.rows,chosen);if(matches.length===1)void downloadRow(f,matches[0].rowRef);else setNotice('Elige la versión correcta de la respuesta disponible.');pulse();return;
+   }
+   const allowed=client.captureSearchActionCurrent();if(!allowed()||!isBotSearchQuery(chosen.title)){f.phase='error';setNotice('No se puede consultar esta canción ahora.');pulse();return;}
+   const before=client.searchSnapshot().queryId;f.phase='query';client.searchBot({providerRef:provider,query:chosen.title,target:chosen,consent:true},allowed);
+   const after=client.searchSnapshot();if(!after.queryId||after.queryId===before){f.phase='error';setNotice('No se inició otra consulta. Comprueba la operación pendiente.');pulse();return;}
+   f.queryId=after.queryId;setDisplayedQuery(f.queryId);setNotice('Buscando el archivo de la canción…');pulse();
+  }catch(error){if(viewLive(f)){f.phase='error';setDownload(null);setNotice(error instanceof Error?error.message:'No se pudo comprobar la copia local.');pulse();}}
+ }
+ function cancelSong(){const f=flight.current;f?.abort.abort();client?.captureSearchCancel()?.();if(f&&f.phase!=='saving')f.phase='error';setNotice('Operación detenida. Una copia ya confirmada se conserva; no se iniciará música.');pulse();}
  return <MusicSearchPanel query={query} onQueryChange={value=>{if(!current())return;edit(true);setQuery(value.slice(0,640));}}
   suggestions={choices.map(c=>({id:c.id,kind:c.kind,title:c.title,subtitle:(c.kind==='track'?[c.artist,c.album]:[c.artist]).filter(Boolean).join(' · ')||null,source:c.source}))} resultsVisible={resultsVisible} selectedSuggestionId={chosenId} suggestionsPending={suggesting} suggestionsError={suggestionError} suggestionsNotice={suggestionNotice}
   onRetrySuggestions={()=>{if(current()&&!ownPending){edit();setRetry(n=>n+1);}}}
   primaryProvider={selectedProvider}
-  sessionReady={props.phase==='connected'} canSearch={ready} searchPending={ownPending||saving}
+  sessionReady={props.phase==='connected'} canSearch={ready} searchPending={ownPending||saving||localPending}
   onSearch={showResults} onChooseSuggestion={choose}
-  onCancel={()=>{downloadAbort.current?.abort();cancel?.();if(mounted.current&&latest.current.client===client)setNotice('Consulta detenida. Revisa el chat del bot antes de repetir si el envío quedó incierto.');}}
-  downloadStatus={download?.phase==='saving'?'Guardando copia verificada…':null} downloadProgress={saving?download:state?.downloadProgress??null} onCancelDownload={saving?()=>downloadAbort.current?.abort():undefined}
-  results={results} selectedResultId={selectedResult} onSelectResult={id=>void downloadResult(id)}
+  onCancel={cancelSong}
+  downloadStatus={download?.phase==='saving'?'Guardando copia verificada…':null} downloadProgress={saving?download:state?.downloadProgress??null} onCancelDownload={saving?cancelSong:undefined}
+  results={results} selectedResultId={selectedResult} onSelectResult={id=>{const f=flight.current;if(current()&&f)void downloadRow(f,id);}}
   status={rateNotice??notice??(displayedQuery&&state?.queryId===displayedQuery&&!state.error&&results.length?'Respuesta del bot recibida. Revisa las opciones; la identidad musical sigue sin confirmar.':null)} error={state?.error?searchErrors[state.error]:null} uncertain={state?.delivery==='uncertain'} current={current}/>;
 }
