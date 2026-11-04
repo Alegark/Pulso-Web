@@ -33,3 +33,5 @@ Quitar descarga usa la reserva, revisión, declaración y confirmación del núc
 La copia de Pulso pertenece a Safari u otro navegador. No requiere exportar a Archivos y no se envía a Cloudflare ni a un servidor propio. Telegram nativo mantiene su caché independiente: la web no puede compartirla ni borrarla. Pueden coexistir buffers y staging temporales; la garantía es una copia gestionada por asset, no una sola copia en todo el teléfono.
 
 Las pruebas con SDK sintético se registran por separado de Telegram real, Safari/iPhone físico, autoplay y reproducción bloqueada. Ninguna de estas aceptaciones físicas se deduce del build o de Chromium.
+
+El presupuesto decodificado de metadatos se aplica por respuesta; el total del recorrido queda acotado además por sus lecturas ya permitidas. No se comparte una única cuota de 64 KiB entre todos los sondeos. [Presupuestos y diagnóstico L15](BOT-SEARCH-DIAGNOSTICS.md#corrección-del-presupuesto-l15).

@@ -44,7 +44,7 @@ function page(mode:string){
 export async function openTemporaryTelegram(_identity:unknown,lifetime:AbortSignal){
  await event('synthetic-sdk-open');lifetime.throwIfAborted();let closed=false,binding:{accountRef:string;accountEpoch:number}|null=null;
  let bots:BotProvidersDriver|undefined,sources:SourcesDriver|undefined,search:BotSearchDriver|undefined;
- let clicked=false,polls=0;let audioBytes:Uint8Array|undefined;
+ let clicked=false,polls=0,callbackPolls=0;let audioBytes:Uint8Array|undefined;
  const ownAudio=async()=>audioBytes??=new Uint8Array(await(await nativeFetch('/__musicflow/download.mp3')).arrayBuffer());
  const audioPage=async(mode:string)=>{const bytes=await ownAudio();return history([{_:'message',id:clicked?13:12,peerId:{_:'peerUser',userId:101},fromId:{_:'peerUser',userId:101},date:1,message:'',...(mode==='download-recent'?{}:{replyTo:{_:'messageReplyHeader',replyToMsgId:10}}),media:{_:'messageMediaDocument',document:{_:'document',id:new Long(12,1),accessHash:new Long(45,2),fileReference:new Uint8Array([4,5]),dcId:2,mimeType:'audio/mpeg',size:mode==='download-oversize'?8388609:bytes.length,attributes:[{_:'documentAttributeAudio',duration:45,title:mode==='download-conflict'?'Different studio version':'MUSIC_FLOW Song (Live version)',performer:'MUSIC_FLOW Artist'}]}}}]);};
  let cooldown:{retryAt:number|null;retryBlocked:boolean}|null=null;
@@ -52,7 +52,7 @@ export async function openTemporaryTelegram(_identity:unknown,lifetime:AbortSign
  const current=(signal:AbortSignal)=>{if(closed||lifetime.aborted||signal.aborted)throw Error('cancelled');};
  const close=async()=>{if(closed)return;closed=true;binding=null;search?.close();bots?.close();sources?.close();await event('synthetic-sdk-close');};
  const invalidateSession=()=>{void close();};lifetime.addEventListener('abort',()=>void close(),{once:true});
- const call=async(request:any,options:any)=>{
+ const rawCall=async(request:any,options:any)=>{
   // Closed transport schema, peer capability and policy checked BEFORE fixture IO.
   if(!['contacts.resolveUsername','messages.getHistory','messages.sendMessage','messages.getDialogs','messages.getMessages','messages.getBotCallbackAnswer','upload.getFile'].includes(request._))throw Error('Forbidden SDK method');
   if(request.peer&&(request.peer._!=='inputPeerUser'||request.peer.userId!==101||!Long.isLong(request.peer.accessHash)))throw Error('Peer capability not closed');
@@ -65,12 +65,22 @@ export async function openTemporaryTelegram(_identity:unknown,lifetime:AbortSign
   if(request._==='contacts.resolveUsername')return identity(request.username,v.label);
   if(request._==='messages.getDialogs')return {_:'messages.dialogs',dialogs:[],messages:[],users:[],chats:[]};
   if(request._==='upload.getFile'){if(options.dcId!==2||options.kind!=='download'||request.location._!=='inputDocumentFileLocation'||request.location.thumbSize!=='')throw Error('Unbound file location');const b=await ownAudio();return {_:'upload.file',bytes:v.mode==='download-corrupt'?new Uint8Array(Math.min(request.limit,b.length-request.offset)):b.slice(request.offset,request.offset+request.limit),mtime:0};}
-  if(request._==='messages.getBotCallbackAnswer'){if(request.msgId!==12||String(request.data)!=='1,2,3')throw Error('Unbound callback');clicked=true;return {_:'messages.botCallbackAnswer',cacheTime:0,...(v.mode==='download-url'?{url:'https://invalid.example/'}:{})};}
-  if(request._==='messages.getMessages'){const p= v.mode.startsWith('download-')&&(clicked||!['download-option','download-changed','download-url','download-recent','download-progress','download-ambiguous','download-sender-omitted','download-unthreaded','download-private-optional','download-unthreaded-ambiguous','download-wide-menu'].includes(v.mode))?await audioPage(v.mode):page(v.mode);if(v.mode==='download-changed')p.messages[0].message='Changed menu';return p;}
+  if(request._==='messages.getBotCallbackAnswer'){if(request.msgId!==12||String(request.data)!=='1,2,3')throw Error('Unbound callback');clicked=true;callbackPolls=0;return {_:'messages.botCallbackAnswer',cacheTime:0,...(v.mode==='download-url'?{url:'https://invalid.example/'}:{})};}
+  if(request._==='messages.getMessages'){const p= v.mode.startsWith('download-')&&(clicked||!['download-option','download-changed','download-url','download-recent','download-progress','download-ambiguous','download-sender-omitted','download-unthreaded','download-private-optional','download-unthreaded-ambiguous','download-wide-menu','download-metadata-budget'].includes(v.mode))?await audioPage(v.mode):page(v.mode);if(v.mode==='download-changed')p.messages[0].message='Changed menu';return p;}
   if(request._==='messages.sendMessage'){clicked=false;polls=0;return v.mode==='badack'?{_:'updates',updates:[],users:[],chats:[]}:{_:'updateShortSentMessage',out:true,id:10,date:1,pts:1,ptsCount:1};}
+  if(request._==='messages.getHistory'&&request.limit===20&&v.mode==='download-metadata-budget'){
+   const count=clicked?++callbackPolls:++polls;
+   if(count<3)return history([{_:'message',id:clicked?13:12,peerId:{_:'peerUser',userId:101},fromId:{_:'peerUser',userId:101},date:1,message:'Searching…',replyTo:{_:'messageReplyHeader',replyToMsgId:10}}]);
+   return clicked?audioPage(v.mode):page('menu');
+  }
   if(request._==='messages.getHistory'&&request.limit!==1&&v.mode==='download-progress'&&!clicked){polls++;if(polls===1)return history([{_:'message',id:12,peerId:{_:'peerUser',userId:101},fromId:{_:'peerUser',userId:101},date:1,message:'Searching…',replyTo:{_:'messageReplyHeader',replyToMsgId:10}}]);return page('menu');}
-  if(request.limit!==1&&v.mode.startsWith('download-')&&(clicked||!['download-option','download-changed','download-url','download-recent','download-progress','download-ambiguous','download-sender-omitted','download-unthreaded','download-private-optional','download-unthreaded-ambiguous','download-wide-menu'].includes(v.mode)))return audioPage(v.mode);
+  if(request.limit!==1&&v.mode.startsWith('download-')&&(clicked||!['download-option','download-changed','download-url','download-recent','download-progress','download-ambiguous','download-sender-omitted','download-unthreaded','download-private-optional','download-unthreaded-ambiguous','download-wide-menu','download-metadata-budget'].includes(v.mode)))return audioPage(v.mode);
   return request.limit===1?history():page(v.mode);
+ };
+ const call=async(request:any,options:any)=>{
+  const result=await rawCall(request,options);
+  // TESTONLY individual responses fit 64KiB, while ordinary polling totals more.
+  return wireMode==='download-metadata-budget'&&request._!=='upload.getFile'?{...result,incidental:'x'.repeat(8192)}:result;
  };
  return {
   async begin(_phone:string,s:AbortSignal){current(s);await event('synthetic-begin');return 'app' as const;},

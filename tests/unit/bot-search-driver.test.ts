@@ -79,7 +79,7 @@ test('empty history reaches timeout, never no-match; one-second polls are bounde
 test('concurrent external outgoing makes response uncertain even with a valid bot reply',async()=>{
  const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(11,{out:true}),msg()]));const {c,p}=s.command();assert.equal((await s.check(p,c)).error,'uncertain');s.driver.close();
 });
-test('raw projection budget accumulates across calls; no send after oversized identity, no truncated success',async()=>{
+test('raw projection budget applies to each reply; no send after oversized identity, no truncated success',async()=>{
  const s=await setup(async()=>({...identity(),incidental:'x'.repeat(40000)}));const x=s.command();assert.equal((await s.check(x.p,x.c)).error,'limit-raw-bytes');assert.equal(s.calls.length,1);s.driver.close();
  const t=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(12,{message:'',replyMarkup:undefined,media:{_: 'unknownMedia'}})]));const y=t.command();assert.equal((await t.check(y.p,y.c)).error,'unsupported');assert.equal(t.calls.length,4);t.driver.close();
 });
@@ -89,7 +89,21 @@ test('request/query IDs finite; replay rejected; static accessors do no IO, quie
 });
 
 
-test('cumulative decoded budget reports its own code, not the individual response byte guard',async()=>{
+test('sequential metadata replies each have their own raw budget rather than sharing a single reply cap',async()=>{
  const s=await setup(async r=>({... (r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg()])),note:'x'.repeat(8192)}));
- const z=s.command();const r=await s.check(z.p,z.c);assert.equal(r.error,'limit-attempt');assert.equal(s.calls.length,4);s.driver.close();
+ const z=s.command();const r=await s.check(z.p,z.c);assert.equal(r.type,'bot-search.result');assert.equal(s.calls.length,4);s.driver.close();
+});
+
+
+test('repeated individually valid progress replies keep polling bounded and never resend',async()=>{
+ let polls=0;
+ const s=await setup(async r=>({... (r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[++polls===10?msg():msg(12,{message:'Searching…',replyMarkup:undefined})])),incidental:'x'.repeat(8192)}));
+ const z=s.command();await tick();for(let n=1;n<10;n++){s.time.advance(1000);await tick();}
+ const r=await s.check(z.p,z.c);assert.equal(r.type,'bot-search.result');assert.equal(polls,10);assert.equal(s.calls.length,13);assert.equal(s.calls.filter(c=>c.request._==='messages.sendMessage').length,1);assert.equal(await s.driver.whenSettled(),true);s.driver.close();assert.equal(s.time.timers.size,0);
+});
+test('large later reply still fails its individual guard after smaller cumulative replies',async()=>{
+ let polls=0;
+ const s=await setup(async r=>({... (r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(12,{message:'Searching…',replyMarkup:undefined})])),incidental:'x'.repeat(r._==='messages.getHistory'&&r.limit===20&&++polls===3?40000:8192)}));
+ const z=s.command();await tick();for(let n=1;n<3;n++){s.time.advance(1000);await tick();}
+ const r=await s.check(z.p,z.c);assert.equal(r.error,'limit-raw-bytes');assert.equal(polls,3);assert.equal(s.calls.length,6);assert.equal(s.calls.filter(c=>c.request._==='messages.sendMessage').length,1);assert.equal(await s.driver.whenSettled(),true);s.driver.close();assert.equal(s.time.timers.size,0);
 });

@@ -6,7 +6,8 @@ export const searchOwn=(v:unknown,k:string):unknown=>v&&typeof v==='object'?Obje
 export class BotSearchProjectionError extends Error {constructor(readonly code:'limit'|'unsupported',readonly limit:BotSearchLimitError|undefined=undefined){super(code);}}
 function bad(code:'limit'|'unsupported'='unsupported',limit?:BotSearchLimitError):never {throw new BotSearchProjectionError(code,limit);}
 /** 64 KiB approximate decoded data budget, including incidental SDK response fields. NOT a
- * transport/WASM allocation or peak heap bound. Caller accumulates returned cost per attempt. */
+ * transport/WASM allocation or peak heap bound. Each sequential reply receives this budget;
+ * the driver separately bounds the complete attempt by its metadata-reply count. */
 export function assertBotSearchRawBudget(raw:unknown):number {
  const pending=[{v:raw,depth:0}],seen=new Set<object>();let bytes=0,nodes=0,slots=0;
  const byteLength=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype),'byteLength')!.get!;

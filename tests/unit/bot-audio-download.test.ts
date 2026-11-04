@@ -78,3 +78,11 @@ test('download deadline is 120 seconds and keeps the RPC lane until settlement',
  let settled=false;void s.driver.whenSettled().then(()=>{settled=true;});await new Promise(r=>setImmediate(r));assert.equal(settled,false);
  finish({_:'upload.file',bytes,mtime:0});assert.equal(await s.driver.whenSettled(),true);s.driver.close();
 });
+
+
+test('callback metadata and exact rereads have separate reply budgets before verified bytes',async()=>{
+ const s=await setup(true,async(r,v)=>r._==='upload.getFile'?v:{...v,incidental:'x'.repeat(8192)});
+ const result=await s.download();assert.equal(result?.type,'bot-search.downloaded');
+ if(result?.type==='bot-search.downloaded')assert.equal(result.audio.sha256,createHash('sha256').update(bytes).digest('hex'));
+ assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getMessages').length,3);assert.equal(await s.driver.whenSettled(),true);s.driver.close();
+});

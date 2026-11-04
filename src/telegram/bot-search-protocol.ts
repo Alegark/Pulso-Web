@@ -1,5 +1,5 @@
 import {dataArray,dataRecord,isUuid,parseAccountBinding,utf8Bytes,type AccountBinding} from './sources-protocol';
-export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:16,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadMs:120000});
+export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:16,downloadReads:60,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadMs:120000});
 export interface BotSearchEnvelope extends AccountBinding {readonly protocol:'pulso-bot-search';readonly version:1;readonly sessionId:string;readonly providerRevision:number;readonly queryId:string;readonly requestId:string}
 export interface BotSearchTarget {readonly title:string;readonly artist:string|null;readonly album:string|null;readonly durationSeconds:number|null}
 export type BotSearchCommand=

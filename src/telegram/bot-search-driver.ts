@@ -83,9 +83,14 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    }};
    const onAbort=()=>f.stop(fail('cancelled'));
    flight=f;ctx.signal.addEventListener('abort',onAbort,{once:true});timer=time.setTimeout(()=>f.stop(fail('timeout')),duration);
-   let decoded=0;
+   // rawBytes bounds EACH metadata reply, not the sum of sequential replies.
+   // Search: identity + baseline + ACK + bounded polls. Callback download:
+   // identity + three exact-message reads + baseline + callback + bounded polls.
+   // Raw replies are projected then discarded; this is not a peak heap bound.
+   const metadataReplyLimit=c.type==='bot-search.download'?B.downloadReads+6:B.reads+3;
+   let decoded=0,metadataReplies=0;
    const check=()=>{if(f.cause)throw f.cause;if(!live(ctx,capture)){f.stop(fail('cancelled'));throw f.cause;}if(time.now()>=deadline){f.stop(fail('timeout'));throw f.cause;}};
-   const budget=(v:unknown)=>{decoded+=assertBotSearchRawBudget(v);if(decoded>B.rawBytes)throw new BotSearchProjectionError('limit','limit-attempt');};
+   const budget=(v:unknown)=>{const bytes=assertBotSearchRawBudget(v);if(++metadataReplies>metadataReplyLimit||decoded+bytes>B.rawBytes*metadataReplyLimit)throw new BotSearchProjectionError('limit','limit-attempt');decoded+=bytes;};
    const observe=(error:unknown):Failure=>{
     if(error instanceof BotSearchProjectionError)return fail(error.limit??error.code);
     if(error instanceof BotDownloadBytesFailure)return fail(error.code==='size'?'file-too-large':error.code==='cancelled'?'cancelled':'file-invalid');
@@ -118,7 +123,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        if((answer as {_?:string})._!=='messages.botCallbackAnswer'||Object.getOwnPropertyDescriptor(answer as object,'url')?.value||Object.getOwnPropertyDescriptor(answer as object,'alert')?.value)throw fail('unsupported');
        f.delivery='acknowledged';
        for(let read=0;;read++){
-        check();if(read>=60)throw fail('timeout');
+        check();if(read>=B.downloadReads)throw fail('timeout');
         const raw=await rpc(ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms));
         const page=projectBotSearchPage(raw,approved.botId,baseline,previous.outgoing,[selection.messageId],c.target);if(page.concurrent)throw fail('uncertain');
         const audio=page.rows.filter(row=>row.kind==='audio'),matches=matchingSongRows(audio,c.target);

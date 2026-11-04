@@ -1,0 +1,150 @@
+{
+  "project": "Pulso-Web",
+  "status": "L15_BUDGET_FIXED_LOCAL_AND_DELIVERED_REAL_PHONE_PENDING",
+  "release": "/releases/f6dc4d39893e7458.html",
+  "ownerDiagnostic": {
+    "code": "L15",
+    "entry": "e22c29994e87deca",
+    "guardIdentified": true,
+    "rawReplyReadOrStored": false
+  },
+  "change": {
+    "rawReplyBytes": 65536,
+    "searchMetadataReplyLimit": 19,
+    "downloadMetadataReplyLimit": 66,
+    "searchAttemptDecodedCostLimit": 1245184,
+    "downloadAttemptDecodedCostLimit": 4325376,
+    "querySendsPerAttempt": 1,
+    "searchPollLimit": 16,
+    "callbackPollLimit": 60,
+    "timeoutsUnchanged": true,
+    "perReplyStructureGuardsUnchanged": true,
+    "fileBytesLimitUnchanged": 8388608,
+    "noNewRetriesOrPeers": true
+  },
+  "validation": {
+    "baselineNative": {
+      "status": "FAIL",
+      "counts": {
+        "uniquePlanned": 1,
+        "executed": 1,
+        "passed": 0,
+        "failed": 1
+      },
+      "observed": "L15 before musical result and no playback",
+      "run": "/data/home/Proyectos/Pulso-Web/.local/bot-l15-budget/baseline-main/main/final-2026-11-04T21-35-17-865Z",
+      "cleanup": true
+    },
+    "finalNative": {
+      "status": "PASS_LOCAL_MAIN_SYNTHETIC_SDK_ONLY",
+      "counts": {
+        "uniquePlanned": 24,
+        "executed": 24,
+        "passed": 24,
+        "failed": 0
+      },
+      "run": "/data/home/Proyectos/Pulso-Web/.local/bot-l15-budget/main/final-2026-11-04T21-38-16-534Z",
+      "receiptSHA256": "96b219bc84242ccea6ecccf8f5b6e8dd37252bd46957f0141fd8c566babc5e64",
+      "sourceFilesExact": 148,
+      "sourcesUnchanged": true,
+      "mainTransformed": false,
+      "sdk": "SYNTHETIC_ONLY",
+      "nativeAudio": true,
+      "pageErrors": 0,
+      "csp": 0,
+      "unexpectedExternal": 0,
+      "cleanup": true
+    },
+    "units": {
+      "passed": 490,
+      "failed": 0,
+      "newFocusedCases": 3,
+      "lintAndTypes": true
+    },
+    "firstCandidateRunPreserved": {
+      "counts": {
+        "uniquePlanned": 24,
+        "executed": 24,
+        "passed": 23,
+        "failed": 1
+      },
+      "cause": "G24 counted all preceding groups polls:49 vs6; native playback already succeeded. Corrected observer slices its own RPC range. Expectations and runtime unchanged except clarifying comment.",
+      "run": "/data/home/Proyectos/Pulso-Web/.local/bot-l15-budget/main/final-2026-11-04T21-36-57-917Z",
+      "cleanup": true
+    },
+    "production": {
+      "cases": [
+        {
+          "engine": "chromium",
+          "version": "154.0.8037.57",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        },
+        {
+          "engine": "webkit",
+          "version": "27.2",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        }
+      ],
+      "webkitStyleSrcAttrReports": 12,
+      "otherCspReports": 0,
+      "cleanup": true
+    },
+    "normalUpdate": {
+      "oldEntrySHA256": "e22c29994e87deca754ab5d55d5f89621e1fd5d91ca745e5c6679f9bfa2d7a8d",
+      "newEntry": "/releases/f6dc4d39893e7458.html",
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    },
+    "buildAudit": {
+      "archiveMembers": 3611,
+      "runtimeMembersExact": 148,
+      "noPrivateIdentity": true
+    },
+    "delivery": {
+      "passed": true,
+      "release": "/releases/f6dc4d39893e7458.html",
+      "copiedFilesExact": 38,
+      "previousImmutableFilesPreserved": 215,
+      "serviceRestarted": false,
+      "grantChanged": false,
+      "newAccessVerified": true
+    },
+    "https": {
+      "passed": true,
+      "urlRecorded": false,
+      "credentialsRecorded": false,
+      "realTelegram": false,
+      "release": "/releases/f6dc4d39893e7458.html",
+      "launcherEntryMainWorkerSWExact": true,
+      "documentMetadataCsp": true,
+      "workerCspUnchanged": true,
+      "privateConfigurationExact": true,
+      "privateConfigurationNoStore": true
+    }
+  },
+  "limits": [
+    "Owner L15 guard is identified; actual raw response not requested or collected",
+    "Synthetic SDK fixtures do not establish real bot delivery or physical iPhone playback",
+    "Approximate decoded-work limits do not bound network allocation, WASM or peak heap",
+    "P0 and mobile background/offline acceptance remain pending"
+  ]
+}
