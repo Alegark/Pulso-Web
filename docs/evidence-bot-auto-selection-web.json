@@ -1,0 +1,130 @@
+{
+  "project": "Pulso-Web",
+  "status": "AUTOMATIC_BEST_MATCH_DELIVERED_REAL_PHONE_PENDING",
+  "release": "/releases/4cf02514f0877dba.html",
+  "behavior": {
+    "secondVersionChooser": false,
+    "ranking": [
+      "compatible audio metadata before callback labels",
+      "closest audio duration within original three-second tolerance",
+      "complete matching labels before labels with numbering/duration decoration",
+      "explicit reply before recent at otherwise equal score",
+      "original bot order on equal score"
+    ],
+    "sameRankingAt": [
+      "worker projection before output truncation",
+      "initial and cached UI continuation",
+      "audio selection after callback"
+    ],
+    "allConflictingOrInsufficient": "terminal notice, no alternate query or file",
+    "opaqueCallbacksAndPrivateRevalidationUnchanged": true,
+    "singleflightAndLocalReuseUnchanged": true,
+    "L15BudgetFixUnchanged": true
+  },
+  "validation": {
+    "unitPassed": 494,
+    "unitFailed": 0,
+    "lintAndTypes": true,
+    "nativeMain": {
+      "counts": {
+        "uniquePlanned": 26,
+        "executed": 26,
+        "passed": 26,
+        "failed": 0
+      },
+      "run": "/data/home/Proyectos/Pulso-Web/.local/bot-auto-selection/main/final-2026-11-04T21-51-03-307Z",
+      "receiptSHA256": "ec4c6148de270d027f372384500abd343dfec8bc407161a10aad98c64816d258",
+      "frozenSourcesExact": 148,
+      "sourceUnchanged": true,
+      "mainTransformed": false,
+      "sdk": "SYNTHETIC_ONLY",
+      "nativeAudio": true,
+      "pageErrors": 0,
+      "csp": 0,
+      "unexpectedExternal": 0,
+      "cleanup": true,
+      "keyGroups": [
+        "08 equal compatible menu options automatically use the first ranked callback once",
+        "21 unthreaded compatible menu ties continue automatically without a second version gesture",
+        "25 best ranked musical option wins over earlier wrong versions artists and decorated alternatives",
+        "26 incompatible menu does not choose another performer or recording and never shows a second chooser"
+      ]
+    },
+    "firstFocusedRunPreserved": "Two expected failures retained in unit-first.log: old manual-choice and decorative-symbol policies superseded by the owner instruction. Tests updated to automatic selection and unchanged conflict denials.",
+    "production": {
+      "cases": [
+        {
+          "engine": "chromium",
+          "version": "154.0.8037.57",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        },
+        {
+          "engine": "webkit",
+          "version": "27.2",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        }
+      ],
+      "webkitStyleSrcAttrReports": 12,
+      "otherCspReports": 0,
+      "cleanup": true
+    },
+    "normalUpdate": {
+      "oldEntrySHA256": "f6dc4d39893e74587331f76049e474c8a30d73fc3abc7dd544bd3578914af43d",
+      "newEntry": "/releases/4cf02514f0877dba.html",
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    },
+    "buildAudit": {
+      "archiveMembers": 3611,
+      "runtimeSourcesExact": 148,
+      "privateIdentityAbsent": true
+    },
+    "delivery": {
+      "passed": true,
+      "release": "/releases/4cf02514f0877dba.html",
+      "copiedFilesExact": 38,
+      "previousImmutableFilesPreserved": 218,
+      "serviceRestarted": false,
+      "grantChanged": false,
+      "newAccessVerified": true
+    },
+    "https": {
+      "passed": true,
+      "urlRecorded": false,
+      "credentialsRecorded": false,
+      "realTelegram": false,
+      "release": "/releases/4cf02514f0877dba.html",
+      "launcherEntryMainWorkerSWExact": true,
+      "documentMetadataCsp": true,
+      "workerCspUnchanged": true,
+      "privateConfigurationExact": true,
+      "privateConfigurationNoStore": true
+    }
+  },
+  "limits": [
+    "No actual Telegram account or physical iPhone test by the agent",
+    "Metadata ranking does not establish acoustic identity",
+    "Other artists and version words are not silently removed",
+    "File size, raw budgets, absolute deadlines, uncertain settlement and no-retry policy remain unchanged",
+    "P0 and mobile background/offline acceptance remain pending"
+  ]
+}

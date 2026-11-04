@@ -137,7 +137,7 @@ export function MusicSearchController(props:Props){
   f.phase='download';setSelectedResult(id);downloadAbort.current=f.abort;setDownload({phase:'network',bytes:0,total:0});setNotice('Obteniendo la canción elegida…');pulse();
   try{
    const audio=await f.client.downloadBot(id,allowed);if(!live(f))return;
-   if(!audio){f.phase=f.client.searchSnapshot().error?'error':'choice';setDownload(null);setNotice('No hay una respuesta inequívoca. Elige el audio correcto de las opciones disponibles.');pulse();return;}
+   if(!audio){f.phase='error';setDownload(null);setNotice(f.client.searchSnapshot().error?null:'El bot no devolvió un audio que coincida con la canción elegida.');pulse();return;}
    f.phase='saving';setDownload({phase:'saving',bytes:0,total:audio.bytes});setNotice('Verificando la única copia local…');
    const result=await f.attempt.save(audio,f.choice,f.abort.signal,bytes=>{if(live(f))setDownload({phase:'saving',bytes,total:audio.bytes});});
    // The file may have committed even when Cancel wins the presentation/Play intent.
@@ -163,8 +163,8 @@ export function MusicSearchController(props:Props){
   const now=f.client.searchSnapshot();if(now.queryId!==f.queryId||now.pending)return;
   if(now.error){f.phase='error';setNotice(null);pulse();return;}
   const matches=matchingSongRows(now.rows,f.target);
-  if(matches.length===1)void downloadRow(f,matches[0].rowRef);
-  else{f.phase='choice';setNotice('Elige la versión correcta entre las opciones del bot.');pulse();}
+  if(matches.length)void downloadRow(f,matches[0].rowRef);
+  else{f.phase='error';setNotice('El bot no devolvió una coincidencia suficiente con el título, artista y versión elegidos.');pulse();}
  });
  function showResults(){if(current()&&query.trim())setResultsVisible(true);}
  async function choose(id:string){
@@ -187,7 +187,7 @@ export function MusicSearchController(props:Props){
    f.networkCurrent=client.captureBotsCurrent();if(!live(f))return;
    const now=client.searchSnapshot();
    if(now.providerRef===provider&&now.providerRevision===props.bots?.revision&&now.expiresAt!==null&&now.expiresAt>Date.now()&&JSON.stringify(now.expectedTarget)===JSON.stringify(chosen)&&now.rows.some(r=>r.kind!=='message')){
-    f.queryId=now.queryId;f.phase='choice';setDisplayedQuery(f.queryId);const matches=matchingSongRows(now.rows,chosen);if(matches.length===1)void downloadRow(f,matches[0].rowRef);else setNotice('Elige la versión correcta de la respuesta disponible.');pulse();return;
+    f.queryId=now.queryId;f.phase='choice';setDisplayedQuery(f.queryId);const matches=matchingSongRows(now.rows,chosen);if(matches.length)void downloadRow(f,matches[0].rowRef);else{f.phase='error';setNotice('La respuesta disponible no contiene una coincidencia suficiente con la canción elegida.');}pulse();return;
    }
    const allowed=client.captureSearchActionCurrent();if(!allowed()||!isBotSearchQuery(chosen.title)){f.phase='error';setNotice('No se puede consultar esta canción ahora.');pulse();return;}
    const before=client.searchSnapshot().queryId;f.phase='query';client.searchBot({providerRef:provider,query:chosen.title,target:chosen,consent:true},allowed);
@@ -204,6 +204,6 @@ export function MusicSearchController(props:Props){
   onSearch={showResults} onChooseSuggestion={choose}
   onCancel={cancelSong}
   downloadStatus={download?.phase==='saving'?'Guardando copia verificada…':null} downloadProgress={saving?download:state?.downloadProgress??null} onCancelDownload={saving?cancelSong:undefined}
-  results={results} selectedResultId={selectedResult} onSelectResult={id=>{const f=flight.current;if(current()&&f)void downloadRow(f,id);}}
+  automaticSelection results={results} selectedResultId={selectedResult} onSelectResult={id=>{const f=flight.current;if(current()&&f)void downloadRow(f,id);}}
   status={rateNotice??notice??(displayedQuery&&state?.queryId===displayedQuery&&!state.error&&results.length?'Respuesta del bot recibida. Revisa las opciones; la identidad musical sigue sin confirmar.':null)} error={state?.error?searchErrorText(state.error):null} uncertain={state?.delivery==='uncertain'} current={current}/>;
 }

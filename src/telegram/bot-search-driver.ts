@@ -129,8 +129,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
         const audio=page.rows.filter(row=>row.kind==='audio'),matches=matchingSongRows(audio,c.target);
         if(audio.length){
          // Correlation may be recent. Fresh exact-peer window plus ONE compatible
-         // recording permits continuation; timing alone or ambiguity never does.
-         if(matches.length!==1){
+         // recording permits continuation; equal matches keep the ranked first one.
+         if(!matches.length){
           retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={...previous,baseline};
           return {...e,type:'bot-search.result',delivery:'acknowledged',rows:audio,expiresAt:retainedUntil,expectedTarget:c.target};
          }

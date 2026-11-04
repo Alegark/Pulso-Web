@@ -36,6 +36,10 @@ function page(mode:string){
   rows.push({_:'keyboardInlineButtonRow',buttons:[{_:'keyboardInlineButton',text:'▶️',type:{_:'inlineButtonTypeCallback',data:new Uint8Array([7])}}]});
   return history([{...msg,message:'Choose a song',replyMarkup:{_:'replyInlineMarkup',rows}}]);
  }
+ if(mode==='download-ranked-options'||mode==='download-no-match'){
+  const labels=['MUSIC_FLOW Song (Remix) — MUSIC_FLOW Artist','MUSIC_FLOW Song (Live version) — Another Artist',...(mode==='download-ranked-options'?['#3 MUSIC_FLOW Song (Live version) — MUSIC_FLOW Artist [00:45]','MUSIC_FLOW Song (Live version) — MUSIC_FLOW Artist']:[])];
+  return history([{...msg,replyMarkup:{_:'replyInlineMarkup',rows:labels.map((text,i)=>({_:'keyboardInlineButtonRow',buttons:[{_:'keyboardInlineButton',text,type:{_:'inlineButtonTypeCallback',data:new Uint8Array(i===3?[1,2,3]:[9,i])}}]}))}}]);
+ }
  if(mode==='empty')return history();
  if(mode==='unknown')return history([{...msg,media:{_:'messageMediaPhoto'}}]);
  if(mode==='conflict'||mode==='missing')return history([{...msg,media:{_:'messageMediaDocument',document:{_:'document',id:new Long(1,0),accessHash:new Long(2,0),fileReference:new Uint8Array([1]),mimeType:'audio/mpeg',size:40000,attributes:[{_:'documentAttributeAudio',duration:45,...(mode==='conflict'?{title:'Different studio version',performer:'Different artist'}:{})}]}}}]);
@@ -66,7 +70,7 @@ export async function openTemporaryTelegram(_identity:unknown,lifetime:AbortSign
   if(request._==='messages.getDialogs')return {_:'messages.dialogs',dialogs:[],messages:[],users:[],chats:[]};
   if(request._==='upload.getFile'){if(options.dcId!==2||options.kind!=='download'||request.location._!=='inputDocumentFileLocation'||request.location.thumbSize!=='')throw Error('Unbound file location');const b=await ownAudio();return {_:'upload.file',bytes:v.mode==='download-corrupt'?new Uint8Array(Math.min(request.limit,b.length-request.offset)):b.slice(request.offset,request.offset+request.limit),mtime:0};}
   if(request._==='messages.getBotCallbackAnswer'){if(request.msgId!==12||String(request.data)!=='1,2,3')throw Error('Unbound callback');clicked=true;callbackPolls=0;return {_:'messages.botCallbackAnswer',cacheTime:0,...(v.mode==='download-url'?{url:'https://invalid.example/'}:{})};}
-  if(request._==='messages.getMessages'){const p= v.mode.startsWith('download-')&&(clicked||!['download-option','download-changed','download-url','download-recent','download-progress','download-ambiguous','download-sender-omitted','download-unthreaded','download-private-optional','download-unthreaded-ambiguous','download-wide-menu','download-metadata-budget'].includes(v.mode))?await audioPage(v.mode):page(v.mode);if(v.mode==='download-changed')p.messages[0].message='Changed menu';return p;}
+  if(request._==='messages.getMessages'){const p= v.mode.startsWith('download-')&&(clicked||!['download-option','download-changed','download-url','download-recent','download-progress','download-ambiguous','download-sender-omitted','download-unthreaded','download-private-optional','download-unthreaded-ambiguous','download-wide-menu','download-metadata-budget','download-ranked-options','download-no-match'].includes(v.mode))?await audioPage(v.mode):page(v.mode);if(v.mode==='download-changed')p.messages[0].message='Changed menu';return p;}
   if(request._==='messages.sendMessage'){clicked=false;polls=0;return v.mode==='badack'?{_:'updates',updates:[],users:[],chats:[]}:{_:'updateShortSentMessage',out:true,id:10,date:1,pts:1,ptsCount:1};}
   if(request._==='messages.getHistory'&&request.limit===20&&v.mode==='download-metadata-budget'){
    const count=clicked?++callbackPolls:++polls;
@@ -74,7 +78,7 @@ export async function openTemporaryTelegram(_identity:unknown,lifetime:AbortSign
    return clicked?audioPage(v.mode):page('menu');
   }
   if(request._==='messages.getHistory'&&request.limit!==1&&v.mode==='download-progress'&&!clicked){polls++;if(polls===1)return history([{_:'message',id:12,peerId:{_:'peerUser',userId:101},fromId:{_:'peerUser',userId:101},date:1,message:'Searching…',replyTo:{_:'messageReplyHeader',replyToMsgId:10}}]);return page('menu');}
-  if(request.limit!==1&&v.mode.startsWith('download-')&&(clicked||!['download-option','download-changed','download-url','download-recent','download-progress','download-ambiguous','download-sender-omitted','download-unthreaded','download-private-optional','download-unthreaded-ambiguous','download-wide-menu','download-metadata-budget'].includes(v.mode)))return audioPage(v.mode);
+  if(request.limit!==1&&v.mode.startsWith('download-')&&(clicked||!['download-option','download-changed','download-url','download-recent','download-progress','download-ambiguous','download-sender-omitted','download-unthreaded','download-private-optional','download-unthreaded-ambiguous','download-wide-menu','download-metadata-budget','download-ranked-options','download-no-match'].includes(v.mode)))return audioPage(v.mode);
   return request.limit===1?history():page(v.mode);
  };
  const call=async(request:any,options:any)=>{

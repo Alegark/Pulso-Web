@@ -8,10 +8,10 @@ const audio=(title='A Song (Live)',performer:string|null='An Artist',durationSec
 test('automatic exact title and performer matching retains live/remix and punctuation semantics',()=>{
  const exact=option('A Song (Live) — An Artist');
  const rows=[exact,option('A Song — An Artist'),option('A Song (Live Remix) — An Artist'),option('A Song (Live) — Another Artist'),option('A Song (Live) — An Artist ▶'),option('Next page'),option('A Song (Live) — An Artist','recent')];
- assert.deepEqual(matchingSongRows(rows,target),[exact,rows.at(-1)]);
+ assert.deepEqual(matchingSongRows(rows,target),[exact,rows[4],rows.at(-1)]);
  assert.equal(matchingSongRows([option('A Sóng (Live) - AN ARTIST')],target).length,1);
 });
-test('ambiguous options stay ambiguous, unknown or foreign-version audio never automatic',()=>{
+test('equal compatible options retain their bot order; unknown or foreign-version audio never matches',()=>{
  assert.equal(matchingSongRows([option('A Song (Live) – An Artist'),option('A Song (Live) - An Artist')],target).length,2);
  assert.equal(matchingSongRows([audio('A Song'),audio('A Song (Live)',null),audio('A Song (Live)','An Artist',130)],target).length,0);
  assert.equal(matchingSongRows([audio()],{...target,artist:null}).length,0);
@@ -23,4 +23,18 @@ test('durable catalogue keys require public identity and version metadata, never
  assert.notEqual(songChoiceKey({...base,title:'A Song'}),key);assert.notEqual(songChoiceKey({...base,artist:'Another Artist'}),key);
  assert.equal(songChoiceKey({...base,artist:null}),null);assert.equal(songChoiceKey({...base,id:'arbitrary'}),null);
  const local='local:'+crypto.randomUUID();assert.equal(songChoiceKey({...base,id:local,source:'local',artist:null}),local);
+});
+
+
+test('ranking prefers verified audio metadata and closest duration before option labels',()=>{
+ const numbered=option('3. A Song (Live) — An Artist [02:00]'),exact=option('A Song (Live) — An Artist'),near=audio('A Song (Live)','An Artist',122),best=audio();
+ const rows=[numbered,near,exact,best,option('A Song (Live Remix) — An Artist'),option('A Song (Live) — Another Artist')];
+ assert.deepEqual(matchingSongRows(rows,target),[best,near,exact,numbered]);assert.equal(rows[0],numbered);
+});
+test('numbering and duration decorations do not erase version or performer conflicts',()=>{
+ const right=option('#12 A Song (Live) — An Artist (02:00)');
+ assert.deepEqual(matchingSongRows([option('#1 A Song (Remix) — An Artist (02:00)'),option('2. A Song (Live) — Other Artist [02:00]'),option('Next ▶️'),right],target),[right]);
+});
+test('best compatible tie uses the first row rather than asking for another choice',()=>{
+ const first=option('A Song (Live) — An Artist'),second=option('A Song (Live) - An Artist');const ranked=matchingSongRows([first,second],target);assert.deepEqual(ranked,[first,second]);assert.equal(ranked[0],first);
 });

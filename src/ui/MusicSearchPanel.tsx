@@ -20,6 +20,7 @@ export interface MusicSearchPanelProps {
  /** Catalogue results only. This callback never submits a Telegram query. */
  onSearch:()=>void;
  onChooseSuggestion:(id:string)=>void;onCancel:()=>void;
+ automaticSelection?:boolean;
  results:readonly MusicSearchResultRow[];status?:string|null;error?:string|null;uncertain:boolean;
  downloadStatus?:string|null;downloadProgress?:{bytes:number;total:number}|null;onCancelDownload?:()=>void;
  selectedResultId:string|null;onSelectResult:(id:string)=>void;
@@ -115,7 +116,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    <div role="status">{props.searchPending?'Consultando la canción elegida…':props.status}</div>
    {props.error&&<p role="alert">{props.error}</p>}
    {props.uncertain&&<p>Resultado incierto: no se ha confirmado la respuesta del bot. No se reintentará ni cambiará de bot automáticamente.</p>}
-   {props.results.length>0&&<><h3>Respuesta del bot</h3><p>Si hay varias opciones, elige la versión correcta: se descargará y reproducirá una única copia en Pulso. Límite inicial: 8 MiB; no hace falta exportar a Archivos.</p>
+   {props.results.length>0&&!props.automaticSelection&&<><h3>Respuesta del bot</h3><p>Si hay varias opciones, elige la versión correcta: se descargará y reproducirá una única copia en Pulso. Límite inicial: 8 MiB; no hace falta exportar a Archivos.</p>
     <ul className="music-search-results">{props.results.map(row=><li key={row.id} data-result-id={row.id}>
      <strong><bdi dir="auto">{row.title}</bdi></strong>{row.subtitle&&<p><bdi dir="auto">{row.subtitle}</bdi></p>}
      <p>{row.kind==='audio'?'Referencia de audio; disponibilidad sin verificar.':row.kind==='option'?'Botón del bot: se pulsa sólo al elegir esta opción.':'Mensaje del bot.'}</p>

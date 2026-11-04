@@ -101,18 +101,28 @@ export function parseBotDownloadedAudio(raw:unknown):BotDownloadedAudio|null {
 // Presentation normalization; never acoustic identity or a substitute for worker peer/epoch checks.
 export const musicIdentityText=(s:string)=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 
-/** Unknown performers, different versions and navigation buttons never auto-match. */
+/** Rank compatible recordings, then keep the bot's order for an equal score.
+ * Only presentation decoration is ignored; title, performer and version words
+ * still have to match. Raw callback data never contributes to the score. */
 export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTarget):readonly BotSearchRow[] {
  if(!target.artist)return [];
  const title=musicIdentityText(target.title),artist=musicIdentityText(target.artist);
- return rows.filter(row=>{
-  // Recent is not relabelled as reply. The worker already restricts it to the
-  // exact bot and post-send/callback window; metadata must still match uniquely.
-  if(row.kind==='audio')return !!row.title&&!!row.performer&&musicIdentityText(row.title)===title&&musicIdentityText(row.performer)===artist&&
-   (target.durationSeconds===null||Math.abs(target.durationSeconds-row.durationSeconds)<=3);
-  if(row.kind!=='option'||/\p{S}/u.test(row.label))return false;
-  // Parse only the visible, entire title–performer label; no callback byte grammar.
-  return row.label.split(/\s+[–—−-]\s+/u).some((_,i,parts)=>i<parts.length-1&&
+ const score=(row:BotSearchRow):number=>{
+  const correlation=row.correlation==='reply'?1:0;
+  if(row.kind==='audio'){
+   if(!row.title||!row.performer||musicIdentityText(row.title)!==title||musicIdentityText(row.performer)!==artist)return 0;
+   const delta=target.durationSeconds===null?0:Math.abs(target.durationSeconds-row.durationSeconds);
+   return delta<=3?4000-Math.round(delta*100)+correlation:0;
+  }
+  if(row.kind!=='option')return 0;
+  const matches=(label:string)=>label.split(/\s+[–—−-]\s+/u).some((_,i,parts)=>i<parts.length-1&&
    musicIdentityText(parts.slice(0,i+1).join(' - '))===title&&musicIdentityText(parts.slice(i+1).join(' - '))===artist);
- });
+  if(matches(row.label))return 2000+correlation;
+  // Numbered results and an optional displayed duration are formatting only.
+  // Do not strip live/remix/cover/version text or words from the performer.
+  const clean=row.label.replace(/^\s*(?:#\d{1,3}|\d{1,3}[.)])\s+/u,'').replace(/\s*[[(]\d{1,2}:[0-5]\d[)\]]\s*$/u,'');
+  return matches(clean)?1900+correlation:0;
+ };
+ return rows.map((row,index)=>({row,index,score:score(row)})).filter(v=>v.score>0)
+  .sort((a,b)=>b.score-a.score||a.index-b.index).map(v=>v.row);
 }

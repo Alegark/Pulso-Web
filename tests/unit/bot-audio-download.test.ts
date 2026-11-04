@@ -50,9 +50,9 @@ test('unthreaded exact private audio can complete the chosen-song operation with
  const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);s.driver.close();
  assert.equal(BOT_SEARCH_BOUNDS.downloadMs,120000);
 });
-test('multiple exact unthreaded audio candidates remain an explicit choice, never a blind download',async()=>{
+test('equal exact unthreaded audio candidates use the first compatible recording automatically',async()=>{
  const s=await setup(true,(r,v,clicked)=>clicked&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([{...msg(doc()),id:13,fromId:undefined,replyTo:undefined},{...msg(doc()),id:14,fromId:undefined,replyTo:undefined}]):v);
- const r=await s.download();assert.equal(r?.type,'bot-search.result');if(r?.type==='bot-search.result'){assert.equal(r.rows.length,2);assert(r.rows.every(row=>row.correlation==='recent'));}assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,0);s.driver.close();
+ const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert.deepEqual(s.calls.filter(x=>x.r._==='messages.getMessages').map(x=>x.r.id[0].id),[12,13,13]);s.driver.close();
 });
 test('cancel preserves the file RPC lane and observes a late revocation without a second request',async()=>{
  let reject!:(e:unknown)=>void;const pending=new Promise((_,r)=>reject=r);const s=await setup(false,(r,v)=>r._==='upload.getFile'?pending:v);
@@ -85,4 +85,10 @@ test('callback metadata and exact rereads have separate reply budgets before ver
  const result=await s.download();assert.equal(result?.type,'bot-search.downloaded');
  if(result?.type==='bot-search.downloaded')assert.equal(result.audio.sha256,createHash('sha256').update(bytes).digest('hex'));
  assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getMessages').length,3);assert.equal(await s.driver.whenSettled(),true);s.driver.close();
+});
+
+
+test('after a callback the closest compatible duration wins before file transfer',async()=>{
+ const s=await setup(true,(r,v,clicked)=>clicked&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([{...msg({...doc(),attributes:[{_:'documentAttributeAudio',duration:3,title:target.title,performer:target.artist}]}),id:13},{...msg(doc()),id:14}]):v);
+ const result=await s.download();assert.equal(result?.type,'bot-search.downloaded');assert.deepEqual(s.calls.filter(x=>x.r._==='messages.getMessages').map(x=>x.r.id[0].id),[12,14,14]);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);s.driver.close();
 });

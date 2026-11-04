@@ -103,8 +103,8 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
  // Decode and inspect every bounded candidate BEFORE truncating so concurrency
  // and duplicate exact matches cannot be hidden by display limits. Keep a matching
  // song even when a long ordinary menu places it after the first twenty rows.
- const matched=new Set(target?matchingSongRows(rows,target).map(row=>row.rowRef):[]);
- const rank=(row:BotSearchRow)=>matched.has(row.rowRef)?0:row.kind==='audio'?1:row.kind==='option'?2:3;
+ const matched=new Map((target?matchingSongRows(rows,target):[]).map((row,index)=>[row.rowRef,index]));
+ const rank=(row:BotSearchRow)=>matched.get(row.rowRef)??(B.candidateRows+(row.kind==='audio'?1:row.kind==='option'?2:3));
  const selected=rows.map((row,index)=>({row,index})).sort((a,b)=>rank(a.row)-rank(b.row)||a.index-b.index).slice(0,B.rows).map(p=>p.row);
  const selectedRefs=new Map(selected.map(row=>[row.rowRef,refs.get(row.rowRef)!]));
  return Object.freeze({rows:Object.freeze(selected),refs:selectedRefs,concurrent,unrecognized});
