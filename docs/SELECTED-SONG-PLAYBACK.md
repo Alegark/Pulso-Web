@@ -20,7 +20,7 @@ La retirada conserva la ficha y su huella. Reimportar los mismos bytes permite a
 
 ## Autoridad y reproducción
 
-Root conserva owner/proof, scope, generación de base, reservas, revisión y admisión musical. La sesión Telegram en RAM tiene un lifetime separado de los permisos transitorios para iniciar comandos: preparar la propia cola no cierra la sesión. Una captura de comando anterior a una reserva o mutación sigue inválida cuando termina. Logout, pérdida de control/base, cambio de contexto o Cancelar impiden un Play tardío.
+Root conserva owner/proof, scope, generación de base, reservas, revisión y admisión musical. La sesión Telegram en RAM tiene un lifetime separado de los permisos transitorios para iniciar comandos: preparar la propia cola no cierra la sesión. Una captura de comando anterior a una reserva o mutación sigue inválida cuando termina. Logout, pérdida de control/base, cambio de contexto o Cancelar impiden un Play tardío. Las órdenes posteriores de Pausar, Reproducir, cambiar de pista, seek o elegir otra ocurrencia, incluidos los controles del sistema, sustituyen la intención pendiente y solicitan cancelar su operación.
 
 No se publica éxito hasta el recibo durable y el refresh. Cancelar no liquida un RPC pendiente y no borra un commit ganador. Sólo el Play todavía autorizado prepara su cola y selecciona la copia verificada con el único Audio existente. Reabrir, recibir sugerencias o restaurar la cola nunca genera esa intención. Si el navegador rechaza play por falta de gesto, se muestra el aviso y queda el control Reproducir; no se promete evitar las políticas de Safari.
 

@@ -1,12 +1,12 @@
 {
   "project": "Pulso-Web",
   "status": "PASS_FOCAL_WEB_NOT_P0",
-  "candidateRelease": "/releases/3a4ecbb8825ed7e0.html",
+  "candidateRelease": "/releases/645b073458a2a786.html",
   "sourceFiles": 148,
   "nativeMain": {
     "runner": "tests/integration/check-selected-song.mjs",
-    "uniqueGroups": 16,
-    "passed": 16,
+    "uniqueGroups": 17,
+    "passed": 17,
     "failed": 0,
     "syntheticSDK": true,
     "mainTransformed": false,
@@ -15,8 +15,8 @@
     "pageErrors": 0,
     "CSP": 0,
     "cleanup": true,
-    "receiptSHA256": "c57c99d54ae235cb4019e7b5b5ff0900c53d6146756d0ba2a2509eb5fda8bad0",
-    "receiptBytes": 758879
+    "receiptSHA256": "cf5d48ac2cea7c11f19bf8266b24631c1e37d7e613e24af0ddd0d01527c2b307",
+    "receiptBytes": 796254
   },
   "unit": {
     "passed": 476,
@@ -53,8 +53,8 @@
     "cleanup": true
   },
   "update": {
-    "oldEntrySHA256": "e68d53050c00bbafb42785a26bb563f60848945a12c059255fa618f608c4236a",
-    "newEntry": "/releases/3a4ecbb8825ed7e0.html",
+    "oldEntrySHA256": "3a4ecbb8825ed7e0f01476fc39d7c19619c036484ea09ae69d1aa201b08376cc",
+    "newEntry": "/releases/645b073458a2a786.html",
     "newVersionBypassesOldShell": true,
     "stableLauncherSelectsCurrentBuild": true,
     "waitingBeforeClosingClients": true,
@@ -65,9 +65,9 @@
   },
   "privateDelivery": {
     "status": "UPDATED_VERIFIED",
-    "release": "/releases/3a4ecbb8825ed7e0.html",
+    "release": "/releases/645b073458a2a786.html",
     "files": 38,
-    "previousImmutablePreserved": 204,
+    "previousImmutablePreserved": 207,
     "sameServiceGrantOrigin": true,
     "HTTPSExact": true,
     "privateConfigSeparateNoStore": true
@@ -88,6 +88,7 @@
     "Earlier native harness metadata grouping, panel state and hold/release observations preserved; no aggregation of final groups",
     "Root premature retirement of queue guard reproduced natively, aborted run and verified manual process cleanup preserved",
     "Root cancel-before-commit UI pending latch observed in old native trace; final G11 requires pending=false after both outcomes",
-    "Production local-play probe originally blocked all Service Workers; failed raw observations preserved; final permits actual native SW transport"
+    "Production local-play probe originally blocked all Service Workers; failed raw observations preserved; final permits actual native SW transport",
+    "Native baseline3a4 confirmed explicit Pause during file transfer still published/played a superseded song (assets3 vs2); root player/media controls now revoke intent and controller cancels original operation; final G17 GREEN. Previous16/16 remains historical, not combined."
   ]
 }

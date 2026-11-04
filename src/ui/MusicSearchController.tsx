@@ -139,6 +139,15 @@ export function MusicSearchController(props:Props){
    f.phase='error';setDownload({phase:result.state==='uncertain'?'uncertain':'failed',bytes:0,total:audio.bytes});setNotice(result.state==='uncertain'?'La copia requiere revisión. No repitas la descarga hasta comprobar Almacenamiento.':'No se pudo guardar la canción.');pulse();
   }catch{if(viewLive(f)){f.phase='error';setDownload(null);setNotice('No se pudo completar la canción. Revisa el estado antes de volver a elegirla.');pulse();}}
  }
+ // A newer explicit playback action (including Pause/media keys) revokes the
+ // original song intent. Abort still waits for the original transport/import receipt.
+ React.useEffect(()=>{
+  const f=flight.current;if(!f||f.abort.signal.aborted||['done','error'].includes(f.phase))return;
+  let valid=false;try{valid=f.attempt.current();}catch{/* Fail closed. */}
+  if(valid)return;f.abort.abort();f.client?.captureSearchCancel()?.();
+  if(f.phase!=='saving'){f.phase='error';setDownload(null);}
+  setNotice('Se conserva tu última acción del reproductor. No se iniciará la canción pendiente.');pulse();
+ });
  // React receives only closed worker snapshots. This continuation belongs to the
  // original song gesture, not to renders, timers, navigation or catalogue submit.
  React.useEffect(()=>{
