@@ -1,0 +1,8 @@
+.selected-song-actions { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.selected-song-actions h3, .selected-song-actions p { margin: .5em 0; }
+.selected-song-actions progress { max-width: 100%; }
+.selected-song-buttons, .selected-song-playlist form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.selected-song-actions button, .selected-song-actions select { min-height: 44px; max-width: 100%; font: inherit; }
+.selected-song-playlist { margin-top: .75rem; }
+.selected-song-playlist select { min-width: 0; }
+.selected-song-actions :focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
