@@ -19,3 +19,8 @@ La evidencia de la versión comprobada se registra en `docs/evidence-music-searc
 Las coincidencias completas preceden a las parciales; se normalizan tildes y puntuación y se admiten prefijos de al menos tres caracteres. Se ordenan todos los candidatos locales antes de seleccionar hasta 50; los locales ganan duplicados remotos. No se descartan candidatos remotos por un segundo filtro estricto.
 
 Los rechazos por límites muestran un código cerrado y la entrada pública para distinguir la guarda y la versión, sin contenido del chat. [Diagnóstico D1 y alcance](BOT-SEARCH-DIAGNOSTICS.md). Identificar ese código no demuestra que el caso real esté reparado.
+
+
+## 2026-11-06 · Pertenencia explícita y copia de escucha
+
+[Escuchar, Biblioteca y playlists](PLAYBACK-COPIES-AND-LIBRARY.md) describe el contrato vigente: escuchar conserva una copia verificada sin añadir automáticamente la canción; las acciones próximas a la elección permiten agregarla o confirmar una playlist sin otra descarga. Backups v3 condicionales conservan la pertenencia de canciones organizadas; v1/v2 siguen admitidos. La reproducción con la cuenta real y el iPhone permanece pendiente.

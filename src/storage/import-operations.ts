@@ -1,3 +1,4 @@
+import {libraryMembershipKey,makeLibraryMembership,copyLibraryMembership} from '../library/library-membership';
 import {copyLocalAlbumMetadata} from '../library/album-metadata';
 import {assertDatabaseUse,type DatabaseUseKind} from './database';
 import {admittedTransaction,closeDatabase} from './database';
@@ -16,7 +17,7 @@ export type ImportState='writing'|'verifying'|'ready'|'publishing'|'uncertain'|'
 export interface ImportResult {track:LinkedTrack;duplicate:boolean}
 export interface ImportOperation {
  version:1;operationId:string;owner:string;revision:number;state:ImportState;
- backend:'idb'|'opfs';storageKey:string;bytes:number;expectedBytes:number;cause?:string;
+ backend:'idb'|'opfs';storageKey:string;bytes:number;expectedBytes:number;cause?:string;libraryMode?:'cache';
  asset?:LocalAsset;track?:LinkedTrack;expectedAssetRevision?:number;result?:ImportResult;
 }
 export const terminal=(job:ImportOperation)=>job.state==='sealed'||job.state==='discarded';
@@ -46,7 +47,7 @@ function validateImportOperation(value:unknown,key:IDBValidKey):value is ImportO
  if(j.version!==1||!uuid(j.operationId)||j.operationId!==key||!uuid(j.owner)||!positive(j.revision)||
  !['writing','verifying','ready','publishing','uncertain','cleanup','discarded','sealed'].includes(j.state)||
  !['idb','opfs'].includes(j.backend)||!uuid(j.storageKey)||!positive(j.expectedBytes)||j.expectedBytes>100*1024*1024||
- !Number.isSafeInteger(j.bytes)||j.bytes<0||j.bytes>j.expectedBytes||j.cause!==undefined&&typeof j.cause!=='string')return false;
+ !Number.isSafeInteger(j.bytes)||j.bytes<0||j.bytes>j.expectedBytes||j.cause!==undefined&&typeof j.cause!=='string'||j.libraryMode!==undefined&&j.libraryMode!=='cache')return false;
  if(j.asset!==undefined||j.track!==undefined||j.expectedAssetRevision!==undefined){
  if(!record(j.asset)||!validAsset(j.asset)||!validTrack(j.track)||!matchesAsset(j.track,j.asset)||j.track.assetId!==j.asset.id||j.asset.backend!==j.backend||j.asset.storageKey!==j.storageKey||
  j.asset.bytes!==j.expectedBytes||j.bytes!==j.expectedBytes||!Number.isSafeInteger(j.expectedAssetRevision)||j.expectedAssetRevision!<0||j.asset.revision!==j.expectedAssetRevision!+1)return false;
@@ -107,7 +108,7 @@ async function updateOperationCore(job:ImportOperation,patch:Partial<Omit<Import
  try{const now=await request<ImportOperation|undefined>(store.get(job.operationId));
  const proof=await request<Ownership|undefined>(tx.objectStore('settings').get(ownershipKey(job)));
  if(!proof||proof.owner!==job.owner||proof.operationId!==job.operationId||JSON.stringify(now)!==JSON.stringify(job)||!now||now.version!==1||now.owner!==job.owner||now.state!==job.state||now.revision!==job.revision){fail('write','internal','conflict','idb');}
- checkUse('write',guard);const next={...job,...patch,revision:job.revision+1};if(next.backend!==job.backend||next.storageKey!==job.storageKey||next.expectedBytes!==job.expectedBytes||!validImportOperation(now,job.operationId)||!validImportOperation(next,job.operationId))fail('validate','internal','input-invalid','idb');store.put(next,job.operationId);await done;return next;
+ checkUse('write',guard);const next={...job,...patch,revision:job.revision+1};if(next.backend!==job.backend||next.storageKey!==job.storageKey||next.expectedBytes!==job.expectedBytes||next.libraryMode!==job.libraryMode||!validImportOperation(now,job.operationId)||!validImportOperation(next,job.operationId))fail('validate','internal','input-invalid','idb');store.put(next,job.operationId);await done;return next;
  }catch(error){try{tx.abort();}catch{/* settled */}await done.catch(()=>{});throw error;}
  }finally{closeDatabase(db);}
 }
@@ -146,6 +147,11 @@ function linkRestoredTracks(store:IDBObjectStore,tracks:Track[],asset:LocalAsset
  store.put(next,next.id);linked.push(next);
  }return linked;
 }
+async function promoteMembership(settings:IDBObjectStore,trackId:string){
+ const key=libraryMembershipKey(trackId),value=await request(settings.get(key)),present=await request(settings.getKey(key));
+ if(present===undefined)return;const member=copyLibraryMembership(value,trackId);if(!member)fail('commit','integrity','relations-invalid','idb');
+ if(!member.added)settings.put(makeLibraryMembership(trackId,true),key);
+}
 /** Shared by normal import and recovery: verifies the existing generation before a short CAS. */
 async function deduplicateOperationCore(job:ImportOperation,signal?:AbortSignal,guard?:ImportOperationGuard):Promise<ImportOperation|undefined>{
  checkUse('publish',guard);if(!validImportOperation(job,job.operationId)||!job.asset)fail('commit','internal','conflict','idb');
@@ -171,6 +177,7 @@ async function deduplicateOperationCore(job:ImportOperation,signal?:AbortSignal,
  checkUse('publish',guard);const linked=linkRestoredTracks(tx.objectStore('tracks'),tracks,existing);
  const resultTrack=track??linked[0];
  if(!resultTrack){await done;return;}
+ if(job.libraryMode!=='cache')await promoteMembership(tx.objectStore('settings'),resultTrack.id);checkUse('publish',guard);
  next={...job,state:'cleanup',revision:job.revision+1,result:{track:resultTrack,duplicate:true}};tx.objectStore('jobs').put(next,job.operationId);
  }await done;
  }catch(error){try{tx.abort();}catch{/* Already committed/aborted. */}
@@ -209,7 +216,8 @@ async function publishOperationCore(job:ImportOperation,signal?:AbortSignal,guar
  const track=existing??linked[0]??job.track;const result={track,duplicate:!!existing||linked.length>0};
  tx.objectStore('settings').put({...proof,everPublished:true},ownershipKey(job));
  tx.objectStore('assets').put(job.asset,job.asset.id);
- if(!existing&&!linked.length)tx.objectStore('tracks').add(track,track.id);
+ if(!existing&&!linked.length){tx.objectStore('tracks').add(track,track.id);if(job.libraryMode==='cache')tx.objectStore('settings').add(makeLibraryMembership(track.id,false),libraryMembershipKey(track.id));}
+ if(job.libraryMode!=='cache')await promoteMembership(tx.objectStore('settings'),track.id);checkUse('publish',guard);
  tx.objectStore('jobs').put({...job,state:'sealed',revision:job.revision+1,result},job.operationId);
  try{await done;}catch(error){if(signal?.aborted&&nativeDOMName(error)==='AbortError')fail('commit','cancelled','cancelled','idb');throw error;}return result;
  }catch(error){try{tx.abort();}catch{/* Already committed/aborted. */}

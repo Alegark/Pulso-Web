@@ -28,3 +28,8 @@ Contrato implementado y probado en las suites concretas de evidence-organization
 ## Evolución v2 · R66/R68
 
 El exportador vigente genera v2 con localAlbum explícito y nullable. El lector, serialización y digest v1 se conservan estrictos. Antes de confirmar, preview avisa si Usar copia retiraría datos automáticos nuevos; Conservar local los mantiene. No se incluyen bytes, no se cambia versión IDB ni se promete compatibilidad del lector antiguo con v2. Contrato y etapas verificadas: [ALBUM-METADATA.md](ALBUM-METADATA.md). Los párrafos v1 anteriores conservan la historia de diseño.
+
+
+## 2026-11-06 · Pertenencia explícita y copia de escucha
+
+[Escuchar, Biblioteca y playlists](PLAYBACK-COPIES-AND-LIBRARY.md) describe el contrato vigente: escuchar conserva una copia verificada sin añadir automáticamente la canción; las acciones próximas a la elección permiten agregarla o confirmar una playlist sin otra descarga. Backups v3 condicionales conservan la pertenencia de canciones organizadas; v1/v2 siguen admitidos. La reproducción con la cuenta real y el iPhone permanece pendiente.

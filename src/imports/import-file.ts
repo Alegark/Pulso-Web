@@ -17,11 +17,12 @@ import {ASSET_DIRECTORY,openAssetReader,WRITER_LOCK} from '../storage/asset-read
 import {assertImportsResolved,validImportOperation,deduplicateOperation,cleanupOperation,createOperation,importOperation,publishOperation,updateOperation,type ImportOperation,type ImportResult} from '../storage/import-operations';
 export {importOperations,importOperation,recoverImportOperation,importIssues,retainImportIssue} from '../storage/import-operations';
 export type ImportLyricsWarning=EmbeddedLyricsFailure|LyricsFailure;
-export interface ImportOptions {backend?:'idb'|'opfs'|'auto';operationId?:string;expected?:{sha256:string;title:string;artist:string|null}}
+export interface ImportOptions {libraryMode?:'cache';backend?:'idb'|'opfs'|'auto';operationId?:string;expected?:{sha256:string;title:string;artist:string|null}}
 const CHUNK=65536;
 async function writeDirectory(){return atBoundary('open','opfs',async()=>{assertDatabaseUse('write');const root=await navigator.storage.getDirectory();assertDatabaseUse('write');return root.getDirectoryHandle(ASSET_DIRECTORY,{create:true});});}
 /** Owns WRITER_LOCK internally, including recovery gating and final outcome resolution. */
 async function importFileCore(file:File,signal:AbortSignal,progress:(bytes:number)=>void=()=>{},options:ImportOptions={},attempt:Attempt):Promise<ImportResult & {artworkWarning?:ArtworkFailure;lyricsWarning?:ImportLyricsWarning;lyricsInspection?:EmbeddedLyricsStoreResult}> {
+ if(options.libraryMode!==undefined&&options.libraryMode!=='cache')fail('validate','internal','input-invalid','none');
  const operationId=options.operationId??crypto.randomUUID();
  const {result,inspect}=await navigator.locks.request(WRITER_LOCK,async()=>{
   const prior=options.operationId?await importOperation(options.operationId):undefined;
@@ -57,6 +58,7 @@ async function importFileCore(file:File,signal:AbortSignal,progress:(bytes:numbe
  return outcome;
 }
 async function performImport(file:File,signal:AbortSignal,progress:(bytes:number)=>void,options:ImportOptions,attempt:Attempt):Promise<ImportResult & {artworkWarning?:ArtworkFailure}>{
+ if(options.libraryMode!==undefined&&options.libraryMode!=='cache')fail('validate','internal','input-invalid','none');
  const operationId=options.operationId??crypto.randomUUID();
  if(!/^[a-f0-9-]{36}$/.test(operationId))fail('validate','internal','input-invalid','none');
  const prior=await importOperation(operationId);
@@ -87,7 +89,7 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
  const available=typeof navigator.storage?.getDirectory==='function'&&typeof FileSystemFileHandle!=='undefined'&&typeof FileSystemFileHandle.prototype.createWritable==='function';
  const backend=options.backend==='idb'?'idb':available?'opfs':'idb';attempt.backend=backend;attempt.closeState=backend==='opfs'?'not-attempted':'not-applicable';
  if(options.backend==='opfs'&&!available)fail('open','storage-unavailable','storage-unavailable','opfs');
- let job:ImportOperation={version:1,operationId,owner:crypto.randomUUID(),revision:1,state:'writing',backend,storageKey:crypto.randomUUID(),bytes:0,expectedBytes:file.size};
+ let job:ImportOperation={version:1,operationId,owner:crypto.randomUUID(),revision:1,state:'writing',backend,storageKey:crypto.randomUUID(),bytes:0,expectedBytes:file.size,...(options.libraryMode==='cache'?{libraryMode:'cache' as const}:{})};
  // Resolve a key collision before recording ownership, so cleanup can never claim an old file.
  assertDatabaseUse('write');const directory=backend==='opfs'?await writeDirectory():undefined;assertDatabaseUse('write');
  if(directory)try{await directory.getFileHandle(job.storageKey);fail('open','internal','conflict','opfs');}catch(error){if(nativeDOMName(error)!=='NotFoundError')throw AppFailure.create(fromKnownError(error,{phase:'open',backend:'opfs'}));}

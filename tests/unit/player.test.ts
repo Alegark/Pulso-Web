@@ -83,3 +83,10 @@ test('failure observer/notifier throws do not interfere; old/current-source and 
  player.select(1);allowed=false;captured.at(-1)!(new Event('error'));assert.equal(calls,1);allowed=true;player.suspend();captured.at(-1)!(new Event('error'));assert.equal(calls,1);
  const throwing=new Player(new Fake(),()=>true,()=>{throw Error('factory');});throwing.setQueue(entries);throwing.select(0);await throwing.play();
 });
+
+
+test('autoplay rejection is distinguishable from other playback failures and clears on native playing',async()=>{
+ const {player,audio}=setup();player.select(0);audio.rejection=Promise.reject(new DOMException('TESTONLY','NotAllowedError'));await player.play();assert.equal(player.lastFailure,'autoplay-denied');
+ audio.rejection=null;audio.dispatchEvent(new Event('playing'));assert.equal(player.lastFailure,null);assert.equal(player.error,'');assert.equal(player.state,'playing');
+ audio.rejection=Promise.reject(new Error('TESTONLY'));await player.play();assert.equal(player.lastFailure,'unknown');
+});

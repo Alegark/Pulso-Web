@@ -5,6 +5,7 @@ import {admittedTransaction,openExistingDatabase,request,closeDatabase} from '..
 import {transactionDone} from '../storage/transaction-done';
 import {validAsset,type Track,type LocalAsset} from './library';
 
+export interface SongManagement {current():boolean;playReady:boolean;add():Promise<boolean>;addToPlaylist(id:string):Promise<boolean>;play():Promise<'playing'|'gesture-required'|'failed'>}
 export type SongChoice=Pick<MusicCatalogChoice,'id'|'source'|'title'|'artist'|'album'|'duration'>;
 export interface SongPlaybackAttempt {
  current():boolean;

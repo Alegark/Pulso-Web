@@ -110,7 +110,7 @@ test('own __proto__, prototype objects, accessors and toJSON are rejected withou
 test('syntax, discriminator and unsupported versions have distinct errors', () => {
   for (const json of ['{', '', 'null', '[]', 'true', '{"format":"pulso-web-organization"}']) rejects(() => parseOrganization(json), 'format');
   bad(d => { (d as { format: string }).format = 'other'; });
-  for (const version of [0, 3, 999, '1', null]) bad(d => { Object.assign(d, { version }); }, 'version');
+  for (const version of [0, 4, 999, '1', null]) bad(d => { Object.assign(d, { version }); }, 'version');
 });
 
 test('metadata/duration/override validation: exact character limits and effective values', () => {
@@ -232,4 +232,13 @@ test('8 MiB UTF-8 limit is checked before parsing, including multibyte and exact
   }));
   // Escaping text can exceed the JSON budget even when every collection is in range.
   rejects(() => serializeOrganization(dto), 'limits');
+});
+
+
+test('v3 explicitly preserves library membership while v1/v2 remain readable',()=>{
+ const base=fixture();const v3={...base,version:3,tracks:base.tracks.map(t=>({...t,localAlbum:null,inLibrary:false}))};
+ const parsed=parseOrganization(serializeOrganization(v3 as OrganizationExport));assert.equal(parsed.version,3);if(parsed.version===3)assert.equal(parsed.tracks[0].inLibrary,false);
+ const noFlag={...v3,tracks:v3.tracks.map(({inLibrary:_,...t})=>t)};rejects(()=>validateOrganization(noFlag),'format');
+ rejects(()=>validateOrganization({...v3,tracks:v3.tracks.map(t=>({...t,inLibrary:'false'}))}),'format');
+ assert.equal(parseOrganization(serializeOrganization(base)).version,1);
 });

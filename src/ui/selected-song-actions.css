@@ -6,3 +6,6 @@
 .selected-song-playlist { margin-top: .75rem; }
 .selected-song-playlist select { min-width: 0; }
 .selected-song-actions :focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
+
+.selected-song-playlist fieldset { min-width: 0; width: 100%; max-height: 16rem; overflow-y: auto; }
+.selected-song-playlist label { display: flex; gap: .5rem; align-items: center; min-height: 44px; overflow-wrap: anywhere; }

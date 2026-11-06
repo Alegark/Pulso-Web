@@ -36,7 +36,9 @@ export interface OrganizationExportV1 {
   playlists: OrganizationPlaylist[];
 }
 export interface OrganizationExportV2 extends Omit<OrganizationExportV1,'version'|'tracks'> {version:2;tracks:OrganizationTrackV2[]}
-export type OrganizationExport=OrganizationExportV1|OrganizationExportV2;
+export interface OrganizationTrackV3 extends OrganizationTrackV2 {inLibrary:boolean}
+export interface OrganizationExportV3 extends Omit<OrganizationExportV2,'version'|'tracks'> {version:3;tracks:OrganizationTrackV3[]}
+export type OrganizationExport=OrganizationExportV1|OrganizationExportV2|OrganizationExportV3;
 export type OrganizationErrorCode = 'format' | 'version' | 'limits' | 'relations';
 export class OrganizationFormatError extends Error {
   constructor(public readonly code: OrganizationErrorCode, public readonly path: string) {
@@ -115,8 +117,8 @@ function audio(value: unknown, path: string): OrganizationAudio | null {
   if (a.bytes > ORGANIZATION_LIMITS.audioBytes) fail('limits', `${path}.bytes`);
   return { algorithm: 'sha256', sha256: a.sha256, bytes: a.bytes };
 }
-function track(value: unknown, path: string, version:1|2): OrganizationTrack|OrganizationTrackV2 {
-  const t = object(value, ['ref', 'title', 'artist', 'album', 'duration', 'createdAt', 'manualOverrides', 'audio', ...(version===2?['localAlbum']:[])], [], path);
+function track(value: unknown, path: string, version:1|2|3): OrganizationTrack|OrganizationTrackV2|OrganizationTrackV3 {
+  const t = object(value, ['ref', 'title', 'artist', 'album', 'duration', 'createdAt', 'manualOverrides', 'audio', ...(version>=2?['localAlbum']:[]),...(version===3?['inLibrary']:[])], [], path);
   const title = text(t.title, ORGANIZATION_LIMITS.metadataCharacters, true, `${path}.title`);
   const artist = nullableText(t.artist, `${path}.artist`), album = nullableText(t.album, `${path}.album`);
   if (typeof t.duration !== 'number' || !Number.isFinite(t.duration) || t.duration <= 0) fail('format', `${path}.duration`);
@@ -129,10 +131,11 @@ function track(value: unknown, path: string, version:1|2): OrganizationTrack|Org
     if (field === 'title') manualOverrides.title = title;
     else manualOverrides[field] = effective;
   }
-  const localAlbum=version===2?(t.localAlbum===null?null:copyLocalAlbumMetadata(t.localAlbum)):null;
-  if(version===2&&t.localAlbum!==null&&!localAlbum)fail('format',`${path}.localAlbum`);
+  if(version===3&&typeof t.inLibrary!=='boolean')fail('format',`${path}.inLibrary`);
+  const localAlbum=version>=2?(t.localAlbum===null?null:copyLocalAlbumMetadata(t.localAlbum)):null;
+  if(version>=2&&t.localAlbum!==null&&!localAlbum)fail('format',`${path}.localAlbum`);
   return { ref: ref(t.ref, `${path}.ref`), title, artist, album, duration: t.duration,
-    createdAt: date(t.createdAt, `${path}.createdAt`), manualOverrides, audio: audio(t.audio, `${path}.audio`), ...(version===2?{localAlbum}: {}) };
+    createdAt: date(t.createdAt, `${path}.createdAt`), manualOverrides, audio: audio(t.audio, `${path}.audio`), ...(version>=2?{localAlbum}: {}),...(version===3?{inLibrary:t.inLibrary as boolean}:{}) };
 }
 function unique(set: Set<string>, id: string, path: string): void {
   if (set.has(id)) fail('relations', path);
@@ -148,7 +151,7 @@ function checkBytes(json: string): void {
 export function validateOrganization(input: unknown): OrganizationExport {
   const root = object(input, ['format', 'version', 'exportId', 'libraryId', 'exportedAt', 'tracks', 'favorites', 'playlists'], [], '$');
   if (root.format !== 'pulso-web-organization') fail('format', '$.format');
-  if (root.version !== 1 && root.version !== 2) fail('version', '$.version');
+  if (root.version !== 1 && root.version !== 2 && root.version !== 3) fail('version', '$.version');
   const exportId = uuid(root.exportId, '$.exportId'), libraryId = uuid(root.libraryId, '$.libraryId');
   const exportedAt = date(root.exportedAt, '$.exportedAt');
   const rawTracks = array(root.tracks, ORGANIZATION_LIMITS.tracks, '$.tracks');
@@ -156,7 +159,7 @@ export function validateOrganization(input: unknown): OrganizationExport {
   const rawPlaylists = array(root.playlists, ORGANIZATION_LIMITS.playlists, '$.playlists');
   const trackIds = new Set<string>(), playlistIds = new Set<string>(), favoriteIds = new Set<string>();
   const tracks = rawTracks.map((value, i) => {
-    const t = track(value, `$.tracks[${i}]`,root.version as 1|2);
+    const t = track(value, `$.tracks[${i}]`,root.version as 1|2|3);
     unique(trackIds, key(t.ref), `$.tracks[${i}].ref`);
     return t;
   });

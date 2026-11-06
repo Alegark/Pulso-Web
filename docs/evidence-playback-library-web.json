@@ -1,0 +1,208 @@
+{
+  "project": "Pulso-Web",
+  "status": "PLAYBACK_LIBRARY_PLAYLIST_LOCAL_PASS_REAL_TELEGRAM_PENDING",
+  "release": "/releases/afe0942f86dbc778.html",
+  "behavior": {
+    "listeningDoesNotAddLibrary": true,
+    "legacyMembershipPreserved": true,
+    "atomicCacheMarkerInImportAndRecovery": true,
+    "explicitLibraryAddIdempotent": true,
+    "playlistOnlyAllowed": true,
+    "samePhysicalAudioCopy": true,
+    "playlistPickerResetsOnSongChange": true,
+    "staleConfirmationDenied": true,
+    "selectedSongFeedbackNearSearch": true,
+    "explicitPreparedPlayRetry": true,
+    "automaticEviction": false,
+    "cloudMusicStorage": false
+  },
+  "backup": {
+    "readerVersions": [
+      1,
+      2,
+      3
+    ],
+    "defaultExportVersion": 2,
+    "conditionalNonMemberExportVersion": 3,
+    "unorganizedPlaybackOnlyExcluded": true,
+    "metadataOnlyRestore": true,
+    "databaseVersionChanged": false
+  },
+  "validation": {
+    "unitPassed": 501,
+    "unitFailed": 0,
+    "lintAndProductTypes": true,
+    "nativeMain": {
+      "counts": {
+        "uniquePlanned": 31,
+        "executed": 31,
+        "passed": 31,
+        "failed": 0
+      },
+      "run": "/data/home/Proyectos/Pulso-Web/.local/playback-library-parent/main/final-2026-11-06T17-44-31-539Z",
+      "receiptSHA256": "407c74cb2e97f933d27299574a77692aae2f866ff142e9388b7ef48344bbd827",
+      "sourceFilesExact": 153,
+      "sourceUnchanged": true,
+      "mainSourceTransformations": 0,
+      "sdk": "SYNTHETIC_ONLY",
+      "pageErrors": 0,
+      "csp": 0,
+      "unexpectedExternal": 0,
+      "cleanup": true
+    },
+    "policyRejectionCase": {
+      "scope": "TESTONLY injected NotAllowedError through real Player handling, followed by explicit retry",
+      "actualSafariPolicy": false
+    },
+    "production": {
+      "passed": true,
+      "release": "/releases/afe0942f86dbc778.html",
+      "cases": [
+        {
+          "engine": "chromium",
+          "version": "154.0.8037.57",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        },
+        {
+          "engine": "webkit",
+          "version": "27.2",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        }
+      ],
+      "external": [],
+      "errors": [],
+      "csp": [
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        }
+      ],
+      "realTelegram": false,
+      "publicMetadataCalls": 0,
+      "physicalIphone": false,
+      "stage": "waiting for native progression",
+      "cleanup": true
+    },
+    "update": {
+      "passed": true,
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57",
+      "result": {
+        "oldEntrySHA256": "9e94ba0a06bff2814cb5738a25a1d170d79e6269f6059fefc1cec23afdef852e",
+        "newEntry": "/releases/afe0942f86dbc778.html",
+        "newVersionBypassesOldShell": true,
+        "stableLauncherSelectsCurrentBuild": true,
+        "waitingBeforeClosingClients": true,
+        "oldStillPlaying": true,
+        "newIsPaused": true,
+        "activatedAfterClientClosure": true,
+        "restoredPaused": true
+      }
+    },
+    "delivery": {
+      "passed": true,
+      "currentFilesExact": 38,
+      "previousImmutableUnchanged": 224,
+      "accessFile": ".local/review/abrir-pulso-biblioteca.html",
+      "accessVerified": true,
+      "credentialsRecorded": false,
+      "sameServiceAndGrant": true,
+      "noForcedActivation": true
+    },
+    "https": {
+      "passed": true,
+      "urlRecorded": false,
+      "credentialsRecorded": false,
+      "realTelegram": false,
+      "release": "/releases/afe0942f86dbc778.html",
+      "launcherEntryMainWorkerSWExact": true,
+      "documentMetadataCsp": true,
+      "workerCspUnchanged": true,
+      "privateConfigurationExact": true,
+      "privateConfigurationNoStore": true
+    },
+    "archive": {
+      "passed": true,
+      "release": "/releases/afe0942f86dbc778.html",
+      "sourceArchiveFiles": 3618,
+      "frozenSourceMembersExact": 153,
+      "allArchiveFilesMatchCurrent": true,
+      "noPrivateIdentity": true,
+      "noPrivateConfigOrLocalRoots": true,
+      "noticesExact": true,
+      "realTelegram": false,
+      "iPhone": false
+    },
+    "memory": {
+      "project": "Pulso-Web",
+      "files": 14,
+      "FullContentVerified": true,
+      "actualBytesAndSHA256": true,
+      "readOnlyAfterIndependentSync": true
+    }
+  },
+  "preservedRuns": {
+    "first": "27/30, removal job whitelist regression plus feedback semantic and harness label failures",
+    "second": "30/30 before added playlist context case; separate historical run",
+    "third": "30/31, observer inspected seeded playlist instead of newly named playlist",
+    "final": "31/31 in one final selection; not cumulative"
+  },
+  "limits": {
+    "realTelegram": false,
+    "physicalIPhone": false,
+    "ownerPlaybackFailureDiagnosed": false,
+    "offlinePrivate": false,
+    "P0Complete": false,
+    "sharedBrowser": "left at latest login form for owner; no active session/challenge before navigation; no real phone/code recorded"
+  }
+}

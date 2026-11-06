@@ -55,15 +55,15 @@ export function copyImportResult(value:unknown):DetailedImportResult|null{
  if(Object.hasOwn(r,'lyricsInspection')){const i=inspectionCopy(r.lyricsInspection);if(!i)return null;r.lyricsInspection=i;}
  return r as unknown as DetailedImportResult;
 }
-export type ImportRequest={version:2;type:'import';operationId:string;file:File;expected?:{sha256:string;title:string;artist:string|null}}|{version:2;type:'cancel';operationId:string};
+export type ImportRequest={version:2;type:'import';operationId:string;file:File;libraryMode?:'cache';expected?:{sha256:string;title:string;artist:string|null}}|{version:2;type:'cancel';operationId:string};
 export type RecoveryRequest={version:2;type:'recover';requestId:string;operationId:string;revision:number;action:'resume'|'discard'};
 const fileSize=typeof Blob==='undefined'?undefined:Object.getOwnPropertyDescriptor(Blob.prototype,'size')?.get;
 const fileName=typeof File==='undefined'?undefined:Object.getOwnPropertyDescriptor(File.prototype,'name')?.get;
 export function copyWorkerRequest(value:unknown):ImportRequest|RecoveryRequest|null{
- const h=optionalRecord(value,['version','type','operationId'],['file','expected','requestId','revision','action']);if(!h||h.version!==2||!uuid(h.operationId))return null;
+ const h=optionalRecord(value,['version','type','operationId'],['file','expected','libraryMode','requestId','revision','action']);if(!h||h.version!==2||!uuid(h.operationId))return null;
  if(h.type==='cancel'){const r=plain(h,['version','type','operationId']);return r as ImportRequest|null;}
  if(h.type==='import'){
- const r=optionalRecord(h,['version','type','operationId','file'],['expected']);if(!r)return null;
+ const r=optionalRecord(h,['version','type','operationId','file'],['expected','libraryMode']);if(!r||Object.hasOwn(r,'libraryMode')&&r.libraryMode!=='cache')return null;
  try{if(!integer(fileSize?.call(r.file),1,100*1024*1024)||typeof fileName?.call(r.file)!=='string')return null;}catch{return null;}
  if(r.expected!==undefined){const e=plain(r.expected,['sha256','title','artist']);if(!e||!text(e.sha256,64,64)||! /^[a-f0-9]{64}$/.test(e.sha256)||!text(e.title,300,1)||e.artist!==null&&!text(e.artist,300,1))return null;r.expected=e;}
  return r as ImportRequest;
@@ -116,7 +116,7 @@ export function createImportV2Handler(send:(response:WorkerResponse)=>void){
  const controller=new AbortController();active={operationId:request.operationId,controller};
  try{
  const {importFileDetailed}=await import('./import-file');
- const attempt=await importFileDetailed(request.file,controller.signal,bytes=>send({version:2,type:'progress',operationId:request.operationId,bytes}),{operationId:request.operationId,expected:request.expected});
+ const attempt=await importFileDetailed(request.file,controller.signal,bytes=>send({version:2,type:'progress',operationId:request.operationId,bytes}),{operationId:request.operationId,expected:request.expected,libraryMode:request.libraryMode});
  if(attempt.kind==='confirmed'){
  const result=copyImportResult(attempt.result);
  if(result)send({version:2,type:'complete',operationId:request.operationId,result,outcome:attempt.outcome});

@@ -44,3 +44,8 @@ Elegir la canción en el catálogo autoriza continuar con la opción musical mej
 Se normalizan tildes, puntuación y símbolos decorativos. Sólo para comparar etiquetas se puede quitar un prefijo como `3.`/`#3` y un sufijo de duración como `[03:20]`; no se quitan palabras live/remix/cover, nombres de intérpretes ni otras versiones. No se elige por proximidad temporal ni por el primer resultado bruto. Navegación sin título e intérprete compatibles no coincide. El mismo ranking se usa antes del recorte de la proyección, al elegir el botón, al reutilizar una respuesta vigente y al escoger el audio tras el callback.
 
 El panel de producto oculta el selector adicional de versiones. El proceso conserva una sola operación y las relecturas privadas antes del callback y de los bytes; si no hay ningún candidato compatible termina con un aviso. No vuelve a preguntar, envía otra consulta ni cambia de bot automáticamente. La preferencia de ranking es una comparación de metadatos; no certifica identidad acústica. Evidencia: `docs/evidence-bot-auto-selection-web.json`.
+
+
+## 2026-11-06 · Pertenencia explícita y copia de escucha
+
+[Escuchar, Biblioteca y playlists](PLAYBACK-COPIES-AND-LIBRARY.md) describe el contrato vigente: escuchar conserva una copia verificada sin añadir automáticamente la canción; las acciones próximas a la elección permiten agregarla o confirmar una playlist sin otra descarga. Backups v3 condicionales conservan la pertenencia de canciones organizadas; v1/v2 siguen admitidos. La reproducción con la cuenta real y el iPhone permanece pendiente.

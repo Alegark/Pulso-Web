@@ -20,6 +20,7 @@ export interface MusicSearchPanelProps {
  /** Catalogue results only. This callback never submits a Telegram query. */
  onSearch:()=>void;
  onChooseSuggestion:(id:string)=>void;onCancel:()=>void;
+ songActions?:React.ReactNode;
  automaticSelection?:boolean;
  results:readonly MusicSearchResultRow[];status?:string|null;error?:string|null;uncertain:boolean;
  downloadStatus?:string|null;downloadProgress?:{bytes:number;total:number}|null;onCancelDownload?:()=>void;
@@ -59,7 +60,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    else if(event.key==='ArrowUp'){event.preventDefault();if(index===0)queryRef.current?.focus();else buttons?.[index-1]?.focus();}
   }:undefined}>
   <strong><bdi dir="auto">{row.title}</bdi></strong>{row.subtitle&&<span><bdi dir="auto">{row.subtitle}</bdi></span>}
-  <small>{row.kind==='track'?'Canción':'Álbum'} · {row.source==='local'?'Biblioteca local':'LRCLIB'}</small>
+  <small>{row.kind==='track'?'Canción':'Álbum'} · {row.source==='local'?'En este navegador':'LRCLIB'}</small>
  </button>;
  return <section className="music-search" aria-labelledby={`${id}-heading`}>
   <h2 id={`${id}-heading`}>Buscar música</h2>
@@ -87,6 +88,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    </div>
    <p id={`${id}-query-help`}>Enter y Buscar muestran resultados en Pulso. Al elegir una canción se reutiliza tu copia o se consigue desde el bot principal para escucharla.</p>
   </form>
+  {props.songActions}
   <div role="status">{props.suggestionsPending?'Buscando sugerencias…':props.suggestionsNotice}</div>
   {props.suggestionsError&&<p role="alert">{props.suggestionsError}</p>}
   {props.onRetrySuggestions&&props.query.trim().length>=3&&<button type="button" disabled={props.suggestionsPending||props.searchPending}
@@ -110,12 +112,13 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    {provider?<p>Bot principal: <bdi dir="auto">@{provider.username.replace(/^@/,'')}</bdi>. {provider.supported?'Se usará al elegir una canción.':'Este bot todavía no es compatible; cambia el orden en «Bots de música».'}</p>:<p>Añade un bot en «Bots de música». Aquí se usará automáticamente el primero de tu lista.</p>}
    {!props.sessionReady&&<p>Conecta Telegram para consultar tu bot. Las sugerencias musicales ya están disponibles.</p>}
    {props.sessionReady&&provider?.supported&&!ready&&!props.searchPending&&<p>La consulta estará disponible cuando termine la operación pendiente.</p>}
-   {props.searchPending&&<button type="button" onClick={()=>{if(committed.current===props&&props.searchPending)(props.onCancelDownload??props.onCancel)();}}>Cancelar consulta</button>}
+   {!props.songActions&&<>{props.searchPending&&<button type="button" onClick={()=>{if(committed.current===props&&props.searchPending)(props.onCancelDownload??props.onCancel)();}}>Cancelar consulta</button>}
    {props.downloadProgress&&props.downloadProgress.total>0&&<progress aria-label="Progreso de la descarga" value={props.downloadProgress.bytes} max={props.downloadProgress.total}/>}
    {props.downloadStatus&&<p role="status">{props.downloadStatus}</p>}
    <div role="status">{props.searchPending?'Consultando la canción elegida…':props.status}</div>
    {props.error&&<p role="alert">{props.error}</p>}
    {props.uncertain&&<p>Resultado incierto: no se ha confirmado la respuesta del bot. No se reintentará ni cambiará de bot automáticamente.</p>}
+   </>}
    {props.results.length>0&&!props.automaticSelection&&<><h3>Respuesta del bot</h3><p>Si hay varias opciones, elige la versión correcta: se descargará y reproducirá una única copia en Pulso. Límite inicial: 8 MiB; no hace falta exportar a Archivos.</p>
     <ul className="music-search-results">{props.results.map(row=><li key={row.id} data-result-id={row.id}>
      <strong><bdi dir="auto">{row.title}</bdi></strong>{row.subtitle&&<p><bdi dir="auto">{row.subtitle}</bdi></p>}

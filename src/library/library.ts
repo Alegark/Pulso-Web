@@ -35,15 +35,17 @@ export async function createPlaylist(name:string):Promise<Playlist> {
  const playlist:Playlist={id:crypto.randomUUID(),name,entries:[],revision:1};
  const db=await openDatabase();try{const tx=admittedTransaction(db,'playlists','readwrite');const done=committed(tx);tx.objectStore('playlists').add(playlist,playlist.id);await done;return playlist;}finally{closeDatabase(db);}
 }
-export async function changePlaylist(id:string, revision:number, action:{type:'rename';name:string}|{type:'add';trackId:string}|{type:'remove';entryId:string}|{type:'move';entryId:string;delta:-1|1}|{type:'delete'}) {
+export async function changePlaylist(id:string, revision:number, action:{type:'rename';name:string}|{type:'add';trackId:string}|{type:'remove';entryId:string}|{type:'move';entryId:string;delta:-1|1}|{type:'delete'},current:()=>boolean=()=>true) {
+ if(!current())throw new Error('La operación ya no está vigente.');
  const db=await openDatabase();try{
  const tx=admittedTransaction(db,['playlists','tracks'],'readwrite');const done=committed(tx);const store=tx.objectStore('playlists');const list=await request<Playlist|undefined>(store.get(id));
+ if(!current()){tx.abort();await done;throw new Error('La operación ya no está vigente.');}
  if(!list||list.revision!==revision){tx.abort();await done;return;}
  if(action.type==='delete')store.delete(id);
  else{
  if(action.type==='rename'){const name=action.name.trim();if(!name||name.length>100){tx.abort();await done;return;}list.name=name;}
  if(action.type==='add'){
- const track=await request<Track|undefined>(tx.objectStore('tracks').get(action.trackId));if(!track){tx.abort();await done;return;}
+ const track=await request<Track|undefined>(tx.objectStore('tracks').get(action.trackId));if(!current()||!track){tx.abort();await done;return;}
  if(!list.entries.some(e=>e.trackId===action.trackId))list.entries.push({id:crypto.randomUUID(),trackId:action.trackId});
  }
  if(action.type==='remove')list.entries=list.entries.filter(e=>e.id!==action.entryId);

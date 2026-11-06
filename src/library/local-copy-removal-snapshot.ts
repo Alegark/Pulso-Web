@@ -81,7 +81,7 @@ export function validateRemovalSnapshot(s:RemovalSnapshot,a:LocalAsset,detached=
  const proof=s.entries.settings.find(e=>Array.isArray(e.key)&&e.key.length===3&&e.key[0]==='asset-ownership'&&e.key[1]===a.backend&&e.key[2]===a.storageKey);
  const p=closedObject(proof?.value,['operationId','owner','everPublished']);if(!p||!uuid(p.operationId)||!uuid(p.owner)||p.everPublished!==true)corrupt();
  let ownerJob=false;
- for(const e of s.entries.jobs){const fields=dataObject(e.value);if(!fields||Object.keys(fields).some(k=>!['version','operationId','owner','revision','state','backend','storageKey','bytes','expectedBytes','cause','asset','track','expectedAssetRevision','result'].includes(k))||!validImportOperation(e.value,e.key))corrupt();const j=e.value;if(!terminal(j))corrupt();if(j.backend===a.backend&&j.storageKey===a.storageKey){if(j.operationId!==p.operationId||j.owner!==p.owner||j.state!=='sealed'||!j.asset||!sameSourceAsset(j.asset,a))corrupt();ownerJob=true;}}
+ for(const e of s.entries.jobs){const fields=dataObject(e.value);if(!fields||Object.keys(fields).some(k=>!['version','operationId','owner','revision','state','backend','storageKey','bytes','expectedBytes','cause','libraryMode','asset','track','expectedAssetRevision','result'].includes(k))||!validImportOperation(e.value,e.key))corrupt();const j=e.value;if(!terminal(j))corrupt();if(j.backend===a.backend&&j.storageKey===a.storageKey){if(j.operationId!==p.operationId||j.owner!==p.owner||j.state!=='sealed'||!j.asset||!sameSourceAsset(j.asset,a))corrupt();ownerJob=true;}}
  if(!ownerJob)corrupt();
  return {aliases,summary:{bytes:a.bytes,tracks:aliases.length,favorites:aliases.filter(t=>t.favorite).length,playlists,playlistEntries,persistedQueueOccurrences:queueOccurrences}};
 }

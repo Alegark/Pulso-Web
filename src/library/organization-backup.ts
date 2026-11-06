@@ -1,3 +1,4 @@
+import {libraryMembershipKey,makeLibraryMembership,copyLibraryMembership,type LibraryMembership} from './library-membership';
 import {copyLocalAlbumMetadata} from './album-metadata';
 import {admittedTransaction,closeDatabase} from '../storage/database';
 import {fromKnownError,nativeDOMName} from '../errors/app-failure';
@@ -82,9 +83,9 @@ export interface OrganizationPreview {
 export type OrganizationApplyResult = {state: 'committed'|'already-committed'; operationId: string};
 export type OrganizationApplyInspection = {state: 'committed'|'not-committed'|'uncertain'; operationId: string; reason?: 'original-library-unavailable'};
 type Row = {key: IDBValidKey; value: unknown};
-interface Snapshot {tracks: Row[]; playlists: Row[]; assets: Row[]; own: Row[]}
+interface Snapshot {tracks: Row[]; playlists: Row[]; assets: Row[]; own: Row[]; memberships:Row[]}
 interface Receipt {version: 1; operationId: string; exportId: string; digest: string}
-interface Plan {preview: OrganizationPreview; base: Snapshot; tracks: Track[]; playlists: Playlist[]; digest: string; libraryId: string}
+interface Plan {preview: OrganizationPreview; base: Snapshot; tracks: Track[]; playlists: Playlist[];memberships:LibraryMembership[]; digest: string; libraryId: string}
 const plans = new Map<string, Plan>();
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
 const refKey = (r: OrganizationRef) => `${r.libraryId}/${r.id}`;
@@ -125,11 +126,12 @@ function rows(store: IDBObjectStore, max: number, budget: SnapshotBudget, range?
 }
 async function snapshot(tx: IDBTransaction): Promise<Snapshot> {
  const budget: SnapshotBudget = {left:24*1024*1024,nodes:500000};
- const [tracks,playlists,assets,own] = await Promise.all([
+ const [tracks,playlists,assets,own,memberships] = await Promise.all([
   rows(tx.objectStore('tracks'),ORGANIZATION_LIMITS.tracks,budget), rows(tx.objectStore('playlists'),ORGANIZATION_LIMITS.playlists,budget),
   rows(tx.objectStore('assets'),MAX_ASSETS,budget), rows(tx.objectStore('settings'),MAX_RECORDS,budget,IDBKeyRange.bound(PREFIX,PREFIX+'\uffff')),
+  rows(tx.objectStore('settings'),ORGANIZATION_LIMITS.tracks,budget,IDBKeyRange.bound(['library-membership',1],['library-membership',2],false,true)),
  ]);
- return {tracks,playlists,assets,own};
+ return {tracks,playlists,assets,own,memberships};
 }
 function own(s: Snapshot, key: string): unknown {return s.own.find(r=>r.key===key)?.value;}
 function identity(s: Snapshot): string {const id = own(s,LIBRARY); if (!uuid(id)) fail('local-corrupt'); return id;}
@@ -144,8 +146,15 @@ function fingerprint(t: Track, assets: Map<unknown,unknown>): OrganizationAudio|
  if (known && t.audioFingerprint && !equal(known,t.audioFingerprint)) fail('local-corrupt');
  return known ?? t.audioFingerprint ?? null;
 }
+function membershipMap(s:Snapshot):Map<string,LibraryMembership>{
+ const map=new Map<string,LibraryMembership>();for(const row of s.memberships){
+  if(!Array.isArray(row.key)||row.key.length!==3||row.key[0]!=='library-membership'||row.key[1]!==1||typeof row.key[2]!=='string')fail('local-corrupt');
+  const value=copyLibraryMembership(row.value,row.key[2]);if(!value)fail('local-corrupt');map.set(value.trackId,value);
+ }return map;
+}
 function dto(s: Snapshot, warnings: string[]): OrganizationExport {
- const libraryId = identity(s), assets = new Map(s.assets.map(r=>[r.key,r.value]));
+ const libraryId = identity(s), assets = new Map(s.assets.map(r=>[r.key,r.value])), memberships=membershipMap(s);
+ const version=s.tracks.some(r=>memberships.get(String(r.key))?.added===false)?3:2;
  for (const row of s.own) {
   if (row.key === LIBRARY) continue;
   if (typeof row.key !== 'string') fail('local-corrupt');
@@ -165,7 +174,7 @@ function dto(s: Snapshot, warnings: string[]): OrganizationExport {
   const audio = fingerprint(t,assets);
   if (!audio) warnings.push(`audio-unavailable:${t.id}`);
   return {ref:reference(t,libraryId), title:t.title, artist:t.artist, album:t.album, duration:t.duration,
-   createdAt:t.createdAt, manualOverrides:t.manualOverrides, audio,localAlbum};
+   createdAt:t.createdAt, manualOverrides:t.manualOverrides, audio,localAlbum,...(version===3?{inLibrary:memberships.get(t.id)?.added!==false}:{})};
  });
  const refs = new Map(s.tracks.map((r,i)=>[r.key,localTracks[i].ref]));
  let entryCount = 0;
@@ -177,7 +186,7 @@ function dto(s: Snapshot, warnings: string[]): OrganizationExport {
    const track = refs.get(e?.trackId); if (!track) fail('local-corrupt'); return {id:e.id,track};
   })};
  });
- return formatCall(()=>validateOrganization({format:'pulso-web-organization',version:2,exportId:crypto.randomUUID(),libraryId,
+ return formatCall(()=>validateOrganization({format:'pulso-web-organization',version,exportId:crypto.randomUUID(),libraryId,
   exportedAt:new Date().toISOString(),tracks:localTracks,favorites:s.tracks.filter(r=>(r.value as Track).favorite).map(r=>refs.get(r.key)),playlists}),true);
 }
 async function withWriter<T>(fn:()=>Promise<T>): Promise<T> {
@@ -220,7 +229,9 @@ async function boundary<T>(observe:ObserveFeature|undefined,fn:(attempt:Attempt)
 }
 export function exportOrganization(observe?:ObserveFeature): Promise<Blob> {return boundary(observe,async()=> {
  await ensureIdentity(); const s = await readSnapshot();
- return new Blob([formatCall(()=>serializeOrganization(dto(s,[])),true)],{type:'application/json;charset=utf-8'});
+ const memberships=membershipMap(s),referenced=new Set(s.playlists.flatMap(r=>(r.value as Playlist).entries.map(e=>e.trackId)));
+ const exported={...s,tracks:s.tracks.filter(r=>memberships.get(String(r.key))?.added!==false||referenced.has(String(r.key))||(r.value as Track).favorite)};
+ return new Blob([formatCall(()=>serializeOrganization(dto(exported,[])),true)],{type:'application/json;charset=utf-8'});
 },'validate');}
 function trackContent(t: OrganizationTrack|OrganizationTrackV2, favorite: boolean) {
  return {title:t.title,artist:t.artist,album:t.album,duration:t.duration,createdAt:t.createdAt,manualOverrides:t.manualOverrides,favorite,localAlbum:'localAlbum'in t?t.localAlbum:null};
@@ -250,6 +261,7 @@ export function previewOrganization(file: Blob, choices: Readonly<Record<string,
  const playlistByRef = new Map(local.playlists.map((p,i)=>[refKey(p.ref),{dto:p,raw:base.playlists[i].value as Playlist}]));
  const tracks = base.tracks.map(r=>r.value as Track), playlists = base.playlists.map(r=>r.value as Playlist);
  const trackIds = new Set(tracks.map(t=>t.id)), playlistIds = new Set(playlists.map(p=>p.id)), remap = new Map<string,string>();
+ const memberships=membershipMap(base);
  let blocked = false, newTracks = 0, newPlaylists = 0;
  for (const t of backup.tracks) {
   const rk = refKey(t.ref), found = trackByRef.get(rk), key = 'track:'+rk;
@@ -257,10 +269,11 @@ export function previewOrganization(file: Blob, choices: Readonly<Record<string,
   let selected = true;
   if (found) {
    if (found.dto.audio && t.audio && !equal(found.dto.audio,t.audio)) {blocked=true; warnings.push(`fingerprint-conflict:${key}`);}
-   if (!equal(trackContent(found.dto,localFav.has(rk)),content)) {
+   if (!equal(trackContent(found.dto,localFav.has(rk)),content)||('inLibrary'in found.dto?found.dto.inLibrary:true)!==('inLibrary'in t?t.inLibrary:true)) {
     const choice = choose(choices,key); conflicts.push({key,entity:'track',ref:t.ref,choice,localLabel:found.dto.title,backupLabel:t.title,...('localAlbum'in found.dto&&found.dto.localAlbum!==null&&content.localAlbum===null?{losesLocalAlbum:true}:{})}); selected=choice==='use-backup';
    } else selected=false;
    remap.set(rk,found.raw.id);
+   if(selected)memberships.set(found.raw.id,makeLibraryMembership(found.raw.id,'inLibrary'in t?t.inLibrary===true:true));
    // A portable fingerprint is recovery information, never proof of local bytes.
    // Enrich missing knowledge independently of the metadata conflict decision.
    const recoveredAudio = !found.dto.audio && t.audio;
@@ -276,7 +289,7 @@ export function previewOrganization(file: Blob, choices: Readonly<Record<string,
    if (!t.audio) warnings.push(`audio-unavailable:${id}`);
    const restored:Track={id,assetId:null,audioFingerprint:t.audio,organizationRef:t.ref,...content,localAlbum:content.localAlbum??undefined,revision:1};
    if(restored.localAlbum===undefined)delete restored.localAlbum;
-   tracks.push(restored); newTracks++;
+   tracks.push(restored);memberships.set(id,makeLibraryMembership(id,'inLibrary'in t?t.inLibrary===true:true)); newTracks++;
   }
  }
  for (const p of backup.playlists) {
@@ -295,7 +308,8 @@ export function previewOrganization(file: Blob, choices: Readonly<Record<string,
  const conflictKeys = new Set(conflicts.map(c=>c.key));
  if (Object.keys(choices).length > ORGANIZATION_LIMITS.tracks+ORGANIZATION_LIMITS.playlists || Object.keys(choices).some(k=>!conflictKeys.has(k))) fail('invalid-choice');
  // Validate the FULL merged result too; no truncation or dangling kept relationships.
- const merged = dto({...base,tracks:tracks.map(t=>({key:t.id,value:t})),playlists:playlists.map(p=>({key:p.id,value:p}))},[]);
+ const membershipRows=[...memberships.values()].map(value=>({key:libraryMembershipKey(value.trackId),value}));
+ const merged = dto({...base,memberships:membershipRows,tracks:tracks.map(t=>({key:t.id,value:t})),playlists:playlists.map(p=>({key:p.id,value:p}))},[]);
  if (base.own.length+2 > MAX_RECORDS) fail('limits');
  const preview: OrganizationPreview = {planId:crypto.randomUUID(),exportId:backup.exportId,operationId:`${libraryId}:${crypto.randomUUID()}`,
   counts:{tracks:tracks.length,playlists:playlists.length,favorites:merged.favorites.length,entries:merged.playlists.reduce((n,p)=>n+p.entries.length,0),newTracks,newPlaylists},conflicts,warnings,canApply:!blocked};
@@ -303,6 +317,7 @@ export function previewOrganization(file: Blob, choices: Readonly<Record<string,
  const originalTracks = new Map(base.tracks.map(r=>[r.key,r.value])), originalPlaylists = new Map(base.playlists.map(r=>[r.key,r.value]));
  // Prepare the exact write set outside IDB; apply does only CAS and queued IDB writes.
  plans.set(preview.planId,{preview:structuredClone(preview),base,
+  memberships:[...memberships.values()].filter(value=>!equal(base.memberships.find(r=>Array.isArray(r.key)&&r.key[2]===value.trackId)?.value,value)),
   tracks:tracks.filter(t=>!equal(originalTracks.get(t.id),t)),playlists:playlists.filter(p=>!equal(originalPlaylists.get(p.id),p)),digest,libraryId});
  return preview;
 },'validate');}
@@ -400,6 +415,7 @@ export function applyOrganization(planId: string, signal?: AbortSignal,observe?:
     for (const t of plan.tracks) tx!.objectStore('tracks').put(t,t.id);
     for (const p of plan.playlists) tx!.objectStore('playlists').put(p,p.id);
     const store=tx!.objectStore('settings');
+    for(const member of plan.memberships)store.put(member,libraryMembershipKey(member.trackId));
     store.put(plan.digest,PREFIX+'export:'+plan.preview.exportId);
     store.add({version:1,operationId,exportId:plan.preview.exportId,digest:plan.digest} satisfies Receipt,PREFIX+'receipt:'+operationId);
     });
