@@ -1,0 +1,130 @@
+{
+  "project": "Pulso-Web",
+  "status": "FULL_PHONE_INTEGRATED_AND_DELIVERED_REAL_LOGIN_PENDING",
+  "release": "/releases/9e94ba0a06bff281.html",
+  "normalization": {
+    "legacyPreserved": true,
+    "completeInternationalField": true,
+    "searchableDomCountryList": true,
+    "sharedPrefixesDoNotInventCountry": true,
+    "trunkZerosPreserved": true,
+    "maxDigits": 15,
+    "draftAdmissionSeparateFromRemoteSend": true,
+    "staleDraftAndSubmitCallbacksDenied": true
+  },
+  "validation": {
+    "units": 498,
+    "unitFailures": 0,
+    "lintAndProductTypes": true,
+    "nativeMain": {
+      "counts": {
+        "uniquePlanned": 27,
+        "executed": 27,
+        "passed": 27,
+        "failed": 0
+      },
+      "run": "/data/home/Proyectos/Pulso-Web/.local/telegram-phone-parent/main/final-2026-11-06T16-57-04-206Z",
+      "receiptSHA256": "d5fe278f2b7579f2a9b0933ddd92d68bed68afbc26a6a699869c37a721d72f91",
+      "sourceFilesExact": 152,
+      "sourceUnchanged": true,
+      "mainTransformed": false,
+      "sdk": "SYNTHETIC_ONLY",
+      "pageErrors": 0,
+      "csp": 0,
+      "unexpectedExternal": 0,
+      "cleanup": true
+    },
+    "sharedBrowserActualRelease": {
+      "entry": "/releases/9e94ba0a06bff281.html",
+      "countryPicked": true,
+      "listClosed": true,
+      "prefixOnly": true,
+      "phoneFocused": true,
+      "sendDisabled": true,
+      "sessionWorkerLoads": 0,
+      "realTelegram": false,
+      "phoneNumberOrCodeRecorded": false,
+      "tabLeftForOwner": true
+    },
+    "production": {
+      "cases": [
+        {
+          "engine": "chromium",
+          "version": "154.0.8037.57",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        },
+        {
+          "engine": "webkit",
+          "version": "27.2",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        }
+      ],
+      "webkitStyleSrcAttrReports": 10,
+      "otherCspReports": 0,
+      "cleanup": true
+    },
+    "normalUpdate": {
+      "oldEntrySHA256": "4cf02514f0877dbac6fcd9c4a4951f9abf033a77e73c05b240b5df3491f914a4",
+      "newEntry": "/releases/9e94ba0a06bff281.html",
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    },
+    "buildAudit": {
+      "archiveFiles": 3616,
+      "runtimeSourcesExact": 152,
+      "noPrivateIdentity": true
+    },
+    "delivery": {
+      "passed": true,
+      "release": "/releases/9e94ba0a06bff281.html",
+      "copiedFilesExact": 38,
+      "previousImmutableFilesPreserved": 221,
+      "serviceRestarted": false,
+      "grantChanged": false
+    },
+    "https": {
+      "passed": true,
+      "urlRecorded": false,
+      "credentialsRecorded": false,
+      "realTelegram": false,
+      "release": "/releases/9e94ba0a06bff281.html",
+      "launcherEntryMainWorkerSWExact": true,
+      "documentMetadataCsp": true,
+      "workerCspUnchanged": true,
+      "privateConfigurationExact": true,
+      "privateConfigurationNoStore": true
+    }
+  },
+  "rootReviewChanges": [
+    "Draft input may be edited without remote authority, while old callbacks remain invalid and submit stays guarded",
+    "Country replacement handles spaced and incomplete prefixes conservatively",
+    "Search ignores accents; Enter on an empty unselected list does not choose the first country",
+    "Country selection focuses the full phone field at its end",
+    "International error/help messages describe the full number rather than a national-only input"
+  ],
+  "limits": [
+    "No real Telegram account/authentication or physical iPhone tested by agent",
+    "Owner reported selected-song playback still absent; actual cause remains undiagnosed until real-session test",
+    "Prepared SelectedSongActions not integrated; listening/library membership separation and playlist action remain pending",
+    "No new service, grant, configuration identity or persistence policy"
+  ]
+}
