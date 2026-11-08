@@ -1,7 +1,7 @@
 import React from 'react';
 import {AlbumCatalog,type AlbumDetail,type AlbumEdition} from '../library/album-catalog';
 import {acquireAlbum,albumTrackChoice,type AlbumRow,type AlbumProgress} from '../library/album-acquisition';
-import {musicCatalogKey} from '../library/music-search-catalog';
+import {resolveAlbum} from '../library/album-resolution';
 import type {SongChoice,SongPlaybackAttempt,SongManagement,SongCopyInspection} from '../library/selected-song';
 import type {TelegramSessionClient} from '../telegram/session-client';
 import './album-page.css';
@@ -34,11 +34,11 @@ export function AlbumPageController(props:Props){
   const abort=new AbortController();metadata.current=abort;setDetail(null);setEditions([]);setStatus('Buscando ediciones…');
   const live=()=>mounted.current&&metadata.current===abort&&!abort.signal.aborted&&latest.current.visible&&metadataIdentity(latest.current)===identity;
   if(props.editionId){void load({id:props.editionId,title:props.title,artist:props.artist??'',trackCount:0,releaseDate:null},abort,live);return()=>abort.abort();}
-  void catalog.search(props.title,props.artist,{signal:abort.signal,current:live}).then(async result=>{
+  void resolveAlbum(catalog,props.title,props.artist,{signal:abort.signal,current:live}).then(async result=>{
    if(!live())return;if(!result.ok){setStatus('No se pudo consultar el catálogo de álbumes.');return;}
-   const candidates=props.artist?result.value.filter(e=>musicCatalogKey(e.title)===musicCatalogKey(props.title)&&musicCatalogKey(e.artist)===musicCatalogKey(props.artist!)):result.value;
+   const candidates=result.value;
    setEditions(candidates);if(candidates.length===1&&props.artist){await load(candidates[0],abort,live);return;}
-   setStatus(candidates.length?'Elige una edición para ver sus pistas.':'No se encontraron ediciones compatibles.');
+   setStatus(candidates.length?'Elige una edición para ver sus pistas.':'No se encontraron ediciones compatibles en los resultados disponibles.');
   });
   return()=>abort.abort();
  },[props.title,props.artist,props.editionId,props.scope,props.visible]);

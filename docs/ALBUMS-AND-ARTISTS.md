@@ -4,6 +4,10 @@
 
 El álbum abre una página con las pistas ordenadas de una edición concreta. Elegir una pista intenta reproducirla usando primero una copia local verificada. Escuchar no incorpora la ficha a Biblioteca. **Añadir álbum** es una acción explícita: verifica y reutiliza copias existentes, obtiene las faltantes secuencialmente y confirma la pertenencia a Biblioteca. No cambia la pista que ya estaba sonando.
 
+Las sugerencias derivadas de canciones locales o LRCLIB pueden traer sólo nombre y crédito del álbum. Si todavía no tienen una edición concreta, primero se buscan coincidencias exactas de ambos campos. Si esa búsqueda responde correctamente sin coincidencias, se permite una búsqueda del artista y una consulta de sus publicaciones: el artista debe ser único por nombre normalizado exacto, y el álbum debe conservar título y crédito completo exactos. Los homónimos no se eligen por posición. No hay esta ampliación ante errores de red, HTTP o límites. Se comparte el transporte y sus límites; cada respuesta y despacho sigue ligado a la selección vigente. Un resultado vacío describe la cobertura consultada, no demuestra que el álbum no exista.
+
+Cuando la sugerencia ya tiene ID de edición se carga directamente. Una agrupación inferida se oculta si hay una edición concreta con el mismo título y crédito; las ediciones de IDs distintos permanecen separadas. Abrir o resolver estos metadatos no consulta al bot, descarga audio ni inicia reproducción.
+
 La disponibilidad física y la pertenencia son distintas. Una pista puede aparecer como «Descargada» y estar fuera de Biblioteca, o como «Sin descarga · En Biblioteca». Un recibo de incorporación antiguo no sustituye la comprobación actual del archivo. La verificación del estado no consulta Telegram.
 
 Cancelar revoca la intención de continuar; no inventa el aborto de una operación de almacenamiento que ya pudo confirmar. Las pistas inciertas requieren revisión y no se reenvían automáticamente. Las copias y la organización ya confirmadas se conservan.
@@ -33,3 +37,8 @@ La aclaración del propietario se comprobó sin cambiar el runtime publicado. Un
 En el perfil real, Nsqk → artista → mosca mostró 17 pistas sin seleccionar canciones ni Añadir álbum, con cero comandos bot-search.search/download/cancel observados. El estado inicial de reproducción no se registró suficientemente y no se afirma ausencia de un arranque nuevo real; al finalizar estaba pausado. Las sugerencias rápidas reales no ofrecieron el álbum objetivo, por lo que esa entrada se acredita con la fixture, no como recorrido real. La prueba anterior de reproducción había seleccionado expresamente SAMSA después de abrir MOSCA. Evidencia: [evidence-album-navigation-web.json](evidence-album-navigation-web.json).
 
 La reproducción de SAMSA continúa pendiente: el último intento conocido terminó timeout acknowledged. La primera auditoría privada falló al proyectar la ventana. Una segunda lectura acotada a cinco mensajes sí terminó y cerró su cliente: observó un teclado y ningún audio en esa ventana, pero la relación con el callback y el baseline original siguen siendo desconocidos. No determina la causa del timeout. Ninguna auditoría envió búsquedas ni callbacks nuevos; todos sus archivos temporales se retiraron preservando los 282 archivos preexistentes.
+
+
+## Corrección de sugerencias sin edición
+
+La entrega privada `fb3366ce20f235cd` incorpora la resolución por artista descrita arriba. El resolver actual encontró MOSCA de Nsqk y validó sus 17 pistas contra metadatos públicos. La selección nativa actual pasó 9/9 con fixtures; incluye apertura inferida con sesión sintética conectada, sin RPC adicionales ni Play. El build minificado y la actualización normal pasaron en las condiciones registradas en [evidence-album-resolution-web.json](evidence-album-resolution-web.json). No acredita descarga o reproducción real de MOSCA ni iPhone.

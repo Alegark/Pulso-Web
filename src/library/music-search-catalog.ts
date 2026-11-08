@@ -64,5 +64,6 @@ export function musicSearchCatalog(query:string,local:readonly Track[],remote:re
   .sort((a,b)=>b.score-a.score||a.index-b.index).map(item=>item.choice);
  const editionChoices:MusicCatalogChoice[]=editions.map(e=>Object.freeze({id:'itunes:album:'+e.id,kind:'album',editionId:e.id,title:e.title,artist:e.artist,album:e.title,duration:null,source:'itunes'}));
  const artistChoices:MusicCatalogChoice[]=artists.map(a=>Object.freeze({id:'itunes:artist:'+a.id,kind:'artist',artistId:a.id,title:a.name,artist:null,album:null,duration:null,source:'itunes'}));
- return Object.freeze([...ranked,...editionChoices,...albums.values(),...artistChoices]);
+ const concreteKeys=new Set(editions.map(e=>JSON.stringify([musicCatalogKey(e.artist),musicCatalogKey(e.title)])));
+ return Object.freeze([...ranked,...editionChoices,...[...albums.entries()].filter(([key])=>!concreteKeys.has(key)).map(([,value])=>value),...artistChoices]);
 }

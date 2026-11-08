@@ -67,3 +67,9 @@ test('canonical artist and edition identities remain distinct from song choices'
  assert.equal(album?.kind==='album'&&album.editionId,42);assert.equal(artist?.kind==='artist'&&artist.artistId,42);
  assert.equal(result[0].artist,'Full Artist Credit');
 });
+
+test('concrete editions suppress only the same inferred full credit and preserve distinct IDs',()=>{
+ const editions=[{id:1,title:'Night',artist:'Own Artist',trackCount:3,releaseDate:null},{id:2,title:'NIGHT',artist:'OWN ARTIST',trackCount:4,releaseDate:null}];
+ const result=musicSearchCatalog('night',[],[row(1,'Song','Own Artist','Night'),row(2,'Song 2','Other','Night')],editions);
+ assert.deepEqual(result.filter(r=>r.kind==='album').map(r=>r.id),['itunes:album:1','itunes:album:2','album:'+JSON.stringify(['other','night'])]);
+});

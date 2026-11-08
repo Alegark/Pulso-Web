@@ -1,0 +1,94 @@
+{
+  "project": "Pulso-Web",
+  "date": "2026-11-08",
+  "status": "ALBUM_SUGGESTION_RESOLUTION_LOCAL_AND_EXISTING_PRIVATE_DELIVERY_PASS",
+  "problem": "Album inferred from song metadata has no edition ID; direct title-credit search can miss an existing edition",
+  "behavior": {
+    "concreteEdition": "exact ID lookup",
+    "inferred": "exact title-credit search; if successful with no matches, unique exact artist and one release lookup",
+    "maxExtraMetadataRequests": 2,
+    "ambiguity": "no arbitrary artist choice",
+    "HTTPNetworkRateFailure": "no fallback or automatic retry",
+    "metadataOnly": true,
+    "canonicalEditionDuplicates": "distinct edition IDs preserved, inferred duplicate hidden"
+  },
+  "native": {
+    "groups": 9,
+    "passed": 9,
+    "raw": ".local/album-suggestion-final/main/final-2026-11-08T10-08-24-773Z/report.json",
+    "sha256": "cc1ced438885ac7784feb3ecaceeb12b8f6e5d9630ec6892f3ce56986e0f6582",
+    "browser": "Chromium 154.0.8037.57",
+    "main": "untransformed",
+    "sdk": "synthetic fixture",
+    "inferredAlbumConnectedFixture": true,
+    "inferredTracks": 17,
+    "additionalBotRpc": 0,
+    "playCalls": 0,
+    "cleanup": true
+  },
+  "publicCatalog": {
+    "runtime": "Node using actual AlbumCatalog and resolveAlbum",
+    "title": "mosca",
+    "artist": "Nsqk",
+    "editionId": 6813620396,
+    "tracksParsed": 17,
+    "requests": 4,
+    "allHTTP200": true,
+    "browserCORSVerified": false,
+    "receipt": ".local/album-suggestion-parent/real-resolver-report.json",
+    "sha256": "dcbcede431c6c2a42c6a8389cd7eb05aaed53a4471ce427aa4ffff5cde2579b5"
+  },
+  "checks": {
+    "unitsFocal": 18,
+    "lint": "PASS",
+    "types": "PASS",
+    "distChromium": "PASS",
+    "distWebkitDesktop": "PASS",
+    "webkitHistoricalStyleSrcAttrEvents": 10,
+    "inferredAlbumInMinifiedBuild": "PASS",
+    "normalUpdateFrom": "6955592aa1587a88",
+    "normalUpdate": "PASS",
+    "frozenSourcesExact": 164,
+    "archiveMembersExact": 3648
+  },
+  "build": {
+    "entry": "/releases/fb3366ce20f235cd.html",
+    "indexSHA256": "fb3366ce20f235cd430d81041037315ba0326188d4528ea34559a94b12438c1f",
+    "archiveSHA256": "585f89535c5ee71945b8a12728afe947b518eb597d422b4b13b2d32b5da6d2d1",
+    "freezeSHA256": "af8a5b555d9b7e6b9300a1275da85a2a01cf8b46bff4e335d1f4a7572b0e355f"
+  },
+  "privateDelivery": {
+    "passed": true,
+    "currentFilesExact": 38,
+    "priorFilesUnchanged": 249,
+    "serviceRestarted": false,
+    "newGrant": false,
+    "forcedSWActivation": false,
+    "realTelegramCalls": 0
+  },
+  "https": {
+    "passed": true,
+    "urlRecorded": false,
+    "credentialsRecorded": false,
+    "realTelegram": false,
+    "stage": "config",
+    "documentCsp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self' https://lrclib.net https://itunes.apple.com; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "release": "/releases/fb3366ce20f235cd.html",
+    "launcherEntryMainWorkerSWExact": true,
+    "documentMetadataCsp": true,
+    "workerCspUnchanged": true,
+    "privateConfigurationExact": true,
+    "privateConfigurationNoStore": true
+  },
+  "preservedFailures": [
+    "initial native 8/9; G34 harness property corrected",
+    "first production helper server path corrected"
+  ],
+  "notAccepted": [
+    "real Telegram SAMSA audio or complete album download",
+    "physical iPhone or Safari",
+    "offline private or background",
+    "collection removal",
+    "P0-W"
+  ]
+}

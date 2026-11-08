@@ -224,4 +224,39 @@ export async function runArtistGroups(env) {
   return {initialHttp500:true,partialAlbumAndArtist:true,initialErrorVisible:true,recoveredTrack:true,knownRowsPreserved:true,oldErrorCleared:true,telegram:0,failures,successes};
  });
 
+ async function resolutionRoutes(mode='ok') {
+  const state={requests:[],held:[],mode};
+  const album={wrapperType:'collection',collectionType:'Album',collectionId:771,collectionName:'MUSIC_FLOW Album',artistId:72,artistName,trackCount:17};
+  await context().route('https://itunes.apple.com/**',async route=>{
+   const u=new URL(route.request().url()),entity=u.searchParams.get('entity'),term=u.searchParams.get('term'),id=Number(u.searchParams.get('id'));
+   state.requests.push({path:u.pathname,entity,term,id});
+   let results=[];
+   if(u.pathname==='/search'&&entity==='musicArtist'){
+    if(term===artistName){if(mode==='rate')return route.fulfill({status:429,headers:{'access-control-allow-origin':env.origin},body:''});results=mode==='missing'?[]:mode==='ambiguous'?[{wrapperType:'artist',artistId:72,artistName},{wrapperType:'artist',artistId:73,artistName}]:[{wrapperType:'artist',artistId:72,artistName}];}
+   }else if(u.pathname==='/search'&&entity==='album')results=mode==='concrete'?[album]:[];
+   else if(entity==='album')results=[{wrapperType:'artist',artistId:72,artistName},album,{...album,collectionId:772,artistName:artistName+', Guest'}];
+   else if(entity==='song')results=[album,...Array.from({length:17},(_,i)=>({wrapperType:'track',kind:'song',collectionId:771,trackId:900+i,artistId:72,discNumber:1,discCount:1,trackNumber:17-i,trackCount:17,trackName:'Fixture track '+(17-i),artistName}))];
+   const send=()=>route.fulfill({status:200,headers:{'access-control-allow-origin':env.origin,'content-type':'application/json'},body:JSON.stringify({resultCount:results.length,results})});
+   if(mode==='hold'&&u.pathname==='/lookup'&&entity==='album'){state.held.push(send);return;}
+   await send().catch(()=>{});
+  });
+  state.release=async()=>{for(const send of state.held.splice(0))await send().catch(()=>{});};
+  return state;
+ }
+ async function selectAlbum(){await input().fill('MUSIC_FLOW Album');await page().waitForFunction(()=>MUSIC_FLOW.panel().suggestions.some(x=>x.kind==='album')&&!MUSIC_FLOW.panel().suggestionsPending,{timeout:20000});await input().press('Enter');await panel().locator('.music-search-catalog [data-catalog-kind="album"]').first().click();}
+ await group('33 inferred album resolves unique artist and ordered 17 tracks without bot or play',async()=>{
+  await fresh();await env.ready();const api=await resolutionRoutes(),rpc=report.rpc.length;await selectAlbum();await page().getByText('17 pistas · 1 discos',{exact:false}).waitFor({timeout:30000});
+  const tracks=await page().locator('.album-page ol li button strong').allTextContents();assert.deepEqual(tracks,Array.from({length:17},(_,i)=>'Fixture track '+(i+1)));
+  assert.equal(api.requests.filter(x=>x.path==='/lookup'&&x.entity==='album').length,1);assert.equal(api.requests.filter(x=>x.path==='/search'&&x.entity==='musicArtist'&&x.term===artistName).length,1);assert.deepEqual(api.requests.filter(x=>x.entity==='song').map(x=>x.id),[771]);assert.equal(report.rpc.length,rpc);assert.equal(await page().evaluate(()=>MUSIC_FLOW.playCalls),0);return {tracks:17,artistLookup:1,albumLookup:1,telegram:0,play:0};
+ });
+ await group('34 concrete edition opens by ID without new search',async()=>{
+  await fresh();await env.ready();const api=await resolutionRoutes('concrete'),rpc=report.rpc.length;await input().fill('MUSIC_FLOW Album');await page().waitForFunction(()=>MUSIC_FLOW.panel().suggestions.some(x=>x.id==='itunes:album:771')&&!MUSIC_FLOW.panel().suggestionsPending,{timeout:20000});await input().press('Enter');const before=api.requests.length;await panel().locator('.music-search-catalog [data-catalog-kind="album"]').click();await page().getByText('17 pistas · 1 discos',{exact:false}).waitFor({timeout:30000});assert.deepEqual(api.requests.slice(before).map(x=>[x.path,x.entity,x.id]),[['/lookup','song',771]]);assert.equal(report.rpc.length,rpc);return {directId:771,extraSearch:0,telegram:0};
+ });
+ await group('35 Back and scope loss reject held artist releases',async()=>{
+  for(const action of ['back','scope']){await fresh();const api=await resolutionRoutes('hold'),rpc=report.rpc.length;await selectAlbum();await waitUntil(()=>api.held.length===1);if(action==='back')await button('Volver a búsqueda').click();else {await nav('Inicio').click();await page().evaluate(()=>dispatchEvent(new Event('pagehide')));}await api.release();await page().waitForTimeout(400);assert.equal(api.requests.filter(x=>x.entity==='song').length,0);assert.equal(await page().locator('.album-page:visible ol li').count(),0);assert.equal(report.rpc.length,rpc);}return {back:true,scope:true,lateDispatch:0,telegram:0};
+ });
+ await group('36 absent ambiguous and rate-limited artist remain honest without bot',async()=>{
+  const cases=[];for(const mode of ['missing','ambiguous','rate']){await fresh();const api=await resolutionRoutes(mode),rpc=report.rpc.length;await selectAlbum();await page().getByText(mode==='rate'?'No se pudo consultar el catálogo de álbumes.':'No se encontraron ediciones compatibles en los resultados disponibles.',{exact:true}).waitFor({timeout:30000});assert.equal(api.requests.filter(x=>x.path==='/lookup').length,0);assert.equal(report.rpc.length,rpc);assert.equal(await page().evaluate(()=>MUSIC_FLOW.playCalls),0);cases.push(mode);}return {cases,lookup:0,telegram:0,play:0};
+ });
+
 }
