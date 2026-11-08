@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import Long from 'long';
-import {assertBotSearchRawBudget,botSearchAck,botSearchBaseline,projectBotSearchPage} from '../../src/telegram/bot-search-page';
+import {assertBotSearchRawBudget,botSearchMessageFingerprint,botSearchAck,botSearchBaseline,projectBotSearchPage} from '../../src/telegram/bot-search-page';
 const bot=101;
 const msg=(id=12,extra:Record<string,unknown>={})=>({_: 'message',id,peerId:{_: 'peerUser',userId:bot},fromId:{_: 'peerUser',userId:bot},message:'Reply',...extra});
 const history=(messages:unknown[])=>({_: 'messages.messages',messages,chats:[],users:[]});
@@ -45,4 +45,18 @@ test('installed SDK layer232 inline-button shape projects native callback label 
  const markup={_: 'replyInlineMarkup',rows:[{_: 'keyboardInlineButtonRow',buttons:[{_: 'keyboardInlineButton',text:'Native layer232 label',type:{_: 'inlineButtonTypeCallback',data:new Uint8Array([7,8])}}]}]} satisfies import('@mtcute/core').tl.RawReplyInlineMarkup;
  const raw=history([msg(12,{replyMarkup:markup})]);assertBotSearchRawBudget(raw);
  const projected=projectBotSearchPage(raw,bot,9,10);assert.equal(projected.rows[0].kind,'option');assert.equal(projected.rows[0].kind==='option'&&projected.rows[0].label,'Native layer232 label');
+});
+
+
+test('renewable document reference is validated separately from exact immutable message identity',()=>{
+ const doc={_: 'document',id:new Long(1,0),accessHash:new Long(22,0),dcId:2,fileReference:new Uint8Array([5]),size:40000,mimeType:'audio/mpeg',attributes:[{_: 'documentAttributeAudio',duration:230,title:'Track',performer:'Artist'}]};
+ const make=(d:unknown=doc)=>msg(12,{message:'',media:{_: 'messageMediaDocument',document:d}});
+ const fingerprint=(m:unknown)=>{assertBotSearchRawBudget(m);return botSearchMessageFingerprint(m);};
+ const original=fingerprint(make());assert.equal(fingerprint(make({...doc,fileReference:new Uint8Array([9,8,7])})),original);
+ for(const delta of [{id:new Long(2,0)},{accessHash:new Long(23,0)},{dcId:3},{size:40001},{mimeType:'audio/ogg'},{attributes:[{_: 'documentAttributeAudio',duration:230,title:'Other',performer:'Artist'}]}])assert.notEqual(fingerprint(make({...doc,...delta})),original);
+ for(const delta of [{peerId:{_: 'peerUser',userId:102}},{id:13},{message:'Changed'},{replyMarkup:menu([button()])}])assert.notEqual(fingerprint({...make(),...delta}),original);
+ for(const ref of [undefined,null,[5],new Uint8Array(4097)])assert.throws(()=>fingerprint(make({...doc,fileReference:ref})));
+ const missing={...doc};delete (missing as Partial<typeof doc>).fileReference;assert.throws(()=>fingerprint(make(missing)));
+ let reads=0;const accessor={...doc};Object.defineProperty(accessor,'fileReference',{enumerable:true,get(){reads++;return new Uint8Array([1]);}});assert.throws(()=>botSearchMessageFingerprint(make(accessor)));assert.equal(reads,0);
+ assert.notEqual(fingerprint({...make(),replyMarkup:{fileReference:new Uint8Array([1])}}),fingerprint({...make(),replyMarkup:{fileReference:new Uint8Array([2])}}),'Other paths remain exact');
 });

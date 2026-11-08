@@ -38,3 +38,10 @@ test('numbering and duration decorations do not erase version or performer confl
 test('best compatible tie uses the first row rather than asking for another choice',()=>{
  const first=option('A Song (Live) — An Artist'),second=option('A Song (Live) - An Artist');const ranked=matchingSongRows([first,second],target);assert.deepEqual(ranked,[first,second]);assert.equal(ranked[0],first);
 });
+
+test('duration metadata disagreement up to five seconds retains exact identity and larger gaps fail closed',()=>{
+ for(const delta of [-5,-4,-3,0,3,4,5])assert.equal(matchingSongRows([audio(target.title,target.artist,target.durationSeconds!+delta)],target).length,1);
+ for(const delta of [-6,6])assert.equal(matchingSongRows([audio(target.title,target.artist,target.durationSeconds!+delta)],target).length,0);
+ assert.equal(matchingSongRows([audio('A Song (Live Remix)',target.artist,124),audio(target.title,'Other Artist',124),audio(target.title,null,124)],target).length,0);
+ const closer=audio(target.title,target.artist,124),farther=audio(target.title,target.artist,125);assert.deepEqual(matchingSongRows([farther,closer],target),[closer,farther]);
+});

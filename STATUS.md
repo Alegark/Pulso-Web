@@ -28,3 +28,10 @@ Presupuesto USD 0. Crear este repositorio privado no publica la aplicación ni a
 ## Sesión conservada · 2026-11-08
 
 La autorización de Telegram se guarda en IndexedDB dedicado y puede recuperarse tras recarga en el mismo navegador. Cachés del SDK siguen en RAM; teléfono/código/contraseña no se guardan. Restaurar no envía consultas musicales y mantiene autoridad y callbacks nuevos. Detener local conserva; logout y olvido explícito eliminan según su resultado confirmado. Red sin bucle, revocación, cuota inyectada, reopen de proceso y reproducción local offline comprobados con datos propios. 507 unidades, final37/37 native main con SDK sintético y19checks SDK instalado con transporte simulado, separados. Build3d461e76723ce8a4 entregado en copia privada existente. [Contrato y límites](docs/TELEGRAM-PERSISTENCE.md); [evidencia](docs/evidence-telegram-persistence-web.json). Cuenta real, fallo musical del propietario, iPhone y P0 siguen pendientes.
+
+
+## Reproducción real comprobada · 2026-11-08
+
+La sesión del propietario se restauró sin otro código en el navegador compartido. Tras corregir el margen de duración, la comparación del localizador renovable y la etiqueta de colaboradores M4A, elegir una canción completó descarga/importación y Play nativos con avance de posición. Reseleccionar reutilizó la única copia sin otra búsqueda. Escuchar no añadió Biblioteca; Agregar canción y Añadir a playlist siguen explícitos. Prueba pausada y sesión conectada.
+
+513 unidades, lint/tipos y final40/40 con SDK sintético; evidencia real separada y sin datos privados. Builde91dfbdd69854646 en la entrega privada existente,38actuales+240inmutables verificados y HTTPS cotejado. [Contrato](docs/SELECTED-SONG-PLAYBACK.md) · [Evidencia y límites](docs/evidence-real-selected-song-web.json). No aceptación física de iPhone/Safari, background, todos los bots ni P0 completo.

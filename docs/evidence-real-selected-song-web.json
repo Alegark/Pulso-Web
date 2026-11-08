@@ -1,0 +1,111 @@
+{
+  "project": "Pulso-Web",
+  "status": "FOCAL_REAL_SHARED_CHROMIUM_PLAYBACK_CONFIRMED_NOT_IPHONE_OR_P0",
+  "release": "/releases/e91dfbdd69854646.html",
+  "corrections": {
+    "durationToleranceSeconds": 5,
+    "titlePerformerAndVersionStillRequired": true,
+    "renewableDocumentReferenceExcludedFromIdentityOnlyAfterValidation": true,
+    "immutableDocumentFieldsStillExact": true,
+    "expectedPerformerMayBeCompleteMemberOfEmbeddedCollaboratorList": true,
+    "wrongArtistAndVersionStillRejected": true,
+    "closedImportFailureCodes": true
+  },
+  "realBrowser": {
+    "project": "Pulso-Web",
+    "release": "e91dfbdd69854646",
+    "realSharedChromium": true,
+    "ownerAuthorizedBotTest": true,
+    "restoredWithoutCode": true,
+    "downloadAndDocumentRevalidationConfirmed": true,
+    "nativeAutomaticPlayback": true,
+    "nativePlayerTimeAdvanced": true,
+    "reselectionAfterPausePlaysLocalCopy": true,
+    "queryIdentityUnchangedOnReselection": true,
+    "botPendingOnReselection": false,
+    "physicalCopies": 1,
+    "cachedOutsideLibrary": true,
+    "explicitLibraryAndPlaylistActionsPresent": true,
+    "pausedOwnTest": true,
+    "diagnosticsDisabled": true,
+    "sessionLeftConnected": true,
+    "sharedTabLeftOpen": true,
+    "credentialsAndPrivateMetadataRecorded": false,
+    "audioStoredOutsideProductBrowserStorage": false,
+    "physicalIphone": false,
+    "globalP0Acceptance": false
+  },
+  "safeFailureHistory": [
+    "metadata duration disagreement of four seconds",
+    "download complete then document revalidation conflict; renewable reference hypothesis, raw private value not inspected",
+    "file title valid, embedded performer is a list containing expected performer; full-string comparison rejected"
+  ],
+  "validation": {
+    "unit": {
+      "passed": 513,
+      "failed": 0
+    },
+    "strictProductTypesAndUnused": true,
+    "nativeMain": {
+      "passed": 40,
+      "failed": 0,
+      "browser": "154.0.8037.57",
+      "syntheticSDK": true,
+      "mainTransformations": 0,
+      "frozenSourceFiles": 155,
+      "sourceAndBuildExact": true,
+      "pageErrors": 0,
+      "csp": 0,
+      "externalAttempts": 0,
+      "cleanup": true
+    },
+    "productionDesktop": {
+      "chromium": true,
+      "webkit": true,
+      "syntheticMetadataAndOwnAudio": true,
+      "webkitHistoricalStyleAttributeNotices": 10,
+      "otherErrorsOrExternal": 0
+    },
+    "normalServiceWorkerUpdate": true,
+    "privateDelivery": {
+      "currentFiles": 38,
+      "previousImmutableFiles": 240,
+      "previousImmutableExact": true,
+      "httpsReadback": true
+    }
+  },
+  "artifacts": {
+    "freeze": {
+      "path": ".local/real-selected-song/freeze.json",
+      "sha256": "57dd52562566649a68b694c7353c79d0a3604bb37d54f47944ee99a98e3b229f"
+    },
+    "mainFinal": {
+      "path": "/data/home/Proyectos/Pulso-Web/.local/real-selected-song/main/final-2026-11-08T05-33-18-669Z/report.json",
+      "sha256": "d0a41d2b921040db986f8bfbf9277b241f8c4e464ea787f6afb5921b8696dbac"
+    },
+    "safeReal": {
+      "path": ".local/real-selected-song/real-final-safe.json",
+      "sha256": "fb411adc7ca992b5d8403e8a982e93da9521aa383f37064f0076897e84293842"
+    }
+  },
+  "privacy": {
+    "noPrivateMetadataCredentialsOrAudioInEvidence": true,
+    "musicOnlyInProductBrowserStorage": true,
+    "noCloudMusicStorage": true,
+    "temporaryReadOnlyParserAuditRemoved": true
+  },
+  "limits": [
+    "physical iPhone/Safari not tested",
+    "shared Chromium real account playback is a focal case, not all bots/formats/songs",
+    "acoustic identity not certified by metadata",
+    "bot pool remains in RAM per connection",
+    "private offline/background/heap and global P0 not accepted"
+  ],
+  "historicalAttempts": {
+    "allOriginalRawsPreserved": true,
+    "g13RemovalOnceFailedBeforeAnyDurableJournal": true,
+    "g13IsolatedThenFull39AndFull40Passed": true,
+    "transientCauseNotAttributedToProductOrHarness": true,
+    "initialObserverErrorsPreserved": true
+  }
+}

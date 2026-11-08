@@ -110,11 +110,27 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
  return Object.freeze({rows:Object.freeze(selected),refs:selectedRefs,concurrent,unrecognized});
 }
 
-/** Canonical own-data snapshot; no SDK toJSON/accessor invocation. Caller validates raw budget first. */
+/** Canonical own-data snapshot; no SDK toJSON/accessor invocation. Caller validates raw budget first.
+ * Telegram may renew only the document fileReference when re-fetching a message.
+ * It is a validated download locator, not document identity. All other own fields
+ * (including document ID, access hash, DC, MIME, size and attributes) remain exact.
+ * https://core.telegram.org/api/file-references */
 export function botSearchMessageFingerprint(message:unknown):string {
- const clean=(v:unknown):unknown=>{if(v===undefined)return null;if(v===null||typeof v!=='object')return v;if(v instanceof Uint8Array)return Array.from(v);if(Array.isArray(v))return v.map(clean);const out:Record<string,unknown>={};for(const k of Object.keys(v).sort()){const d=Object.getOwnPropertyDescriptor(v,k);if(!d||!('value'in d))throw new BotSearchProjectionError('unsupported');out[k]=clean(d.value);}return out;};
- // Exclude mutable view counters, include exact peer, text, markup and document.
- return JSON.stringify(['id','peerId','fromId','message','replyMarkup','media','replyTo'].map(k=>clean(searchOwn(message,k))));
+ const clean=(v:unknown,path:string):unknown=>{
+  if(v===undefined)return null;if(v===null||typeof v!=='object')return v;
+  if(v instanceof Uint8Array)return Array.from(v);
+  if(Array.isArray(v))return v.map((item,index)=>clean(item,path+'.'+index));
+  const renewable=path==='media.document'&&searchOwn(v,'_')==='document';
+  if(renewable){const d=Object.getOwnPropertyDescriptor(v,'fileReference'),ref=d&&'value'in d?d.value:undefined;
+   if(!ref||typeof ref!=='object'||Object.getPrototypeOf(ref)!==Uint8Array.prototype||ref.length>4096)bad();
+  }
+  const out:Record<string,unknown>={};for(const k of Object.keys(v).sort()){
+   const d=Object.getOwnPropertyDescriptor(v,k);if(!d||!('value'in d))bad();
+   if(renewable&&k==='fileReference')continue;
+   out[k]=clean(d.value,path+'.'+k);
+  }return out;
+ };
+ return JSON.stringify(['id','peerId','fromId','message','replyMarkup','media','replyTo'].map(k=>clean(searchOwn(message,k),k)));
 }
 export function botSearchDocument(message:unknown):{location:{_: 'inputDocumentFileLocation';id:Long;accessHash:Long;fileReference:Uint8Array;thumbSize:string};dcId:number}|null {
  const media=searchOwn(message,'media'),d=searchOwn(media,'document');

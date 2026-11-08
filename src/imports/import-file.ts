@@ -1,3 +1,4 @@
+import {expectedAudioTagMismatch} from './expected-audio-metadata';
 import {extractLocalAlbumMetadata,type Mp4AlbumTag} from './album-metadata';
 import {assertDatabaseUse} from '../storage/database';
 import {admittedTransaction,closeDatabase} from '../storage/database';
@@ -81,10 +82,11 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
   try{metadata=await parseBlob(await atBoundary('read','none',()=>metadataView(file,mime,true,omitted)),parserOptions);}
   catch(error){if(isMetadataLimit(error))fail('parse','internal','limit-exceeded','none');if(issuedFailure(error)||nativeDOMName(error))throw AppFailure.create(fromKnownError(error,{phase:'parse',backend:'none'}));throw AppFailure.create(fromKnownError(error,{phase:'parse',backend:'none'}));}
  }
- const normalized=(s:string)=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
- if(options.expected&&(metadata.common.title&&normalized(metadata.common.title)!==normalized(options.expected.title)||options.expected.artist&&metadata.common.artist&&normalized(metadata.common.artist)!==normalized(options.expected.artist)))fail('parse','integrity','metadata-invalid','none');
+ const tagMismatch=options.expected?expectedAudioTagMismatch(metadata.common,options.expected):null;
+ if(tagMismatch)fail('parse','integrity',tagMismatch==='title'?'metadata-title-mismatch':'metadata-artist-mismatch','none');
  checkCancelled(signal); const duration=metadata.format.duration;
- if(!duration||!Number.isFinite(duration)||duration<=0||!metadata.format.codec)fail('parse','integrity','metadata-invalid','none');
+ if(!duration||!Number.isFinite(duration)||duration<=0)fail('parse','integrity','audio-duration-invalid','none');
+ if(!metadata.format.codec)fail('parse','integrity','audio-codec-missing','none');
  // Capability selection happens before creating staging. Runtime OPFS failures never switch backend.
  const available=typeof navigator.storage?.getDirectory==='function'&&typeof FileSystemFileHandle!=='undefined'&&typeof FileSystemFileHandle.prototype.createWritable==='function';
  const backend=options.backend==='idb'?'idb':available?'opfs':'idb';attempt.backend=backend;attempt.closeState=backend==='opfs'?'not-attempted':'not-applicable';
