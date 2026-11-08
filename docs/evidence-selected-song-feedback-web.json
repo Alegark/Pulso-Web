@@ -1,0 +1,190 @@
+{
+  "project": "Pulso-Web",
+  "status": "TERMINAL_FEEDBACK_REPAIRED_OWNER_PLAYBACK_NOT_YET_DIAGNOSED",
+  "release": "/releases/e7aae6cae4b8f847.html",
+  "causeProved": {
+    "scope": "synthetic SESSION_REVOKED after bot callback during first upload.getFile",
+    "baselineSelectedSongPanels": 0,
+    "fixedSelectedSongPanels": 1,
+    "stoppedFlightNeverRevived": true,
+    "queryAndNetworkCaptureCleared": true,
+    "originalSendCallbackFileCounts": {
+      "contacts.resolveUsername": 3,
+      "messages.getHistory": 4,
+      "messages.sendMessage": 1,
+      "messages.getMessages": 2,
+      "messages.getBotCallbackAnswer": 1,
+      "upload.getFile": 1
+    }
+  },
+  "validation": {
+    "unitPassed": 501,
+    "unitFailed": 0,
+    "lintAndProductTypes": true,
+    "nativeCounts": {
+      "uniquePlanned": 32,
+      "executed": 32,
+      "passed": 32,
+      "failed": 0
+    },
+    "nativeRun": "/data/home/Proyectos/Pulso-Web/.local/selected-play-feedback/main/final-2026-11-08T03-30-32-494Z",
+    "nativeReceiptSHA256": "fd5b9cf04850b0b1c7a036ab389e4b38bca9230e8ed0022e7bac3a9b090722c7",
+    "sourceUnchanged": true,
+    "sourceExact": 153,
+    "sdk": "SYNTHETIC_ONLY",
+    "mainTransformed": false,
+    "pageErrors": 0,
+    "csp": 0,
+    "unexpectedExternal": 0,
+    "cleanup": true,
+    "baselineRedPreserved": ".local/selected-play-feedback/baseline-native32-RED.json",
+    "childClientRepro": "1/1 separate local unit; not added to 501 or native count",
+    "production": {
+      "passed": true,
+      "release": "/releases/e7aae6cae4b8f847.html",
+      "cases": [
+        {
+          "engine": "chromium",
+          "version": "154.0.8037.57",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        },
+        {
+          "engine": "webkit",
+          "version": "27.2",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        }
+      ],
+      "external": [],
+      "errors": [],
+      "csp": [
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        }
+      ],
+      "realTelegram": false,
+      "publicMetadataCalls": 0,
+      "physicalIphone": false,
+      "stage": "waiting for native progression",
+      "cleanup": true
+    },
+    "normalUpdate": {
+      "passed": true,
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57",
+      "result": {
+        "oldEntrySHA256": "afe0942f86dbc77895a36de2f7e78ee065baefa2bfc70c236e1026b5466b6a01",
+        "newEntry": "/releases/e7aae6cae4b8f847.html",
+        "newVersionBypassesOldShell": true,
+        "stableLauncherSelectsCurrentBuild": true,
+        "waitingBeforeClosingClients": true,
+        "oldStillPlaying": true,
+        "newIsPaused": true,
+        "activatedAfterClientClosure": true,
+        "restoredPaused": true
+      }
+    },
+    "delivery": {
+      "passed": true,
+      "currentFilesExact": 38,
+      "previousImmutableUnchanged": 232,
+      "accessFile": ".local/review/abrir-pulso-estado-cancion.html",
+      "accessVerified": true,
+      "credentialsRecorded": false,
+      "sameServiceAndGrant": true,
+      "noForcedActivation": true,
+      "sharedBrowserNotReloaded": true
+    },
+    "https": {
+      "passed": true,
+      "urlRecorded": false,
+      "credentialsRecorded": false,
+      "realTelegram": false,
+      "release": "/releases/e7aae6cae4b8f847.html",
+      "launcherEntryMainWorkerSWExact": true,
+      "documentMetadataCsp": true,
+      "workerCspUnchanged": true,
+      "privateConfigurationExact": true,
+      "privateConfigurationNoStore": true
+    },
+    "archive": {
+      "passed": true,
+      "release": "/releases/e7aae6cae4b8f847.html",
+      "sourceArchiveFiles": 3618,
+      "frozenSourceMembersExact": 153,
+      "allArchiveFilesMatchCurrent": true,
+      "noPrivateIdentity": true,
+      "noPrivateConfigOrLocalRoots": true,
+      "noticesExact": true,
+      "realTelegram": false,
+      "iPhone": false
+    },
+    "engram14ReadOnlyActualBytesSHA": true
+  },
+  "limits": {
+    "realTelegram": false,
+    "physicalIPhone": false,
+    "ownerReportedFailureResolved": false,
+    "realSdkCauseKnown": false,
+    "noNewRetriesOrAutoPlayPermission": true,
+    "noSessionOrPhoneRecorded": true,
+    "P0Complete": false
+  },
+  "sharedBrowser": {
+    "openedLoginForm": true,
+    "connectedAtInitialCheck": false,
+    "challengeOrPhoneDraftAtInitialCheck": false,
+    "notReloadedAfterLoginRequest": true,
+    "leftForOwner": true
+  }
+}

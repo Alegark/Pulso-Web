@@ -56,7 +56,7 @@ export function MusicSearchController(props:Props){
  const [retry,setRetry]=React.useState(0),[notice,setNotice]=React.useState<string|null>(null),[displayedQuery,setDisplayedQuery]=React.useState<string|null>(null),[selectedResult,setSelectedResult]=React.useState<string|null>(null);
  const downloadAbort=React.useRef<AbortController|null>(null),flight=React.useRef<SongFlight|null>(null);
  const [download,setDownload]=React.useState<{phase:'network'|'saving'|'saved'|'failed'|'uncertain';bytes:number;total:number}|null>(null);
- const [organizing,setOrganizing]=React.useState(false);
+ const [organizing,setOrganizing]=React.useState(false),[songError,setSongError]=React.useState<string|null>(null);
  const actionArea=React.useRef<HTMLDivElement>(null);
  React.useLayoutEffect(()=>{if(chosenId&&props.visible)actionArea.current?.scrollIntoView({block:'nearest'});},[chosenId,props.visible]);
  const saving=download?.phase==='saving',localPending=['lookup','saving','play'].includes(flight.current?.phase??'');
@@ -78,9 +78,15 @@ export function MusicSearchController(props:Props){
  const results=displayedQuery!==null&&state?.queryId===displayedQuery?state.rows.map(row=>resultView(row,state.expectedTarget)):[];
  const revokeMetadata=()=>{++metadataEpoch.current;const attempt=metadataAttempt.current;metadataAttempt.current=null;attempt?.abort.abort();setSuggesting(false);};
  const bump=()=>{++viewEpoch.current;pulse();};
- const edit=(queryChanged=false)=>{flight.current?.abort.abort();flight.current=null;downloadAbort.current?.abort();setDownload(null);bump();chosenDraft.current=null;if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);setResultsVisible(false);}setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);cancel?.();if(action?.())client?.clearSearch(action);};
+ const edit=(queryChanged=false)=>{flight.current?.abort.abort();flight.current=null;downloadAbort.current?.abort();setDownload(null);setSongError(null);bump();chosenDraft.current=null;if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);setResultsVisible(false);}setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);cancel?.();if(action?.())client?.clearSearch(action);};
  React.useEffect(()=>{
-  flight.current?.abort.abort();flight.current=null;bump();setDownload(null);setDisplayedQuery(null);setSelectedResult(null);setChosenId(null);
+  const f=flight.current;if(f){f.abort.abort();f.networkCurrent=null;f.queryId=null;}bump();setDownload(null);setDisplayedQuery(null);setSelectedResult(null);
+  // Revoking Telegram authority must stop work, not erase the user's outcome.
+  // Keep only the chosen catalogue metadata; never retain chat rows/capabilities.
+  if(f&&!['done','error'].includes(f.phase)){
+   f.phase='error';setNotice(null);setSongError(props.phase==='connected'?'La configuración del bot cambió. La consulta se detuvo; elige la canción de nuevo.':'La conexión de Telegram se interrumpió al obtener la canción. No se pudo confirmar la descarga y no se iniciará música. Vuelve a conectar antes de intentarlo.');
+  }
+  if(!f)setChosenId(null);
  },[props.scopeKey,props.bots?.revision,props.bots?.scopeKey]);
  React.useEffect(()=>()=>{downloadAbort.current?.abort();client?.captureSearchCancel()?.();},[props.scopeKey,props.bots?.revision,client,props.visible]);
  React.useEffect(()=>{if(!props.visible){metadataAttempt.current?.abort.abort();client?.captureSearchCancel()?.();setDisplayedQuery(null);setSelectedResult(null);}},[props.visible,client]);
@@ -141,7 +147,9 @@ export function MusicSearchController(props:Props){
   const allowed=f.client.captureSearchActionCurrent();if(!allowed())return;
   f.phase='download';setSelectedResult(id);downloadAbort.current=f.abort;setDownload({phase:'network',bytes:0,total:0});setNotice('Obteniendo la canción elegida…');pulse();
   try{
-   const audio=await f.client.downloadBot(id,allowed);if(!live(f))return;
+   const audio=await f.client.downloadBot(id,allowed);
+   if(!viewLive(f))return;
+   if(!live(f)){f.abort.abort();f.phase='error';setDownload(null);setNotice(null);setSongError('La conexión o el permiso para obtener la canción se interrumpió. No se pudo confirmar la descarga y no se iniciará música.');pulse();return;}
    if(!audio){f.phase='error';setDownload(null);setNotice(f.client.searchSnapshot().error?null:'El bot no devolvió un audio que coincida con la canción elegida.');pulse();return;}
    f.phase='saving';setDownload({phase:'saving',bytes:0,total:audio.bytes});setNotice('Verificando la única copia local…');
    const result=await f.attempt.save(audio,f.choice,f.abort.signal,bytes=>{if(live(f))setDownload({phase:'saving',bytes,total:audio.bytes});});
@@ -185,7 +193,7 @@ export function MusicSearchController(props:Props){
   const attempt=props.captureSongPlayback?.();if(!attempt){setNotice('La biblioteca está ocupada o requiere revisión. Comprueba Almacenamiento.');return;}
   old?.abort.abort();const abort=new AbortController();downloadAbort.current=abort;
   const f:SongFlight={key,choice,target:chosen,attempt,abort,scope:props.scopeKey,client,networkCurrent:null,revision:props.bots?.revision,queryId:null,phase:'lookup'};flight.current=f;
-  revokeMetadata();bump();chosenDraft.current=query;setChosenId(id);setResultsVisible(true);setDownload(null);setSelectedResult(null);setNotice('Comprobando si ya tienes esta canción…');
+  revokeMetadata();bump();chosenDraft.current=query;setChosenId(id);setResultsVisible(true);setDownload(null);setSongError(null);setSelectedResult(null);setNotice('Comprobando si ya tienes esta canción…');
   try{
    const local=await attempt.lookup(choice,abort.signal);if(!live(f))return;
    if(local){await finishPlay(f,local);return;}
@@ -212,7 +220,7 @@ export function MusicSearchController(props:Props){
   }finally{if(mounted.current)setOrganizing(false);}
  };
  const songActions=selected&&<div ref={actionArea} className="music-search-selection"><SelectedSongActions key={selected.key} title={selected.choice.title} artist={selected.choice.artist}
-  status={notice??(ownPending?'Obteniendo la canción…':null)} error={state?.error?searchErrorText(state.error):null}
+  status={notice??(ownPending?'Obteniendo la canción…':null)} error={songError??(state?.error?searchErrorText(state.error):null)}
   pending={ownPending||saving||localPending||organizing} progress={ownPending||saving?(download?.total?download:state?.downloadProgress):null}
   inLibrary={!!selected.trackId&&!!props.libraryTrackIds?.has(selected.trackId)}
   canAdd={!!selected.trackId&&!!management?.current()&&!ownPending&&!localPending&&!saving&&!organizing}

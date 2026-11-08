@@ -49,3 +49,9 @@ El panel de producto oculta el selector adicional de versiones. El proceso conse
 ## 2026-11-06 · Pertenencia explícita y copia de escucha
 
 [Escuchar, Biblioteca y playlists](PLAYBACK-COPIES-AND-LIBRARY.md) describe el contrato vigente: escuchar conserva una copia verificada sin añadir automáticamente la canción; las acciones próximas a la elección permiten agregarla o confirmar una playlist sin otra descarga. Backups v3 condicionales conservan la pertenencia de canciones organizadas; v1/v2 siguen admitidos. La reproducción con la cuenta real y el iPhone permanece pendiente.
+
+## 2026-11-08 · Resultado visible al interrumpirse Telegram
+
+Se reprodujo con SDK sintético un cierre de sesión después del callback musical y al comenzar la lectura del archivo. Antes, revocar la sesión resolvía la descarga sin audio y el cambio de ámbito retiraba la canción seleccionada; el aviso podía quedar debajo del catálogo, con el texto anterior de espera. El controlador conserva ahora la ficha pública elegida y un error terminal próximo al buscador. Aborta la intención, elimina la referencia de consulta y la captura de red, descarta el progreso y no permite un Play tardío ni reintenta mensajes automáticamente. Una selección nueva comienza un intento nuevo bajo sus propias guardas.
+
+La regresión integrada verifica un envío, un callback y una lectura de archivo que falla por revocación; no publica copia ni inicia audio. Esta reparación acredita la presentación del fallo, **no identifica la causa del problema informado por el propietario ni demuestra reproducción con su cuenta real**. La sesión del navegador compartido estaba desconectada al abrirlo para la prueba. Evidencia: [evidence-selected-song-feedback-web.json](evidence-selected-song-feedback-web.json).
