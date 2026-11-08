@@ -128,4 +128,100 @@ export async function runArtistGroups(env) {
   return {quickAlbumOpenRpc:0,resultsAlbumOpenRpc:0,playBeforeTrack:0,explicitTrackSearch:1,explicitTrackCallback:1,oneAsset:true,automaticLibraryAdd:false};
  });
 
+ await group('28 unified suggestions and explicit selection remain metadata only',async()=>{
+  await fresh();await env.ready();env.fixture.set({mode:'download-option'});const before=report.rpc.length;
+  await input().fill('MUSIC_FLOW Album');
+  await page().waitForFunction(()=>{const p=MUSIC_FLOW.panel();return ['track','album','artist'].every(k=>p.suggestions.some(r=>r.kind===k))&&!p.suggestionsPending;},{timeout:20000});
+  for(const kind of ['track','album','artist'])assert((await panel().locator('.music-search-dropdown [data-catalog-kind="'+kind+'"]').count())>=1);
+  assert((await panel().locator('.music-search-dropdown [data-catalog-kind]').count())<=6);
+  assert.equal(await panel().getByRole('button',{name:/Buscar álbumes|Buscar artistas|Cancelar búsqueda/}).count(),0);
+  await input().press('Enter');for(const kind of ['track','album','artist'])assert(await panel().locator('.music-search-catalog [data-catalog-kind="'+kind+'"]').count());
+  assert.equal(report.rpc.length,before);await panel().locator('.music-search-catalog [data-catalog-kind="album"][data-suggestion-id="itunes:album:42"]').click();
+  await page().getByText('1 pistas · 1 discos',{exact:false}).waitFor();assert.equal(report.rpc.length,before);
+  await button('Volver a búsqueda').click();await panel().locator('.music-search-catalog [data-catalog-kind="artist"]').click();
+  await heading().waitFor();assert.equal(report.rpc.length,before);await button('Volver a búsqueda').click();
+  const n=report.rpc.filter(r=>r.method==='messages.sendMessage').length;await panel().locator('.music-search-catalog [data-catalog-kind="track"]').first().click();await env.playing();await idle();
+  assert.equal(report.rpc.filter(r=>r.method==='messages.sendMessage').length,n+1);
+  return {threeCategories:true,enterRpc:0,albumRpc:0,artistRpc:0,selectedSongQueries:1};
+ });
+
+ await group('29 clearing rejects held metadata and stale callbacks without duplicate dispatch',async()=>{
+  await fresh();await env.ready();const before=report.rpc.length;let release,started=0;
+  await context().route('https://itunes.apple.com/**',async route=>{started++;await new Promise(r=>{release=r;});await route.fulfill({status:200,headers:{'access-control-allow-origin':env.origin,'content-type':'application/json'},body:JSON.stringify({resultCount:1,results:[{wrapperType:'collection',collectionType:'Album',collectionId:99,collectionName:'Obsolete',artistName:'MUSIC_FLOW Artist',trackCount:1}]})}).catch(()=>{});});
+  await input().fill('MUSIC_FLOW Album');await waitUntil(()=>started===1);await page().waitForFunction(()=>MUSIC_FLOW.panel().suggestions.some(r=>r.kind==='track'));
+  await input().press('Enter');await input().press('Enter');assert.equal(started,1);
+  await page().evaluate(()=>{const el=document.querySelector('.music-search-catalog [data-catalog-kind="track"]');const k=Object.keys(el).find(x=>x.startsWith('__reactProps$'));MUSIC_FLOW.saved.staleClick=el[k].onClick;MUSIC_FLOW.saved.staleElement=el;});
+  await input().fill('');release();await page().evaluate(()=>MUSIC_FLOW.saved.staleClick({currentTarget:MUSIC_FLOW.saved.staleElement}));
+  await page().waitForTimeout(500);assert.equal(await panel().locator('[data-suggestion-id]').count(),0);assert.equal(await panel().locator('.music-search-catalog').count(),0);assert.equal(started,1);assert.equal(report.rpc.length,before);
+  return {heldResponseDiscarded:true,staleCallbackRejected:true,enterDidNotDuplicate:true,telegram:0};
+ });
+ await group('30 unified navigation keeps audio queue and responsive layout',async()=>{
+  await pipeline('download-option');const before=await page().evaluate(()=>({audio:MUSIC_FLOW.audio[0].src,time:MUSIC_FLOW.audio[0].currentTime,plays:MUSIC_FLOW.playCalls,queue:document.querySelector('#player > ol').textContent}));const rpc=report.rpc.length;
+  await page().setViewportSize({width:320,height:568});await page().evaluate(()=>{document.documentElement.style.fontSize='200%';});
+  await input().fill('MUSIC_FLOW Album');await page().waitForFunction(()=>MUSIC_FLOW.panel().suggestions.some(r=>r.kind==='artist')&&!MUSIC_FLOW.panel().suggestionsPending);await input().press('Enter');
+  assert(await noHorizontalOverflow());await panel().locator('.music-search-catalog [data-catalog-kind="artist"]').click();await heading().waitFor();await button('Volver a búsqueda').click();
+  await page().setViewportSize({width:568,height:320});assert(await noHorizontalOverflow());
+  const after=await page().evaluate(()=>({audio:MUSIC_FLOW.audio[0].src,time:MUSIC_FLOW.audio[0].currentTime,paused:MUSIC_FLOW.audio[0].paused,plays:MUSIC_FLOW.playCalls,queue:document.querySelector('#player > ol').textContent}));
+  assert.equal(after.audio,before.audio);assert(after.time>before.time);assert.equal(after.paused,false);assert.equal(after.plays,before.plays);assert.equal(after.queue,before.queue);assert.equal(report.rpc.length,rpc);
+  return {audioContinues:true,queuePreserved:true,newTelegram:0,widths:[320,568],text:'200%'};
+ });
+
+ await group('31 pending artists resume after album navigation without losing known rows',async()=>{
+  await fresh();await env.ready();const rpc=report.rpc.length;let firstRelease,artistRequests=0;
+  await context().route('https://itunes.apple.com/**',async route=>{
+   const url=new URL(route.request().url());
+   if(url.pathname!=='/search'||url.searchParams.get('entity')!=='musicArtist')return route.fallback();
+   artistRequests++;
+   const first=artistRequests===1;
+   if(first)await new Promise(resolve=>{firstRelease=resolve;});
+   const results=[{wrapperType:'artist',artistId:first?999:2,artistName:first?'Obsolete artist':artistName}];
+   await route.fulfill({status:200,headers:{'access-control-allow-origin':env.origin,'content-type':'application/json'},body:JSON.stringify({resultCount:1,results})}).catch(()=>{});
+  });
+  await input().fill('MUSIC_FLOW Album');
+  await waitUntil(()=>artistRequests===1&&!!firstRelease);
+  await page().waitForFunction(()=>{const s=MUSIC_FLOW.panel().suggestions;return s.some(r=>r.kind==='album')&&s.some(r=>r.kind==='track');});
+  await input().press('Enter');
+  const rows=()=>panel().locator('.music-search-catalog [data-catalog-kind]');
+  const known=await rows().evaluateAll(els=>els.map(e=>e.getAttribute('data-suggestion-id')).sort());
+  assert(known.some(x=>x.startsWith('itunes:album:')));assert(known.some(x=>x.startsWith('lrclib:')));
+  await panel().locator('.music-search-catalog [data-catalog-kind="album"]').first().click();
+  await page().getByText('1 pistas · 1 discos',{exact:false}).waitFor();
+  firstRelease();await button('Volver a búsqueda').click();
+  const restored=await rows().evaluateAll(els=>els.map(e=>e.getAttribute('data-suggestion-id')));
+  for(const id of known)assert(restored.includes(id),'Known row lost on return: '+id);
+  await panel().locator('.music-search-catalog [data-catalog-kind="artist"]').filter({hasText:artistName}).waitFor();
+  assert(artistRequests>=2);assert.equal(await panel().getByText('Obsolete artist').count(),0);
+  const final=await rows().evaluateAll(els=>els.map(e=>e.getAttribute('data-suggestion-id')));
+  for(const id of known)assert(final.includes(id),'Known row lost after completion: '+id);
+  assert.equal(report.rpc.length,rpc);
+  return {heldNativeArtist:true,albumOpenedBeforeArtist:true,knownRowsPreserved:true,validArtistCompleted:true,obsoleteArtistAbsent:true,telegram:0,artistRequests};
+ });
+
+ await group('32 LRCLIB error clears on successful return while known catalogue rows survive',async()=>{
+  await fresh();const rpc=report.rpc.length;let healthy=false,failures=0,successes=0;
+  await context().route('https://lrclib.net/api/v2/search**',async route=>{
+   const headers={'access-control-allow-origin':env.origin,'access-control-allow-methods':'GET, OPTIONS','access-control-allow-headers':'Lrclib-Client','content-type':'application/json'};
+   if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers,body:''});
+   if(!healthy){failures++;return route.fulfill({status:500,headers,body:''});}
+   successes++;return route.fulfill({status:200,headers,body:JSON.stringify([{id:321,trackName:'MUSIC_FLOW Recovered Song',artistName,albumName:'MUSIC_FLOW Album',duration:45}])});
+  });
+  await input().fill('MUSIC_FLOW Album');
+  await page().waitForFunction(()=>{const p=MUSIC_FLOW.panel();return !p.suggestionsPending&&!!p.suggestionsError&&['album','artist'].every(k=>p.suggestions.some(r=>r.kind===k));});
+  assert.equal(failures,1);await input().press('Enter');
+  const rows=()=>panel().locator('.music-search-catalog [data-catalog-kind]');
+  const error=panel().getByRole('alert').filter({hasText:'No se pudieron obtener sugerencias'});await error.waitFor();
+  const known=await rows().evaluateAll(els=>els.map(e=>e.getAttribute('data-suggestion-id')));
+  assert(known.some(id=>id.startsWith('itunes:album:')));assert(known.some(id=>id.startsWith('itunes:artist:')));
+  assert.equal(await panel().locator('.music-search-catalog [data-catalog-kind="track"]').count(),0);
+  await panel().locator('.music-search-catalog [data-catalog-kind="album"]').first().click();
+  await page().getByText('1 pistas · 1 discos',{exact:false}).waitFor();healthy=true;
+  await button('Volver a búsqueda').click();
+  await panel().locator('.music-search-catalog [data-catalog-kind="track"]').filter({hasText:'MUSIC_FLOW Recovered Song'}).waitFor();
+  await page().waitForFunction(()=>!MUSIC_FLOW.panel().suggestionsPending);
+  const final=await rows().evaluateAll(els=>els.map(e=>e.getAttribute('data-suggestion-id')));
+  for(const id of known)assert(final.includes(id),'Known row lost after recovery: '+id);
+  assert.equal(await error.count(),0);assert(successes>=1);assert.equal(report.rpc.length,rpc);
+  return {initialHttp500:true,partialAlbumAndArtist:true,initialErrorVisible:true,recoveredTrack:true,knownRowsPreserved:true,oldErrorCleared:true,telegram:0,failures,successes};
+ });
+
 }

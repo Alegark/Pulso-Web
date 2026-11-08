@@ -10,12 +10,13 @@ import {musicSearchCatalog} from '../library/music-search-catalog';
 import {songChoiceKey,matchingSongRows,type SongChoice,type SongPlaybackAttempt,type SongManagement,type SongCopyInspection} from '../library/selected-song';
 import {MusicSearchPanel,type MusicSearchResultRow} from './MusicSearchPanel';
 import {AlbumPageController,type AlbumCoordinator} from './AlbumPageController';
-import {ArtistSearchResults,ArtistPage} from './ArtistCatalogView';
-import type {CatalogArtist} from '../library/album-catalog';
+import {ArtistPage} from './ArtistCatalogView';
+import {AlbumCatalog,type AlbumEdition,type CatalogArtist} from '../library/album-catalog';
 
 // One RAM-only transport per document, including cooldown across account/scope changes.
 // Construction performs no IO. Each mounted view owns only its request and AbortSignal.
 const suggestionsClient=createMusicSuggestionsClient();
+const metadataCatalog=new AlbumCatalog((...args)=>fetch(...args));
 // Retain unresolved album delivery across navigation and account/scope remounts.
 const albumCoordinator:AlbumCoordinator={running:false,uncertainTracks:new Set(),remoteClock:{settledAt:0},rows:new Map(),listeners:new Set()};
 interface Props {
@@ -57,7 +58,8 @@ interface SongFlight {key:string;choice:SongChoice;target:BotSearchTarget;attemp
 export function MusicSearchController(props:Props){
  const [query,setQuery]=React.useState('');
  const [album,setAlbum]=React.useState<{title:string;artist:string|null;editionId?:number}|null>(null);
- const [artist,setArtist]=React.useState<CatalogArtist|null>(null),[artistRequest,setArtistRequest]=React.useState(0);
+ const [artist,setArtist]=React.useState<CatalogArtist|null>(null);
+ const [editions,setEditions]=React.useState<readonly AlbumEdition[]>([]),[artists,setArtists]=React.useState<readonly CatalogArtist[]>([]),[catalogQuery,setCatalogQuery]=React.useState<string|null>(null),[catalogPending,setCatalogPending]=React.useState(false),[catalogError,setCatalogError]=React.useState<string|null>(null);
  const artistOpener=React.useRef<HTMLButtonElement|null>(null),albumOpener=React.useRef<HTMLButtonElement|null>(null);
  const artistScroll=React.useRef<[number,number]>([0,0]),albumScroll=React.useRef<[number,number]>([0,0]);
  const navigationReturn=React.useRef<{scope:string;kind:'artist'|'search';opener:HTMLButtonElement|null;position:[number,number]|null}|null>(null);
@@ -80,13 +82,14 @@ export function MusicSearchController(props:Props){
  const saving=download?.phase==='saving',localPending=['lookup','saving','play'].includes(flight.current?.phase??'');
  const [,pulse]=React.useReducer(n=>n+1,0);
  const latest=React.useRef(props),mounted=React.useRef(false),viewEpoch=React.useRef(0),committed=React.useRef<object|null>(null),metadataAttempt=React.useRef<{abort:AbortController}|null>(null),metadataEpoch=React.useRef(0);
- const chosenDraft=React.useRef<string|null>(null);
+ const chosenDraft=React.useRef<string|null>(null),catalogAbort=React.useRef<AbortController|null>(null);
+ const suggestionKey=React.useRef<string|null>(null),catalogKey=React.useRef<string|null>(null);
  const renderToken={};const renderEpoch=viewEpoch.current;
  React.useLayoutEffect(()=>{latest.current=props;mounted.current=true;committed.current=renderToken;return()=>{committed.current=null;};});
  React.useEffect(()=>()=>{mounted.current=false;metadataAttempt.current?.abort.abort();},[]);
  const current=()=>mounted.current&&committed.current===renderToken&&viewEpoch.current===renderEpoch&&latest.current.visible&&latest.current.scopeKey===props.scopeKey&&latest.current.client===props.client;
  const client=props.client,state=client?.searchSnapshot()??props.searchState,action=client?.captureSearchActionCurrent(),cancel=client?.captureSearchCancel();
- const choices=React.useMemo(()=>musicSearchCatalog(query,props.tracks,remoteQuery===normalizeMusicSuggestionsQuery(query)?remote:[]),[query,props.tracks,remote,remoteQuery]);
+ const choices=React.useMemo(()=>musicSearchCatalog(query,props.tracks,remoteQuery===normalizeMusicSuggestionsQuery(query)?remote:[],catalogQuery===normalizeMusicSuggestionsQuery(query)?editions:[],catalogQuery===normalizeMusicSuggestionsQuery(query)?artists:[]),[query,props.tracks,remote,remoteQuery,catalogQuery,editions,artists]);
  const primary=props.bots?.providers[0]??null;
  const selectedProvider=primary?{id:primary.providerRef,username:primary.username,label:primary.label,supported:primary.username.toLowerCase()==='ivkmbot'}:null;
  const provider=primary?.providerRef??null,ownPending=!!cancel||!!state?.cancelling;
@@ -96,7 +99,7 @@ export function MusicSearchController(props:Props){
  const results=displayedQuery!==null&&state?.queryId===displayedQuery?state.rows.map(row=>resultView(row,state.expectedTarget)):[];
  const revokeMetadata=()=>{++metadataEpoch.current;const attempt=metadataAttempt.current;metadataAttempt.current=null;attempt?.abort.abort();setSuggesting(false);};
  const bump=()=>{++viewEpoch.current;pulse();};
- const edit=(queryChanged=false)=>{flight.current?.abort.abort();flight.current=null;downloadAbort.current?.abort();setDownload(null);setSongError(null);bump();chosenDraft.current=null;if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);setResultsVisible(false);}setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);cancel?.();if(action?.())client?.clearSearch(action);};
+ const edit=(queryChanged=false)=>{catalogAbort.current?.abort();catalogAbort.current=null;setCatalogPending(false);flight.current?.abort.abort();flight.current=null;downloadAbort.current?.abort();setDownload(null);setSongError(null);bump();chosenDraft.current=null;if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);setResultsVisible(false);}setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);cancel?.();if(action?.())client?.clearSearch(action);};
  React.useEffect(()=>{
   const f=flight.current;if(f){f.abort.abort();f.networkCurrent=null;f.queryId=null;}bump();setDownload(null);setDisplayedQuery(null);setSelectedResult(null);
   // Revoking Telegram authority must stop work, not erase the user's outcome.
@@ -115,14 +118,16 @@ export function MusicSearchController(props:Props){
  },[state?.expiresAt,client]);
  React.useEffect(()=>{
   const abort=new AbortController(),attempt={abort};metadataAttempt.current?.abort.abort();metadataAttempt.current=attempt;
-  setRemote([]);setRemoteQuery(null);setSuggestionError(null);setSuggesting(false);
   const valid=normalizeMusicSuggestionsQuery(query);
+  const key=JSON.stringify([valid,props.scopeKey,retry]);
+  if(suggestionKey.current!==key){suggestionKey.current=key;setRemote([]);setRemoteQuery(null);setSuggestionError(null);}
+  setSuggesting(false);
   if(chosenDraft.current!==null&&query===chosenDraft.current){setSuggestionNotice('Canción elegida para consultar al bot principal.');return()=>abort.abort();}
-  if(!props.visible||!valid){setSuggestionNotice(query?'Escribe entre 3 y 160 caracteres para obtener sugerencias.':null);return()=>abort.abort();}
+  if(!props.visible||album||artist||!valid){setSuggestionNotice(query&&!valid?'Escribe entre 3 y 160 caracteres para obtener sugerencias.':null);return()=>abort.abort();}
   const scope=props.scopeKey,epoch=metadataEpoch.current,waitUntil=Date.now()+15000;
   const live=()=>epoch===metadataEpoch.current&&mounted.current&&!abort.signal.aborted&&metadataAttempt.current===attempt&&latest.current.visible&&latest.current.scopeKey===scope;
   let timer:ReturnType<typeof setTimeout>|undefined;
-  setSuggesting(true);setSuggestionNotice(null);
+  setSuggesting(true);setSuggestionNotice(null);setSuggestionError(null);
   let fallback=false;
   const run=()=>{
    if(!live())return;
@@ -151,7 +156,29 @@ export function MusicSearchController(props:Props){
   timer=setTimeout(run,450);
   const deadline=setTimeout(()=>{if(live()){abort.abort();setSuggesting(false);setSuggestionError('La consulta de sugerencias agotó el plazo.');}},15000);
   return()=>{if(timer!==undefined)clearTimeout(timer);clearTimeout(deadline);abort.abort();};
- },[query,props.visible,props.scopeKey,retry]);
+ },[query,props.visible,props.scopeKey,retry,!!album,!!artist]);
+ React.useEffect(()=>{
+  const abort=new AbortController(),valid=normalizeMusicSuggestionsQuery(query),scope=props.scopeKey;
+  catalogAbort.current?.abort();catalogAbort.current=abort;
+  const key=JSON.stringify([valid,scope,retry]);
+  if(catalogKey.current!==key){catalogKey.current=key;setEditions([]);setArtists([]);setCatalogQuery(null);setCatalogError(null);}
+  setCatalogPending(false);
+  if(!props.visible||album||artist||!valid||chosenDraft.current===query)return()=>abort.abort();
+  let active=true;
+  const live=()=>active&&!abort.signal.aborted&&catalogAbort.current===abort&&mounted.current&&latest.current.visible&&latest.current.scopeKey===scope;
+  setCatalogPending(true);setCatalogError(null);
+  const timer=setTimeout(()=>{void (async()=>{
+   const albums=await metadataCatalog.search(valid,null,{signal:abort.signal,current:live});
+   if(!live())return;
+   setCatalogQuery(valid);
+   if(albums.ok)setEditions(albums.value);else if(albums.reason!=='cancelled')setCatalogError('No se pudieron consultar algunos álbumes o artistas.');
+   const performers=await metadataCatalog.searchArtists(valid,{signal:abort.signal,current:live});
+   if(!live())return;
+   if(performers.ok)setArtists(performers.value);else if(performers.reason!=='cancelled')setCatalogError('No se pudieron consultar algunos álbumes o artistas.');
+   setCatalogPending(false);
+  })();},450);
+  return()=>{active=false;clearTimeout(timer);abort.abort();};
+ },[query,props.visible,props.scopeKey,retry,!!album,!!artist]);
  const viewLive=(f:SongFlight)=>mounted.current&&flight.current===f&&!f.abort.signal.aborted&&latest.current.visible&&latest.current.scopeKey===f.scope&&latest.current.client===f.client;
  const live=(f:SongFlight)=>viewLive(f)&&f.attempt.current()&&(!f.networkCurrent||f.networkCurrent()&&latest.current.bots?.revision===f.revision);
  const finishPlay=async(f:SongFlight,id:string)=>{
@@ -199,9 +226,10 @@ export function MusicSearchController(props:Props){
   else{f.phase='error';setNotice('El bot no devolvió una coincidencia suficiente con el título, artista y versión elegidos.');pulse();}
  });
  function showResults(){if(current()&&query.trim())setResultsVisible(true);}
- async function choose(id:string){
+ async function choose(id:string,opener:HTMLButtonElement){
   if(!current())return;const choice=choices.find(c=>c.id===id);if(!choice)return;
-  if(choice.kind==='album'){if(ownPending||localPending)return;edit();setAlbum({title:choice.title,artist:choice.artist});return;}
+  if(choice.kind==='artist'){if(ownPending||localPending)return;catalogAbort.current?.abort();setCatalogPending(false);revokeMetadata();artistOpener.current=opener;artistScroll.current=[window.scrollX,window.scrollY];setArtist({id:choice.artistId,name:choice.title});return;}
+  if(choice.kind==='album'){if(ownPending||localPending)return;revokeMetadata();albumOpener.current=opener;albumScroll.current=[window.scrollX,window.scrollY];edit();setAlbum({title:choice.title,artist:choice.artist,editionId:choice.editionId});return;}
   await chooseChoice(choice);
  }
  async function chooseChoice(choice:SongChoice){
@@ -216,7 +244,7 @@ export function MusicSearchController(props:Props){
   const attempt=props.captureSongPlayback?.();if(!attempt){setNotice('La biblioteca está ocupada o requiere revisión. Comprueba Almacenamiento.');return;}
   old?.abort.abort();const abort=new AbortController();downloadAbort.current=abort;
   const f:SongFlight={key,choice,target:chosen,attempt,abort,scope:props.scopeKey,client,networkCurrent:null,revision:props.bots?.revision,queryId:null,phase:'lookup'};flight.current=f;
-  revokeMetadata();bump();chosenDraft.current=query;setChosenId(id);setResultsVisible(true);setDownload(null);setSongError(null);setSelectedResult(null);setNotice('Comprobando si ya tienes esta canción…');
+  catalogAbort.current?.abort();setCatalogPending(false);revokeMetadata();bump();chosenDraft.current=query;setChosenId(id);setResultsVisible(true);setDownload(null);setSongError(null);setSelectedResult(null);setNotice('Comprobando si ya tienes esta canción…');
   try{
    const local=await attempt.lookup(choice,abort.signal);if(!live(f))return;
    if(local){await finishPlay(f,local);return;}
@@ -251,15 +279,15 @@ export function MusicSearchController(props:Props){
   playlists={props.playlists??[]} canAddToPlaylist={!!selected.trackId&&!!management?.current()&&!ownPending&&!localPending&&!saving&&!organizing}
   onAdd={()=>void manage('add')} onAddToPlaylist={id=>void manage('playlist',id)} onPlay={()=>void manage('play')} onCancel={cancelSong} current={current}/></div>;
  return <><div ref={searchContainer} hidden={!!album||!!artist}><MusicSearchPanel songActions={album?null:songActions} query={query} onQueryChange={value=>{if(!current())return;edit(true);setQuery(value.slice(0,640));}}
-  suggestions={choices.map(c=>({id:c.id,kind:c.kind,title:c.title,subtitle:(c.kind==='track'?[c.artist,c.album]:[c.artist]).filter(Boolean).join(' · ')||null,source:c.source}))} resultsVisible={resultsVisible} selectedSuggestionId={chosenId} suggestionsPending={suggesting} suggestionsError={suggestionError} suggestionsNotice={suggestionNotice}
+  suggestions={choices.map(c=>({id:c.id,kind:c.kind,title:c.title,subtitle:(c.kind==='track'?[c.artist,c.album]:[c.artist]).filter(Boolean).join(' · ')||null,source:c.source}))} resultsVisible={resultsVisible} selectedSuggestionId={chosenId} suggestionsPending={suggesting||catalogPending} suggestionsError={[suggestionError,catalogError].filter(Boolean).join(' ')||null} suggestionsNotice={suggestionNotice}
   onRetrySuggestions={()=>{if(current()&&!ownPending){edit();setRetry(n=>n+1);}}}
   primaryProvider={selectedProvider}
   sessionReady={props.phase==='connected'} canSearch={ready} searchPending={ownPending||saving||localPending}
-  onSearch={showResults} onSearchArtists={()=>{if(current()&&!ownPending&&!localPending&&query.trim())setArtistRequest(n=>n+1);}} onSearchAlbums={()=>{if(current()&&!ownPending&&!localPending&&query.trim()){edit();setAlbum({title:query.trim(),artist:null});}}} onChooseSuggestion={choose}
+  onSearch={showResults} onChooseSuggestion={choose}
   onCancel={cancelSong}
   downloadStatus={download?.phase==='saving'?'Guardando copia verificada…':null} downloadProgress={saving?download:state?.downloadProgress??null} onCancelDownload={saving?cancelSong:undefined}
   automaticSelection results={results} selectedResultId={selectedResult} onSelectResult={id=>{const f=flight.current;if(current()&&f)void downloadRow(f,id);}}
-  status={rateNotice??notice??(displayedQuery&&state?.queryId===displayedQuery&&!state.error&&results.length?'Respuesta del bot recibida. Revisa las opciones; la identidad musical sigue sin confirmar.':null)} error={state?.error?searchErrorText(state.error):null} uncertain={state?.delivery==='uncertain'} current={current}/>{artistRequest>0&&<ArtistSearchResults query={query} scope={props.scopeKey} visible={props.visible&&!album&&!artist} request={artistRequest} onOpen={(row,opener)=>{if(!current()||ownPending||localPending)return;artistOpener.current=opener;artistScroll.current=[window.scrollX,window.scrollY];setArtist(row);}}/>}</div>
+  status={rateNotice??notice??(displayedQuery&&state?.queryId===displayedQuery&&!state.error&&results.length?'Respuesta del bot recibida. Revisa las opciones; la identidad musical sigue sin confirmar.':null)} error={state?.error?searchErrorText(state.error):null} uncertain={state?.delivery==='uncertain'} current={current}/></div>
   {artist&&<div hidden={!!album}><ArtistPage artist={artist} scope={props.scopeKey} visible={props.visible&&!album} onBack={()=>{if(!current())return;navigationReturn.current={scope:props.scopeKey,kind:'search',opener:artistOpener.current,position:artistScroll.current};setArtist(null);}} onAlbum={(row,opener)=>{if(!current()||ownPending||localPending)return;albumOpener.current=opener;albumScroll.current=[window.scrollX,window.scrollY];setAlbum({title:row.title,artist:row.artist,editionId:row.id});}}/></div>}
-  {album&&<AlbumPageController coordinator={albumCoordinator} title={album.title} artist={album.artist} editionId={album.editionId} backLabel={artist?'Volver al artista':undefined} scope={props.scopeKey} visible={props.visible} captureInspection={props.captureSongCopyInspection} selectedKey={selected?.phase==='done'&&selected.trackId?selected.choice.id:null} libraryTrackIds={props.libraryTrackIds} client={client} revision={props.bots?.revision} provider={selectedProvider?.supported?provider:null} capture={()=>current()?props.captureSongPlayback?.()??null:null} management={id=>props.captureSongManagement?.(id)??null} songActions={songActions} onChoose={choice=>{if(current())void chooseChoice(choice);}} onBack={()=>{if(!current())return;edit();navigationReturn.current={scope:props.scopeKey,kind:artist?'artist':'search',opener:artist?albumOpener.current:null,position:artist?albumScroll.current:null};setAlbum(null);}}/>}</>;
+  {album&&<AlbumPageController coordinator={albumCoordinator} title={album.title} artist={album.artist} editionId={album.editionId} backLabel={artist?'Volver al artista':undefined} scope={props.scopeKey} visible={props.visible} captureInspection={props.captureSongCopyInspection} selectedKey={selected?.phase==='done'&&selected.trackId?selected.choice.id:null} libraryTrackIds={props.libraryTrackIds} client={client} revision={props.bots?.revision} provider={selectedProvider?.supported?provider:null} capture={()=>current()?props.captureSongPlayback?.()??null:null} management={id=>props.captureSongManagement?.(id)??null} songActions={songActions} onChoose={choice=>{if(current())void chooseChoice(choice);}} onBack={()=>{if(!current())return;edit();navigationReturn.current={scope:props.scopeKey,kind:artist?'artist':'search',opener:albumOpener.current,position:albumScroll.current};setAlbum(null);}}/>}</>;
 }

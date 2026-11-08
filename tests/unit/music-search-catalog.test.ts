@@ -59,3 +59,11 @@ test('a title identical to the performer remains searchable',()=>{
  const t={id:'same-name',title:'Talk Talk',artist:'Talk Talk',album:null,duration:1} as Track;
  assert.equal(musicSearchCatalog('talk talk',[t],[])[0]?.id,'local:same-name');
 });
+
+test('canonical artist and edition identities remain distinct from song choices',()=>{
+ const result=musicSearchCatalog('luna',[],[row(1,'Luna','Full Artist Credit')],[{id:42,title:'Luna',artist:'Album Credit',trackCount:3,releaseDate:null}],[{id:42,name:'Luna'}]);
+ assert.deepEqual(result.map(item=>item.id),['lrclib:1','itunes:album:42','itunes:artist:42']);
+ const album=result.find(item=>item.kind==='album');const artist=result.find(item=>item.kind==='artist');
+ assert.equal(album?.kind==='album'&&album.editionId,42);assert.equal(artist?.kind==='artist'&&artist.artistId,42);
+ assert.equal(result[0].artist,'Full Artist Credit');
+});

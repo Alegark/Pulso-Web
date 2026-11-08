@@ -1,0 +1,77 @@
+{
+  "project": "Pulso-Web",
+  "date": "2026-11-08",
+  "status": "LOCAL_SYNTHETIC_VALIDATION_AND_EXISTING_PRIVATE_DELIVERY_PASS",
+  "behavior": {
+    "automaticSuggestions": [
+      "songs",
+      "albums",
+      "artists"
+    ],
+    "searchActions": [
+      "Buscar"
+    ],
+    "enter": "catalogue only",
+    "clear": "abort metadata and reject stale results",
+    "artistAndAlbumSelection": "navigate only",
+    "songSelection": "existing verified copy or configured bot"
+  },
+  "native": {
+    "groups": 5,
+    "passed": 5,
+    "browser": "Chromium 154.0.8037.57",
+    "main": "untransformed source",
+    "sdk": "synthetic fixture",
+    "raw": ".local/unified-search-feedback-validation/main/final-2026-11-08T09-54-14-277Z/report.json",
+    "sha256": "8ca1620f0ac6bdf68f3a4667138caa4cfa0ac3061f317606c9407f65f040246f",
+    "cleanup": true
+  },
+  "production": {
+    "distIndexSHA256": "6955592aa1587a88dce26fbde5d65e6c7c0be6417d79d7dc2c53825e4a43ae10",
+    "release": "/releases/6955592aa1587a88.html",
+    "sourceArchiveSHA256": "37748b7c731927901753a4b9da5cdd91cb83775d05cc414d167abcb4cc9bd854",
+    "frozenSources": 163,
+    "freezeSHA256": "55e5c260706a7e435e711ca9ee70d05c99324b7bae4980ec418eaeffe3acfe4a",
+    "archiveMembersExact": 3646,
+    "chromium": "PASS",
+    "webkitDesktop": "PASS",
+    "webkitHistoricalStyleSrcAttrEvents": 10,
+    "normalUpdateFrom": "80a9423c34c6d88b",
+    "normalUpdate": "PASS"
+  },
+  "privateDelivery": {
+    "passed": true,
+    "currentFilesExact": 38,
+    "priorFilesUnchanged": 247,
+    "serviceRestarted": false,
+    "newGrant": false,
+    "forcedSWActivation": false,
+    "realTelegramCalls": 0
+  },
+  "https": {
+    "passed": true,
+    "urlRecorded": false,
+    "credentialsRecorded": false,
+    "realTelegram": false,
+    "stage": "config",
+    "documentCsp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self' https://lrclib.net https://itunes.apple.com; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "release": "/releases/6955592aa1587a88.html",
+    "launcherEntryMainWorkerSWExact": true,
+    "documentMetadataCsp": true,
+    "workerCspUnchanged": true,
+    "privateConfigurationExact": true,
+    "privateConfigurationNoStore": true
+  },
+  "priorEvidence": {
+    "unit24": "PASS before final two error setters, not attributed to current SHA",
+    "previousNative3And4Groups": "separate historical sources, not added to current five",
+    "harnessFailures": "preserved"
+  },
+  "notAccepted": [
+    "real Telegram search or SAMSA playback",
+    "physical iPhone or Safari",
+    "physical collection removal",
+    "offline private or background",
+    "P0-W"
+  ]
+}

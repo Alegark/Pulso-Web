@@ -1,15 +1,16 @@
 import type {Track} from './library';
 import type {MusicSuggestion} from './music-suggestions';
+import type {AlbumEdition,CatalogArtist} from './album-catalog';
 
-export interface MusicCatalogChoice {
+interface ChoiceBase {
  readonly id:string;
- readonly kind:'track'|'album';
  readonly title:string;
  readonly artist:string|null;
  readonly album:string|null;
  readonly duration:number|null;
  readonly source:'local'|'lrclib'|'itunes';
 }
+export type MusicCatalogChoice = (ChoiceBase & {readonly kind:'track'}) | (ChoiceBase & {readonly kind:'album'; readonly editionId?:number}) | (ChoiceBase & {readonly kind:'artist'; readonly artistId:number});
 export const MUSIC_CATALOG_LIMITS=Object.freeze({localMatches:50,tracks:70,albums:20,preview:6});
 // Ignore presentation differences, not recording/version qualifiers or performers.
 export function musicCatalogKey(text:string):string {
@@ -38,9 +39,10 @@ function albumMatches(query:string,album:string,artist:string|null):boolean {
 }
 /** A metadata grouping, not an acoustic identity claim. Album/duration differences
  * do not repeat a title/performer; literal live/remix/etc titles remain distinct.
- * Artist names are context, never separate categories. Local matching uses song/album names; remote candidates keep provider relevance.
+ * Artist identities and concrete editions come from the bounded public catalogue.
+ * Local song matching uses song/album names; remote candidates keep provider relevance.
  */
-export function musicSearchCatalog(query:string,local:readonly Track[],remote:readonly MusicSuggestion[]):readonly MusicCatalogChoice[] {
+export function musicSearchCatalog(query:string,local:readonly Track[],remote:readonly MusicSuggestion[], editions:readonly AlbumEdition[] = [], artists:readonly CatalogArtist[] = []):readonly MusicCatalogChoice[] {
  const q=musicCatalogKey(query);if(!q)return [];
  const songs=new Map<string,MusicCatalogChoice>(),albums=new Map<string,MusicCatalogChoice>();
  const add=(id:string,title:string,artist:string|null,album:string|null,duration:number|null,source:'local'|'lrclib')=>{
@@ -60,5 +62,7 @@ export function musicSearchCatalog(query:string,local:readonly Track[],remote:re
  for(const t of remote)add('lrclib:'+t.id,t.trackName,t.artistName,t.albumName||null,t.duration,'lrclib');
  const ranked=[...songs.values()].map((choice,index)=>({choice,index,score:score(q,choice.title,choice.artist,choice.album)}))
   .sort((a,b)=>b.score-a.score||a.index-b.index).map(item=>item.choice);
- return Object.freeze([...ranked,...albums.values()]);
+ const editionChoices:MusicCatalogChoice[]=editions.map(e=>Object.freeze({id:'itunes:album:'+e.id,kind:'album',editionId:e.id,title:e.title,artist:e.artist,album:e.title,duration:null,source:'itunes'}));
+ const artistChoices:MusicCatalogChoice[]=artists.map(a=>Object.freeze({id:'itunes:artist:'+a.id,kind:'artist',artistId:a.id,title:a.name,artist:null,album:null,duration:null,source:'itunes'}));
+ return Object.freeze([...ranked,...editionChoices,...albums.values(),...artistChoices]);
 }
