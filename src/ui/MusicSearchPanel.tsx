@@ -3,7 +3,7 @@ import {MUSIC_CATALOG_LIMITS} from '../library/music-search-catalog';
 import './music-search.css';
 
 export interface MusicSearchSuggestionRow {
- id:string;kind:'track'|'album';title:string;subtitle:string|null;source:'local'|'lrclib';
+ id:string;kind:'track'|'album';title:string;subtitle:string|null;source:'local'|'lrclib'|'itunes';
 }
 export interface MusicSearchProviderRow {id:string;username:string;label:string;supported:boolean}
 export interface MusicSearchResultRow {
@@ -19,6 +19,8 @@ export interface MusicSearchPanelProps {
  sessionReady:boolean;canSearch:boolean;searchPending:boolean;
  /** Catalogue results only. This callback never submits a Telegram query. */
  onSearch:()=>void;
+ onSearchAlbums?:()=>void;
+ onSearchArtists?:()=>void;
  onChooseSuggestion:(id:string)=>void;onCancel:()=>void;
  songActions?:React.ReactNode;
  automaticSelection?:boolean;
@@ -65,7 +67,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
  return <section className="music-search" aria-labelledby={`${id}-heading`}>
   <h2 id={`${id}-heading`}>Buscar música</h2>
   <form onSubmit={event=>{event.preventDefault();showAll();}}>
-   <label htmlFor={`${id}-query`}>Canción o álbum</label>
+   <label htmlFor={`${id}-query`}>Canción, álbum o artista</label>
    <div className="music-search-query" onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node|null))setOpen(false);}}>
     <div className="music-search-query-bar">
      <input ref={queryRef} id={`${id}-query`} type="search" role="combobox" aria-autocomplete="list" aria-expanded={expanded} aria-controls={expanded?`${id}-quick`:undefined}
@@ -77,6 +79,8 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
        if(event.key==='ArrowDown'&&quick.length){event.preventDefault();setOpen(true);requestAnimationFrame(()=>quickRef.current?.querySelector<HTMLButtonElement>('[data-suggestion-id]')?.focus());}
       }}/>
      <button type="submit" disabled={!props.query.trim()}>Buscar</button>
+   {props.onSearchAlbums&&<button type="button" disabled={!props.query.trim()||props.searchPending} onClick={()=>{if(active())props.onSearchAlbums?.();}}>Buscar álbumes</button>}
+   {props.onSearchArtists&&<button type="button" disabled={!props.query.trim()||props.searchPending} onClick={()=>{if(active())props.onSearchArtists?.();}}>Buscar artistas</button>}
      {focused&&<button type="button" onClick={()=>{if(active()){props.onQueryChange('');setOpen(false);setFocused(false);queryRef.current?.blur();}}}>Cancelar búsqueda</button>}
     </div>
     {expanded&&<div ref={quickRef} className="music-search-dropdown" aria-label="Sugerencias rápidas">

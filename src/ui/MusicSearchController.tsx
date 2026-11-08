@@ -7,14 +7,19 @@ import type {TelegramSessionClient,BotsSnapshot,BotSearchSnapshot} from '../tele
 import type {SessionState} from '../telegram/session-protocol';
 import {isBotSearchQuery,parseBotSearchTarget,BOT_SEARCH_LIMIT_DIAGNOSTICS,isBotSearchLimitError,type BotSearchLimitError,type BotSearchTarget,type BotSearchRow,type BotSearchError} from '../telegram/bot-search-protocol';
 import {musicSearchCatalog} from '../library/music-search-catalog';
-import {songChoiceKey,matchingSongRows,type SongChoice,type SongPlaybackAttempt,type SongManagement} from '../library/selected-song';
+import {songChoiceKey,matchingSongRows,type SongChoice,type SongPlaybackAttempt,type SongManagement,type SongCopyInspection} from '../library/selected-song';
 import {MusicSearchPanel,type MusicSearchResultRow} from './MusicSearchPanel';
+import {AlbumPageController,type AlbumCoordinator} from './AlbumPageController';
+import {ArtistSearchResults,ArtistPage} from './ArtistCatalogView';
+import type {CatalogArtist} from '../library/album-catalog';
 
 // One RAM-only transport per document, including cooldown across account/scope changes.
 // Construction performs no IO. Each mounted view owns only its request and AbortSignal.
 const suggestionsClient=createMusicSuggestionsClient();
+// Retain unresolved album delivery across navigation and account/scope remounts.
+const albumCoordinator:AlbumCoordinator={running:false,uncertainTracks:new Set(),remoteClock:{settledAt:0},rows:new Map(),listeners:new Set()};
 interface Props {
- captureSongPlayback?:()=>SongPlaybackAttempt|null;
+ captureSongPlayback?:()=>SongPlaybackAttempt|null;captureSongCopyInspection?:()=>SongCopyInspection|null;
  libraryTrackIds?:ReadonlySet<string>;playlists?:readonly Playlist[];captureSongManagement?:(id:string)=>SongManagement|null;
  visible:boolean;scopeKey:string;client:TelegramSessionClient|null;phase:SessionState['phase'];
  captureDownloadSave?:()=>((audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void)=>Promise<'saved'|'failed'|'uncertain'>)|null;
@@ -51,6 +56,19 @@ function searchErrorText(error:BotSearchError):string {
 interface SongFlight {key:string;choice:SongChoice;target:BotSearchTarget;attempt:SongPlaybackAttempt;abort:AbortController;scope:string;client:TelegramSessionClient|null;networkCurrent:(()=>boolean)|null;revision:number|undefined;queryId:string|null;trackId?:string;phase:'lookup'|'query'|'choice'|'download'|'saving'|'play'|'done'|'error'}
 export function MusicSearchController(props:Props){
  const [query,setQuery]=React.useState('');
+ const [album,setAlbum]=React.useState<{title:string;artist:string|null;editionId?:number}|null>(null);
+ const [artist,setArtist]=React.useState<CatalogArtist|null>(null),[artistRequest,setArtistRequest]=React.useState(0);
+ const artistOpener=React.useRef<HTMLButtonElement|null>(null),albumOpener=React.useRef<HTMLButtonElement|null>(null);
+ const artistScroll=React.useRef<[number,number]>([0,0]),albumScroll=React.useRef<[number,number]>([0,0]);
+ const navigationReturn=React.useRef<{scope:string;kind:'artist'|'search';opener:HTMLButtonElement|null;position:[number,number]|null}|null>(null);
+ const searchContainer=React.useRef<HTMLDivElement>(null);
+ React.useLayoutEffect(()=>{
+  const point=navigationReturn.current;if(!point)return;navigationReturn.current=null;
+  if(!props.visible||props.scopeKey!==point.scope||album||point.kind==='artist'&&!artist||point.kind==='search'&&artist)return;
+  if(point.opener?.isConnected)point.opener.focus({preventScroll:true});
+  else if(point.kind==='search')searchContainer.current?.querySelector<HTMLInputElement>('input[type=search]')?.focus();
+  if(point.position)window.scrollTo(...point.position);
+ },[album,artist,props.visible,props.scopeKey]);
  const [chosenId,setChosenId]=React.useState<string|null>(null),[resultsVisible,setResultsVisible]=React.useState(false);
  const [remote,setRemote]=React.useState<readonly MusicSuggestion[]>([]),[remoteQuery,setRemoteQuery]=React.useState<string|null>(null),[suggesting,setSuggesting]=React.useState(false),[suggestionError,setSuggestionError]=React.useState<string|null>(null),[suggestionNotice,setSuggestionNotice]=React.useState<string|null>(null);
  const [retry,setRetry]=React.useState(0),[notice,setNotice]=React.useState<string|null>(null),[displayedQuery,setDisplayedQuery]=React.useState<string|null>(null),[selectedResult,setSelectedResult]=React.useState<string|null>(null);
@@ -183,12 +201,17 @@ export function MusicSearchController(props:Props){
  function showResults(){if(current()&&query.trim())setResultsVisible(true);}
  async function choose(id:string){
   if(!current())return;const choice=choices.find(c=>c.id===id);if(!choice)return;
-  if(choice.kind==='album'){if(ownPending||localPending)return;edit();setQuery(choice.title);setResultsVisible(true);return;}
+  if(choice.kind==='album'){if(ownPending||localPending)return;edit();setAlbum({title:choice.title,artist:choice.artist});return;}
+  await chooseChoice(choice);
+ }
+ async function chooseChoice(choice:SongChoice){
+  if(!current())return;
+  const id=choice.id;
   const key=songChoiceKey(choice)??JSON.stringify([choice.source,choice.id,choice.title,choice.artist]);
   const old=flight.current;
   if(old?.key===key&&old.scope===props.scopeKey&&old.client===client&&!old.abort.signal.aborted&&!['done','error'].includes(old.phase)&&(old.phase!=='choice'||old.client?.searchSnapshot().queryId===old.queryId&&old.client?.searchSnapshot().expiresAt!==null)){setNotice('Esta canción ya está en proceso. Se usará la misma copia.');return;}
   if(ownPending||localPending)return;
-  const chosen=parseBotSearchTarget({title:choice.title.normalize('NFC').trim(),artist:choice.artist?.normalize('NFC').trim()||null,album:choice.album?.normalize('NFC').trim()||null,durationSeconds:choice.duration});
+  const chosen=parseBotSearchTarget({title:choice.title.normalize('NFC').trim(),artist:(choice.searchArtist??choice.artist)?.normalize('NFC').trim()||null,album:choice.album?.normalize('NFC').trim()||null,durationSeconds:choice.duration});
   if(!chosen){setNotice('Los metadatos de esta sugerencia no permiten identificar la canción.');return;}
   const attempt=props.captureSongPlayback?.();if(!attempt){setNotice('La biblioteca está ocupada o requiere revisión. Comprueba Almacenamiento.');return;}
   old?.abort.abort();const abort=new AbortController();downloadAbort.current=abort;
@@ -227,14 +250,16 @@ export function MusicSearchController(props:Props){
   canPlay={!!management?.playReady&&!!management.current()&&!ownPending&&!localPending&&!saving&&!organizing}
   playlists={props.playlists??[]} canAddToPlaylist={!!selected.trackId&&!!management?.current()&&!ownPending&&!localPending&&!saving&&!organizing}
   onAdd={()=>void manage('add')} onAddToPlaylist={id=>void manage('playlist',id)} onPlay={()=>void manage('play')} onCancel={cancelSong} current={current}/></div>;
- return <MusicSearchPanel songActions={songActions} query={query} onQueryChange={value=>{if(!current())return;edit(true);setQuery(value.slice(0,640));}}
+ return <><div ref={searchContainer} hidden={!!album||!!artist}><MusicSearchPanel songActions={album?null:songActions} query={query} onQueryChange={value=>{if(!current())return;edit(true);setQuery(value.slice(0,640));}}
   suggestions={choices.map(c=>({id:c.id,kind:c.kind,title:c.title,subtitle:(c.kind==='track'?[c.artist,c.album]:[c.artist]).filter(Boolean).join(' · ')||null,source:c.source}))} resultsVisible={resultsVisible} selectedSuggestionId={chosenId} suggestionsPending={suggesting} suggestionsError={suggestionError} suggestionsNotice={suggestionNotice}
   onRetrySuggestions={()=>{if(current()&&!ownPending){edit();setRetry(n=>n+1);}}}
   primaryProvider={selectedProvider}
   sessionReady={props.phase==='connected'} canSearch={ready} searchPending={ownPending||saving||localPending}
-  onSearch={showResults} onChooseSuggestion={choose}
+  onSearch={showResults} onSearchArtists={()=>{if(current()&&!ownPending&&!localPending&&query.trim())setArtistRequest(n=>n+1);}} onSearchAlbums={()=>{if(current()&&!ownPending&&!localPending&&query.trim()){edit();setAlbum({title:query.trim(),artist:null});}}} onChooseSuggestion={choose}
   onCancel={cancelSong}
   downloadStatus={download?.phase==='saving'?'Guardando copia verificada…':null} downloadProgress={saving?download:state?.downloadProgress??null} onCancelDownload={saving?cancelSong:undefined}
   automaticSelection results={results} selectedResultId={selectedResult} onSelectResult={id=>{const f=flight.current;if(current()&&f)void downloadRow(f,id);}}
-  status={rateNotice??notice??(displayedQuery&&state?.queryId===displayedQuery&&!state.error&&results.length?'Respuesta del bot recibida. Revisa las opciones; la identidad musical sigue sin confirmar.':null)} error={state?.error?searchErrorText(state.error):null} uncertain={state?.delivery==='uncertain'} current={current}/>;
+  status={rateNotice??notice??(displayedQuery&&state?.queryId===displayedQuery&&!state.error&&results.length?'Respuesta del bot recibida. Revisa las opciones; la identidad musical sigue sin confirmar.':null)} error={state?.error?searchErrorText(state.error):null} uncertain={state?.delivery==='uncertain'} current={current}/>{artistRequest>0&&<ArtistSearchResults query={query} scope={props.scopeKey} visible={props.visible&&!album&&!artist} request={artistRequest} onOpen={(row,opener)=>{if(!current()||ownPending||localPending)return;artistOpener.current=opener;artistScroll.current=[window.scrollX,window.scrollY];setArtist(row);}}/>}</div>
+  {artist&&<div hidden={!!album}><ArtistPage artist={artist} scope={props.scopeKey} visible={props.visible&&!album} onBack={()=>{if(!current())return;navigationReturn.current={scope:props.scopeKey,kind:'search',opener:artistOpener.current,position:artistScroll.current};setArtist(null);}} onAlbum={(row,opener)=>{if(!current()||ownPending||localPending)return;albumOpener.current=opener;albumScroll.current=[window.scrollX,window.scrollY];setAlbum({title:row.title,artist:row.artist,editionId:row.id});}}/></div>}
+  {album&&<AlbumPageController coordinator={albumCoordinator} title={album.title} artist={album.artist} editionId={album.editionId} backLabel={artist?'Volver al artista':undefined} scope={props.scopeKey} visible={props.visible} captureInspection={props.captureSongCopyInspection} selectedKey={selected?.phase==='done'&&selected.trackId?selected.choice.id:null} libraryTrackIds={props.libraryTrackIds} client={client} revision={props.bots?.revision} provider={selectedProvider?.supported?provider:null} capture={()=>current()?props.captureSongPlayback?.()??null:null} management={id=>props.captureSongManagement?.(id)??null} songActions={songActions} onChoose={choice=>{if(current())void chooseChoice(choice);}} onBack={()=>{if(!current())return;edit();navigationReturn.current={scope:props.scopeKey,kind:artist?'artist':'search',opener:artist?albumOpener.current:null,position:artist?albumScroll.current:null};setAlbum(null);}}/>}</>;
 }

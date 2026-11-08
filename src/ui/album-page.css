@@ -1,0 +1,4 @@
+.album-page { min-width: 0; overflow-wrap: anywhere; }
+.album-page ol,.album-page ul { padding-inline-start: 1.5rem; }
+.album-page li { margin-block: .5rem; }
+.album-page li button { text-align: start; max-width: 100%; }

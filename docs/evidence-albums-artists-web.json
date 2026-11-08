@@ -1,0 +1,62 @@
+{
+  "project": "Pulso-Web",
+  "date": "2026-11-08",
+  "status": "LOCAL_SYNTHETIC_BROWSER_PASS_PRIVATE_RELEASED_REAL_ALBUM_PENDING",
+  "release": "80a9423c34c6d88b",
+  "entrySHA256": "80a9423c34c6d88bbf4e1deab44b6f5eef9abaf5e25fd0be958237f783c4c02f",
+  "freezeSHA256": "e49f65cf382b167a2475ffa4f4fb2b1a88fc429a7567308b3547e2fb7be6d983",
+  "frozenSources": 162,
+  "nativeMain": {
+    "groups": {
+      "uniquePlanned": 26,
+      "executed": 26,
+      "passed": 26,
+      "failed": 0
+    },
+    "cleanup": true,
+    "sourceUnchanged": true,
+    "mainTransformations": 0,
+    "sdkFactory": "synthetic, exactly one",
+    "pageErrors": 0,
+    "csp": 0,
+    "external": 0
+  },
+  "previousUnitSuite": {
+    "passed": 545,
+    "rerunAfterFinalUIFixes": false
+  },
+  "currentLintPassed": true,
+  "production": {
+    "passed": true,
+    "desktopEngines": [
+      "Chromium 154",
+      "WebKit 27.2"
+    ],
+    "syntheticMetadataAndOwnAudio": true,
+    "historicalWebKitStyleSrcAttr": 10
+  },
+  "buildAudit": {
+    "passed": true,
+    "sourceArchiveFiles": 3644,
+    "currentSourceMembersExact": 162,
+    "privateIdentityAbsent": true
+  },
+  "privateDelivery": {
+    "passed": true,
+    "currentExact": 38,
+    "previousImmutableExact": 258,
+    "serviceRestart": false,
+    "newGrant": false,
+    "forcedSWActivation": false,
+    "sessionOrMusicCleared": false
+  },
+  "realMosca": {
+    "status": "PENDING_AFTER_CATALOG_FIX",
+    "publicEditionId": 6813620396,
+    "publicDeclaredTracks": 17,
+    "earlierAttempt": "stopped before any bot audio query because album search did not offer target edition"
+  },
+  "physicalIPhone": false,
+  "p0Accepted": false,
+  "usd": 0
+}

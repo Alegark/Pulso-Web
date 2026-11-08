@@ -19,7 +19,6 @@ export function MiniPlayer(props: MiniPlayerProps) {
       <div className="mini-player__artwork">{props.artwork ?? <span aria-hidden="true">♪</span>}</div>
       <div className="mini-player__details">
         <p><strong>{props.title}</strong>{props.artist && <> · {props.artist}</>}</p>
-        <p>{props.stateText}</p>
       </div>
       <div className="mini-player__actions">
         {props.playing ? (

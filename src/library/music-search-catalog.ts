@@ -8,7 +8,7 @@ export interface MusicCatalogChoice {
  readonly artist:string|null;
  readonly album:string|null;
  readonly duration:number|null;
- readonly source:'local'|'lrclib';
+ readonly source:'local'|'lrclib'|'itunes';
 }
 export const MUSIC_CATALOG_LIMITS=Object.freeze({localMatches:50,tracks:70,albums:20,preview:6});
 // Ignore presentation differences, not recording/version qualifiers or performers.
@@ -31,9 +31,10 @@ function score(query:string,title:string,artist:string|null,album:string|null):n
  const artistMatches=words.filter(w=>match(w,performers)).length;
  return (covered===words.length?10000:0)+covered*100+artistMatches*10+named;
 }
-function matches(text:string|null,query:string):boolean {
- const words=tokens(query), values=tokens(text);
- return words.length>0&&words.every(w=>values.some(v=>v===w||(w.length>=3&&v.startsWith(w))));
+function albumMatches(query:string,album:string,artist:string|null):boolean {
+ const words=tokens(query),names=tokens(album),performers=tokens(artist);
+ const has=(word:string,values:string[])=>values.some(value=>value===word||(word.length>=3&&value.startsWith(word)));
+ return words.length>0&&words.some(w=>has(w,names))&&words.every(w=>has(w,[...names,...performers]));
 }
 /** A metadata grouping, not an acoustic identity claim. Album/duration differences
  * do not repeat a title/performer; literal live/remix/etc titles remain distinct.
@@ -48,7 +49,7 @@ export function musicSearchCatalog(query:string,local:readonly Track[],remote:re
   if(source==='local'&&!score(q,title,artist,album))return;
   const key=JSON.stringify([musicCatalogKey(title),musicCatalogKey(artist??'')]);
   if(!songs.has(key)&&songs.size<MUSIC_CATALOG_LIMITS.tracks)songs.set(key,Object.freeze({id,kind:'track',title,artist,album,duration,source}));
-  if(album&&matches(album,q)){
+  if(album&&albumMatches(q,album,artist)){
    const albumKey=JSON.stringify([musicCatalogKey(artist??''),musicCatalogKey(album)]);
    if(!albums.has(albumKey)&&albums.size<MUSIC_CATALOG_LIMITS.albums)albums.set(albumKey,Object.freeze({id:'album:'+albumKey,kind:'album',title:album,artist,album,duration:null,source}));
   }
