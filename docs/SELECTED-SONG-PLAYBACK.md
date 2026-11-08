@@ -55,3 +55,8 @@ El panel de producto oculta el selector adicional de versiones. El proceso conse
 Se reprodujo con SDK sintético un cierre de sesión después del callback musical y al comenzar la lectura del archivo. Antes, revocar la sesión resolvía la descarga sin audio y el cambio de ámbito retiraba la canción seleccionada; el aviso podía quedar debajo del catálogo, con el texto anterior de espera. El controlador conserva ahora la ficha pública elegida y un error terminal próximo al buscador. Aborta la intención, elimina la referencia de consulta y la captura de red, descarta el progreso y no permite un Play tardío ni reintenta mensajes automáticamente. Una selección nueva comienza un intento nuevo bajo sus propias guardas.
 
 La regresión integrada verifica un envío, un callback y una lectura de archivo que falla por revocación; no publica copia ni inicia audio. Esta reparación acredita la presentación del fallo, **no identifica la causa del problema informado por el propietario ni demuestra reproducción con su cuenta real**. La sesión del navegador compartido estaba desconectada al abrirlo para la prueba. Evidencia: [evidence-selected-song-feedback-web.json](evidence-selected-song-feedback-web.json).
+
+
+## 2026-11-08 · Autorización persistente
+
+El acceso temporal descrito arriba queda sustituido para la autorización por la [sesión conservada en este navegador](TELEGRAM-PERSISTENCE.md). El SDK mantiene caches y referencias en RAM; la autorización confirmada se guarda en un almacén separado, se restaura bajo autoridad y puede eliminarse explícitamente. No persiste búsquedas, chats ni el pool de bots. La prueba musical con la cuenta real sigue pendiente; esta modificación no se presenta como reparación del audio.

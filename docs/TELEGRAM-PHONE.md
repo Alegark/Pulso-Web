@@ -11,3 +11,8 @@ El borrador se puede editar sin tener autoridad para conectarse. Los callbacks d
 La normalización legacy se conserva para sus consumidores. El cambio no modifica SDK, sesión temporal, cuotas, backend, configuración API ni autenticación de cuenta. Biblioteca, copia de reproducción y nuevas acciones de playlist siguen siendo un incremento separado; el componente SelectedSongActions está preparado y todavía no integrado.
 
 Evidencia de la integración y límites: `docs/evidence-telegram-phone-web.json`. La prueba local de los campos no acredita autenticación con cuenta real ni Safari físico.
+
+
+## 2026-11-08 · Autorización persistente
+
+El acceso temporal descrito arriba queda sustituido para la autorización por la [sesión conservada en este navegador](TELEGRAM-PERSISTENCE.md). El SDK mantiene caches y referencias en RAM; la autorización confirmada se guarda en un almacén separado, se restaura bajo autoridad y puede eliminarse explícitamente. No persiste búsquedas, chats ni el pool de bots. La prueba musical con la cuenta real sigue pendiente; esta modificación no se presenta como reparación del audio.

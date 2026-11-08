@@ -1,25 +1,25 @@
-/** Temporary authentication only. No session export, generic RPC or local-library authority. */
+/** Worker-owned authentication. No session export, generic RPC or local-library authority. */
 import {parseAccountBinding,type AccountBinding,type SourceRow} from './sources-protocol';
 import {parseSaved} from './sources-bridge-protocol';
 import {record,uuid} from './auth-protocol';
-export const sessionPhases=['disconnected','sending-code','code','password','authorizing','connected','disconnecting','error'] as const;
-export const sessionErrors=['configuration','api-invalid','api-restricted','phone-invalid','code-invalid','code-expired','password-invalid','rate-limit','network','unsupported','cancelled','timeout','protocol','logout-unconfirmed','internal'] as const;
+export const sessionPhases=['disconnected','restoring','sending-code','code','password','authorizing','connected','disconnecting','error'] as const;
+export const sessionErrors=['configuration','api-invalid','api-restricted','phone-invalid','code-invalid','code-expired','password-invalid','rate-limit','network','unsupported','cancelled','timeout','protocol','logout-unconfirmed','session-storage','session-expired','internal'] as const;
 export type SessionPhase=typeof sessionPhases[number];
 export type SessionError=typeof sessionErrors[number];
 export type Delivery='app'|'sms'|'call'|'email';
 export interface SessionState {phase:SessionPhase;error:SessionError|null;retryAt:number|null;delivery:Delivery|null}
-export interface SessionCommand {version:2;session:string;request:string;type:'begin'|'code'|'password'|'logout';value:string}
+export interface SessionCommand {version:2;session:string;request:string;type:'begin'|'restore'|'forget'|'code'|'password'|'logout';value:string}
 export interface SessionReply {version:2;session:string;request:string;phase:SessionPhase;error:SessionError|null;retryAt:number|null;delivery:Delivery|null;binding:AccountBinding|null;saved:SourceRow|null}
 export const initialSessionState=():SessionState=>({phase:'disconnected',error:null,retryAt:null,delivery:null});
 export function parseSessionCommand(value:unknown):SessionCommand|null {
  try{
   if(!record(value,['version','session','request','type','value'])||value.version!==2||!uuid(value.session)||!uuid(value.request)||typeof value.value!=='string')return null;
   const type=value.type;
-  if(!['begin','code','password','logout'].includes(type as string))return null;
+  if(!['begin','restore','forget','code','password','logout'].includes(type as string))return null;
   if(type==='begin'&&!/^\+[1-9][0-9]{5,14}$/.test(value.value))return null;
   if(type==='code'&&!/^[0-9]{1,12}$/.test(value.value))return null;
   if(type==='password'&&(!value.value.length||value.value.length>1024))return null;
-  if(type==='logout'&&value.value!=='')return null;
+  if(['logout','restore','forget'].includes(type as string)&&value.value!=='')return null;
   return {version:2,session:value.session,request:value.request,type:type as SessionCommand['type'],value:value.value};
  }catch{return null;}
 }
@@ -28,7 +28,7 @@ export function parseSessionReply(value:unknown,session:string,request:string):S
   if(!record(value,['version','session','request','phase','error','retryAt','delivery','binding','saved'])||value.version!==2||value.session!==session||value.request!==request||!sessionPhases.includes(value.phase as SessionPhase)||!(value.error===null||sessionErrors.includes(value.error as SessionError))||!(value.retryAt===null||typeof value.retryAt==='number'&&Number.isSafeInteger(value.retryAt)&&value.retryAt>=0&&value.retryAt<=8640000000000000)||!(value.delivery===null||['app','sms','call','email'].includes(value.delivery as string)))return null;
   if((value.phase==='connected'||value.phase==='disconnected')&&value.error!==null)return null;
   if((value.phase==='connected'||value.phase==='disconnected')&&(value.retryAt!==null||value.delivery!==null)||value.phase==='error'&&value.error===null)return null;
-  if(['sending-code','authorizing','disconnecting'].includes(value.phase as string))return null;
+  if(['restoring','sending-code','authorizing','disconnecting'].includes(value.phase as string))return null;
   const binding=parseAccountBinding(value.binding),saved=parseSaved(value.saved);
   if(value.phase==='connected'?(!binding||!saved):(value.binding!==null||value.saved!==null))return null;
   return {version:2,session,request,binding,saved,phase:value.phase as SessionPhase,error:value.error as SessionError|null,retryAt:value.retryAt as number|null,delivery:value.delivery as Delivery|null};
@@ -43,7 +43,7 @@ export function sessionFailure(error:unknown):{error:SessionError;retryAt:number
   const match=/FLOOD_(?:PREMIUM_)?WAIT_(\d+)/.exec(text);if(match)seconds=Number(match[1]);
   return {error:'rate-limit',retryAt:seconds>0&&seconds<=86400?Date.now()+Math.ceil(seconds*1000):null,passwordNeeded:false};
  }
- const pairs:readonly [RegExp,SessionError][]=[[/PHONE_NUMBER_INVALID/,'phone-invalid'],[/PHONE_CODE_INVALID|PHONE_CODE_EMPTY/,'code-invalid'],[/PHONE_CODE_EXPIRED|PHONE_CODE_HASH/,'code-expired'],[/PASSWORD_HASH_INVALID/,'password-invalid'],[/API_ID_INVALID/,'api-invalid'],[/API_ID_PUBLISHED_FLOOD/,'api-restricted'],[/configuration/,'configuration'],[/SIGN_UP_REQUIRED|AUTH_RESTART|EMAIL_|Payment|payment|unsupported|PHONE_NUMBER_BANNED/,'unsupported'],[/Abort|cancelled/,'cancelled']];
+ const pairs:readonly [RegExp,SessionError][]=[[/session-storage/,'session-storage'],[/session-expired|AUTH_KEY_UNREGISTERED|SESSION_REVOKED|SESSION_EXPIRED/,'session-expired'],[/PHONE_NUMBER_INVALID/,'phone-invalid'],[/PHONE_CODE_INVALID|PHONE_CODE_EMPTY/,'code-invalid'],[/PHONE_CODE_EXPIRED|PHONE_CODE_HASH/,'code-expired'],[/PASSWORD_HASH_INVALID/,'password-invalid'],[/API_ID_INVALID/,'api-invalid'],[/API_ID_PUBLISHED_FLOOD/,'api-restricted'],[/configuration/,'configuration'],[/SIGN_UP_REQUIRED|AUTH_RESTART|EMAIL_|Payment|payment|unsupported|PHONE_NUMBER_BANNED/,'unsupported'],[/Abort|cancelled/,'cancelled']];
  return {error:pairs.find(([pattern])=>pattern.test(text))?.[1]??'network',retryAt:null,passwordNeeded:false};
 }
 export const sessionErrorText:Record<SessionError,string>={
@@ -61,5 +61,7 @@ export const sessionErrorText:Record<SessionError,string>={
  timeout:'La operación no terminó a tiempo. Se detuvo la conexión local; revisa Dispositivos en Telegram si la autorización pudo completarse.',
  protocol:'No se pudo validar la respuesta de la conexión. Se cerró el acceso local.',
  'logout-unconfirmed':'Se cerró el acceso local, pero no se confirmó la revocación remota. Revisa Telegram → Ajustes → Dispositivos.',
+ 'session-storage':'No se pudo leer, guardar o eliminar la sesión de Telegram en este navegador. Comprueba el almacenamiento antes de volver a intentarlo.',
+ 'session-expired':'Telegram revocó o caducó la sesión guardada. Inicia sesión de nuevo.',
  internal:'No se pudo completar este paso de acceso.',
 };

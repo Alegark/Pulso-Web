@@ -2,12 +2,13 @@
  * This does NOT authenticate a real account or establish live bot compatibility.
  * Genuine pool/source/search drivers and typed SDK adapter remain in the worker. */
 import Long from 'long';
+import {sessionLease,saveTelegramSession,loadTelegramSession,clearTelegramSessionLease} from './saved-session';
 import type {tl} from '@mtcute/core';
 import {createSourcesDriver,type SourcesDriver} from './sources-driver';
 import {createBotProvidersDriver,botProvidersFailure,type BotProvidersDriver} from './bot-providers-driver';
 import {createBotSearchSdkDriver,type BotSearchDriver} from './bot-search-driver';
 const nativeFetch=fetch.bind(globalThis);
-async function event(type:string,extra:object={}){await nativeFetch('/__musicflow/event',{method:'POST',body:JSON.stringify({type,...extra})});}
+async function event(type:string,extra:object={}){const r=await nativeFetch('/__musicflow/event',{method:'POST',body:JSON.stringify({type,...extra})});return r.json();}
 Object.defineProperty(globalThis,'WebSocket',{value:class{constructor(){void event('blocked-websocket');throw Error('TESTONLY no Telegram network');}}});
 globalThis.fetch=((input:RequestInfo|URL,init?:RequestInit)=>{
  const u=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url,location.href);
@@ -86,10 +87,13 @@ export async function openTemporaryTelegram(_identity:unknown,lifetime:AbortSign
   // TESTONLY individual responses fit 64KiB, while ordinary polling totals more.
   return wireMode==='download-metadata-budget'&&request._!=='upload.getFile'?{...result,incidental:'x'.repeat(8192)}:result;
  };
+ let persistentLease='';
  return {
+  async restore(s:AbortSignal){current(s);const config=await event('synthetic-restore-NOT-REAL');current(s);const saved=await loadTelegramSession();if(!saved)return false;persistentLease=saved.lease;if(config.mode==='persist-network')throw Error('synthetic-network');if(config.mode==='persist-revoked'){await clearTelegramSessionLease(persistentLease);throw Error('session-expired');}binding={accountRef:crypto.randomUUID(),accountEpoch:1};return true;},
+  async forgetSavedAuthorization(s:AbortSignal){current(s);if(persistentLease)await clearTelegramSessionLease(persistentLease);current(s);},
   async begin(_phone:string,s:AbortSignal){current(s);await event('synthetic-begin');return 'app' as const;},
   async code(_phone:string,_code:string,s:AbortSignal){current(s);throw {errorMessage:'SESSION_PASSWORD_NEEDED'};},
-  async password(_password:string,s:AbortSignal){current(s);binding={accountRef:crypto.randomUUID(),accountEpoch:1};await event('synthetic-positive-auth-NOT-REAL');},
+  async password(_password:string,s:AbortSignal){current(s);const config=await event('synthetic-positive-auth-NOT-REAL');current(s);if(config.persistSession){persistentLease=await sessionLease();if(!await saveTelegramSession(persistentLease,'MUSIC_FLOW_SYNTHETIC_AUTH_ONLY'))throw Error('session-storage');}binding={accountRef:crypto.randomUUID(),accountEpoch:1};},
   async logout(s:AbortSignal){current(s);if(search&&!await search.quiesce()||bots&&!await bots.quiesce()||sources&&!await sources.quiesce())throw Error('synthetic logout unsettled');await event('synthetic-logout');await close();},
   close,getAccountCooldown,getAccountBinding:()=>closed?null:binding,
   createBotProviders(sessionId:string){if(!binding||closed)throw Error('No synthetic binding');return bots??=createBotProvidersDriver(binding,sessionId,{invalidateSession,resolveIdentity:(username,s)=>call({_:'contacts.resolveUsername',username},{abortSignal:s,timeout:15000,maxRetryCount:0,floodSleepThreshold:0})});},

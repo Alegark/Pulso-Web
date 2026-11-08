@@ -44,3 +44,8 @@ Los245 pares territorio/código proceden de la fuente Google libphonenumber fija
 ### Comprobaciones locales pendientes y acceso temporal
 
 La conexión temporal a Telegram usa exclusivamente memoria y no escribe en la biblioteca. Una comprobación o un resultado musical anterior pendiente no impide por sí solo enviar el código de acceso. Esos pendientes siguen visibles y conservan sus restricciones de escritura, recuperación y retirada; autenticarse no los resuelve ni autoriza descargas. Propiedad de la pestaña, base disponible, operaciones incompatibles, reservas, cola, consentimiento y plazo de reintento conservan sus comprobaciones. Perder el ámbito invalida el cliente y sus callbacks como antes. Evidencia: docs/evidence-telegram-library-admission-web.json; cuenta real y teléfono físico pendientes.
+
+
+## 2026-11-08 · Autorización persistente
+
+El acceso temporal descrito arriba queda sustituido para la autorización por la [sesión conservada en este navegador](TELEGRAM-PERSISTENCE.md). El SDK mantiene caches y referencias en RAM; la autorización confirmada se guarda en un almacén separado, se restaura bajo autoridad y puede eliminarse explícitamente. No persiste búsquedas, chats ni el pool de bots. La prueba musical con la cuenta real sigue pendiente; esta modificación no se presenta como reparación del audio.

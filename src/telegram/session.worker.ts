@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import {hasSavedTelegramSession,clearSavedTelegramSession} from './saved-session';
 import {parseSessionCommand,sessionFailure,type SessionCommand,type SessionReply,type Delivery} from './session-protocol';
 import {decodeTelegramApiIdentity,API_IDENTITY_INPUT_BYTES} from './api-identity';
 import {parseAccountBinding,parseSourcesCommand,type SourcesCommand} from './sources-protocol';
@@ -100,12 +101,19 @@ self.onmessage=event=>{
  if(event.data?.protocol==='pulso-bot-providers'){const bot=parseBotProvidersCommand(event.data);if(!bot){closeLocal();return;}void botCommand(bot);return;}
  if(event.data?.protocol==='pulso-sources'){const source=parseSourcesCommand(event.data);if(!source){closeLocal();return;}void sourceCommand(source);return;}
  const command=parseSessionCommand(event.data);if(!command||active||session&&command.session!==session){closeLocal();return;}
- if(!session){if(command.type!=='begin'){closeLocal();return;}session=command.session;}
- if(command.type==='begin'&&phase!=='disconnected'||command.type==='code'&&phase!=='code'||command.type==='password'&&phase!=='password'||command.type==='logout'&&phase!=='connected'){closeLocal();return;}
+ if(!session){if(!['begin','restore','forget'].includes(command.type)){closeLocal();return;}session=command.session;}
+ if(['begin','restore','forget'].includes(command.type)&&phase!=='disconnected'||command.type==='code'&&phase!=='code'||command.type==='password'&&phase!=='password'||command.type==='logout'&&phase!=='connected'){closeLocal();return;}
  active=true;
  void (async()=>{
   try{
-   if(command.type==='logout'){
+   if(command.type==='forget'){await clearSavedTelegramSession();if(abort.signal.aborted)return;phase='disconnected';reply(command);self.close();return;}
+   if(command.type==='restore'){
+    if(!await hasSavedTelegramSession()){phase='disconnected';reply(command);self.close();return;}
+    const ready=await open();if(!ready.restore)throw Error('unsupported');
+    if(!await ready.restore(abort.signal)){phase='disconnected';reply(command);closeLocal();return;}
+   }else if(command.type==='logout'){
+    // Forget this authorization even if remote quiescence cannot be confirmed.
+    await client!.forgetSavedAuthorization?.(abort.signal);
     if(search){const settled=await search.quiesce();if(searchFlight)await searchFlight;if(searchControl)await searchControl;if(abort.signal.aborted)return;if(!settled||!client?.getAccountBinding()){phase='error';reply(command,'logout-unconfirmed');closeLocal();return;}}
     if(bots){const settled=await bots.quiesce();if(botFlight)await botFlight;if(botControl)await botControl;if(!settled||!client?.getAccountBinding()){phase='error';reply(command,'logout-unconfirmed');closeLocal();return;}}
     if(page){const settled=await sources!.quiesce();await page;if(!settled||!client?.getAccountBinding()){phase='error';reply(command,'logout-unconfirmed');closeLocal();return;}}
@@ -116,7 +124,7 @@ self.onmessage=event=>{
     const delivery=await ready.begin(phone,abort.signal);
     if(delivery!==null){phase='code';reply(command,null,null,delivery);return;}
    }else if(command.type==='code')await client!.code(phone,command.value,abort.signal);
-   else await client!.password(command.value,abort.signal);
+   else if(command.type==='password')await client!.password(command.value,abort.signal);
    if(!parseAccountBinding(client!.getAccountBinding())){phase='error';reply(command,'protocol');closeLocal();return;}
    sources=client!.createSources(session);if(!parseSaved(sources.getSaved())){phase='error';reply(command,'protocol');closeLocal();return;}
    phase='connected';phone='';reply(command);
@@ -125,7 +133,7 @@ self.onmessage=event=>{
    if(safe.passwordNeeded&&(command.type==='code'||command.type==='begin')){phase='password';reply(command);return;}
    const retryable=command.type==='code'&&safe.error==='code-invalid'||command.type==='password'&&safe.error==='password-invalid'||(command.type==='code'||command.type==='password')&&safe.error==='rate-limit';
    if(retryable){phase=command.type==='code'?'code':'password';reply(command,safe.error,safe.retryAt);return;}
-   phase='error';phone='';reply(command,command.type==='logout'?'logout-unconfirmed':safe.error,safe.retryAt);
+   phase='error';phone='';reply(command,command.type==='logout'&&safe.error!=='session-storage'?'logout-unconfirmed':safe.error,safe.retryAt);
    abort.abort();await client?.close().catch(()=>{});self.close();
   }finally{active=false;}
  })();

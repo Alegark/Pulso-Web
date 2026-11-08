@@ -1,0 +1,234 @@
+{
+  "project": "Pulso-Web",
+  "status": "PERSISTENT_BROWSER_AUTH_IMPLEMENTED_REAL_ACCOUNT_PENDING",
+  "release": "/releases/3d461e76723ce8a4.html",
+  "storage": {
+    "dedicatedIndexedDB": "pulso-web-telegram-session-v1",
+    "sdkCaches": "MemoryStorage",
+    "onlyAuthorizationExportStored": true,
+    "secretReadOnlyInWorker": true,
+    "mainChecksOnlyPresence": true,
+    "phoneCodesPasswordsStored": false,
+    "cloudOrGitSessionStorage": false,
+    "generationCASAndTombstone": true,
+    "newLoginInvalidatesOlderWrites": true,
+    "noAutomaticMessagesOrBotValidation": true,
+    "automaticRestoreOncePerClient": true,
+    "offlineSkipsRestore": true,
+    "savedBotPool": false
+  },
+  "controls": {
+    "localStopKeepsSavedAuthorization": true,
+    "confirmedLogoutRemovesOwnSavedAuthorization": true,
+    "unconfirmedRemoteLogoutVisible": true,
+    "explicitForgetWorksWithoutSdkOrConfiguration": true,
+    "networkErrorKeepsAuthorization": true,
+    "revocationClearsOwnLeaseOnly": true
+  },
+  "validation": {
+    "unitPassed": 507,
+    "unitFailed": 0,
+    "strictProductTypesAndLint": true,
+    "nativeMain": {
+      "counts": {
+        "uniquePlanned": 37,
+        "executed": 37,
+        "passed": 37,
+        "failed": 0
+      },
+      "run": "/data/home/Proyectos/Pulso-Web/.local/persistent-telegram-parent/main/final-2026-11-08T04-46-14-252Z",
+      "receiptSHA256": "ae3ae80b868453ccca8aa61461935fa11200f75217aee1bbd5fb2c3033a8e95c",
+      "sourceUnchanged": true,
+      "sourceExact": 154,
+      "mainTransformed": false,
+      "sdkTransport": "SYNTHETIC_ONLY",
+      "pageErrors": 0,
+      "csp": 0,
+      "unexpectedExternal": 0,
+      "cleanup": true
+    },
+    "sdkInstalled": {
+      "checks": 19,
+      "passed": true,
+      "receipt": ".local/persistent-sdk-native/attempt-1794112569789.json",
+      "receiptSHA256": "235b9f7f75c0467522f1fe10c99b0629c3a2d26b30402ebf478dd3e9d9b11fd2",
+      "realImportExportMemoryStorageWasmAndGetMe": true,
+      "rawCallTransport": "TESTONLY synthetic subclass",
+      "websockets": [],
+      "externalAttempts": 0,
+      "separateFromMainCounts": true
+    },
+    "processRestartVault": {
+      "passed": true,
+      "scope": "own synthetic authorization, native disk profile and vault only",
+      "realTelegram": false,
+      "external": 0,
+      "pageErrors": [],
+      "cleanup": true,
+      "browser": "154.0.8037.57",
+      "survivedBrowserProcessRestart": true,
+      "forgottenAcrossAnotherRestart": true
+    },
+    "quotaFailure": "TESTONLY synchronous QuotaExceededError in native IDB put; not physical quota exhaustion",
+    "production": {
+      "passed": true,
+      "release": "/releases/3d461e76723ce8a4.html",
+      "cases": [
+        {
+          "engine": "chromium",
+          "version": "154.0.8037.57",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        },
+        {
+          "engine": "webkit",
+          "version": "27.2",
+          "passed": true,
+          "build": "actual dist launcher/minified modules, no product transformation",
+          "nativeFetchSyntheticRoute": true,
+          "metadataGets": 1,
+          "authRequests": 0,
+          "oneAudio": true,
+          "nativeLocalPlayback": true,
+          "autoStarted": true
+        }
+      ],
+      "external": [],
+      "errors": [],
+      "csp": [
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        },
+        {
+          "engine": "webkit",
+          "directive": "style-src-attr"
+        }
+      ],
+      "realTelegram": false,
+      "publicMetadataCalls": 0,
+      "physicalIphone": false,
+      "stage": "waiting for native progression",
+      "cleanup": true
+    },
+    "normalUpdate": {
+      "passed": true,
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57",
+      "result": {
+        "oldEntrySHA256": "e7aae6cae4b8f847858be2ced9c640d971ea7ea8ca2a49f96442a4a752768354",
+        "newEntry": "/releases/3d461e76723ce8a4.html",
+        "newVersionBypassesOldShell": true,
+        "stableLauncherSelectsCurrentBuild": true,
+        "waitingBeforeClosingClients": true,
+        "oldStillPlaying": true,
+        "newIsPaused": true,
+        "activatedAfterClientClosure": true,
+        "restoredPaused": true
+      }
+    },
+    "delivery": {
+      "passed": true,
+      "currentFilesExact": 38,
+      "previousImmutableUnchanged": 234,
+      "accessFile": ".local/review/abrir-pulso-sesion-guardada.html",
+      "credentialsRecorded": false,
+      "accessVerified": true,
+      "sameServiceAndGrant": true,
+      "noForcedActivation": true
+    },
+    "https": {
+      "passed": true,
+      "urlRecorded": false,
+      "credentialsRecorded": false,
+      "realTelegram": false,
+      "release": "/releases/3d461e76723ce8a4.html",
+      "launcherEntryMainWorkerSWExact": true,
+      "documentMetadataCsp": true,
+      "workerCspUnchanged": true,
+      "privateConfigurationExact": true,
+      "privateConfigurationNoStore": true
+    },
+    "archive": {
+      "passed": true,
+      "release": "/releases/3d461e76723ce8a4.html",
+      "sourceArchiveFiles": 3620,
+      "frozenSourceMembersExact": 154,
+      "allArchiveFilesMatchCurrent": true,
+      "noPrivateIdentity": true,
+      "noPrivateConfigOrLocalRoots": true,
+      "noticesExact": true,
+      "realTelegram": false,
+      "iPhone": false
+    },
+    "memory": {
+      "project": "Pulso-Web",
+      "files": 14,
+      "fullContentVerified": true,
+      "actualBytesAndSHA": true,
+      "independentReadOnlyAfterSync": true
+    }
+  },
+  "history": {
+    "full36BeforeOfflineGuard": "36/36 historical, separate from final37",
+    "new4": "4/4 focal native integration before full run",
+    "offlineFirst": "Expected playback from library queue preparation; source was paused by existing contract. Original raw preserved. Harness now selects local catalogue song through intended automatic playback path.",
+    "sdkHarness": "Original loopback HMR WebSockets blocked and preserved. Final removes Vite client injection and retains zero WebSocket/external assertion."
+  },
+  "limits": {
+    "realTelegramAccount": false,
+    "physicalIPhone": false,
+    "ownerPlaybackFailureResolved": false,
+    "privateOfflineAcceptance": false,
+    "P0Complete": false,
+    "newBotsOrFallback": false,
+    "userProfileSessionSharedWithPhone": false,
+    "credentialsRecorded": false
+  },
+  "sharedBrowser": {
+    "entry": "/releases/3d461e76723ce8a4.html",
+    "initiallyConnected": false,
+    "initialChallengeOrPhoneDraft": false,
+    "persistenceCopyVisible": true,
+    "leftForOwner": true,
+    "notReloadedAfterLoginRequest": true
+  }
+}

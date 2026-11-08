@@ -16,8 +16,8 @@ export interface BotSearchSnapshot {binding:AccountBinding|null;scopeKey:string;
 const emptySearch=():BotSearchSnapshot=>({binding:null,scopeKey:'',pending:false,cancelling:false,rows:[],queryId:null,providerRef:null,providerRevision:0,expectedTarget:null,delivery:'not-dispatched',expiresAt:null,error:null,retryAt:null,retryBlocked:false,available:false});
 interface SearchPlan {worker:SessionWorker;command:Exclude<BotSearchCommand,{type:'bot-search.cancel'}>;token:ActivityToken;current:()=>boolean;timer:ReturnType<typeof setTimeout>;until:number;cancelCommand:BotSearchCommand|null;cancelAck:boolean;done:boolean;cancelled:boolean;resolveDownload?:(audio:BotDownloadedAudio|null)=>void;audio?:BotDownloadedAudio|null}
 export interface SessionWorker {onmessage:((event:MessageEvent)=>void)|null;onerror:((event:ErrorEvent)=>void)|null;onmessageerror:((event:MessageEvent)=>void)|null;postMessage(message:SessionCommand|SourcesCommand|BotProvidersCommand|BotSearchCommand):void;terminate():void}
-interface Pending {request:string;token:ActivityToken;timer:ReturnType<typeof setTimeout>}
-/** One RAM-only session/worker, created only by an explicit valid phone submission. */
+interface Pending {request:string;type:SessionCommand['type'];token:ActivityToken;timer:ReturnType<typeof setTimeout>}
+/** One worker under owner authority. Credentials remain worker-private. */
 export class TelegramSessionClient {
  private search:BotSearchSnapshot=emptySearch();private searchPlan:SearchPlan|null=null;private searchEpoch=0;private searchGuards=new WeakMap<()=>boolean,()=>boolean>();private retiredSearch=new Map<string,BotSearchCommand>();private searchExpiry:ReturnType<typeof setTimeout>|null=null;
  private bots:BotsSnapshot=emptyBots();private botBinding:AccountBinding|null=null;private botPlan:BotPlan|null=null;private botEpoch=0;private commandEpoch=0;
@@ -180,14 +180,17 @@ export class TelegramSessionClient {
  stop(error:SessionError|null='cancelled'){const uncertain=!!this.searchPlan&&this.search.delivery!=='not-dispatched';this.drop();if(uncertain)this.search={...emptySearch(),delivery:'uncertain',error:'uncertain'};if(!this.stopped)this.publish(error?{...initialSessionState(),phase:'error',error}:initialSessionState());if(uncertain)this.publishSearch();}
  dispose(){this.stopped=true;this.drop();}
  revalidate(){if(this.worker&&!this.current())this.stop('cancelled');else{this.expireSearch();this.expireSources();if(this.sourcesExpiryDirty)this.publishSources();}}
- begin(phone:string){
+ restore(){this.startAuthentication('restore','','restoring');}
+ forgetSavedSession(){this.startAuthentication('forget','','disconnecting');}
+ begin(phone:string){this.startAuthentication('begin',phone,'sending-code');}
+ private startAuthentication(type:'begin'|'restore'|'forget',value:string,phase:'sending-code'|'restoring'|'disconnecting'){
   if(this.stopped||this.pending||this.worker||this.state.retryAt!==null&&Date.now()<this.state.retryAt)return;
   const current=this.captureCurrent(),admission=this.captureCommandCurrent();let valid=false;try{valid=current()&&admission();}catch{/* Denied. */}if(!valid)return;
-  const session=crypto.randomUUID(),request=crypto.randomUUID();const command=parseSessionCommand({version:2,session,request,type:'begin',value:phone});
+  const session=crypto.randomUUID(),request=crypto.randomUUID();const command=parseSessionCommand({version:2,session,request,type,value});
   if(!command){this.publish({...initialSessionState(),phase:'error',error:'phone-invalid'});return;}
   const token=this.activity.begin();if(!token)return;
   this.guard=()=>current()&&token.current();this.session=session;
-  try{const worker=this.factory();this.worker=worker;const live=()=>this.worker===worker&&this.session===session;worker.onmessage=event=>{if(live())this.receive(event.data);};worker.onerror=event=>{if(live()){event.preventDefault?.();this.stop(this.state.phase==='disconnecting'?'logout-unconfirmed':'network');}};worker.onmessageerror=()=>{if(live())this.stop(this.state.phase==='disconnecting'?'logout-unconfirmed':'protocol');};this.send(command,token,'sending-code');}catch{token.end();this.stop('internal');}
+  try{const worker=this.factory();this.worker=worker;const live=()=>this.worker===worker&&this.session===session;worker.onmessage=event=>{if(live())this.receive(event.data);};worker.onerror=event=>{if(live()){event.preventDefault?.();this.stop(this.pending?.type==='forget'?'session-storage':this.state.phase==='disconnecting'?'logout-unconfirmed':'network');}};worker.onmessageerror=()=>{if(live())this.stop(this.pending?.type==='forget'?'session-storage':this.state.phase==='disconnecting'?'logout-unconfirmed':'protocol');};this.send(command,token,phase);}catch{token.end();this.stop('internal');}
  }
  submit(type:'code'|'password',value:string){
   if(!this.worker||this.pending||!this.current()||this.state.retryAt!==null&&Date.now()<this.state.retryAt)return;
@@ -253,8 +256,8 @@ export class TelegramSessionClient {
  }
  private send(command:SessionCommand,token:ActivityToken,phase:SessionState['phase']){
   if(!this.current()){token.end();this.stop('cancelled');return;}
-  const timer=setTimeout(()=>this.stop(command.type==='logout'?'logout-unconfirmed':'timeout'),this.timeoutMs);
-  this.pending={request:command.request,token,timer};this.publish({...this.state,phase,error:null});
+  const timer=setTimeout(()=>this.stop(command.type==='forget'?'session-storage':command.type==='logout'?'logout-unconfirmed':'timeout'),this.timeoutMs);
+  this.pending={request:command.request,type:command.type,token,timer};this.publish({...this.state,phase,error:null});
   if(command.type==='logout'&&(this.searchPlan||this.sourceControl||this.botPlan?.cancelCommand)){this.queuedLogout=command;return;}
   try{this.worker!.postMessage(command);}catch{this.stop(command.type==='logout'?'logout-unconfirmed':'protocol');}
  }

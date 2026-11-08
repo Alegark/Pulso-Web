@@ -23,3 +23,8 @@ El runner `test:browser` compila páginas de prueba; `test:browser:run` abre Chr
 Los archivos `.local/`, `.tools/`, `node_modules/`, `dist/`, logs y `.env*` están excluidos. No se suben sesiones, credenciales, memoria Engram ni almacenamiento musical del navegador. La configuración de contexto Engram identifica únicamente este proyecto; cada checkout necesita su propia instalación y almacenamiento local.
 
 Presupuesto USD 0. Crear este repositorio privado no publica la aplicación ni autoriza facturación, despliegues, cuentas nuevas o acciones reales en Telegram.
+
+
+## Sesión conservada · 2026-11-08
+
+La autorización de Telegram se guarda en IndexedDB dedicado y puede recuperarse tras recarga en el mismo navegador. Cachés del SDK siguen en RAM; teléfono/código/contraseña no se guardan. Restaurar no envía consultas musicales y mantiene autoridad y callbacks nuevos. Detener local conserva; logout y olvido explícito eliminan según su resultado confirmado. Red sin bucle, revocación, cuota inyectada, reopen de proceso y reproducción local offline comprobados con datos propios. 507 unidades, final37/37 native main con SDK sintético y19checks SDK instalado con transporte simulado, separados. Build3d461e76723ce8a4 entregado en copia privada existente. [Contrato y límites](docs/TELEGRAM-PERSISTENCE.md); [evidencia](docs/evidence-telegram-persistence-web.json). Cuenta real, fallo musical del propietario, iPhone y P0 siguen pendientes.
