@@ -1,0 +1,43 @@
+{
+  "project": "Pulso-Web",
+  "date": "2026-11-08",
+  "status": "CURRENT_RELEASE_ROSALIA_PASS_OLD_INTERFACE_IDENTIFIED",
+  "release": "fb3366ce20f235cd",
+  "indexSHA256": "fb3366ce20f235cd430d81041037315ba0326188d4528ea34559a94b12438c1f",
+  "screenshotPhrase": "Artistas disponibles en iTunes US (hasta 20 resultados).",
+  "phraseAbsentInCurrentDist": true,
+  "phraseSource": "unused legacy ArtistSearchResults; current controller does not import it",
+  "publicAPI": {
+    "requests": 1,
+    "HTTP": 200,
+    "artists": 20,
+    "receipt": ".local/rosalia-current-check/public-result.json"
+  },
+  "browser": {
+    "currentMinifiedDist": true,
+    "metadata": "actual public artist response reused as fixture; other catalogue responses synthetic",
+    "query": "rosalia",
+    "artistRows": 20,
+    "ROSALIAVisible": true,
+    "artistCanonicalId": 313845115,
+    "pageNavigation": "PASS with fixture publications",
+    "unexpectedExternalRequests": 0,
+    "jsErrors": 0,
+    "CSP": 0,
+    "cleanup": true
+  },
+  "access": {
+    "passed": true,
+    "newAccessOpensNetworkLauncher": true,
+    "latestEntryExact": true,
+    "release": "/releases/fb3366ce20f235cd.html",
+    "indexSHA256": "fb3366ce20f235cd430d81041037315ba0326188d4528ea34559a94b12438c1f",
+    "newGrant": false,
+    "credentialsOrURLsRecorded": false
+  },
+  "productCodeChanged": false,
+  "storageOrSessionCleared": false,
+  "physicalIPhoneOrRealCORS": false,
+  "realTelegram": false,
+  "P0": false
+}
