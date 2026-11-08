@@ -24,3 +24,12 @@ La página de artista pasó una selección final única de **26/26** y está en 
 
 
 El recorrido de regreso conserva la edición cargada y libera el indicador de inspección cancelada; los bytes se verifican de nuevo al mostrarla. La posición y el foco del artista se restauran después del commit que muestra su lista, con guarda de ámbito y visibilidad. Se conservan las matrices anteriores 25/26 con los fallos de inspección y desplazamiento. El caso largo pasó tres focales independientes, separadas de la matriz final. La evidencia actual se resume en [evidence-albums-artists-web.json](evidence-albums-artists-web.json).
+
+
+## Apertura de álbum sin consultas al bot
+
+La aclaración del propietario se comprobó sin cambiar el runtime publicado. Una prueba focal G27 con main íntegro y SDK sintético conectado abrió tarjetas de álbum desde sugerencias y resultados: cero RPC y cero Play; seleccionar después una pista ficticia produjo una consulta, un callback y una copia fuera de Biblioteca. Ese control positivo comprueba que el cero anterior no se debía a un SDK ausente. Es una prueba independiente, no una matriz nueva 27/27 ni una suma a las 26 previas. El arnés se añadió después del build publicado.
+
+En el perfil real, Nsqk → artista → mosca mostró 17 pistas sin seleccionar canciones ni Añadir álbum, con cero comandos bot-search.search/download/cancel observados. El estado inicial de reproducción no se registró suficientemente y no se afirma ausencia de un arranque nuevo real; al finalizar estaba pausado. Las sugerencias rápidas reales no ofrecieron el álbum objetivo, por lo que esa entrada se acredita con la fixture, no como recorrido real. La prueba anterior de reproducción había seleccionado expresamente SAMSA después de abrir MOSCA. Evidencia: [evidence-album-navigation-web.json](evidence-album-navigation-web.json).
+
+La reproducción de SAMSA continúa pendiente: el último intento conocido terminó timeout acknowledged. Una auditoría privada de sólo lectura cerró su cliente, pero falló al proyectar la ventana y no determina la causa. No se enviaron búsquedas ni callbacks nuevos durante esa auditoría; sus cuatro archivos temporales se retiraron preservando los 282 archivos preexistentes.

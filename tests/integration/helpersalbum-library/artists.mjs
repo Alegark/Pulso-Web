@@ -105,4 +105,27 @@ export async function runArtistGroups(env) {
   assert(after.sameAudio);assert.equal(after.audioCount,1);assert.equal(after.source,before.source);assert.equal(after.paused,false);assert(after.time>before.time);assert.equal(after.playCalls,before.playCalls);assert.equal(after.queue,before.queue);assert.equal(after.repeat,before.repeat);assert.equal(after.shuffle,before.shuffle);assert.equal(report.rpc.length,rpc);
   return {nativeAudio:true,sameAudio:true,sourceStable:true,queueStable:true,modesStable:true,positionAdvanced:true,newPlayCalls:0,newTelegram:0,metadataRequests:api.requests.length};
  });
+ await group('27 opening album cards never queries Telegram and only a track starts playback',async()=>{
+  await fresh();await env.ready();env.fixture.set({mode:'download-option'});
+  const before=report.rpc.length;await input().fill('MUSIC_FLOW Album');
+  await page().waitForFunction(()=>MUSIC_FLOW.panel().suggestions.some(row=>row.kind==='album')&&!MUSIC_FLOW.panel().suggestionsPending);
+  await panel().locator('.music-search-dropdown [data-catalog-kind="album"]').first().click();
+  await page().getByText('1 pistas · 1 discos',{exact:false}).waitFor();await idle();
+  assert.equal(report.rpc.length,before,'Opening the quick album card must be metadata-only');
+  assert.equal(await page().evaluate(()=>MUSIC_FLOW.playCalls),0);
+  await button('Volver a búsqueda').click();await input().press('Enter');
+  await panel().locator('.music-search-catalog [data-catalog-kind="album"]').first().click();
+  await page().getByText('1 pistas · 1 discos',{exact:false}).waitFor();await idle();
+  assert.equal(report.rpc.length,before,'Opening the results album card must be metadata-only');
+  assert.equal(await page().evaluate(()=>MUSIC_FLOW.playCalls),0);
+  const searches=report.rpc.filter(r=>r.method==='messages.sendMessage').length;
+  const callbacks=report.rpc.filter(r=>r.method==='messages.getBotCallbackAnswer').length;
+  await page().locator('.album-page ol li button').first().click();await env.playing();await idle();
+  assert.equal(report.rpc.filter(r=>r.method==='messages.sendMessage').length,searches+1);
+  assert.equal(report.rpc.filter(r=>r.method==='messages.getBotCallbackAnswer').length,callbacks+1);
+  const data=await env.state();assert.equal(data.assets.length,1);
+  assert(data.settings.some(row=>row?.trackId===data.tracks[0].id&&row.added===false));
+  return {quickAlbumOpenRpc:0,resultsAlbumOpenRpc:0,playBeforeTrack:0,explicitTrackSearch:1,explicitTrackCallback:1,oneAsset:true,automaticLibraryAdd:false};
+ });
+
 }

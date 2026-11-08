@@ -1,0 +1,41 @@
+{
+  "project": "Pulso-Web",
+  "date": "2026-11-08",
+  "productChanged": false,
+  "release": "80a9423c34c6d88b",
+  "runtimeSourceCommit": "9fbe248ac2e5f753bb566b1bebb101c6de1049f9",
+  "syntheticFocusedMain": {
+    "groups": {
+      "uniquePlanned": 1,
+      "executed": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    "cleanup": true,
+    "sourceUnchanged": true,
+    "reportSHA256": "2b9d635eca008fdefcc49b6e2d202e901d20d0b3eae46dad49b613b97dc181a3",
+    "quickAlbumOpenRpc": 0,
+    "resultsAlbumOpenRpc": 0,
+    "playBeforeTrack": 0,
+    "explicitSyntheticTrackSearch": 1,
+    "explicitSyntheticTrackCallback": 1,
+    "automaticLibraryAdd": false
+  },
+  "realBrowser": {
+    "route": "Nsqk \u2192 artista \u2192 mosca",
+    "tracks": 17,
+    "workerSearchCommands": 0,
+    "workerDownloadCommands": 0,
+    "workerCancelCommands": 0,
+    "songsClicked": 0,
+    "albumAddClicked": false,
+    "htmlHashVerified": true,
+    "initialPlaybackSufficientlyObserved": false,
+    "finalMiniplayerPaused": true,
+    "quickAlbumCardTargetOffered": false,
+    "coversAllRpc": false
+  },
+  "suite26": "prior final remains separate; not combined into 27/27",
+  "realMoscaDownloadComplete": false,
+  "physicalIPhone": false
+}
