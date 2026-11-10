@@ -1,8 +1,13 @@
+import {catalogFetch} from './catalog-fetch'
+import {artworkUrl} from './player-artwork-provider'
 /** Public iTunes Store metadata, US market. Completeness refers to declared metadata only. */
 export type AlbumFailure = 'cancelled' | 'timeout' | 'network' | 'http' | 'rate-limited' | 'invalid' | 'incomplete' | 'too-large'
-export type AlbumResult<T> = { ok: true; value: T } | { ok: false; reason: AlbumFailure }
+export type AlbumStage = 'album-search' | 'artist-search' | 'artist-albums' | 'album-detail'
+export type AlbumResult<T> = { ok: true; value: T } | { ok: false; reason: AlbumFailure; stage?: AlbumStage; httpStatus?: number }
 export interface CatalogArtist { id: number; name: string }
-export interface AlbumEdition { id: number; title: string; artist: string; trackCount: number; releaseDate: string | null }
+export interface CatalogSongHint { releaseId:number; trackId:number; disc:number; position:number; title:string; artist:string; album:string; durationMs:number; artworkUrl?:string }
+export interface AlbumHint { id: number; title: string; artist: string | null; artworkUrl?: string }
+export interface AlbumEdition { id: number; title: string; artist: string; trackCount: number; releaseDate: string | null; artworkUrl?: string }
 export interface AlbumTrack { releaseId: number; trackId: number; disc: number; position: number; title: string; artist: string; durationMs: number | null; primaryArtist?: string }
 export interface AlbumDetail { edition: AlbumEdition; tracks: AlbumTrack[] }
 export interface AlbumRequest { signal: AbortSignal; current: () => boolean }
@@ -19,7 +24,8 @@ const owns = (row: Row, keys: string[]) => keys.every(key => Object.hasOwn(row, 
 const fail = <T>(reason: AlbumFailure): AlbumResult<T> => ({ ok: false, reason })
 function edition(row: Row): AlbumEdition | null {
   if (!owns(row, ['wrapperType', 'collectionType', 'collectionId', 'collectionName', 'artistName', 'trackCount']) || row.wrapperType !== 'collection' || row.collectionType !== 'Album' || !pos(row.collectionId) || !text(row.collectionName) || !text(row.artistName) || !pos(row.trackCount) || row.trackCount > LIMIT) return null
-  return Object.freeze({ id: row.collectionId, title: row.collectionName, artist: row.artistName, trackCount: row.trackCount, releaseDate: Object.hasOwn(row, 'releaseDate') && text(row.releaseDate) ? row.releaseDate : null })
+  const artwork = Object.hasOwn(row, 'artworkUrl100') ? artworkUrl(row.artworkUrl100) : null
+  return Object.freeze({ id: row.collectionId, title: row.collectionName, artist: row.artistName, trackCount: row.trackCount, releaseDate: Object.hasOwn(row, 'releaseDate') && text(row.releaseDate) ? row.releaseDate : null, ...(artwork ? { artworkUrl: artwork } : {}) })
 }
 // Inspect descriptors before reading any value: reject accessors, exotic prototypes, cycles and large graphs.
 function bounded(value: unknown): boolean {
@@ -55,6 +61,44 @@ function rows(data: unknown): Row[] | null {
   if (!object(data) || !Object.hasOwn(data, 'results') || !Object.hasOwn(data, 'resultCount') || !Array.isArray(data.results) || data.results.length > LIMIT + 1 || data.resultCount !== data.results.length || !data.results.every(object)) return null
   return data.results
 }
+/** Candidate editions from one bounded song response. Detail lookup remains authoritative. */
+export function albumHintsFromSongs(data: unknown): readonly AlbumHint[] {
+  if (!bounded(data)) return []
+  const all = rows(data)
+  if (!all || all.length > 200) return []
+  const groups = new Map<number, { title: string; artist: string | null; artworkUrl?: string; count: number; valid: boolean }>()
+  for (const row of all) {
+    if (row.wrapperType !== 'track' || row.kind !== 'song' || !pos(row.collectionId) || !text(row.collectionName)) continue
+    const artist = text(row.collectionArtistName) ? row.collectionArtistName : null
+    const artwork = artworkUrl(row.artworkUrl100)
+    const group = groups.get(row.collectionId)
+    if (!group) groups.set(row.collectionId, {title:row.collectionName,artist,...(artwork ? {artworkUrl:artwork} : {}),count:1,valid:true})
+    else {
+      if (group.title !== row.collectionName || group.artist && artist && group.artist !== artist) group.valid = false
+      if (!group.artist && artist) group.artist = artist
+      group.count++
+    }
+  }
+  return Object.freeze([...groups.entries()].filter(([,g])=>g.valid).sort((a,b)=>b[1].count-a[1].count).slice(0,100)
+    .map(([id,g])=>Object.freeze({id,title:g.title,artist:g.artist,...(g.artworkUrl ? {artworkUrl:g.artworkUrl} : {})})))
+}
+
+/** Individual candidates from the existing bounded song search; no completeness claim. */
+export function catalogSongsFromBatch(data:unknown):readonly CatalogSongHint[] {
+ if(!bounded(data))return [];
+ const all=rows(data);if(!all||all.length>200)return [];
+ const found=new Map<string,CatalogSongHint|null>();
+ for(const row of all){
+  if(row.wrapperType!=='track'||row.kind!=='song'||!pos(row.collectionId)||!pos(row.trackId)||!pos(row.discNumber)||row.discNumber>20||!pos(row.trackNumber)||row.trackNumber>200||!text(row.trackName)||!text(row.artistName)||!text(row.collectionName)||!Number.isSafeInteger(row.trackTimeMillis)||(row.trackTimeMillis as number)<0||(row.trackTimeMillis as number)>86400000)continue;
+  const art=artworkUrl(row.artworkUrl100);
+  const song:CatalogSongHint={releaseId:row.collectionId,trackId:row.trackId,disc:row.discNumber,position:row.trackNumber,title:row.trackName,artist:row.artistName,album:row.collectionName,durationMs:row.trackTimeMillis as number,...(art?{artworkUrl:art}:{})};
+  const key=`${song.releaseId}:${song.disc}:${song.position}:${song.trackId}`,previous=found.get(key);
+  if(previous===undefined)found.set(key,Object.freeze(song));
+  else if(previous&&JSON.stringify(previous)!==JSON.stringify(song))found.set(key,null);
+ }
+ return Object.freeze([...found.values()].filter((song):song is CatalogSongHint=>song!==null));
+}
+
 /** Rejects ambiguous, missing, inconsistent or extra positions; preserves repeated track IDs. */
 export function parseAlbumDetail(data: unknown, id: number): AlbumResult<AlbumDetail> {
   if (!bounded(data)) return fail('invalid')
@@ -181,7 +225,7 @@ export class AlbumCatalog {
       const cancelReader = () => { if (reader && !cancellation) cancellation = reader.cancel().catch(() => {}) }
       try {
         if (!active()) return fail<T>(stopped ?? 'cancelled')
-        const response = await this.fetcher(origin + path, { signal: controller.signal, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error' })
+        const response = await catalogFetch(origin + path, { signal: controller.signal, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error' }, this.fetcher)
         if (!active()) { await response.body?.cancel().catch(() => {}); return fail<T>(stopped ?? 'cancelled') }
         if (response.status === 429 || response.status === 503) {
           const retry = response.headers.get('retry-after')
@@ -193,6 +237,7 @@ export class AlbumCatalog {
         if (!response.ok || Number(response.headers.get('content-length')) > MAX_BYTES || !response.body) {
           const reason = response.ok ? 'too-large' : 'http'
           await response.body?.cancel().catch(() => {})
+          if (active() && reason === 'http' && Number.isInteger(response.status) && response.status >= 400 && response.status <= 599) return { ok: false, reason, httpStatus: response.status } as AlbumResult<T>
           return fail<T>(active() ? reason : stopped ?? 'cancelled')
         }
         reader = response.body.getReader()

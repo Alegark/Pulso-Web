@@ -1,0 +1,26 @@
+{
+  "status": "PASS_WITH_LIMITS",
+  "release": "0a92a9641e836c05",
+  "runtimeSourceExact": 190,
+  "playlistUIReadyIncluded": true,
+  "uiGroups": 34,
+  "uiRuntimeExact": 189,
+  "uiCspEvents": {
+    "style-src-attr": 92,
+    "style-src-elem": 14
+  },
+  "playlistWebKitFixture": "fresh persistent synthetic profile; ephemeral Blob IDB negative preserved",
+  "albumNativeGroups": 4,
+  "unitPassed": 646,
+  "lint": "PASS",
+  "sourceArchiveFiles": 3753,
+  "productionSmoke": "PASS Chromium/WebKit",
+  "updateFrom": "2ddae05eaafb16f8",
+  "retainedImmutableFiles": 321,
+  "httpsVerified": true,
+  "rootDistMatchesAccepted": true,
+  "iPhone": false,
+  "SafariPrivate": false,
+  "iPhoneNetworkCause": "not established",
+  "P0Complete": false
+}

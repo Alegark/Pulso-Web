@@ -12,6 +12,14 @@ test('complete multidisc sorts positions and retains repeated recording occurren
   assert.equal(result.ok, true)
   if (result.ok) assert.deepEqual(result.value.tracks.map(t => [t.disc, t.position, t.trackId]), [[1, 1, 1], [1, 2, 1], [2, 1, 1]])
 })
+test('edition carries only a validated artwork URL without weakening track checks', () => {
+  for (const [url, expected] of [['https://is1-ssl.mzstatic.com/image/100x100.jpg', 'https://is1-ssl.mzstatic.com/image/100x100.jpg'], ['https://evil.example/image.jpg', undefined], ['http://is1-ssl.mzstatic.com/image.jpg', undefined]] as const) {
+    const input = body(); Object.assign(input.results[0], {artworkUrl100: url})
+    const result = parseAlbumDetail(input, 42)
+    assert.equal(result.ok, true)
+    if (result.ok) assert.equal(result.value.edition.artworkUrl, expected)
+  }
+})
 test('rejects missing, duplicate, incorrect edition and malformed fields', () => {
   const missing = body(); missing.results.pop(); missing.resultCount--
   assert.deepEqual(parseAlbumDetail(missing, 42), { ok: false, reason: 'incomplete' })
@@ -134,3 +142,13 @@ test('unknown Retry-After retains at least a minute across instances', async () 
     assert.deepEqual(await next, { ok: false, reason: 'cancelled' })
   } finally { Date.now = actualNow }
 })
+
+test('song batch yields bounded edition candidates with collection credit, not guest credit', async()=>{
+ const {albumHintsFromSongs}=await import('../../src/library/album-catalog');
+ const tracks=Array.from({length:60},(_,i)=>({wrapperType:'track',kind:'song',collectionId:i<48?i+1:999,collectionName:i<48?'Other':'Night',collectionArtistName:i<48?'Other':'Example',artistName:i<48?'Other':'Guest'}));
+ const hints=albumHintsFromSongs({resultCount:tracks.length,results:tracks});
+ assert.deepEqual(hints[0],{id:999,title:'Night',artist:'Example'});
+ assert.equal(albumHintsFromSongs({resultCount:1,results:[{wrapperType:'track',kind:'song',collectionId:3,collectionName:'Night',artistName:'Guest'}]})[0].artist,null);
+ assert.deepEqual(albumHintsFromSongs({resultCount:1,results:tracks}),[]);
+ assert.deepEqual(albumHintsFromSongs({resultCount:201,results:Array(201).fill({})}),[]);
+});

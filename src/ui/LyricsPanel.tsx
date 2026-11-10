@@ -152,7 +152,7 @@ export function LyricsPanel({activity, trackId, title, timeSeconds, canEdit, cap
   return <details className="lyrics-panel" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
     <summary>Letras locales</summary>
     {open && <>
-      <p>{external?.available?'Las letras locales tienen prioridad. La consulta en línea es opcional.':'Solo letras locales; ningún proveedor externo está habilitado.'}</p>
+      <p>{external?.available?'Las letras locales tienen prioridad. La consulta en línea es opcional.':'Aquí puedes editar las letras guardadas en este navegador.'}</p>
       {busy && !result && <p>Cargando letras…</p>}
       {result?.state === 'absent' && <p>Sin letras para {title}.{result.origin?.provenance === 'manual' && ' Elección «Sin letras» guardada por ti.'}</p>}
       {result?.state === 'unavailable' && <p>Letras no disponibles. {new LyricsError(result.failureCode).message} {result.repairToken ? 'Puedes reparar el registro guardando una nueva elección.' : 'No se puede guardar hasta volver a leer el estado.'}</p>}

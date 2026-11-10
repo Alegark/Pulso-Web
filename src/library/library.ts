@@ -1,6 +1,6 @@
 import type {LocalAlbumMetadataV1} from './album-metadata';
 import {admittedTransaction,closeDatabase,assertDatabaseUse} from '../storage/database';
-import {openAssetReader,verificationFailure} from '../storage/asset-reader';
+import {openAssetReader,verificationFailure,WRITER_LOCK} from '../storage/asset-reader';
 import {fromKnownError,makeFailure,type FailureV1} from '../errors/app-failure';
 import {committed, openDatabase, readRecord, request} from '../storage/database';
 export interface AudioFingerprint {algorithm:'sha256';sha256:string;bytes:number}
@@ -21,21 +21,28 @@ export function validAsset(a: unknown): a is LocalAsset {
  Number.isSafeInteger(m.bytes)&&m.bytes>0&&m.bytes<=100*1024*1024&&m.chunkSize===65536&&m.chunks===Math.ceil(m.bytes/m.chunkSize)&&Number.isSafeInteger(m.revision)&&m.revision>0;
 }
 export async function all<T>(store:string):Promise<T[]> { const db=await openDatabase();try{const tx=admittedTransaction(db,store);const done=committed(tx);const records=await request<T[]>(tx.objectStore(store).getAll());await done;assertDatabaseUse('read');return records;}finally{closeDatabase(db);} }
-export async function editTrack(id:string, revision:number, patch:Partial<Pick<Track,'title'|'artist'|'album'|'favorite'>>) {
+export async function editTrack(id:string, revision:number, patch:Partial<Pick<Track,'title'|'artist'|'album'|'favorite'>>,current:()=>boolean=()=>true) {
+ if(!current())throw new Error('La operación ya no está vigente.');
+ return navigator.locks.request(WRITER_LOCK,async()=>{
+ if(!current())throw new Error('La operación ya no está vigente.');
  const db=await openDatabase();try{
  const tx=admittedTransaction(db,'tracks','readwrite');const done=committed(tx);const store=tx.objectStore('tracks');const track=await request<Track|undefined>(store.get(id));
- if(!track||track.revision!==revision){tx.abort();await done;return;}
+ if(!current()||!track||track.revision!==revision){tx.abort();await done;return;}
  const title=patch.title?.trim();if(patch.title!==undefined&&(!title||title.length>300)){tx.abort();await done;return;}
  const next={...track,...patch,title:title??track.title,revision:revision+1,manualOverrides:{...track.manualOverrides,...('title'in patch?{title}:{}),...('artist'in patch?{artist:patch.artist}:{}),...('album'in patch?{album:patch.album}:{})}};
  store.put(next,id);await done;
  }finally{closeDatabase(db);}
+ });
 }
-export async function createPlaylist(name:string):Promise<Playlist> {
+export async function createPlaylist(name:string,current:()=>boolean=()=>true):Promise<Playlist> {
+ if(!current())throw new Error('La operación ya no está vigente.');
  name=name.trim();if(!name||name.length>100)throw new Error('Escribe un nombre de 1 a 100 caracteres.');
  const playlist:Playlist={id:crypto.randomUUID(),name,entries:[],revision:1};
- const db=await openDatabase();try{const tx=admittedTransaction(db,'playlists','readwrite');const done=committed(tx);tx.objectStore('playlists').add(playlist,playlist.id);await done;return playlist;}finally{closeDatabase(db);}
+ return navigator.locks.request(WRITER_LOCK,async()=>{if(!current())throw new Error('La operación ya no está vigente.');const db=await openDatabase();try{if(!current())throw new Error('La operación ya no está vigente.');const tx=admittedTransaction(db,'playlists','readwrite');const done=committed(tx);tx.objectStore('playlists').add(playlist,playlist.id);await done;return playlist;}finally{closeDatabase(db);}});
 }
 export async function changePlaylist(id:string, revision:number, action:{type:'rename';name:string}|{type:'add';trackId:string}|{type:'remove';entryId:string}|{type:'move';entryId:string;delta:-1|1}|{type:'delete'},current:()=>boolean=()=>true) {
+ if(!current())throw new Error('La operación ya no está vigente.');
+ return navigator.locks.request(WRITER_LOCK,async()=>{
  if(!current())throw new Error('La operación ya no está vigente.');
  const db=await openDatabase();try{
  const tx=admittedTransaction(db,['playlists','tracks'],'readwrite');const done=committed(tx);const store=tx.objectStore('playlists');const list=await request<Playlist|undefined>(store.get(id));
@@ -54,6 +61,7 @@ export async function changePlaylist(id:string, revision:number, action:{type:'r
  }
  await done;
  }finally{closeDatabase(db);}
+ });
 }
 export type VerifiedAssetResult={state:'valid';asset:LocalAsset;failure:null}|{state:'missing'|'corrupt'|'unknown';asset:null;failure:FailureV1};
 // Validate a data-only snapshot: neither validation nor backend selection may run

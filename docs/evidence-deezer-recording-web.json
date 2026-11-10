@@ -1,0 +1,168 @@
+{
+  "project": "Pulso-Web",
+  "status": "PRIVATE_RELEASE_COMPLETE_FOR_THIS_INCREMENT",
+  "release": "c7c56c290c274884",
+  "curatedProviders": [
+    "KDMusic_Bot",
+    "DeezerMusicBot"
+  ],
+  "accountOrder": [
+    "kdmusic_bot",
+    "deezermusicbot"
+  ],
+  "implementation": {
+    "artistFirstSupported": true,
+    "onlyNewSuffix": "(Album Version)",
+    "aliasRequiresKnownAlbumDuration": true,
+    "importRequiresActualFullTagsAlbumAndDuration": true,
+    "aliasToleranceSeconds": 1,
+    "ordinaryToleranceSeconds": 5,
+    "closedRecordingTitleContextGroup": true,
+    "ambiguousDetachedCopiesRemainUnknown": true,
+    "noAutomaticSuggestionActivation": true
+  },
+  "realProduct": {
+    "providerActuallyUsed": "kdmusic_bot",
+    "publicSongTitle": "No Basta Con Querernos Más",
+    "publicArtist": "Nsqk",
+    "album": "mosca",
+    "bytes": 3221310,
+    "newAssetCount": 1,
+    "totalAssetsAfter": 18,
+    "albumDownloaded": 17,
+    "albumInLibrary": 17,
+    "autoPlaybackObservedSeconds": [
+      27.0,
+      41.3
+    ],
+    "blobDeclaredStoredManifestMatchRAM": true,
+    "extraSearchOnTwoReselections": 0,
+    "extraDownloadOnTwoReselections": 0,
+    "libraryAddExplicit": true,
+    "deliverySnapshotResidual": "uncertain; downloaded terminal and file verification independently prove completion, not download ACK"
+  },
+  "realDeezer": {
+    "scope": "existing file already selected by user; no new query/callback or app import",
+    "callbackEvidence": "OWNER_REPORTED_IMAGE",
+    "fileBytes": 8071089,
+    "parts": 124,
+    "durationSeconds": 199.0008163265306,
+    "metadataPass": true,
+    "independentHashComparedRAM": true,
+    "revalidatedBeforeAfter": true,
+    "codecValid": true,
+    "clientCleanup": "confirmed",
+    "appMusicWrites": false,
+    "physicalRamOnlyGuaranteed": false,
+    "fullRealProductFallbackExercised": false
+  },
+  "tests": {
+    "unitPassed": 620,
+    "lintPassed": true,
+    "nativeIndependentRuns": [
+      {
+        "path": ".local/deezer-recording-main/final-2026-11-09T03-30-31-962Z/report.json",
+        "sha256": "0e80d3763b07457e5bb2e48df98f2e6612325aa3ade2b85c896347d84bc99110",
+        "bytes": 527244,
+        "counts": {
+          "uniquePlanned": 8,
+          "executed": 8,
+          "passed": 8,
+          "failed": 0
+        },
+        "status": "PASS_LOCAL_MAIN_SYNTHETIC_SDK_ONLY",
+        "sourceUnchanged": true,
+        "cleanup": true,
+        "sdk": "synthetic transport, worker native",
+        "mainTransformations": 0
+      },
+      {
+        "path": ".local/deezer-recording-main/final-2026-11-09T03-32-40-524Z/report.json",
+        "sha256": "f7b0e28a642e67a1cd9dc5ca00f9178570eba17486ca8db55e58d9db7657f194",
+        "bytes": 163573,
+        "counts": {
+          "uniquePlanned": 1,
+          "executed": 1,
+          "passed": 1,
+          "failed": 0
+        },
+        "status": "PASS_LOCAL_MAIN_SYNTHETIC_SDK_ONLY",
+        "sourceUnchanged": true,
+        "cleanup": true,
+        "sdk": "synthetic transport, worker native",
+        "mainTransformations": 0
+      }
+    ],
+    "inactiveSuggestionPanelGroupsPassed": 14,
+    "productionDesktop": [
+      "Chromium154",
+      "WebKit27.2"
+    ],
+    "historicWebkitStyleAttrEvents": 10,
+    "otherProductionErrors": 0,
+    "updatePreservesOldAudioAndWaitsForClientClosure": true
+  },
+  "build": {
+    "functionalRuntimeSources": 170,
+    "sourceArchiveMembers": 3701,
+    "archiveExactNoPrivateIdentity": true,
+    "indexSHA256": "c7c56c290c274884511a53e1db9034f423f70a044807ffeb70fb13c53dbe348d",
+    "rootEqualsBuild": false,
+    "concurrentDesignExcluded": true
+  },
+  "delivery": {
+    "filesVerified": 38,
+    "previousHashedAssetsAndEntriesRetained": 286,
+    "httpsExact": true,
+    "newServicesOrGrant": false
+  },
+  "finalBrowser": {
+    "release": "c7c56c290c274884",
+    "indexMatchesFrozen": true,
+    "authenticatedWithoutCode": true,
+    "providers": [
+      "kdmusic_bot",
+      "deezermusicbot"
+    ],
+    "suggestions": [
+      "KDMusic_Bot",
+      "DeezerMusicBot"
+    ],
+    "activeOperations": 0,
+    "mediaSession": "paused",
+    "diagnosticsOff": true,
+    "tracks": 18,
+    "assets": 18,
+    "inLibrary": 17,
+    "playlists": 4,
+    "missingSongCopyBytes": 3221310,
+    "missingSongStoredMatchesManifest": true,
+    "observersRemoved": true,
+    "ownOldTabsClosed": true,
+    "normalLeftOpen": true,
+    "newMusicalGesturesAfterPublication": 0
+  },
+  "memory": {
+    "project": "Pulso-Web",
+    "verifiedFiles": 15,
+    "independentFullContentBytesSHA256": true,
+    "D1MemoryUnchanged": true
+  },
+  "limitations": [
+    "metadata validation is not acoustic identification",
+    "Deezer full fallback in the real application was not exercised because KD satisfied the request",
+    "physical iPhone/offline/background and global P0-W remain pending",
+    "provider pool remains per-connection RAM",
+    "no unlimited quota/catalogue availability guarantee"
+  ],
+  "privacy": {
+    "privateChatOrIdsInEvidence": false,
+    "audioOrAudioHashesInEvidence": false,
+    "fileProofDidNotPersistSecondMusicCopy": true,
+    "preparedQueryProbeExecuted": false
+  },
+  "git": {
+    "commit": false,
+    "push": false
+  }
+}

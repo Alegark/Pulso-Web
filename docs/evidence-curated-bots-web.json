@@ -1,0 +1,111 @@
+{
+  "project": "Pulso-Web",
+  "status": "CURATION_RELEASED_SECOND_NEW_BOT_NOT_APPROVED",
+  "release": "bcaa12d8c49b370e",
+  "suggestions": [
+    "KDMusic_Bot"
+  ],
+  "oneCuratedRegistry": true,
+  "customBotsAndPriorityRetained": true,
+  "noGlobalDefaultOrAutomaticBotStart": true,
+  "accountPrincipal": "kdmusic_bot",
+  "newSecondBot": "not confirmed",
+  "currentCandidates": {
+    "foxtune": {
+      "publicUsername": "FoxtuneBetaBot",
+      "startAcknowledged": true,
+      "queryAcknowledged": true,
+      "callbackAttempted": false,
+      "downloadAttempted": false,
+      "musicalChoiceIdentified": false,
+      "readonlyFollowupHistoryCalls": 1,
+      "status": "NOT_CONFIRMED_FOR_PULSO",
+      "sdkClosed": true
+    },
+    "musget": {
+      "publicUsername": "musgetbot",
+      "startAcknowledged": true,
+      "querySent": false,
+      "callbackAttempted": false,
+      "downloadAttempted": false,
+      "accessKeywordBarrierObserved": true,
+      "mandatoryVsOptionalUnknown": true,
+      "status": "STOPPED_BEFORE_QUERY",
+      "sdkClosed": true
+    }
+  },
+  "source": {
+    "runtimeFiles": 169,
+    "sourceArchiveMembers": 3693,
+    "functionalSnapshotExcludesConcurrentD1": true
+  },
+  "tests": {
+    "unitPassed": 610,
+    "lintPassed": true,
+    "panelGroupsPassed": 14,
+    "panelZeroExternalOrStorageIo": true,
+    "productionChromiumAndWebkitPassed": true,
+    "historicalWebkitStyleAttrEvents": 10,
+    "updateWithPreviousAudioPreserved": true
+  },
+  "delivery": {
+    "filesVerified": 38,
+    "oldHashedAssetsAndEntriesRetained": 284,
+    "httpsPassed": true
+  },
+  "finalBrowser": {
+    "release": "bcaa12d8c49b370e",
+    "authenticatedWithoutCode": true,
+    "pool": [
+      "kdmusic_bot"
+    ],
+    "curatedSuggestions": [
+      "KDMusic_Bot"
+    ],
+    "suggestionClick": {
+      "draftOnly": true,
+      "profileCommands": 0,
+      "orderCommands": 0,
+      "searchCommands": 0,
+      "downloadCommands": 0
+    },
+    "explicitAdd": {
+      "profileCommands": 1,
+      "orderCommands": 1,
+      "searchCommands": 0,
+      "downloadCommands": 0
+    },
+    "pending": false,
+    "activeOperations": 0,
+    "available": true,
+    "tracks": 17,
+    "assets": 17,
+    "playlists": 4,
+    "mediaSession": "paused",
+    "diagnosticsOff": true,
+    "observerRemoved": true,
+    "normalTabLeftOpen": true
+  },
+  "privacy": {
+    "privateIdsSaved": false,
+    "privateChatsSaved": false,
+    "audioOrHashesSaved": false,
+    "newCandidateCallbacks": 0,
+    "newCandidateDownloads": 0,
+    "temporaryOperatorFilesRemoved": 10
+  },
+  "pending": [
+    "second new compatible bot",
+    "physical iPhone acceptance"
+  ],
+  "git": {
+    "commit": false,
+    "push": false
+  },
+  "memory": {
+    "project": "Pulso-Web",
+    "filesVerified": 15,
+    "fullContentBytesSHA256Independent": true,
+    "designMemoryUnchanged": true
+  }
+}

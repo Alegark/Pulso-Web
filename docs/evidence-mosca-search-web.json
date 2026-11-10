@@ -1,0 +1,35 @@
+{
+  "status": "PASS_WITH_LIMITS",
+  "release": "88a7cc6f88363955",
+  "runtimeFrozen": 187,
+  "unitPassed": 644,
+  "lint": "PASS",
+  "nativeMainFixtureGroups": 5,
+  "nativeManifestSources": 186,
+  "nativeMatchesBuild": true,
+  "sharedBrowser": {
+    "htmlShaMatchesFrozen": true,
+    "queries": [
+      "mosca",
+      "mosca nsqk"
+    ],
+    "album": "mosca",
+    "artist": "Nsqk",
+    "tracksShown": 17,
+    "coverDecoded": [
+      100,
+      100
+    ],
+    "tabClosed": true
+  },
+  "extraMetadataRequestsAdded": 0,
+  "hardcodedArtistOrAlbum": false,
+  "productionSmoke": "PASS Chromium/WebKit",
+  "updateFrom": "3a856decc1a904d1",
+  "publicationFiles": 38,
+  "retainedImmutable": 317,
+  "httpsVerified": true,
+  "realTelegramOrAudio": false,
+  "iPhone": false,
+  "P0Complete": false
+}

@@ -1,0 +1,78 @@
+{
+  "project": "Pulso-Web",
+  "release": "03f80776e1154d43",
+  "date": "2026-11-10",
+  "unitsPassed": 659,
+  "lint": true,
+  "browserCases": 6,
+  "browser": "Chromium full main with synthetic own audio, artwork and catalogue",
+  "providerSearchPublicObservation": {
+    "status": 200,
+    "records": 0,
+    "exactMatches": [],
+    "strictMatch": false,
+    "publicMetadataOnly": true
+  },
+  "providerCoverPublicObservation": {
+    "passed": true,
+    "exactTrackFound": true,
+    "headerWidth": 600,
+    "headerHeight": 600,
+    "withinImageByteLimit": true,
+    "publicMetadataOnly": true,
+    "realTelegram": false,
+    "imageOrContentsSaved": false,
+    "fullImageDecode": false
+  },
+  "production": {
+    "passed": true,
+    "entrySha256": "03f80776e1154d4373101adc63a413b58a9cd0611e255a5606ad1667122a62af",
+    "engines": [
+      {
+        "name": "chromium",
+        "version": "154.0.8037.57",
+        "passed": true,
+        "externalRequests": 0,
+        "fixtureRequests": 4,
+        "syntheticAlbumTrack": true,
+        "pageErrors": 0
+      },
+      {
+        "name": "webkit",
+        "version": "27.2",
+        "passed": true,
+        "externalRequests": 0,
+        "fixtureRequests": 4,
+        "syntheticAlbumTrack": true,
+        "pageErrors": 0
+      }
+    ]
+  },
+  "update": {
+    "passed": true,
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "externalRequests": 0,
+      "oldEntrySHA256": "bdcadf2404a521c4baafa863636cf99097b35190f1b0d61b7f354761b9b0ca90",
+      "newEntry": "/releases/03f80776e1154d43.html",
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    }
+  },
+  "runtime193Exact": true,
+  "retainedOldImmutable": 326,
+  "iphoneVerified": false,
+  "realTelegramRetested": false,
+  "imageOrAudioPersistedByProbe": false,
+  "P0Complete": false,
+  "browserReportSHA256": "4818afa2a5772033012deeb159017d30ba19a6b48922a4a0fb5704b5fed5c884",
+  "additionalCase": "Fingerprint mismatch prevents catalogue identity and artwork publication",
+  "httpsReadbackPassed": true,
+  "httpsRelayPassed": true
+}

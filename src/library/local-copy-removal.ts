@@ -6,6 +6,8 @@ import {transactionDone} from '../storage/transaction-done';
 import {ASSET_DIRECTORY,generationLock,WRITER_LOCK,openAssetReader} from '../storage/asset-reader';
 import {copySourceAsset,closedObject,sameSourceAsset} from '../playback/local-source-protocol';
 import {runCopyWorker} from './local-copy-client';
+import {copyLibraryMembership,libraryMembershipKey} from './library-membership';
+import {normalizeSnapshot} from '../playback/queue-restore';
 import type {LocalAsset} from './library';
 import {REMOVAL_LIMITS as L,removalUUID as uuid,positive,journalKey,markerKey,copyRemovalConsent,copyRemovalTracking,type RemovalTracking,type RemovalCandidate,type RemovalPlan,type RemovalContinuation,type RemovalReadContext,type RemovalContext,type RemovalDiscovery,type RemovalPreview,type RemovalBlocked,type RemovalSummary,type RemovalJournalV1,type RemovalConsent,type RemovalOutcome,type RemovalInspection} from './local-copy-removal-contract';
 import {removalStores,scanRemovalSnapshot,scanRemovalPrefix,validateRemovalSnapshot,validateRemovalPrefix,validateTrack,identityKey,describeRemovalData,changed,corrupt,checkRemovalChunks,type RemovalSnapshot} from './local-copy-removal-snapshot';
@@ -13,8 +15,9 @@ export type * from './local-copy-removal-contract';
 export {copyRemovalConsent,copyRemovalTracking} from './local-copy-removal-contract';
 const digest=(s:string)=>bytesToHex(sha256(new TextEncoder().encode(s)));
 const candidates=new WeakMap<RemovalCandidate,{target:LocalAsset;trackId:string;revision:number}>();
-interface PlanData {target:LocalAsset;snapshot:RemovalSnapshot;summary:RemovalSummary;tracking:RemovalTracking;planRevision:number;context:RemovalContext;used:boolean;controller:AbortController;settlement:Promise<RemovalOutcome>|null;detachedDigest:string;planDigest:string;preparedDispatched:boolean}
+interface PlanData {target:LocalAsset;snapshot:RemovalSnapshot;summary:RemovalSummary;tracking:RemovalTracking;planRevision:number;context:RemovalContext;used:boolean;controller:AbortController;settlement:Promise<RemovalOutcome>|null;detachedDigest:string;planDigest:string;preparedDispatched:boolean;strict:boolean}
 const plans=new WeakMap<RemovalPlan,PlanData>();
+const strictOutcomes=new WeakMap<RemovalOutcome,{context:RemovalContext;target:LocalAsset;tracking:RemovalTracking;state:'removed'|'not-committed';revision:number}>();
 const continuations=new WeakMap<RemovalContinuation,{journal:RemovalJournalV1;context:RemovalContext;planRevision:number;used:boolean}>();
 let activePlan:RemovalPlan|null=null;
 let planning=false;
@@ -34,7 +37,16 @@ async function transaction<T>(stores:string[],mode:IDBTransactionMode,c:RemovalR
 }
 const scan=(c:RemovalReadContext)=>transaction(removalStores,'readonly',c,tx=>scanRemovalSnapshot(tx,()=>checkRead(c)));
 async function locked<T>(name:string,work:()=>Promise<T>):Promise<T>{return navigator.locks.request(name,{ifAvailable:true},lock=>{if(!lock)fail('validate','internal','conflict','none');return work();});}
-const fenced=<T>(j:Pick<RemovalJournalV1,'operationId'|'target'>,fn:()=>Promise<T>)=>locked('pulso-web:local:copy-removal:'+j.operationId,()=>locked(generationLock(j.target),()=>locked(WRITER_LOCK,fn)));
+// A verify worker releases its shared lock asynchronously after its terminal
+// message. Give that release a bounded chance to settle, without waiting on
+// WRITER_LOCK or holding it while another reader is active.
+async function boundedGeneration<T>(name:string,work:()=>Promise<T>):Promise<T>{
+ const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),250);let acquired=false;
+ try{return await navigator.locks.request(name,{signal:controller.signal},async()=>{acquired=true;clearTimeout(timer);return work();});}
+ catch(e){if(!acquired&&controller.signal.aborted)fail('validate','internal','conflict','none');throw e;}
+ finally{clearTimeout(timer);}
+}
+const fenced=<T>(j:Pick<RemovalJournalV1,'operationId'|'target'>,fn:()=>Promise<T>,bounded=false)=>locked('pulso-web:local:copy-removal:'+j.operationId,()=>(bounded?boundedGeneration:locked)(generationLock(j.target),()=>locked(WRITER_LOCK,fn)));
 function blocked(e:unknown):RemovalBlocked {
  const f=fromKnownError(e,{phase:'validate',backend:'idb'});const reason=f.code==='conflict'?'busy':f.code==='limit-exceeded'?'limit':f.code==='asset-missing'?'missing':['local-corrupt','relations-invalid','digest-mismatch','length-mismatch'].includes(f.code)?'corrupt':f.code==='asset-changed'?'changed':f.code==='owner-unavailable'?'runtime-unknown':f.code==='cancelled'?'cancelled':'unavailable';return {kind:'blocked',reason,failure:f};
 }
@@ -62,17 +74,35 @@ export async function discoverCopyRemoval(input:{namespace:'local';trackId:strin
 }
 async function verifyPublished(a:LocalAsset,c:RemovalContext){check(c,a);const r=await runCopyWorker('verify',a,{signal:c.signal,current:()=>{check(c,a);return true;}});check(c,a);if(r.kind!=='verified')fail('verify','internal','worker-protocol',a.backend);if(r.result.availability!=='present'||r.result.integrity!=='verified')throw AppFailure.create(r.result.failure??makeFailure('verify','integrity','local-corrupt',a.backend));}
 export async function planCopyRemoval(candidate:RemovalCandidate,c:RemovalContext):Promise<RemovalPreview>{
+ return plan(candidate,c,false);
+}
+/** Restrictive collection policy; this entry point cannot grant manual removal authority. */
+export async function planUnreferencedCopyRemoval(candidate:RemovalCandidate,c:RemovalContext):Promise<RemovalPreview>{
+ return plan(candidate,c,true);
+}
+async function strictPolicy(tx:IDBTransaction,s:RemovalSnapshot,a:LocalAsset,c:RemovalContext):Promise<void>{
+ const tracks=s.entries.tracks.map(e=>validateTrack(e.value,e.key));
+ const related=tracks.filter(t=>t.assetId===a.id||t.assetId===null&&t.audioFingerprint?.algorithm==='sha256'&&t.audioFingerprint.sha256===a.sha256&&t.audioFingerprint.bytes===a.bytes);
+ const ids=new Set(related.map(t=>t.id));if(related.some(t=>t.favorite))changed();
+ for(const row of s.entries.playlists){const p=row.value as {entries:{trackId:string}[]};if(p.entries.some(e=>ids.has(e.trackId)))changed();}
+ for(const row of s.entries.settings)if(row.key==='library-playback'){const q=normalizeSnapshot(row.value);if(!q||q.warnings.length||q.snapshot.entries.some(e=>ids.has(e.trackId)))changed();}
+ const settings=tx.objectStore('settings');const values=await Promise.all(related.map(async t=>{const key=libraryMembershipKey(t.id);const [value,present]=await Promise.all([request(settings.get(key)),request(settings.getKey(key))]);return {id:t.id,value,present};}));
+ for(const v of values){if(v.present===undefined)changed();const membership=copyLibraryMembership(v.value,v.id);if(!membership)corrupt();if(membership.added)changed();}check(c,a);
+}
+async function strictScan(c:RemovalContext,a:LocalAsset):Promise<RemovalSnapshot>{return transaction(removalStores,'readonly',c,async tx=>{const s=await scanRemovalSnapshot(tx,()=>check(c,a));validateRemovalSnapshot(s,a);await strictPolicy(tx,s,a,c);return s;});}
+async function plan(candidate:RemovalCandidate,c:RemovalContext,strict:boolean):Promise<RemovalPreview>{
  if(planning)return blocked(AppFailure.create(makeFailure('validate','internal','conflict','none')));planning=true;
  try{const d=candidates.get(candidate);if(!d)changed();if(activePlan)fail('validate','internal','conflict','none');check(c,d.target);let s=await scan(c);check(c,d.target);const p=validateRemovalPrefix(s);const v=validateRemovalSnapshot(s,d.target);const t=v.aliases.find(t=>t.id===d.trackId);if(!t||t.revision!==d.revision)changed();if(s.prefix.some(e=>e.key===markerKey(d.target))||p.journals.length>=L.journals)fail('validate','internal','conflict','idb');
- await verifyPublished(d.target,c);const after=await scan(c);check(c,d.target);if(s.canonical!==after.canonical||describeRemovalData(s.prefix)!==describeRemovalData(after.prefix))changed();s=after;
+ if(strict)await strictScan(c,d.target);await verifyPublished(d.target,c);const after=strict?await strictScan(c,d.target):await scan(c);check(c,d.target);if(s.canonical!==after.canonical||describeRemovalData(s.prefix)!==describeRemovalData(after.prefix))changed();s=after;
  // Identity initialization is deferred to explicit confirmation, atomically with
  // prepared. Merely opening/previewing does not create a removal epoch.
  const tracking=Object.freeze({incarnation:p.incarnation??crypto.randomUUID(),operationId:crypto.randomUUID()});const plan=Object.freeze({}) as RemovalPlan;
- plans.set(plan,{target:d.target,snapshot:s,summary:v.summary,tracking,planRevision:1,context:c,used:false,controller:new AbortController(),settlement:null,detachedDigest:digest(detachedProjection(s,d.target)),planDigest:digest(s.canonical),preparedDispatched:false});activePlan=plan;candidates.delete(candidate);return {kind:'ready',plan,tracking,planRevision:1,summary:Object.freeze({...v.summary})};
+ plans.set(plan,{target:d.target,snapshot:s,summary:v.summary,tracking,planRevision:1,context:c,used:false,controller:new AbortController(),settlement:null,detachedDigest:digest(detachedProjection(s,d.target)),planDigest:digest(s.canonical),preparedDispatched:false,strict});activePlan=plan;candidates.delete(candidate);return {kind:'ready',plan,tracking,planRevision:1,summary:Object.freeze({...v.summary})};
  }catch(e){return blocked(e);}finally{planning=false;}
 }
 async function prepare(d:PlanData,consent:RemovalConsent,c:RemovalContext):Promise<RemovalJournalV1>{
  return transaction(removalStores,'readwrite',c,async tx=>{check(c,d.target);const s=await scanRemovalSnapshot(tx,()=>check(c,d.target));const p=validateRemovalPrefix(s);if(s.canonical!==d.snapshot.canonical||describeRemovalData(s.prefix)!==describeRemovalData(d.snapshot.prefix))changed();const v=validateRemovalSnapshot(s,d.target);if(p.journals.length>=L.journals||p.incarnation!==null&&p.incarnation!==d.tracking.incarnation||s.prefix.some(e=>e.key===markerKey(d.target)))changed();
+ if(d.strict)await strictPolicy(tx,s,d.target,c);
  const j:RemovalJournalV1={version:1,namespace:'local',...d.tracking,revision:1,state:'prepared',target:d.target,planRevision:d.planRevision,planDigest:d.planDigest,detachedDigest:d.detachedDigest,consent,tracks:v.aliases.map(t=>({id:t.id,beforeRevision:t.revision,afterRevision:t.revision+1})),summary:v.summary};
  // Charge the actual persistent prefix INCLUDING the new marker/identity.
  const projected=[...s.prefix.map(e=>[e.key,e.value]),[identityKey,{version:1,incarnation:j.incarnation}],[journalKey(j.operationId),j],[markerKey(j.target),{version:1,incarnation:j.incarnation,operationId:j.operationId,revision:1}]];describeRemovalData(projected,{left:L.prefixBytes});check(c,d.target);if(!p.incarnation)tx.objectStore('settings').add({version:1,incarnation:j.incarnation},identityKey);putJournal(tx,j);return j;
@@ -120,10 +150,10 @@ export async function confirmCopyRemoval(plan:RemovalPlan,value:RemovalConsent,c
  return await fenced({operationId:d.tracking.operationId,target:d.target},async()=>{try{check(owned,d.target);j=await prepare(d,consent,owned);check(owned,d.target);j=await detach(j,owned);check(owned,d.target);j=await remove(j,owned,now=>{j=now;});return outcome(j);}
  catch(e){const primary=fromKnownError(e,{phase:'commit',backend:d.target.backend});const secondary:RemovalOutcome['secondary'][number][]=[];
  if(j?.state==='prepared'){try{check(owned,d.target,true);j=await transition(j,'not-committed',owned,true);}catch(cleanup){secondary.push({phase:'reconcile',failure:fromKnownError(cleanup,{phase:'reconcile',backend:'idb'})});}}
- return {...attemptOutcome(d,j,e,primary),secondary};}});
+ return {...attemptOutcome(d,j,e,primary),secondary};}},d.strict);
  }catch(e){return attemptOutcome(d,j,e,fromKnownError(e,{phase:'verify',backend:d.target.backend}));}
  finally{c.signal.removeEventListener('abort',abort);if(activePlan===plan)activePlan=null;}
- })();return d.settlement;
+ })();const result=await d.settlement;if(d.strict&&(result.state==='removed'||result.state==='not-committed')&&result.preparation==='recorded'&&result.journalRevision!==null)strictOutcomes.set(result,{context:c,target:d.target,tracking:d.tracking,state:result.state,revision:result.journalRevision});return result;
 }
 /** Cancels only this private attempt and awaits native settlement. Caller keeps
  * the reservation occupied until this promise resolves. Never republish. */
@@ -132,6 +162,15 @@ export async function cancelCopyRemoval(plan:RemovalPlan):Promise<RemovalOutcome
 }
 async function readPrefix(c:RemovalReadContext){const s=await transaction(['settings'],'readonly',c,tx=>scanRemovalPrefix(tx,()=>checkRead(c)));checkRead(c);return validateRemovalPrefix(s);}
 async function getJournal(tracking:RemovalTracking,c:RemovalReadContext){const r=copyRemovalTracking(tracking);if(!r)corrupt();const p=await readPrefix(c);if(p.incarnation!==r.incarnation)changed();const j=p.journals.find(j=>j.operationId===r.operationId);if(!j)changed();return {j};}
+/** Acknowledge only the fresh, private result of a strict collection operation. */
+export async function acknowledgeUnreferencedCopyRemoval(result:RemovalOutcome,c:RemovalContext):Promise<boolean>{
+ const d=strictOutcomes.get(result);if(!d||d.context!==c)return false;strictOutcomes.delete(result);
+ try{return await fenced({operationId:d.tracking.operationId,target:d.target},async()=>{
+  check(c,d.target);const {j}=await getJournal(d.tracking,c);if(j.state!==d.state||j.revision!==d.revision||!sameSourceAsset(j.target,d.target))changed();
+  if(j.state==='removed'&&await physical(j,c)!=='absent')changed();
+  return transaction(['settings'],'readwrite',c,async tx=>{check(c,d.target);const snapshot=await scanRemovalPrefix(tx,()=>check(c,d.target)),p=validateRemovalPrefix(snapshot);const now=p.journals.find(x=>x.operationId===d.tracking.operationId);if(p.incarnation!==d.tracking.incarnation||!now||describeRemovalData(now)!==describeRemovalData(j))changed();const marker=snapshot.prefix.find(e=>e.key===markerKey(j.target));if(j.state==='removed'){const expected={version:1,incarnation:j.incarnation,operationId:j.operationId,revision:j.revision};if(!marker||describeRemovalData(marker.value)!==describeRemovalData(expected))changed();}else if(marker)changed();check(c,d.target);tx.objectStore('settings').delete(journalKey(j.operationId));if(j.state==='removed')tx.objectStore('settings').delete(markerKey(j.target));return true;});
+ });}catch{return false;}
+}
 /** Trusted root-only target discovery for a recorded operation, no writes. */
 export async function readCopyRemovalTarget(tracking:RemovalTracking,c:RemovalReadContext):Promise<Readonly<LocalAsset>|null>{try{return Object.freeze({...((await getJournal(tracking,c)).j.target)});}catch{return null;}}
 export async function readPendingCopyRemovals(c:RemovalReadContext):Promise<readonly RemovalTracking[]>{const p=await readPrefix(c);return p.journals.filter(j=>!['removed','not-committed'].includes(j.state)).map(j=>Object.freeze({incarnation:j.incarnation,operationId:j.operationId}));}

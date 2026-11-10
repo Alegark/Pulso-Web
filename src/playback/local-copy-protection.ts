@@ -1,3 +1,4 @@
+import {AUDIO_FILE_MAX_BYTES,AUDIO_BLOB_TOTAL_MAX_BYTES} from '../storage/audio-limits';
 import type {LocalAsset} from '../library/library';
 import type {Entry} from './player';
 import type {InsertionRequest,InsertResult} from './queue-insertion';
@@ -110,14 +111,14 @@ export function createLocalCopyProtection(host:{getPlayer():ProtectionPlayer;cap
  function reserveBlob(p:PreparationRecord,live:()=>boolean,expected:readonly Readonly<LocalAsset>[]):BlobCredit|null {
   if(!live()||p.credit||!budgetKnown())return null;
   const assets=copySourceAssets(expected);
-  if(!assets||!assets.length||assets.some(a=>a.bytes>8388608))return null;
+  if(!assets||!assets.length||assets.some(a=>a.bytes>AUDIO_FILE_MAX_BYTES))return null;
   // Separate URLs are charged separately, including identical historical assets.
   const allocations=new Map<string,number>();
   for(const b of bundles)for(const a of b.allocations!)if(a.kind==='blob')allocations.set(a.allocationId,a.bytes);
   let total=[...allocations.values()].reduce((a,b)=>a+b,0);
   for(const c of reservations)total+=credits.get(c)!.bytes;
   const bytes=assets.reduce((n,a)=>n+a.bytes,0);
-  if(total+bytes>25165824)return null;
+  if(total+bytes>AUDIO_BLOB_TOTAL_MAX_BYTES)return null;
   let finish!:()=>void;const done=new Promise<void>(r=>{finish=r;});
   const token=Object.freeze({current:()=>{const c=credits.get(token)!;return !c.adopted&&reservations.has(token)&&live();}}) as BlobCredit;
   credits.set(token,{expected:assets,bytes,claimed:false,adopted:false,complete:false,bundle:null,done,finish,current:live,drop(){if(reservations.delete(token))changed();}});

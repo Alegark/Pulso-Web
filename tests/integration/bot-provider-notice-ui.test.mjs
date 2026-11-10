@@ -1,0 +1,11 @@
+import {build} from 'vite';
+import {writeFile,mkdir} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import assert from 'node:assert/strict';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+const out=await build({configFile:false,publicDir:false,logLevel:'silent',build:{write:false,minify:false,lib:{entry:'src/ui/MusicSearchController.tsx',formats:['es']},rolldownOptions:{external:['react','react/jsx-runtime'],output:{codeSplitting:false}}}});
+const dir=resolve('.local/bot-provider-notice');await mkdir(dir,{recursive:true});const file=resolve(dir,'ui-synthetic.mjs');await writeFile(file,(Array.isArray(out)?out:[out]).flatMap(x=>x.output).find(x=>x.type==='chunk').code);const {BotProviderNotice}=await import(pathToFileURL(file).href);
+const html=renderToStaticMarkup(React.createElement(BotProviderNotice,{text:'<script>alert(1)</script> https://example.invalid'}));
+assert.match(html,/Mensaje del bot:/);assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);assert.match(html,/https:\/\/example\.invalid/);assert.doesNotMatch(html,/<script|<a\s|href=/i);console.log('React notice escaping: PASS (synthetic)');

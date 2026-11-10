@@ -25,3 +25,12 @@ La exportación de organización omite copias de escucha sin favoritos ni playli
 ## Evidencia y límites
 
 La evidencia versionada está en [evidence-playback-library-web.json](evidence-playback-library-web.json). Los escenarios integrados usan SDK sintético en un worker nativo y archivos propios. El caso de rechazo `NotAllowedError` inyecta ese fallo deliberadamente; no acredita la política real de Safari. La reproducción con la cuenta Telegram del propietario y la aceptación física en iPhone siguen pendientes. El estado visible y las pruebas locales no diagnostican por sí solos el fallo informado en su teléfono.
+
+
+## Caché de escucha y limpieza manual · 2026-11-09
+
+Las copias obtenidas al elegir una canción se mantienen fuera de Biblioteca hasta pulsar Agregar canción. Configuración → Almacenamiento muestra su tamaño y ofrece **Limpiar caché de escucha**. La revisión requiere confirmación; cancelar conserva las copias. No hay limpieza automática al abrir ni cambios en la sesión de Telegram.
+
+La limpieza sólo retira copias sin referencias organizativas. Biblioteca y álbumes añadidos, favoritos y cualquier playlist protegen sus archivos, incluidos alias separados del mismo fingerprint. Las copias actuales, en cola o protegidas por el runtime se conservan mientras estén en uso. Una ficha antigua sin marcador explícito se considera añadida a Biblioteca; no se reclasifica como caché.
+
+Después de retirar una copia, su ficha y huella permiten reconocerla si se obtiene otra vez. La prueba integrada con SDK sintético verificó descarga/reproducción inicial, reselección sin RPC, limpieza con bytes ausentes, nueva descarga con el mismo ID y promoción a Biblioteca sin otra consulta. No es una prueba con Telegram real. Entrega funcional `e549c4c517300a6e`, evidencia [evidence-listening-cache-web.json](evidence-listening-cache-web.json).

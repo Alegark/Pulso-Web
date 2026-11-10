@@ -1,3 +1,4 @@
+import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import type {BotDownloadedAudio} from '../telegram/bot-search-protocol';
 import type {SongPlaybackAttempt,SongManagement,SongCopyInspection} from '../library/selected-song';
 import React from 'react';
@@ -53,7 +54,7 @@ export function TelegramPanel({activity,canConnect,scopeKey,captureCurrent,captu
  const submit=(event:React.FormEvent)=>{event.preventDefault();if(client.current!==actionClient||!sessionAction?.()||!actionCurrent()||!canConnect||pending||retrying)return;focusIntent.current=true;if(state.phase==='code'){client.current?.submit('code',code);setCode('');}else if(state.phase==='password'){client.current?.submit('password',password);setPassword('');}};
  return <section ref={panel} className="telegram-panel" aria-label="Conexión a Telegram"><h2 ref={heading} tabIndex={-1}>Tu cuenta de Telegram</h2>
  <p>Conecta tu propia cuenta. Pulso conserva la autorización de Telegram en este navegador para recuperar la conexión al volver. No guarda tu código ni tu contraseña. «Cerrar sesión en Telegram» elimina la autorización guardada de esta conexión; la música y las playlists se conservan.</p>
- <p>En Buscar puedes consultar sugerencias y enviar una consulta al bot elegido. Al elegir una opción musical puedes obtener su audio y obtener una copia de reproducción de hasta 8 MiB en este navegador. Se elige automáticamente la mejor coincidencia; «Agregar canción» y «Añadir a playlist» son acciones aparte.</p>
+ <p>En Buscar puedes consultar sugerencias y enviar una consulta al bot elegido. Al elegir una opción musical puedes obtener su audio y obtener una copia de reproducción de hasta {AUDIO_FILE_MAX_BYTES/1048576} MiB en este navegador. Se elige automáticamente la mejor coincidencia; «Agregar canción» y «Añadir a playlist» son acciones aparte.</p>
  {libraryPending&&<p role="status">Hay una comprobación pendiente de la biblioteca local. Puedes iniciar sesión en Telegram; los cambios en la biblioteca siguen en pausa.</p>}
  {!canConnect&&<div><p role="status">{telegramBlockText[blockedReason??'busy']}</p>{blockedReason==='no-control'&&<div className="controls">{onCheckControl&&<button onClick={onCheckControl}>Comprobar control</button>}{onRequestControl&&<button onClick={onRequestControl}>Usar en esta pestaña</button>}</div>}</div>}
  {(state.phase==='disconnected'||state.phase==='error')&&savedSession==='present'&&<div><p role="status">Hay una sesión de Telegram guardada en este navegador.</p><button disabled={!canConnect||pending||retrying} onClick={()=>{if(client.current!==actionClient||!sessionAction?.()||!actionCurrent()||!canConnect||retrying)return;resumeTried.current=actionClient;actionClient?.restore();}}>Reconectar Telegram</button></div>}

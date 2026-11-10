@@ -13,7 +13,7 @@ import {isUuid} from './sources-protocol';
 import type {TelegramApiIdentity} from './api-identity';
 import type {Delivery} from './session-protocol';
 import {openCrypto} from './crypto-provider';
-import {sessionLease,saveTelegramSession,loadTelegramSession,telegramSessionLeaseCurrent,clearTelegramSessionLease} from './saved-session';
+import {sessionLease,saveTelegramSession,loadTelegramSession,telegramSessionLeaseCurrent,clearTelegramSessionLease,loadTelegramBotSelection,saveTelegramBots,type SavedBot} from './saved-session';
 let nextAccountEpoch=0;
 function revoked(error:unknown):boolean{try{if(!error||typeof error!=='object')return false;return ['text','errorMessage','message'].some(key=>{const d=Object.getOwnPropertyDescriptor(error,key);return d&&'value'in d&&typeof d.value==='string'&&/^(?:AUTH_KEY_UNREGISTERED|SESSION_REVOKED|SESSION_EXPIRED)$/.test(d.value);});}catch{return false;}}
 /** Worker-private account wait: no account identity, peers or raw SDK errors. */
@@ -47,7 +47,7 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  };
  let closed=false,phone='',challenge='',closing:Promise<void>|undefined,lease='',persisted=false;
  let accountKey='',binding:AccountBinding|null=null,sources:SourcesDriver|undefined,sourcesSession='';
- let botProviders:BotProvidersDriver|undefined,botProvidersSession='';
+ let botProviders:BotProvidersDriver|undefined,botProvidersSession='';let savedBots:SavedBot[]=[],confirmedBots:SavedBot[]=[],confirmedBotRevision=0;
  let botSearch:BotSearchDriver|undefined,botSearchSession='';
  let accountCooldown:TelegramAccountCooldown|null=null;
  const getAccountCooldown=():TelegramAccountCooldown|null=>{
@@ -71,9 +71,9 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  const sourceLifetimeAbort=()=>{void close().catch(()=>{});};
  const close=()=>{if(closing)return closing;closed=true;phone=challenge='';signal.removeEventListener('abort',sourceLifetimeAbort);
   // Invalidate publication first; keep original settlement before destroying its client.
-  const pendingSearch=botSearch;pendingSearch?.close();sources?.close();botProviders?.close();
+  const pendingSearch=botSearch,pendingProviders=botProviders;pendingSearch?.close();sources?.close();pendingProviders?.close();
   binding=null;accountKey='';
-  closing=Promise.resolve().then(async()=>{if(pendingSearch)await pendingSearch.quiesce();await client.destroy();}).finally(()=>{botSearch=undefined;botSearchSession='';sources=undefined;sourcesSession='';botProviders=undefined;botProvidersSession='';accountCooldown=null;});
+  closing=Promise.resolve().then(async()=>{if(pendingSearch)await pendingSearch.quiesce();if(pendingProviders)await pendingProviders.quiesce();await client.destroy();}).finally(()=>{botSearch=undefined;botSearchSession='';sources=undefined;sourcesSession='';botProviders=undefined;botProvidersSession='';accountCooldown=null;});
   void closing.catch(()=>{});return closing;
  };
  const current=(abort:AbortSignal)=>{if(closed||signal.aborted||abort.aborted)throw Error('cancelled');};
@@ -86,7 +86,7 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  try{await client.prepare();current(signal);}catch(error){await close().catch(()=>{});throw error;}
  return Object.freeze({
   async forgetSavedAuthorization(abort:AbortSignal){current(abort);await clearTelegramSessionLease(lease);persisted=false;current(abort);},
-  async restore(abort:AbortSignal){current(abort);const saved=await loadTelegramSession();current(abort);if(!saved)return false;lease=saved.lease;persisted=true;try{await client.importSession(saved.value);current(abort);const user=await getMe(client);current(abort);if(!await telegramSessionLeaseCurrent(saved.lease))throw Error('session-expired');current(abort);authorized(user);return true;}catch(error){if(revoked(error)){await clearTelegramSessionLease(saved.lease);throw Error('session-expired');}throw error;}},
+  async restore(abort:AbortSignal){current(abort);const saved=await loadTelegramSession();current(abort);if(!saved)return false;lease=saved.lease;persisted=true;try{await client.importSession(saved.value);current(abort);const user=await getMe(client);current(abort);if(!await telegramSessionLeaseCurrent(saved.lease))throw Error('session-expired');current(abort);const selection=await loadTelegramBotSelection(saved.lease);savedBots=selection.bots;confirmedBotRevision=selection.revision;current(abort);authorized(user);return true;}catch(error){if(revoked(error)){await clearTelegramSessionLease(saved.lease);throw Error('session-expired');}throw error;}},
   async begin(number:string,abort:AbortSignal){current(abort);lease=await sessionLease();current(abort);phone=number;const value=await sendCode(client,{phone,abortSignal:abort});current(abort);if(value.type==='user'){await persist(abort);authorized(value);return null;}if(!['app','sms','call','email'].includes(value.type))throw Error('unsupported');challenge=value.phoneCodeHash;return value.type as Delivery;},
   async code(_number:string,code:string,abort:AbortSignal){current(abort);if(!phone||!challenge)throw Error('unsupported');const user=await signIn(client,{phone,phoneCodeHash:challenge,phoneCode:code,abortSignal:abort});current(abort);await persist(abort);authorized(user);},
   async password(value:string,abort:AbortSignal){current(abort);const user=await checkPassword(client,{password:value,abortSignal:abort});current(abort);await persist(abort);authorized(user);},
@@ -122,8 +122,9 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
      current(abort);return result;
     },
     invalidateSession(){void close().catch(()=>{});},
-   });
-   return botProviders;
+    async saveSelection(bots){current(signal);const ok=await saveTelegramBots(lease,bots,confirmedBots,confirmedBotRevision);current(signal);if(ok){confirmedBots=bots.map(bot=>({...bot}));confirmedBotRevision++;}return ok;},
+   },undefined,savedBots);
+   confirmedBots=savedBots.map(bot=>({...bot}));savedBots=[];return botProviders;
   },
   createBotSearch(sessionId:string){
    current(signal);if(!binding||!isUuid(sessionId)||!botProviders||botProvidersSession!==sessionId||sourcesSession&&sourcesSession!==sessionId)throw Error('unsupported');

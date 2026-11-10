@@ -1,4 +1,7 @@
-/** Public study metadata only. No reference, peer, query builder or chat adapter. */
+/** Curated public suggestions. Choosing one never connects or sends a message. */
+export const PULSO_BOT_SUGGESTIONS:readonly string[]=Object.freeze(['KDMusic_Bot','DeezerMusicBot']);
+
+/** Historical study metadata, not the application's current suggestions. */
 export const BOT_CHAT_SUGGESTIONS:readonly string[]=Object.freeze(['ivkmbot','LyDBot']);
 export const BOT_CHAT_PROFILES=Object.freeze([
  Object.freeze({username:'ivkmbot',version:1,status:'NO_VERIFICADO' as const,queryGenerationEnabled:false as const}),

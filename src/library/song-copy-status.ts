@@ -1,6 +1,8 @@
+import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {readSongAlias,songChoiceKey,type SongChoice} from './selected-song';
 import {readLibraryTrackIds} from './library-membership';
 import {expectedAudioTagMismatch} from '../imports/expected-audio-metadata';
+import {recordingTitlesEquivalent} from './recording-title';
 import {musicIdentityText} from '../telegram/bot-search-protocol';
 import {isUuid} from '../telegram/sources-protocol';
 import {validAudioFingerprint,verifiedAssetDetailed,type Track} from './library';
@@ -21,7 +23,7 @@ export function compatibleSongMetadata(track:Track,choice:SongChoice):boolean {
  const artist=choice.artist;
  return !!artist&&choice.duration!==null&&!!track&&isUuid(track.id)&&typeof track.title==='string'&&typeof track.artist==='string'&&!!track.artist.trim()&&validAudioFingerprint(track.audioFingerprint)&&
   typeof track.duration==='number'&&Number.isFinite(track.duration)&&track.duration>0&&Math.abs(track.duration-choice.duration)<=5&&
-  musicIdentityText(track.title)===musicIdentityText(choice.title)&&!expectedAudioTagMismatch({title:track.title,artist:track.artist},{title:choice.title,artist});
+  recordingTitlesEquivalent(track.title,choice.title,{actualAlbum:track.album,expectedAlbum:choice.album,actualDurationSeconds:track.duration,expectedDurationSeconds:choice.duration})&&!expectedAudioTagMismatch({title:track.title,artist:track.artist,album:track.album??undefined},{title:choice.title,artist,...(musicIdentityText(track.title)!==musicIdentityText(choice.title)&&choice.album&&choice.duration!==null?{recordingTitle:track.title,album:choice.album,durationSeconds:choice.duration}:{})},track.duration);
 }
 async function knownTrack(choice:SongChoice,current:()=>boolean):Promise<string|null>{
  // A direct catalogue binding can identify its exact fingerprint. Otherwise
@@ -50,7 +52,7 @@ export async function readSongCopyStatus(choice:SongChoice,current:()=>boolean):
   const inLibrary=members.has(id);
   if(track.assetId===null)return {state:'missing',trackId:id,inLibrary};
   // Verification has the same small-file bound as the remote acquisition lane.
-  if(!validAudioFingerprint(track.audioFingerprint)||track.audioFingerprint.bytes>8388608)return {state:'unknown',trackId:id,inLibrary};
+  if(!validAudioFingerprint(track.audioFingerprint)||track.audioFingerprint.bytes>AUDIO_FILE_MAX_BYTES)return {state:'unknown',trackId:id,inLibrary};
   const checked=await verifiedAssetDetailed(track.assetId,true);if(!live(current))return unknown();
   const after=await readRecord<Track>('tracks',id);if(!live(current)||!after||after.revision!==track.revision||after.assetId!==track.assetId)return unknown();
   const freshMembers=await readLibraryTrackIds([id],current);if(!live(current))return unknown();

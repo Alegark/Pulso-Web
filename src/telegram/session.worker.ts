@@ -17,7 +17,7 @@ let client:import('./temporary-sdk').TemporaryTelegramDriver|undefined;
 const abort=new AbortController();
 let sources:SourcesDriver|undefined,page:Promise<void>|null=null,control=false;
 let bots:BotProvidersDriver|undefined,botFlight:Promise<void>|null=null,botControl:Promise<void>|null=null;
-let search:BotSearchDriver|undefined,searchFlight:Promise<void>|null=null,searchControl:Promise<void>|null=null;
+let search:BotSearchDriver|undefined,searchFlight:Promise<void>|null=null,searchControl:Promise<void>|null=null,searchCancelled=false;
 let retryAt:number|null=null,retryBlocked=false;
 const remoteAllowed=()=>!retryBlocked&&(retryAt===null||Date.now()>=retryAt);
 function observeRemote(reply:{type:string;retryAt?:number|null;retryBlocked?:boolean}){if(reply.type!=='bots.error'&&reply.type!=='sources.error'&&reply.type!=='bot-search.error')return;retryBlocked ||=!!reply.retryBlocked;if(reply.retryAt!=null)retryAt=Math.max(retryAt??0,reply.retryAt);}
@@ -31,20 +31,21 @@ async function searchCommand(command:BotSearchCommand){
  const current=()=>!abort.signal.aborted&&client===driver&&driver.getAccountBinding()?.accountRef===binding.accountRef&&driver.getAccountBinding()?.accountEpoch===binding.accountEpoch;
  let core:BotSearchDriver|undefined;try{core=search??=driver.createBotSearch?.(session);}catch{closeLocal();return;}
  const post=(reply:BotSearchReply,sessionClosed:boolean)=>self.postMessage({protocol:'pulso-bot-search',version:1,reply,sessionClosed,retryAt,retryBlocked} satisfies BotSearchBridgeReply);
- let terminal=false,sending=false;
+ let terminal=false,sending=false,notice=false;
  const run=async()=>{try{
   refreshCooldown();let reply:BotSearchReply|null;
   if(command.type!=='bot-search.cancel'&&(!core||!remoteAllowed()))reply={...copyBotSearchEnvelope(command),type:'bot-search.error',error:core?'rate-limit':'unsupported',delivery:'not-dispatched',retryAt:core?retryAt:null,retryBlocked:core?retryBlocked:false};
   else reply=await core!.handle(command,{signal:abort.signal,current,publish:raw=>{
-   if(terminal)return;const progress=parseBotSearchReply(raw,command);if(!progress||!['bot-search.sending','bot-search.download-progress'].includes(progress.type)||command.type==='bot-search.cancel'||!current()){closeLocal();return;}
+   if(terminal)return;const progress=parseBotSearchReply(raw,command);if(!progress||!['bot-search.sending','bot-search.download-progress','bot-search.provider-notice'].includes(progress.type)||command.type==='bot-search.cancel'||!current()){closeLocal();return;}
+   if(progress.type==='bot-search.provider-notice'){if(command.type!=='bot-search.download'){closeLocal();return;}if(notice||searchCancelled)return;notice=true;}
    if(progress.type==='bot-search.sending'){if(sending)return;sending=true;}post(progress,false);
   }});
   const settled=command.type!=='bot-search.cancel'&&core?await core.whenSettled():true;
   if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&(reply.type!=='bot-search.cancelled'||reply.targetRequestId!==command.targetRequestId)){closeLocal();return;}observeRemote(reply);refreshCooldown();
   const sessionClosed=!settled||!current()||!driver.getAccountBinding();post(reply,sessionClosed);if(sessionClosed)closeLocal();
  }catch{closeLocal();}};
- if(command.type==='bot-search.cancel'){const flight=run();searchControl=flight;try{await flight;}finally{if(searchControl===flight)searchControl=null;}}
- else{const flight=run();searchFlight=flight;try{await flight;}finally{if(searchFlight===flight)searchFlight=null;}}
+ if(command.type==='bot-search.cancel'){searchCancelled=true;const flight=run();searchControl=flight;try{await flight;}finally{if(searchControl===flight)searchControl=null;}}
+ else{searchCancelled=false;const flight=run();searchFlight=flight;try{await flight;}finally{if(searchFlight===flight)searchFlight=null;}}
 }
 async function botCommand(command:BotProvidersCommand){
  if(!client||phase!=='connected'||active||command.sessionId!==session||searchFlight||searchControl||command.type!=='bots.cancel'&&(botFlight||botControl||page||control||searchFlight||searchControl)||command.type==='bots.cancel'&&botControl){closeLocal();return;}
@@ -95,7 +96,7 @@ async function open(){
  const identity=await configuration();
  const {openTemporaryTelegram}=await import('./temporary-sdk');client=await openTemporaryTelegram(identity,abort.signal);return client;
 }
-function reply(command:SessionCommand,error:SessionReply['error']=null,retryAt:number|null=null,delivery:Delivery|null=null){self.postMessage({version:2,session,request:command.request,phase,error,retryAt,delivery,binding:phase==='connected'?parseAccountBinding(client!.getAccountBinding()):null,saved:phase==='connected'?parseSaved(sources!.getSaved()):null} satisfies SessionReply);}
+function reply(command:SessionCommand,error:SessionReply['error']=null,retryAt:number|null=null,delivery:Delivery|null=null){self.postMessage({version:2,session,request:command.request,phase,error,retryAt,delivery,binding:phase==='connected'?parseAccountBinding(client!.getAccountBinding()):null,saved:phase==='connected'?parseSaved(sources!.getSaved()):null,...(phase==='connected'&&bots?{bots:bots.getSnapshot()!.providers}:{})} satisfies SessionReply);}
 self.onmessage=event=>{
  if(event.data?.protocol==='pulso-bot-search'){const command=parseBotSearchCommand(event.data);if(!command){closeLocal();return;}void searchCommand(command);return;}
  if(event.data?.protocol==='pulso-bot-providers'){const bot=parseBotProvidersCommand(event.data);if(!bot){closeLocal();return;}void botCommand(bot);return;}
@@ -127,6 +128,7 @@ self.onmessage=event=>{
    else if(command.type==='password')await client!.password(command.value,abort.signal);
    if(!parseAccountBinding(client!.getAccountBinding())){phase='error';reply(command,'protocol');closeLocal();return;}
    sources=client!.createSources(session);if(!parseSaved(sources.getSaved())){phase='error';reply(command,'protocol');closeLocal();return;}
+   bots=client!.createBotProviders?.(session);if(bots&&!bots.getSnapshot())throw Error('session-storage');
    phase='connected';phone='';reply(command);
   }catch(error){
    const safe=sessionFailure(error);

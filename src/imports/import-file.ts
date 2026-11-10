@@ -1,4 +1,4 @@
-import {expectedAudioTagMismatch} from './expected-audio-metadata';
+import {expectedAudioTagMismatch,type ExpectedAudioMetadata} from './expected-audio-metadata';
 import {extractLocalAlbumMetadata,type Mp4AlbumTag} from './album-metadata';
 import {assertDatabaseUse} from '../storage/database';
 import {admittedTransaction,closeDatabase} from '../storage/database';
@@ -18,7 +18,7 @@ import {ASSET_DIRECTORY,openAssetReader,WRITER_LOCK} from '../storage/asset-read
 import {assertImportsResolved,validImportOperation,deduplicateOperation,cleanupOperation,createOperation,importOperation,publishOperation,updateOperation,type ImportOperation,type ImportResult} from '../storage/import-operations';
 export {importOperations,importOperation,recoverImportOperation,importIssues,retainImportIssue} from '../storage/import-operations';
 export type ImportLyricsWarning=EmbeddedLyricsFailure|LyricsFailure;
-export interface ImportOptions {libraryMode?:'cache';backend?:'idb'|'opfs'|'auto';operationId?:string;expected?:{sha256:string;title:string;artist:string|null}}
+export interface ImportOptions {libraryMode?:'cache';backend?:'idb'|'opfs'|'auto';operationId?:string;expected?:ExpectedAudioMetadata}
 const CHUNK=65536;
 async function writeDirectory(){return atBoundary('open','opfs',async()=>{assertDatabaseUse('write');const root=await navigator.storage.getDirectory();assertDatabaseUse('write');return root.getDirectoryHandle(ASSET_DIRECTORY,{create:true});});}
 /** Owns WRITER_LOCK internally, including recovery gating and final outcome resolution. */
@@ -82,7 +82,7 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
   try{metadata=await parseBlob(await atBoundary('read','none',()=>metadataView(file,mime,true,omitted)),parserOptions);}
   catch(error){if(isMetadataLimit(error))fail('parse','internal','limit-exceeded','none');if(issuedFailure(error)||nativeDOMName(error))throw AppFailure.create(fromKnownError(error,{phase:'parse',backend:'none'}));throw AppFailure.create(fromKnownError(error,{phase:'parse',backend:'none'}));}
  }
- const tagMismatch=options.expected?expectedAudioTagMismatch(metadata.common,options.expected):null;
+ const tagMismatch=options.expected?expectedAudioTagMismatch(metadata.common,options.expected,metadata.format.duration):null;
  if(tagMismatch)fail('parse','integrity',tagMismatch==='title'?'metadata-title-mismatch':'metadata-artist-mismatch','none');
  checkCancelled(signal); const duration=metadata.format.duration;
  if(!duration||!Number.isFinite(duration)||duration<=0)fail('parse','integrity','audio-duration-invalid','none');

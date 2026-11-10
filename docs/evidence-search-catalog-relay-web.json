@@ -1,0 +1,134 @@
+{
+  "project": "Pulso-Web",
+  "date": "2026-11-10",
+  "release": "bdcadf2404a521c4",
+  "scope": "Búsqueda combinada y transporte opcional de metadatos/portadas del prototipo",
+  "passed": true,
+  "runtimeSources": 193,
+  "unitTests": {
+    "passed": 656,
+    "failed": 0
+  },
+  "serverTests": {
+    "passed": 10,
+    "network": "injected"
+  },
+  "mainBrowser": {
+    "passed": 9,
+    "engine": "Chromium",
+    "metadata": "synthetic",
+    "directProviderBlocked": true,
+    "sameOriginRelay": "fixture"
+  },
+  "production": {
+    "passed": true,
+    "entrySha256": "bdcadf2404a521c4baafa863636cf99097b35190f1b0d61b7f354761b9b0ca90",
+    "engines": [
+      {
+        "name": "chromium",
+        "version": "154.0.8037.57",
+        "passed": true,
+        "externalRequests": 0,
+        "fixtureRequests": 4,
+        "syntheticAlbumTrack": true,
+        "pageErrors": 0
+      },
+      {
+        "name": "webkit",
+        "version": "27.2",
+        "passed": true,
+        "externalRequests": 0,
+        "fixtureRequests": 4,
+        "syntheticAlbumTrack": true,
+        "pageErrors": 0
+      }
+    ]
+  },
+  "update": {
+    "passed": true,
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "externalRequests": 0,
+      "oldEntrySHA256": "0a92a9641e836c05fb1a3772292ac9ced6c5b901f9dda8e19b2bacf5b334c02a",
+      "newEntry": "/releases/bdcadf2404a521c4.html",
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    }
+  },
+  "https": {
+    "passed": true,
+    "urlRecorded": false,
+    "credentialsRecorded": false,
+    "realTelegram": false,
+    "stage": "config",
+    "documentCsp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self' https://lrclib.net https://itunes.apple.com https://is1-ssl.mzstatic.com https://is2-ssl.mzstatic.com https://is3-ssl.mzstatic.com https://is4-ssl.mzstatic.com https://is5-ssl.mzstatic.com; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "release": "/releases/bdcadf2404a521c4.html",
+    "launcherEntryMainWorkerSWExact": true,
+    "documentMetadataCsp": true,
+    "workerCspUnchanged": true,
+    "privateConfigurationExact": true,
+    "privateConfigurationNoStore": true
+  },
+  "httpsRelay": {
+    "passed": true,
+    "publicMetadataOnly": true,
+    "realTelegram": false,
+    "contentsSaved": false,
+    "credentialsRecorded": false,
+    "capabilityEnabled": true,
+    "metadataStatus": 200,
+    "albumTrackCount": 17,
+    "artworkStatus": 200,
+    "artworkMime": "image/jpeg",
+    "noStore": true
+  },
+  "retention": {
+    "passed": true,
+    "retainedImmutableEntries": 324
+  },
+  "liveSearch": {
+    "passed": true,
+    "httpStatus": 200,
+    "canonicalTracks": 14,
+    "requestedEditionPresent": true,
+    "publicMetadataOnly": true,
+    "realTelegram": false,
+    "contentsSaved": false,
+    "searchResultCompletenessClaimed": false,
+    "detailVerifiedSeparately": true,
+    "initialProbeRequiredWholeAlbumInSearch": true
+  },
+  "initialSearchProbe": "La primera aserción exigía 17 pistas en search; devolvió 14 y la edición correcta. Search no garantiza completitud; lookup independiente sí verificó 17. Negativo conservado.",
+  "dataFlow": {
+    "prototypeRelay": "public iTunes metadata and finite-host artwork only",
+    "audio": "device only",
+    "telegramSession": "device only",
+    "cache": "bounded RAM, five minutes",
+    "providerSpacingSeconds": 3.1,
+    "newService": false,
+    "newPort": false,
+    "newAccount": false
+  },
+  "limits": {
+    "iphoneVerified": false,
+    "authenticatedTelegramRetested": false,
+    "physicalAudioOrDownloadRetested": false,
+    "wholeProviderCatalogGuaranteed": false,
+    "P0Complete": false
+  },
+  "privateArtifacts": {
+    "revision-1/freeze.json": "996853cc107d55beeedc2e8ff08be90e6d58a398eb950e199aaebe9ef72730f3",
+    "reports/audit-build.json": "f1d57db4163ea013b1b78bbdef163a06f1547bcfb64b5fec8458ef3ebeffae6b",
+    "reports/production-smoke.json": "e1740caccbd93533955d3fe8a97028ac30ee51d8d0f6cdb1672a19e295a08918",
+    "reports/update.json": "466fed17db0f5b8c6faab9b783e731949ac672d6099b7aa9d43d8fe447df4531",
+    "https-readback.json": "6d55a55b48b68b10cfb7310aa3ea08e8f19a52be03c57502b32a23e04ff283bf",
+    "https-relay-readback.json": "02f3cd374d43f4478cf0748f27fbfcc4a1d797c6f4e74682ba49bd3993eda9c8",
+    "retained-after.json": "d9d85199d0c925b6e84e5f058f54ca7c929814eb52a9a274076fa79fb1bb5a14"
+  }
+}

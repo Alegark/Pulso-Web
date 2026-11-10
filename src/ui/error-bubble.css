@@ -1,0 +1,45 @@
+.error-bubble-host {
+  --error-ink: #8a2631;
+  --error-line: #d9a5ac;
+  box-sizing: border-box;
+  color: var(--pulso-foreground,#172335);
+  background: var(--pulso-surface,#fff);
+  border: 1px solid var(--error-line);
+  border-inline-start: 4px solid var(--error-ink);
+  border-radius: 1rem;
+  padding: 1rem;
+  box-shadow: 0 .5rem 2rem #17233512;
+  overflow-wrap: anywhere;
+  min-inline-size: 0;
+  position: fixed;
+  z-index: 100;
+  inset-inline-end: max(1rem,env(safe-area-inset-right,0px));
+  inset-block-start: calc(var(--error-viewport-top,0px) + var(--error-viewport-height,100dvh) - var(--error-bottom-offset,0px) - max(1rem,env(safe-area-inset-bottom,0px)));
+  transform: translateY(-100%);
+  inline-size: min(28rem,calc(100% - 2rem));
+  max-block-size: max(3rem,calc(var(--error-viewport-height,100dvh) - var(--error-bottom-offset,0px) - 6rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.error-bubble-host:not(:has(.error-bubble__message)) { padding: 0; border: 0; box-shadow: none; background: transparent; }
+.error-bubble__message strong { color: var(--error-ink); display: block; line-height: 1.4; }
+.error-bubble__message p { margin: .4rem 0 .75rem; line-height: 1.5; }
+.error-bubble__actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.error-bubble__actions button {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  min-block-size: 44px;
+  padding: .5rem .85rem;
+  border-radius: .65rem;
+  border: 1px solid var(--pulso-border,#d9e0ea);
+  color: inherit;
+  background: var(--pulso-surface,#fff);
+  touch-action: manipulation;
+}
+.error-bubble__actions button:focus-visible { outline: 3px solid var(--pulso-accent,#235ad7); outline-offset: 3px; }
+.error-bubble__actions button:disabled { opacity: .65; cursor: wait; }
+html[data-theme="dark"] .error-bubble-host { --error-ink: #ffb8c0; --error-line: #865963; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .error-bubble-host { --error-ink: #ffb8c0; --error-line: #865963; }
+}

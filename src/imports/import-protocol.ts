@@ -1,3 +1,6 @@
+import {recordingTitleCandidate} from '../library/recording-title';
+import type {ExpectedAudioMetadata} from './expected-audio-metadata';
+export type {ExpectedAudioMetadata} from './expected-audio-metadata';
 import {copyLocalAlbumMetadata} from '../library/album-metadata';
 import {plain} from '../diagnostics/contract';
 import {copyOutcomeV1,makeOutcome,workerFailureOutcome,type OutcomeV1} from './import-outcome';
@@ -55,7 +58,7 @@ export function copyImportResult(value:unknown):DetailedImportResult|null{
  if(Object.hasOwn(r,'lyricsInspection')){const i=inspectionCopy(r.lyricsInspection);if(!i)return null;r.lyricsInspection=i;}
  return r as unknown as DetailedImportResult;
 }
-export type ImportRequest={version:2;type:'import';operationId:string;file:File;libraryMode?:'cache';expected?:{sha256:string;title:string;artist:string|null}}|{version:2;type:'cancel';operationId:string};
+export type ImportRequest={version:2;type:'import';operationId:string;file:File;libraryMode?:'cache';expected?:ExpectedAudioMetadata}|{version:2;type:'cancel';operationId:string};
 export type RecoveryRequest={version:2;type:'recover';requestId:string;operationId:string;revision:number;action:'resume'|'discard'};
 const fileSize=typeof Blob==='undefined'?undefined:Object.getOwnPropertyDescriptor(Blob.prototype,'size')?.get;
 const fileName=typeof File==='undefined'?undefined:Object.getOwnPropertyDescriptor(File.prototype,'name')?.get;
@@ -65,7 +68,7 @@ export function copyWorkerRequest(value:unknown):ImportRequest|RecoveryRequest|n
  if(h.type==='import'){
  const r=optionalRecord(h,['version','type','operationId','file'],['expected','libraryMode']);if(!r||Object.hasOwn(r,'libraryMode')&&r.libraryMode!=='cache')return null;
  try{if(!integer(fileSize?.call(r.file),1,100*1024*1024)||typeof fileName?.call(r.file)!=='string')return null;}catch{return null;}
- if(r.expected!==undefined){const e=plain(r.expected,['sha256','title','artist']);if(!e||!text(e.sha256,64,64)||! /^[a-f0-9]{64}$/.test(e.sha256)||!text(e.title,300,1)||e.artist!==null&&!text(e.artist,300,1))return null;r.expected=e;}
+ if(r.expected!==undefined){const e=optionalRecord(r.expected,['sha256','title','artist'],['recordingTitle','album','durationSeconds']);if(!e||!text(e.sha256,64,64)||! /^[a-f0-9]{64}$/.test(e.sha256)||!text(e.title,300,1)||e.artist!==null&&!text(e.artist,300,1))return null;const grouped=['recordingTitle','album','durationSeconds'].filter(k=>Object.hasOwn(e,k)).length;if(grouped!==0&&grouped!==3)return null;if(grouped===3&&(!text(e.recordingTitle,300,1)||!e.recordingTitle.trim()||!text(e.album,300,1)||!e.album.trim()||typeof e.durationSeconds!=='number'||!Number.isFinite(e.durationSeconds)||e.durationSeconds<=0||e.durationSeconds>86400||!recordingTitleCandidate(e.recordingTitle,e.title,e.album,e.durationSeconds)))return null;r.expected=e;}
  return r as ImportRequest;
  }
  const r=plain(h,['version','type','operationId','requestId','revision','action']);return r&&r.type==='recover'&&uuid(r.requestId)&&integer(r.revision,1)&&member(r.action,['resume','discard'])?r as RecoveryRequest:null;

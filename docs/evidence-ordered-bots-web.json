@@ -1,0 +1,154 @@
+{
+  "project": "Pulso-Web",
+  "status": "IMPLEMENTED_PRIVATE_RELEASE_REAL_ALBUM_PARTIAL",
+  "release": "6513c86cdcc77922",
+  "scope": "Functional snapshot; concurrent visual design excluded",
+  "implementation": {
+    "localCopyFirst": true,
+    "orderedProvidersMax": 5,
+    "oneSearchAndSelectionPerProvider": true,
+    "totalAcquisitionDeadlineMs": 180000,
+    "fullArtistCredits": true,
+    "cancelOnlyAdmittedPlan": true,
+    "uncertainDoesNotAdvance": true
+  },
+  "tests": {
+    "unit": {
+      "passed": 610,
+      "failed": 0
+    },
+    "lint": true,
+    "nativeRuns": [
+      {
+        "groups": {
+          "uniquePlanned": 15,
+          "executed": 15,
+          "passed": 15,
+          "failed": 0
+        },
+        "mainTransformations": 0,
+        "sdk": "synthetic; see independent polling declarations",
+        "receiptSHA256": "dc6d31076357589226f48ea827dfcf508e2c8cd0c970fc6011b75728a9b4bf95"
+      },
+      {
+        "groups": {
+          "uniquePlanned": 3,
+          "executed": 3,
+          "passed": 3,
+          "failed": 0
+        },
+        "mainTransformations": 0,
+        "sdk": "synthetic; see independent polling declarations",
+        "receiptSHA256": "ee586a6a428dd919627e93742484043c51d6fc732e515111bbd801547569995b"
+      },
+      {
+        "groups": {
+          "uniquePlanned": 1,
+          "executed": 1,
+          "passed": 1,
+          "failed": 0
+        },
+        "mainTransformations": 0,
+        "sdk": "synthetic; see independent polling declarations",
+        "receiptSHA256": "f7ab74e3552682dfff390a3f7275fb0a0d7501940e0556628fe24691bea2447b"
+      },
+      {
+        "groups": {
+          "uniquePlanned": 1,
+          "executed": 1,
+          "passed": 1,
+          "failed": 0
+        },
+        "mainTransformations": 0,
+        "sdk": "synthetic; see independent polling declarations",
+        "receiptSHA256": "194c4d8ca007d50eacf1905a8d990260bd9d483477943fd7429d71efacc1e13c"
+      }
+    ],
+    "productionDesktop": [
+      "Chromium154",
+      "WebKit27.2"
+    ],
+    "historicalWebkitStyleAttrEvents": 10,
+    "otherProductionErrors": 0,
+    "normalUpdateWithAudioPreserved": true
+  },
+  "build": {
+    "runtimeSources": 169,
+    "sourceArchiveMembers": 3693,
+    "archiveExactAndNoPrivateConfig": true,
+    "indexSHA256": "6513c86cdcc77922f685a068749eaa6984f36f8c5e1d3949aaa2f9b342f75cd3",
+    "sourceTreeEqualsRoot": false,
+    "excludedRootDesignChanges": [
+      "index.html",
+      "src/main.tsx",
+      "src/ui/MiniPlayer.tsx"
+    ]
+  },
+  "privateDelivery": {
+    "filesVerified": 38,
+    "previousHashedAssetsRetained": 282,
+    "httpsVerified": true,
+    "noNewServiceOrGrant": true
+  },
+  "realAlbum": {
+    "title": "mosca",
+    "artist": "Nsqk",
+    "copiesInLibrary": 16,
+    "tracks": 17,
+    "complete": false,
+    "coverage": "Accumulated batch and explicit individual selections; not a single complete batch",
+    "remainingTitle": "No Basta Con Querernos Más",
+    "remainingReason": "KD incompatible audio; next provider Ans returned no compatible match",
+    "newCollaborationFiles": 6,
+    "newBlobManifestOpfsIntegrityRAMOnly": true,
+    "circoTwoReselectionsExtraSearch": 0,
+    "circoTwoReselectionsExtraDownload": 0,
+    "testPlaylistPersistedEntries": 2,
+    "historicalMenuConflictCause": "not established; no fingerprint guard relaxed"
+  },
+  "finalBrowser": {
+    "release": "6513c86cdcc77922",
+    "reportedBy": "mosca_final_ordered_live; final browser readback",
+    "indexHashMatchesFrozen": true,
+    "authenticatedWithoutCode": true,
+    "providers": [
+      "ansmusicbot",
+      "kdmusic_bot"
+    ],
+    "activeOperations": 0,
+    "mediaSession": "paused",
+    "diagnosticsOff": true,
+    "libraryTracks": 16,
+    "assets": 17,
+    "floresHasCompleteAsset": true,
+    "playlists": 4,
+    "ownCandidateAndPriorNormalTabsClosed": true,
+    "normalTabLeftOpen": true,
+    "observersRemoved": true,
+    "newMusicSelectionsDuringNormalReadback": 0
+  },
+  "memory": {
+    "project": "Pulso-Web",
+    "verifiedFiles": 15,
+    "independentFullContentBytesSHA256": true,
+    "D1MemoryUnchanged": true
+  },
+  "pending": [
+    "physical iPhone/Safari acceptance",
+    "remaining song availability from configured providers",
+    "offline/background acceptance",
+    "durable provider pool (currently connection RAM)",
+    "global P0-W acceptance"
+  ],
+  "privacy": {
+    "privateChatSaved": false,
+    "audioSavedInEvidence": false,
+    "privateIdsSaved": false,
+    "audioHashesSaved": false,
+    "commandCountsAreAllRPC": false
+  },
+  "git": {
+    "commit": false,
+    "push": false
+  }
+}

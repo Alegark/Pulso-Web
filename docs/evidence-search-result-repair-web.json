@@ -1,0 +1,86 @@
+{
+  "date": "2026-11-10",
+  "release": "adfa04ecd00a7695",
+  "frozenRuntimeFiles": 181,
+  "search": {
+    "oneRowPerPresentationTitleAndFullCredit": true,
+    "preferCleanRemoteRecord": true,
+    "preferLocalCopy": true,
+    "liveRemixDistinct": true,
+    "cleanedRemoteTarget": true
+  },
+  "audio": {
+    "fileLimitMiB": 32,
+    "aggregateBlobLimitMiB": 64,
+    "metadataAndExportLimitsUnchanged": true
+  },
+  "tests": {
+    "unit": {
+      "passed": 633,
+      "failed": 0,
+      "executor": "Terra"
+    },
+    "nativeSynthetic": {
+      "groups01to04": "PASS",
+      "group05Separate": "PASS",
+      "sameFrozenRuntime": true,
+      "wavBytes": 10584044,
+      "downloadImportPlaybackHashReuseCleanup": true,
+      "physicalIPhone": false
+    },
+    "productionSmoke": {
+      "passed": true,
+      "entrySha256": "adfa04ecd00a7695ca926305dabbb3eaa18ef52dab4c8ed715ce338d19f5b0df",
+      "engines": [
+        {
+          "name": "chromium",
+          "version": "154.0.8037.57",
+          "passed": true,
+          "externalRequests": 0,
+          "pageErrors": 0
+        },
+        {
+          "name": "webkit",
+          "version": "27.2",
+          "passed": true,
+          "externalRequests": 0,
+          "pageErrors": 0
+        }
+      ]
+    },
+    "update": {
+      "passed": true,
+      "iphoneVerified": false,
+      "browserVersion": "154.0.8037.57",
+      "result": {
+        "oldEntrySHA256": "6b28ffbe1295f963b72bbb7dbaadfcd457058166708dcf86fdfbccd5edbd94b3",
+        "newEntry": "/releases/adfa04ecd00a7695.html",
+        "newVersionBypassesOldShell": true,
+        "stableLauncherSelectsCurrentBuild": true,
+        "waitingBeforeClosingClients": true,
+        "oldStillPlaying": true,
+        "newIsPaused": true,
+        "activatedAfterClientClosure": true,
+        "restoredPaused": true
+      }
+    }
+  },
+  "real": {
+    "beforeFix": "file-too-large acknowledged; no transferred bytes observed",
+    "afterFix": {
+      "publicSong": "Dientes De Fierro — Nsqk",
+      "receivedBytes": 8950674,
+      "storedBytes": 8950674,
+      "receivedAndStoredHashMatchInRAM": true,
+      "autoplayAdvancedSeconds": 2.7,
+      "reselectAdditionalSearches": 0,
+      "reselectAdditionalDownloads": 0,
+      "finalPaused": true,
+      "finalPending": false,
+      "sessionAvailable": true,
+      "physicalIPhone": false
+    }
+  },
+  "privateDeliveryVerified": true,
+  "physicalIPhone": false
+}

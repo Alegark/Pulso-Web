@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-09",
+  "release": "e549c4c517300a6e",
+  "implemented": {
+    "settingsAction": "Configuración → Almacenamiento → Limpiar caché de escucha",
+    "initialSearchImport": "cache membership false, existing contract retained",
+    "protects": [
+      "Library membership including legacy",
+      "Added albums",
+      "Favorites",
+      "Any playlist",
+      "Shared attached and detached aliases",
+      "Current queue and runtime protected sources"
+    ],
+    "authAndSettingsCleared": false,
+    "automaticEviction": false
+  },
+  "validation": {
+    "unitPassed": 627,
+    "unitFailed": 0,
+    "lint": true,
+    "nativeCacheCases": 4,
+    "idbAndOpfsConfirmed": true,
+    "playlistRegression": "PASS separate receipt",
+    "reacquisitionMain": {
+      "passed": true,
+      "sdk": "synthetic only",
+      "initialSearchAndCallback": 1,
+      "repeatRemoteCommands": 0,
+      "cleanedAssetAbsent": true,
+      "sameTrackIdAfterReacquisition": true,
+      "oneNewSearchAndCallback": true,
+      "addToLibraryNoNewRPC": true,
+      "cacheSummaryAfterAdd": 0
+    },
+    "productionChromiumDesktop": true,
+    "productionWebKitDesktop": true,
+    "historicalWebKitStyleAttributeWarnings": 10,
+    "normalUpdatePreservesAudio": true,
+    "sourceFilesFrozen": 171,
+    "sourceArchiveMembers": 3708,
+    "filesCopiedAndVerified": 38,
+    "oldAssetsAndEntriesRetained": 294,
+    "httpsReadback": true
+  },
+  "limitations": [
+    "No real account or real music deletion in these tests",
+    "Authorization and pool checks use synthetic sentinel without a session secret",
+    "Shell cache name preserved; content not independently compared",
+    "No dedicated second prepared-track or exhaustive settings case",
+    "No operating-system physical disk reclamation or secure erase guarantee",
+    "No physical iPhone/offline-private/background acceptance",
+    "Concurrent D1 visual work excluded from this functional release"
+  ],
+  "P0Complete": false,
+  "newServicesOrCosts": false
+}

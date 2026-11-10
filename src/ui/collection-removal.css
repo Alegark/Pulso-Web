@@ -1,0 +1,17 @@
+.collection-removal {
+  box-sizing: border-box;
+  max-width: 42rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.collection-removal *, .collection-removal *::before, .collection-removal *::after { box-sizing: border-box; }
+.collection-removal__summary { display: grid; gap: 0.5rem; }
+.collection-removal__summary div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.25rem 1rem; }
+.collection-removal__summary dd { margin: 0; font-weight: 600; }
+.collection-removal__consent { display: flex; align-items: flex-start; gap: 0.65rem; }
+.collection-removal__consent input { flex: none; margin: 0.25em 0 0; }
+.collection-removal__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.collection-removal__actions button { max-width: 100%; min-height: 2.75rem; white-space: normal; overflow-wrap: anywhere; }

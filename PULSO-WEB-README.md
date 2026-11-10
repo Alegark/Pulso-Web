@@ -4,7 +4,7 @@ Biblioteca musical personal para **buscar canciones y álbumes desde fuentes aut
 
 La prioridad es una buena experiencia en **iPhone desde Safari o Chrome**, incluida la reproducción y el avance de cola con la pantalla bloqueada. Esa capacidad es un objetivo de aceptación que debe comprobarse en el teléfono.
 
-> **Estado · 2026-10-31:** investigación de referencias y especificación completas para iniciar un proyecto separado. La aplicación web todavía no está implementada. Este README describe el producto previsto, la propuesta técnica y cómo comenzar su desarrollo.
+> **Estado · 2026-11-10:** prototipo web funcional con búsqueda de canciones, álbumes y artistas, reproducción, playlists, favoritos y gestión de copias locales. Las pruebas automatizadas locales no sustituyen la aceptación física en iPhone, que sigue pendiente. El SPEC conserva la propuesta original; las tareas ODD y la evidencia documentan los incrementos implementados.
 
 ## Documentación principal
 
@@ -78,9 +78,9 @@ El SPEC contiene enlaces a commits y archivos concretos de ocho proyectos: **Tel
 
 Se estudiaron recorridos de autenticación, búsqueda, entrega de bytes, audio, cola y persistencia. Algunos necesitan servidor o motor nativo; sirven como referencia de sus contratos, no como prueba de que funcionen en Safari. Revisar licencia y dependencias antes de incorporar código.
 
-## Cómo empezar
+## Origen del proyecto y recorrido de implementación
 
-Al autorizar el inicio en el proyecto nuevo:
+El plan inicial que guio la implementación fue:
 
 1. **Leer el SPEC**, especialmente §C y las decisiones D01–D10. Confirmar el directorio, las instrucciones y los recursos disponibles.
 2. **Crear un bootstrap mínimo** con dependencias fijadas y una tarea ODD.
@@ -94,9 +94,27 @@ Si falla una frontera esencial, registrar el caso y resolver la decisión corres
 
 ### Instalación y ejecución
 
-**Todavía no hay comandos de instalación, ejecución o build verificados para la aplicación web.** Se añadirán cuando exista su implementación y se hayan ejecutado realmente.
+Desde la raíz del repositorio, con Node.js compatible con Vite 8 y npm:
 
-Los comandos y dependencias de la app React Native pertenecen a otro producto y no se presentan como instrucciones de arranque de esta web.
+```sh
+npm ci
+npx vite --host 127.0.0.1
+```
+
+El terminal muestra el puerto local. Para verificar y compilar:
+
+```sh
+npm run lint
+npm run test:unit
+python3 -m unittest discover -s tests/server -v
+npm run build
+```
+
+La compilación genera `dist/`. Engram es una herramienta local de desarrollo, no una dependencia del producto. El uso de Telegram requiere configurar una identidad API propia por el procedimiento de [configuración privada](docs/TELEGRAM-SETUP.md); el repositorio no incluye credenciales ni sesiones. Para desplegar, usa HTTPS y conserva las políticas de seguridad indicadas en la documentación.
+
+Las funciones e investigaciones actuales están en [interfaz](docs/UI-INTEGRATION.md), [álbumes y artistas](docs/ALBUMS-AND-ARTISTS.md), [copias y Biblioteca](docs/PLAYBACK-COPIES-AND-LIBRARY.md), [bots sugeridos](docs/BOT-SUGGESTIONS.md) y [portadas](docs/ARTWORK-PROVIDERS.md). La investigación de fuentes directas fue [descartada por el propietario](docs/DIRECT-AUDIO-SOURCES.md).
+
+Pulso guarda las copias musicales y la sesión personal en el dispositivo. El relay opcional del prototipo sólo maneja metadatos públicos y portadas temporalmente; no almacena música en Cloudflare. `.local/`, `.tools/`, `node_modules/`, `dist/` y archivos de entorno quedan fuera de Git.
 
 ## Método de desarrollo: ODD + Engram local
 

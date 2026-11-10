@@ -1,11 +1,12 @@
 import {assembleBotDownloadBytes,BotDownloadBytesFailure} from './bot-download-bytes';
+import {recordingTitleCandidate} from '../library/recording-title';
 import Long from 'long';
 import type {tl} from '@mtcute/core';
 import type {BaseTelegramClient} from '@mtcute/core/client.js';
 import {botProvidersFailure,type BotProvidersClock,type BotSearchProviderCapture,type BotProvidersDriver} from './bot-providers-driver';
 import {isUuid,parseAccountBinding,type AccountBinding} from './sources-protocol';
-import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,formatBotSearchQuery,parseBotSearchCommand,matchingSongRows,type BotSearchEnvelope,type BotSearchReply,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
-import {assertBotSearchRawBudget,botSearchAck,botSearchBaseline,BotSearchProjectionError,projectBotSearchPage,botSearchKnownMessage,botSearchMessageFingerprint,botSearchDocument,type BotSearchPrivateRef} from './bot-search-page';
+import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,botSearchText,formatBotSearchQuery,parseBotSearchCommand,matchingSongRows,type BotSearchEnvelope,type BotSearchReply,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
+import {assertBotSearchRawBudget,botSearchAck,botSearchBaseline,BotSearchProjectionError,projectBotSearchPage,projectBotCallbackPage,botSearchDocumentIdentity,botSearchKnownMessage,botSearchMessageFingerprint,botSearchAudioFingerprint,botSearchDocument,type BotSearchPrivateRef} from './bot-search-page';
 /** Inject only inside the worker. No generic RPC, root peers or arbitrary message identifiers. */
 export interface BotSearchDependency {
  captureProvider(ref:string,revision:number):BotSearchProviderCapture|null;
@@ -65,7 +66,9 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    if(time.now()>=retainedUntil||retained.size){retained=new Map();retainedUntil=0;}
    const capture=dependency.captureProvider(c.providerRef,c.providerRevision);
    if(!capture)return response(e,fail('expired'),'not-dispatched');
-   if(capture.username!=='ivkmbot')return response(e,fail('unsupported'),'not-dispatched');
+   // Supported providers use private-chat music menus with layer232 callback
+   // buttons. Selection still requires this attempt's exact peer, menu and target.
+   if(capture.username!=='ivkmbot'&&capture.username!=='lydbot'&&capture.username!=='ansmusicbot'&&capture.username!=='kdmusic_bot'&&capture.username!=='deezermusicbot')return response(e,fail('unsupported'),'not-dispatched');
    const query=c.type==='bot-search.search'?formatBotSearchQuery(c):null;if(c.type==='bot-search.search'&&!query)return response(e,fail('limit-query'),'not-dispatched');
    const shared=dependency.getAccountCooldown?.();
    if(shared)return response(e,{error:'rate-limit',...shared},'not-dispatched');
@@ -112,45 +115,74 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      const approved=capture.verifyIdentity(identity);if(!approved){if(!capture.current())throw fail('identity-changed');throw fail('unsupported');}check();
      if(c.type==='bot-search.download'){
       if(!dependency.readKnown||!dependency.readDocumentPart||!selection?.row||!previous)throw fail('unsupported');
-      const known=async(ref:BotSearchPrivateRef)=>{const raw=await rpc(()=>dependency.readKnown!(approved.peer,ref.messageId,abort.signal));const message=botSearchKnownMessage(raw,approved.botId,ref.messageId);if(!message||botSearchMessageFingerprint(message)!==ref.fingerprint)throw fail('conflict');return message;};
+      const known=async(ref:BotSearchPrivateRef)=>{
+       const raw=await rpc(()=>dependency.readKnown!(approved.peer,ref.messageId,abort.signal));const message=botSearchKnownMessage(raw,approved.botId,ref.messageId);
+       if(!message)throw fail('conflict');
+       if(ref.row?.kind==='audio'&&ref.audioFingerprint){
+        if(botSearchAudioFingerprint(message)!==ref.audioFingerprint)throw fail('conflict');
+        const fresh=projectBotSearchPage({_: 'messages.messages',messages:[message],users:[],chats:[]},approved.botId,Math.min(previous.baseline,ref.messageId-1),previous.outgoing,[selection.messageId],c.target);
+        if(matchingSongRows(fresh.rows.filter(row=>row.kind==='audio'),c.target).length!==1)throw fail('conflict');
+       }else if(botSearchMessageFingerprint(message)!==ref.fingerprint)throw fail('conflict');
+       return message;
+      };
       let selected=selection,message=await known(selected);
       if(selected.row?.kind==='option'){
+       const selectedDocumentId=botSearchDocumentIdentity(message);
        const fold=(v:string)=>v.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
-       if(!dependency.callback||!selected.callbackData||!(matchingSongRows([selected.row],c.target).length===1||fold(c.target.title).length>=3&&fold(selected.row.label).includes(fold(c.target.title))))throw fail('unsupported');
+       if(!dependency.callback||!selected.callbackData||!(matchingSongRows([selected.row],c.target).length===1||!['kdmusic_bot','deezermusicbot'].includes(capture.username)&&fold(c.target.title).length>=3&&fold(selected.row.label).includes(fold(c.target.title))))throw fail('unsupported');
        const baseline=botSearchBaseline(await rpc(ms=>dependency.readHistory(approved.peer,0,1,abort.signal,ms)),approved.botId);
        f.delivery='uncertain';if(ctx.publish&&live(ctx,capture))try{ctx.publish({...e,type:'bot-search.sending',delivery:'uncertain'});}catch{/* Observers cannot own or repeat the callback. */}
        const answer=await rpc(()=>dependency.callback!(approved.peer,selected.messageId,selected.callbackData!.slice(),abort.signal));
-       if((answer as {_?:string})._!=='messages.botCallbackAnswer'||Object.getOwnPropertyDescriptor(answer as object,'url')?.value||Object.getOwnPropertyDescriptor(answer as object,'alert')?.value)throw fail('unsupported');
+       if(!answer||typeof answer!=='object'||Object.getOwnPropertyDescriptor(answer,'_')?.value!=='messages.botCallbackAnswer')throw fail('unsupported');
        f.delivery='acknowledged';
+       const notice=botSearchText(Object.getOwnPropertyDescriptor(answer,'message')?.value,500);
+       if(notice&&ctx.publish&&live(ctx,capture))try{ctx.publish(Object.freeze({...e,type:'bot-search.provider-notice',text:notice}));}catch{/* Observers cannot own transport. */}
+       // `alert` and `nativeUi` are presentation hints, not media or authority.
+       // We render only inert notice text and never launch a native/game surface.
+       // Continuation still requires an actual matching document in this chat.
+       // https://core.telegram.org/constructor/messages.botCallbackAnswer
+       for(const key of ['alert','nativeUi']){
+        const field=Object.getOwnPropertyDescriptor(answer,key);
+        if(field&&(!('value'in field)||field.value!==undefined&&typeof field.value!=='boolean'))throw fail('unsupported');
+       }
+       if(['url','hasUrl'].some(key=>{const field=Object.getOwnPropertyDescriptor(answer,key);return !!field&&(!('value' in field)||!!field.value);}))throw fail('unsupported');
+       let unmatched:ReturnType<typeof projectBotCallbackPage>|null=null;
        for(let read=0;;read++){
-        check();if(read>=B.downloadReads)throw fail('timeout');
-        const raw=await rpc(ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms));
-        const page=projectBotSearchPage(raw,approved.botId,baseline,previous.outgoing,[selection.messageId],c.target);if(page.concurrent)throw fail('uncertain');
+        check();if(read>=B.downloadReads){
+         if(!unmatched)throw fail('timeout');
+         retained=unmatched.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={...previous,baseline};
+         return {...e,type:'bot-search.result',delivery:'acknowledged',rows:unmatched.rows.filter(row=>row.kind==='audio'),expiresAt:retainedUntil,expectedTarget:c.target};
+        }
+        const raw=await rpc(ms=>dependency.readHistory(approved.peer,Math.min(baseline,selection.messageId-1),20,abort.signal,ms));
+        const page=projectBotCallbackPage(raw,approved.botId,baseline,previous.outgoing,selection.messageId,selectedDocumentId,c.target);if(page.concurrent)throw fail('uncertain');
         const audio=page.rows.filter(row=>row.kind==='audio'),matches=matchingSongRows(audio,c.target);
         if(audio.length){
          // Correlation may be recent. Fresh exact-peer window plus ONE compatible
          // recording permits continuation; equal matches keep the ranked first one.
-         if(!matches.length){
-          retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={...previous,baseline};
-          return {...e,type:'bot-search.result',delivery:'acknowledged',rows:audio,expiresAt:retainedUntil,expectedTarget:c.target};
-         }
-         selected=page.refs.get(matches[0].rowRef)!;message=await known(selected);break;
+         // The first audio need not be the selected recording. Keep observing
+         // this same callback's bounded window without fetching unrelated bytes
+         // or sending another query/callback.
+         if(!matches.length)unmatched=page;
+         else{selected=page.refs.get(matches[0].rowRef)!;message=await known(selected);break;}
         }
         await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},B.pollMs);});
        }
       }
       const row=selected.row;if(row?.kind!=='audio')throw fail('unsupported');
       const fold=(v:string)=>v.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
-      if(!row.title||fold(row.title)!==fold(c.target.title)||c.target.artist&&(!row.performer||fold(row.performer)!==fold(c.target.artist)))throw fail('conflict');
+      if(!row.title||!recordingTitleCandidate(row.title,c.target.title,c.target.album,c.target.durationSeconds)||c.target.artist&&(!row.performer||fold(row.performer)!==fold(c.target.artist)))throw fail('conflict');
       const document=botSearchDocument(message);if(!document)throw fail('unsupported');
       const result=await assembleBotDownloadBytes({bytes:row.bytes,mime:row.mimeType},async(offset,limit)=>{
+       // The descriptor passed validation; zero bytes means ready to receive,
+       // not that Telegram has delivered any part of the file yet.
+       if(offset===0&&ctx.publish&&live(ctx,capture)&&!f.cause)try{ctx.publish({...e,type:'bot-search.download-progress',bytes:0,total:row.bytes});}catch{/* Observation does not own transport. */}
        const bytes=await rpc(()=>dependency.readDocumentPart!(document,offset,limit,abort.signal),false);
        if(!(bytes instanceof Uint8Array)||bytes.length!==Math.min(limit,row.bytes-offset))throw new BotDownloadBytesFailure('short');
        if(ctx.publish&&live(ctx,capture))try{ctx.publish({...e,type:'bot-search.download-progress',bytes:offset+bytes.length,total:row.bytes});}catch{/* Observation does not own transport. */}
        return bytes;
       },()=>live(ctx,capture)&&!f.cause&&time.now()<deadline);
       await known(selected);check();retained=new Map();retainedSearch=null;
-      return {...e,type:'bot-search.downloaded',audio:{...result,target:c.target}};
+      return {...e,type:'bot-search.downloaded',audio:{...result,target:c.target,...(fold(row.title)!==fold(c.target.title)?{recordingTitle:row.title}:{})}};
      }
      const baseline=botSearchBaseline(await rpc(ms=>dependency.readHistory(approved.peer,0,1,abort.signal,ms)),approved.botId);check();
      const randomId=randomLong();check();
@@ -159,15 +191,22 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      if(ctx.publish&&live(ctx,capture)){try{ctx.publish(Object.freeze({...e,type:'bot-search.sending',delivery:'uncertain'}));}catch{/* UI observers cannot change authority. */}}
      const ack=botSearchAck(await rpc(ms=>dependency.sendQuery(approved.peer,query!,randomId,abort.signal,ms)),approved.botId,randomId);
      if(!ack||ack<=baseline)throw fail('uncertain');f.delivery='acknowledged';check();
+     let lastCandidates:ReturnType<typeof projectBotSearchPage>|null=null;
+     const searchResult=(page:ReturnType<typeof projectBotSearchPage>):BotSearchReply=>{
+      retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={providerRef:c.providerRef,queryId:c.queryId,revision:c.providerRevision,baseline,outgoing:ack,target:c.target??null};check();
+      return Object.freeze({...e,type:'bot-search.result',delivery:'acknowledged',rows:page.rows,expiresAt:retainedUntil,expectedTarget:c.target??null});
+     };
      for(let reads=0;reads<B.reads;reads++){
       const page=projectBotSearchPage(await rpc(ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms)),approved.botId,baseline,ack,[],c.target??null);check();
       if(page.concurrent)throw fail('uncertain');
-      if(page.rows.some(row=>row.kind==='option'||row.kind==='audio')){retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={providerRef:c.providerRef,queryId:c.queryId,revision:c.providerRevision,baseline,outgoing:ack,target:c.target??null};check();
-       return Object.freeze({...e,type:'bot-search.result',delivery:'acknowledged',rows:page.rows,expiresAt:retainedUntil,expectedTarget:c.target??null});
+      if(page.rows.some(row=>row.kind==='option'||row.kind==='audio')){
+       lastCandidates=page;
+       if(page.rows.some(row=>row.kind==='option')||!c.target?.artist||matchingSongRows(page.rows,c.target).length)return searchResult(page);
       }
       if(page.unrecognized)throw fail('unsupported');
       await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},Math.min(B.pollMs,Math.max(0,deadline-time.now())));});check();
      }
+     if(lastCandidates)return searchResult(lastCandidates);
      throw fail('timeout');
     }catch(error){
      // Internally constructed causes are data-only; SDK errors were normalized in rpc.

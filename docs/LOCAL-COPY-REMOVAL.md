@@ -24,3 +24,29 @@ Evidencia separada, sin sumar etapas:
 - Acceso HTTPS privado: regresión amplia con datos propios y dos pestañas PASS. Una revisión de retirada sin controlador se deniega, conserva todos los datos y mantiene la reproducción. No acredita retirada positiva ni offline de ese acceso.
 
 El presupuesto de metadatos retenidos es estimado: no garantiza heap y el clon nativo de un registro puede ocupar más transitoriamente. No se implementa GC/LRU de generaciones antiguas ni borrado seguro de disco; no se garantiza espacio liberado. No hay prueba de crash/purga física, iPhone, VoiceOver o zoom real. USD0. Evidencia y hashes en [evidence-local-copy-removal-web.json](evidence-local-copy-removal-web.json).
+
+## Retirar una playlist o un álbum: candidato local
+
+Biblioteca incorpora «Eliminar playlist» y «Retirar álbum». La revisión presenta la colección completa, las copias potencialmente elegibles y las compartidas. El álbum se calcula sobre toda Biblioteca, aunque la vista tenga filtros. La confirmación es explícita; abrir la revisión no elimina archivos.
+
+Eliminar una playlist conserva la pertenencia de sus canciones a Biblioteca. Retirar un álbum quita de Biblioteca sus miembros. Después se examina cada archivo físico una sola vez: se conservan los favoritos, otras playlists, otras pertenencias a Biblioteca, las referencias de cola y las fuentes o lectores activos. No se pausa ni se vacía la cola para volver elegible un archivo. Las fichas y sus huellas permanecen para reconocer una futura reimportación.
+
+Las escrituras organizativas comparten el bloqueo de la retirada. Cada archivo exige una reserva y comprobación de runtime nuevas; su cierre nativo, recibo y actualización de la vista preceden a la liberación. Cancelar impide nuevas retiradas, pero no deshace un commit confirmado. Una incertidumbre detiene el lote y se presenta en la revisión manual existente, sin reintentos automáticos. El puntero de seguimiento se limpia antes de podar un recibo terminal; si el ACK falla, sólo se restablece cuando una lectura fresca demuestra que el journal original sigue presente. Un ACK que ya comprometió su limpieza no genera un puntero huérfano.
+
+La evidencia local está en `.local/collection-removal-final-main/REPORT.md`: main minificado y CSS real, retirada física IDB/OPFS con SW real, protección de referencias compartidas, continuidad del audio y Pausar, álbum global filtrado, fallo de ACK y recuperación por la UI. Las barreras y fallos inyectados se identifican como TESTONLY. La prueba de 35 archivos verifica ACK secuenciales sin elevar el límite de journals; las carreras físicas preservan el siguiente archivo. La barrera OPFS retiene la observación de la promesa original y no demuestra un syscall físicamente prolongado.
+
+El control de versión de DB y el retorno de control entre pestañas tienen pruebas acotadas; no se afirma una pérdida forzada de owner durante una escritura ya enviada ni una matriz exhaustiva de cola persistida. La geometría se comprobó con CSS compilado a 320 × 568 y zoom de escritorio del 200 %. El resultado de desbordamiento del arnés de desarrollo no se atribuye al producto: sus estilos inyectados estaban bloqueados por CSP. No se modificó música real. Este candidato aún no está publicado y no acredita iPhone, fallos físicos del dispositivo ni cierre global P0-W.
+
+
+## Comprobación actual · 2026-11-09
+
+La entrega funcional `9709829634c283c5` se comprobó con archivos propios en Chromium y Service Worker nativo. Quitar una descarga individual pasó en IndexedDB y OPFS: desaparecen manifiesto y bytes, conservando la ficha, pertenencia a Biblioteca y organización. No existe aquí una afirmación de borrar la canción de Biblioteca.
+
+Retirar un álbum con tres pistas, una oculta por un filtro, retiró de Biblioteca sus tres miembros y eliminó las dos copias exclusivas. Conservó la copia protegida por favorito y playlist, además de la playlist, cola y audio activo. Cancelar la revisión no modificó esos datos. Los tres casos pasaron sin cambiar producto ni tocar música real. Informe: `.local/song-album-removal-check/REPORT.md`. No acredita liberación física de disco del sistema, borrado seguro ni iPhone.
+
+
+## Caché de escucha y colecciones compartidas · 2026-11-09
+
+La limpieza de caché reutiliza la revisión, snapshot, CAS, bloqueo de escritor, reservas físicas y recibos de la retirada de colecciones. Su fase organizativa no borra playlists ni cambia la pertenencia a Biblioteca; cada archivo se vuelve a comprobar antes de retirarlo. Si una canción pasa a Biblioteca o una playlist entre revisión y confirmación, la revisión se rechaza sin borrar sus bytes. Un resultado incierto conserva el seguimiento y no se repite automáticamente.
+
+La regresión de eliminar playlists confirmó nuevamente que desaparecen las copias exclusivas y se conservan los archivos de otras playlists, Biblioteca, álbumes y favoritos. En caché se retiraron dos archivos propios IDB/OPFS, manteniendo referencias compartidas, alias separados, cola y reproducción. Los casos de alias detached y cambios concurrentes son fixtures negativos. No se retiró música real. Véase [evidencia de caché](evidence-listening-cache-web.json); iPhone continúa pendiente.

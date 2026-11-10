@@ -1,0 +1,29 @@
+{
+  "status": "PASS_WITH_LIMITS",
+  "release": "/releases/2ddae05eaafb16f8.html",
+  "composition": {
+    "baseline": "88a7cc6f88363955",
+    "ownedDelta": [
+      "src/library/album-catalog.ts",
+      "src/library/album-resolution.ts",
+      "src/ui/MusicSearchController.tsx",
+      "src/ui/AlbumPageController.tsx"
+    ],
+    "mutablePlaylistUIIncluded": false
+  },
+  "runtimeFrozen": 187,
+  "unitPassed": 646,
+  "nativeMainGroups": 4,
+  "nativeSourceEqualsBuild": true,
+  "baselineRedReproduced": true,
+  "safeStageHttpDiagnostics": true,
+  "productionSmoke": "PASS Chromium/WebKit",
+  "updateFrom": "88a7cc6f88363955",
+  "httpsVerified": true,
+  "retainedImmutable": 319,
+  "rootDistRebuiltFromAcceptedSnapshot": true,
+  "playlistUIIncluded": false,
+  "realTelegramOrAudio": false,
+  "iPhoneCause": "not established",
+  "P0Complete": false
+}

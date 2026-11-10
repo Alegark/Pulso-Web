@@ -5,6 +5,7 @@ import {preparedSourceProvenance} from '../../src/playback/transport';
 import type {LocalAsset} from '../../src/library/library';
 import type {BlobCredit,PreparedLocalSources} from '../../src/playback/local-source-protocol';
 import {openAssetReader} from '../../src/storage/asset-reader';
+import {AUDIO_FILE_MAX_BYTES as fileLimit,AUDIO_BLOB_TOTAL_MAX_BYTES as totalLimit} from '../../src/storage/audio-limits';
 const uuid=(n:number)=>`00000000-0000-4000-8000-${n.toString(16).padStart(12,'0')}`;
 const asset=(n:number,bytes=1):LocalAsset=>({id:uuid(n),namespace:'local',storageKey:uuid(n),bytes,sha256:'a'.repeat(64),mime:'audio/wav',chunks:Math.ceil(bytes/65536),state:'complete',revision:1,chunkSize:65536,retention:'kept',backend:'idb'});
 function fixture(){
@@ -21,26 +22,26 @@ test('complete FIFO pending protects removal synchronously and setPlanned cannot
  assert.equal(q.getSources(),null);p.cancel();assert.equal(p.setPlanned(['A','B','A']),false);
  await Promise.all([p.settle(),q.settle()]);assert.equal(r.getReadonlySnapshot().pending.length,0);
 });
-test('8/24 MiB exact, +1 and concurrent reservations share one atomic budget',async()=>{
- const {r}=fixture();const ps=Array.from({length:4},()=>r.beginPreparation(['A'],()=>true));
- const eight=8388608;
- assert.equal(ps[0].reserveBlob([asset(1,eight+1)]),null);
- const a=ps[0].reserveBlob([asset(1,eight)]),b=ps[1].reserveBlob([asset(2,eight)]),c=ps[2].reserveBlob([asset(3,eight)]);
- assert.ok(a&&b&&c);assert.equal(ps[3].reserveBlob([asset(4)]),null);
+test('32/64 MiB exact, +1 and concurrent reservations share one atomic budget',async()=>{
+ const {r}=fixture();const ps=Array.from({length:3},()=>r.beginPreparation(['A'],()=>true));
+ assert.equal(totalLimit,2*fileLimit);
+ assert.equal(ps[0].reserveBlob([asset(1,fileLimit+1)]),null);
+ const a=ps[0].reserveBlob([asset(1,fileLimit)]),b=ps[1].reserveBlob([asset(2,fileLimit)]);
+ assert.ok(a&&b);assert.equal(ps[2].reserveBlob([asset(4)]),null);
  assert.equal(ps[0].reserveBlob([asset(5)]),null,'one preparation cannot mint another reservation');
- await ps[0].settle();assert.equal(a.current(),false);assert.ok(ps[3].reserveBlob([asset(4)]));
+ await ps[0].settle();assert.equal(a.current(),false);assert.ok(ps[2].reserveBlob([asset(4)]));
  await Promise.all(ps.map(p=>p.settle()));
 });
 test('credits are opaque, single producer claims exact twelve fields and cancellation retains native custody',async()=>{
- const {r}=fixture(),p=r.beginPreparation(['A'],()=>true),expected=asset(1,8388608),credit=p.reserveBlob([expected])!;
+ const {r}=fixture(),p=r.beginPreparation(['A'],()=>true),expected=asset(1,fileLimit),credit=p.reserveBlob([expected])!;
  assert.ok(credit);assert.equal(claimBlobCredit({current:()=>true} as BlobCredit,[expected]),null);
  assert.equal(claimBlobCredit(credit,[{...expected,mime:'audio/mpeg'}]),null);
  const claim=claimBlobCredit(credit,[expected])!;assert.ok(claim);assert.equal(claimBlobCredit(credit,[expected]),null);
  let settled=false;const wait=p.settle().then(()=>{settled=true;});await Promise.resolve();assert.equal(settled,false);
  const q=r.beginPreparation(['B'],()=>true);
- assert.equal(q.reserveBlob([asset(2,8388608),asset(3,8388608),asset(4,1)]),null);
+ assert.equal(q.reserveBlob([asset(2,fileLimit),asset(4,1)]),null);
  claim.complete();claim.complete();await wait;assert.equal(settled,true);
- assert.ok(q.reserveBlob([asset(2,8388608),asset(3,8388608),asset(4,1)]));await q.settle();
+ assert.ok(q.reserveBlob([asset(2,fileLimit),asset(4,1)]));await q.settle();
 });
 test('unknown historical allocations deny appending and reserve before any producer IO',async()=>{
  const f=fixture();let releases=0;

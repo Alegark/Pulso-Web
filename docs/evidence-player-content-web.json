@@ -1,0 +1,95 @@
+{
+  "release": "de0967e84ee0d9f9",
+  "runtimeFiles": 185,
+  "unitPassed": 639,
+  "nativeMainGroupsPassed": 5,
+  "nativeMainReport": ".local/player-content-fix/browser/2026-11-10T03-27-25-144Z/report.json",
+  "localOrganizationAndMedia": true,
+  "remoteResultsRAMOnly": true,
+  "manualPriority": true,
+  "realProviderAndAccountValidation": {
+    "release_path_matched": true,
+    "release_html_sha256_independently_verified": false,
+    "cover_blob_loaded": true,
+    "cover_natural_width": 1000,
+    "lyrics_source": "LRCLIB",
+    "lyrics_preview_lines": 2,
+    "lyrics_timed_lines": 48,
+    "lyrics_active_cues": 1,
+    "library_added": true,
+    "library_ui_checked_after_reload": true,
+    "library_idb_added_after_reload": true,
+    "playback_advanced": true,
+    "playback_paused": true,
+    "observed_worker_commands": 0,
+    "worker_pending_before_reload": false,
+    "worker_available_before_reload": true,
+    "worker_cancelling_before_reload": false,
+    "worker_wrapper_restored_before_reload": true,
+    "artwork_request_count_observed": false,
+    "preview_tab_closed": true
+  },
+  "physicalIPhone": false,
+  "publicArtworkProbe": {
+    "passed": true,
+    "metadataRequests": 1,
+    "imageRequests": 1,
+    "metadataStatus": 200,
+    "imageStatus": 200,
+    "unexpectedRequests": 0,
+    "pageErrors": 0,
+    "cspViolations": 0,
+    "sourceUnchanged": true,
+    "cleanup": true,
+    "matchedAlbum": "ROY",
+    "corsReadable": true,
+    "decode": true,
+    "width": 100,
+    "height": 100,
+    "rendered": true
+  },
+  "productionSmoke": {
+    "passed": true,
+    "entrySha256": "de0967e84ee0d9f9bc7d7d65ffdab041d6903e29538435c53448a615de2b1ebc",
+    "engines": [
+      {
+        "name": "chromium",
+        "version": "154.0.8037.57",
+        "passed": true,
+        "externalRequests": 0,
+        "pageErrors": 0
+      },
+      {
+        "name": "webkit",
+        "version": "27.2",
+        "passed": true,
+        "externalRequests": 0,
+        "pageErrors": 0
+      }
+    ]
+  },
+  "update": {
+    "passed": true,
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "externalRequests": 0,
+      "oldEntrySHA256": "a6298e0bb1031db611da707545ac21969ab93ce3d5c0a16123bca7dc6c10140a",
+      "newEntry": "/releases/de0967e84ee0d9f9.html",
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    }
+  },
+  "privateDelivery": {
+    "files": 38,
+    "immutablePreserved": 308,
+    "httpsExact": true,
+    "configurationSeparateNoStore": true,
+    "documentAppleHostsOnly": true
+  }
+}

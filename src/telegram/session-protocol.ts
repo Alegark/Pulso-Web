@@ -2,6 +2,7 @@
 import {parseAccountBinding,type AccountBinding,type SourceRow} from './sources-protocol';
 import {parseSaved} from './sources-bridge-protocol';
 import {record,uuid} from './auth-protocol';
+import {parseBotRows,type BotProviderRow} from './bot-providers-protocol';
 export const sessionPhases=['disconnected','restoring','sending-code','code','password','authorizing','connected','disconnecting','error'] as const;
 export const sessionErrors=['configuration','api-invalid','api-restricted','phone-invalid','code-invalid','code-expired','password-invalid','rate-limit','network','unsupported','cancelled','timeout','protocol','logout-unconfirmed','session-storage','session-expired','internal'] as const;
 export type SessionPhase=typeof sessionPhases[number];
@@ -9,7 +10,7 @@ export type SessionError=typeof sessionErrors[number];
 export type Delivery='app'|'sms'|'call'|'email';
 export interface SessionState {phase:SessionPhase;error:SessionError|null;retryAt:number|null;delivery:Delivery|null}
 export interface SessionCommand {version:2;session:string;request:string;type:'begin'|'restore'|'forget'|'code'|'password'|'logout';value:string}
-export interface SessionReply {version:2;session:string;request:string;phase:SessionPhase;error:SessionError|null;retryAt:number|null;delivery:Delivery|null;binding:AccountBinding|null;saved:SourceRow|null}
+export interface SessionReply {version:2;session:string;request:string;phase:SessionPhase;error:SessionError|null;retryAt:number|null;delivery:Delivery|null;binding:AccountBinding|null;saved:SourceRow|null;bots?:readonly BotProviderRow[]}
 export const initialSessionState=():SessionState=>({phase:'disconnected',error:null,retryAt:null,delivery:null});
 export function parseSessionCommand(value:unknown):SessionCommand|null {
  try{
@@ -25,13 +26,14 @@ export function parseSessionCommand(value:unknown):SessionCommand|null {
 }
 export function parseSessionReply(value:unknown,session:string,request:string):SessionReply|null {
  try{
-  if(!record(value,['version','session','request','phase','error','retryAt','delivery','binding','saved'])||value.version!==2||value.session!==session||value.request!==request||!sessionPhases.includes(value.phase as SessionPhase)||!(value.error===null||sessionErrors.includes(value.error as SessionError))||!(value.retryAt===null||typeof value.retryAt==='number'&&Number.isSafeInteger(value.retryAt)&&value.retryAt>=0&&value.retryAt<=8640000000000000)||!(value.delivery===null||['app','sms','call','email'].includes(value.delivery as string)))return null;
+  if(!record(value,['version','session','request','phase','error','retryAt','delivery','binding','saved','bots'],['version','session','request','phase','error','retryAt','delivery','binding','saved'])||value.version!==2||value.session!==session||value.request!==request||!sessionPhases.includes(value.phase as SessionPhase)||!(value.error===null||sessionErrors.includes(value.error as SessionError))||!(value.retryAt===null||typeof value.retryAt==='number'&&Number.isSafeInteger(value.retryAt)&&value.retryAt>=0&&value.retryAt<=8640000000000000)||!(value.delivery===null||['app','sms','call','email'].includes(value.delivery as string)))return null;
   if((value.phase==='connected'||value.phase==='disconnected')&&value.error!==null)return null;
   if((value.phase==='connected'||value.phase==='disconnected')&&(value.retryAt!==null||value.delivery!==null)||value.phase==='error'&&value.error===null)return null;
   if(['restoring','sending-code','authorizing','disconnecting'].includes(value.phase as string))return null;
-  const binding=parseAccountBinding(value.binding),saved=parseSaved(value.saved);
+  const binding=parseAccountBinding(value.binding),saved=parseSaved(value.saved),bots=value.bots===undefined?undefined:parseBotRows(value.bots);
+  if(bots===null||value.phase!=='connected'&&bots!==undefined)return null;
   if(value.phase==='connected'?(!binding||!saved):(value.binding!==null||value.saved!==null))return null;
-  return {version:2,session,request,binding,saved,phase:value.phase as SessionPhase,error:value.error as SessionError|null,retryAt:value.retryAt as number|null,delivery:value.delivery as Delivery|null};
+  return {version:2,session,request,binding,saved,...(bots===undefined?{}:{bots}),phase:value.phase as SessionPhase,error:value.error as SessionError|null,retryAt:value.retryAt as number|null,delivery:value.delivery as Delivery|null};
  }catch{return null;}
 }
 /** SDK error names are examined defensively and never emitted verbatim. */

@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Pulso · Direcciones del reproductor</title>
+<style>
+:root{--background:transparent;--foreground:#e9e9ee;--muted:#a2a2ae;--card:#1d1d23;--border:#363640;--primary:#b4a5ff;--radius:20px;--font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-family:var(--font-sans);font-size:16px;color:var(--foreground);color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;background:transparent}body{font-family:var(--font-sans);-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}button,input,select{font:inherit}button{cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none}button:disabled{cursor:default;opacity:.4}button:focus-visible,input:focus-visible,select:focus-visible,[tabindex="-1"]:focus-visible{outline:3px solid var(--primary);outline-offset:4px}button:active:not(:disabled){transform:scale(.97)}button{transition:transform 120ms cubic-bezier(.23,1,.32,1)}[hidden]{display:none!important}svg{width:20px;height:20px;display:block;flex-shrink:0}p,h1,h2,h3{margin:0}h1,h2,h3{text-wrap:balance}h1{font-size:clamp(2rem,5.5vw,3.8rem);line-height:1.04;letter-spacing:-.055em;font-weight:730}h2{letter-spacing:-.03em}small{font-size:.75rem}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.lab-tools{margin:82px 0 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:0.75rem;color:var(--muted)}.lab-tools label{display:flex;gap:8px;align-items:center}.lab-tools select{font-size:1rem;max-width:180px;min-height:44px;padding:0 10px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--foreground)}.direction-note{margin:16px 0 8px;display:flex;gap:12px;align-items:flex-start;color:var(--foreground);font-size:0.875rem;line-height:1.5}.direction-note strong{font-weight:650}.direction-note p{flex:1;min-width:0}.swatches{display:flex;gap:4px;margin-top:3px;flex-shrink:0}.swatches i{display:block;width:18px;height:18px;border:1px solid #8886;border-radius:50%;background:var(--swatch)}.lab-foot{font-size:0.75rem;line-height:1.6;color:var(--muted);margin:0 0 24px}
+.app{--background:#f4f6fa;--foreground:#172335;--muted:#5d697c;--card:#fff;--secondary:#e9eef6;--border:#d9e0ea;--primary:#235ad7;--on-primary:#fff;--ring:#235ad7;--accent-soft:#e8efff;--art-bg:#bac9c8;--art-ink:#234052;--art-sun:#f5ba7b;background:var(--background);color:var(--foreground);padding:16px;border-radius:var(--radius);position:relative;isolation:isolate;min-width:0;color-scheme:light;overflow:clip}
+.app[data-theme="grafito"]{--background:#141414;--foreground:#f7f5f2;--muted:#b4afab;--card:#1e1d1d;--secondary:#292727;--border:#403b39;--primary:#ff8775;--on-primary:#281410;--ring:#ff8775;--accent-soft:#3a2724;--art-bg:#ab4b3a;--art-ink:#331e2c;--art-sun:#f3bf91;color-scheme:dark;--radius:12px}
+.app[data-theme="tinta"]{--background:#111527;--foreground:#f3f1ff;--muted:#b1b4ce;--card:#1b2038;--secondary:#262c46;--border:#383f5b;--primary:#b4a5ff;--on-primary:#211740;--ring:#b4a5ff;--accent-soft:#302b50;--art-bg:#414f7f;--art-ink:#121b39;--art-sun:#c3b7ef;color-scheme:dark;--radius:24px}
+.workspace{display:grid;grid-template-columns:124px minmax(0,1fr);min-height:575px}.sidebar{padding:11px 14px 0 0;border-right:1px solid var(--border)}.brand{display:flex;align-items:center;gap:7px;font-size:1.5625rem;letter-spacing:-1px;font-weight:750}.brand svg{color:var(--primary);width:25px;height:25px}.side-list{list-style:none;padding:32px 0 0;margin:0;display:grid;gap:10px;font-size:0.8125rem}.side-list li{display:flex;align-items:center;gap:8px;min-height:40px;color:var(--muted);padding:0 7px}.side-list .active{color:var(--foreground);background:var(--secondary);border-radius:8px;font-weight:600}.side-list svg{width:17px;height:17px}.side-heading{font-size:0.625rem;letter-spacing:.09em;color:var(--muted);margin:30px 7px 14px}.side-caption{font-size:0.75rem;line-height:1.7;padding:0 7px;color:var(--muted)}.side-caption span{display:block}.context{min-width:0;padding:4px 0 20px 22px}.appbar{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:30px}.mobile-brand{display:none}.search{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:10px;min-height:44px;padding:0 12px;background:var(--card);width:100%;max-width:320px}.search svg{color:var(--muted);width:17px}.search input{border:0;background:transparent;outline-offset:6px;color:var(--foreground);width:100%;min-width:0;font-size:1rem;min-height:42px}.search input::placeholder{color:var(--muted);opacity:1}.profile-mark{font-size:0.6875rem;font-weight:700;letter-spacing:.04em;border:1px solid var(--border);width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex-shrink:0}.eyebrow{font-size:0.625rem;font-weight:650;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}.album-hero{display:grid;grid-template-columns:142px minmax(0,1fr);align-items:end;gap:22px}.cover{position:relative;isolation:isolate;aspect-ratio:1;overflow:hidden;border-radius:6px;min-width:0;background:var(--art-bg);color:var(--art-ink)}.cover svg{width:100%;height:100%}.cover .cover-top{position:absolute;left:9%;top:9%;font-size:0.5rem;letter-spacing:.15em;font-weight:650}.cover .cover-bottom{position:absolute;left:9%;bottom:8%;font-weight:600;font-size:clamp(11px,2vw,19px);letter-spacing:-.05em;line-height:1}.cover .cover-edition{position:absolute;right:9%;top:9%;font-size:0.4375rem}.cover.missing{display:grid;place-content:center;background:var(--secondary);color:var(--muted)}.cover.missing svg{width:55px;height:55px}.cover.missing span{font-size:0.75rem;margin-top:12px}.album-meta{font-size:0.75rem;color:var(--muted);line-height:1.6;margin-top:12px}.album-meta strong{color:var(--foreground);font-weight:550}.album-actions{display:flex;align-items:center;gap:8px;margin-top:24px;flex-wrap:wrap}.button-primary{border:0;border-radius:999px;min-height:44px;background:var(--primary);color:var(--on-primary);padding:0 17px;font-size:0.8125rem;font-weight:650;display:inline-flex;align-items:center;justify-content:center;gap:8px}.button-primary svg{width:17px;height:17px}.button-secondary{min-height:44px;border:1px solid var(--border);background:transparent;border-radius:999px;color:var(--foreground);padding:8px 14px;font-size:0.75rem;font-weight:550}.icon-button{height:44px;width:44px;min-width:44px;min-height:44px;aspect-ratio:1/1;padding:0;appearance:none;-webkit-appearance:none;flex-shrink:0;display:inline-grid;place-items:center;border:0;background:transparent;color:var(--foreground);border-radius:50%}.icon-button[aria-pressed="true"]{color:var(--primary);background:var(--accent-soft)}.tracks-heading{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:12px;margin-top:28px;font-size:0.6875rem;color:var(--muted)}.tracks-heading strong{font-weight:550;letter-spacing:.02em}.track-list{padding:0;margin:0;list-style:none}.track-row{display:flex;align-items:center;gap:8px;min-width:0;border-bottom:1px solid var(--border);padding:4px 0}.track-choose{display:flex;align-items:center;gap:12px;flex:1;min-width:0;text-align:left;color:var(--foreground);border:0;background:transparent;min-height:62px;padding:6px 4px;border-radius:8px}.track-number{width:17px;flex-shrink:0;font-size:0.6875rem;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}.track-copy{min-width:0;flex:1}.track-title{display:block;font-size:0.8125rem;font-weight:550;line-height:1.5;overflow-wrap:anywhere}.track-artist{display:block;font-size:0.6875rem;line-height:1.6;color:var(--muted);overflow-wrap:anywhere}.track-row[data-current] .track-title,.track-row[data-current] .track-number{color:var(--primary)}.track-duration{font-size:0.6875rem;color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0}.track-row .icon-button{width:44px}.track-row .icon-button svg{width:16px;height:16px}.album-footer{color:var(--muted);font-size:0.625rem;letter-spacing:.02em;margin-top:20px;line-height:1.8}.empty-state{padding:25px 10px;text-align:center;color:var(--muted);font-size:0.8125rem;line-height:1.6}.empty-state strong{display:block;color:var(--foreground);font-weight:600;margin-bottom:4px}.empty-state svg{margin:0 auto 14px;width:30px;height:30px}
+.dock{position:relative;margin-top:4px;background:var(--card);border:1px solid var(--border);border-radius:14px;display:flex;align-items:center;gap:8px;padding:10px 12px;min-width:0}.dock-copy{border:0;background:transparent;text-align:left;color:var(--foreground);padding:5px 0;flex:1;min-width:0;min-height:44px}.dock-title{display:block;font-size:0.8125rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.5}.dock-artist{display:block;font-size:0.6875rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.6}.dock .play-toggle{background:var(--primary);color:var(--on-primary)}.dock .play-toggle svg{width:19px;height:19px}.dock-next{display:none}.bottom-nav{display:none}.menu{position:absolute;right:16px;bottom:88px;z-index:5;border:1px solid var(--border);background:var(--card);border-radius:12px;box-shadow:0 12px 32px #0003;padding:6px;width:min(260px,calc(100% - 32px))}.menu button{display:flex;align-items:center;gap:12px;width:100%;background:transparent;border:0;color:var(--foreground);font-size:0.8125rem;min-height:46px;text-align:left;padding:8px 12px;border-radius:6px}.feedback{font-size:0.75rem;line-height:1.5;min-height:24px;margin:12px 0 0;color:var(--muted)}.feedback[data-error]{color:var(--primary)}
+.expanded{position:absolute;inset:16px 16px 98px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;z-index:4;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;box-shadow:0 12px 45px #0002}.expanded-heading{display:flex;align-items:center;gap:12px;justify-content:space-between;margin-bottom:24px}.expanded-heading h2{font-size:0.75rem;font-weight:550;letter-spacing:.02em}.expanded-heading h2 span{display:block;font-size:0.625rem;color:var(--muted);font-weight:400;margin-top:4px}.expanded-heading .icon-button{border:1px solid var(--border)}.listening-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:center}.expanded .cover{border-radius:8px;box-shadow:0 14px 30px #0002}.expanded .cover-top{font-size:0.75rem}.expanded .cover-edition{font-size:0.625rem}.expanded .cover-bottom{font-size:clamp(24px,4vw,38px)}.player-body{min-width:0}.now-title{font-size:clamp(1.5rem,3vw,2.2rem);font-weight:700;letter-spacing:-.04em;line-height:1.18;overflow-wrap:anywhere;text-wrap:pretty}.now-artist{font-size:0.8125rem;line-height:1.6;color:var(--muted);margin-top:8px;overflow-wrap:anywhere}.now-meta{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:22px}.now-meta>div{min-width:0}.seek{width:100%;margin:4px 0;height:24px;accent-color:var(--primary);cursor:pointer}.time-row{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:0.625rem;font-variant-numeric:tabular-nums}.transport{display:flex;align-items:center;justify-content:space-between;gap:3px;margin:18px 0}.transport .play-toggle{width:62px;height:62px;background:var(--primary);color:var(--on-primary)}.transport .play-toggle svg{width:25px;height:25px}.transport svg{width:20px;height:20px}.transport .skip svg{fill:currentColor}.volume-row{display:flex;align-items:center;gap:9px;color:var(--muted)}.volume-row svg{width:15px;height:15px}.volume-row input{width:100%;min-width:0;accent-color:var(--primary);height:24px}.player-subtools{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px}.queue-toggle{border:0;background:transparent;color:var(--foreground);display:flex;align-items:center;gap:7px;font-size:0.75rem;min-height:44px;padding:0 5px}.queue-toggle[aria-expanded="true"]{color:var(--primary)}.local-label{font-size:0.625rem;color:var(--muted);display:flex;align-items:center;gap:5px}.local-label svg{width:12px;height:12px}.queue{margin-top:24px;border-top:1px solid var(--border);padding-top:16px}.queue h3{font-size:0.8125rem;letter-spacing:-.01em;margin-bottom:6px}.queue-caption{font-size:0.6875rem;line-height:1.5;color:var(--muted);margin-bottom:8px}.queue ol{padding:0;list-style:none;margin:0}.queue li button{display:flex;align-items:center;gap:10px;padding:8px 0;min-height:44px;width:100%;color:var(--foreground);background:transparent;border:0;text-align:left;font-size:0.75rem;line-height:1.5}.queue li button span:first-child{font-size:0.625rem;color:var(--muted);width:16px;flex-shrink:0}.queue li button span:nth-child(2){flex:1;overflow-wrap:anywhere;min-width:0}.queue li button[aria-current="true"]{color:var(--primary)}
+.app[data-theme="grafito"] .workspace{grid-template-columns:104px minmax(0,1fr);min-height:575px}.app[data-theme="grafito"] .context{padding-left:20px}.app[data-theme="grafito"] .album-hero{grid-template-columns:108px minmax(0,1fr);gap:18px}.app[data-theme="grafito"] h1{font-size:clamp(2rem,4.6vw,3rem)}.app[data-theme="grafito"] .album-actions{margin-top:18px}.app[data-theme="grafito"] .track-choose{min-height:56px}.app[data-theme="grafito"] .tracks-heading{margin-top:24px}.app[data-theme="grafito"] .dock{border-radius:6px;background:var(--secondary);padding:8px 14px}.app[data-theme="grafito"] .dock-next{display:grid}.app[data-theme="grafito"] .expanded{left:auto;width:min(370px,calc(100% - 32px));border-radius:10px;box-shadow:-20px 0 60px #0006}.app[data-theme="grafito"] .listening-grid{display:flex;flex-direction:column;gap:24px}.app[data-theme="grafito"] .expanded .cover{width:148px;align-self:start}.app[data-theme="grafito"] .player-body{width:100%}.app[data-theme="grafito"] .now-title{font-size:1.7rem}.app[data-theme="grafito"] .now-meta{margin-bottom:8px}.app[data-theme="grafito"] .transport{justify-content:center;gap:10px}.app[data-theme="grafito"] .transport .play-toggle{width:54px;height:54px}
+.app[data-theme="tinta"] .album-hero{grid-template-columns:1fr;gap:20px;align-items:start}.app[data-theme="tinta"] .album-hero>.cover{width:158px;margin-inline:auto;border-radius:8px}.app[data-theme="tinta"] .album-heading{text-align:center}.app[data-theme="tinta"] h1{font-size:clamp(2rem,4.7vw,3rem)}.app[data-theme="tinta"] .album-actions{justify-content:center;margin-top:20px}.app[data-theme="tinta"] .tracks-heading{margin-top:25px}.app[data-theme="tinta"] .appbar{margin-bottom:22px}.app[data-theme="tinta"] .workspace{min-height:650px}.app[data-theme="tinta"] .dock{border-radius:22px;border-color:var(--border);box-shadow:0 9px 28px #0002}.app[data-theme="tinta"] .expanded{background:var(--background);border-radius:20px}.app[data-theme="tinta"] .listening-grid{display:flex;flex-direction:column;gap:26px;max-width:340px;margin:0 auto}.app[data-theme="tinta"] .expanded .cover{width:min(100%,240px);border-radius:12px}.app[data-theme="tinta"] .player-body{width:100%}.app[data-theme="tinta"] .now-title{font-size:1.8rem}.app[data-theme="tinta"] .queue{max-width:340px;margin-inline:auto}.app[data-theme="tinta"] .transport .play-toggle{background:var(--foreground);color:var(--background)}
+@media (hover:hover) and (pointer:fine){.app button:hover:not(:disabled){filter:brightness(.94)}.app[data-theme="grafito"] button:hover:not(:disabled),.app[data-theme="tinta"] button:hover:not(:disabled){filter:brightness(1.15)}.track-choose:hover{background:var(--secondary)}}
+@media (max-width:580px){.app{padding:16px 16px max(12px,env(safe-area-inset-bottom,0px));border-radius:18px}.workspace,.app[data-theme="grafito"] .workspace{display:block;min-height:570px}.sidebar{display:none}.context,.app[data-theme="grafito"] .context{padding:0 0 18px}.appbar{margin-bottom:26px;gap:12px;flex-wrap:wrap}.mobile-brand{display:flex;width:100%;justify-content:space-between;align-items:center}.mobile-brand .brand{font-size:1.5625rem}.appbar>.profile-mark{display:none}.search{max-width:none;border-radius:9px}.album-hero{grid-template-columns:112px minmax(0,1fr);gap:16px;align-items:center}.album-hero h1{font-size:clamp(1.8rem,7.3vw,2.8rem)}.album-hero .eyebrow{font-size:0.5625rem;margin-bottom:9px}.album-meta{font-size:0.6875rem;margin-top:8px}.album-actions{margin-top:22px}.button-secondary{font-size:0.6875rem;padding-inline:12px}.button-primary{font-size:0.75rem;padding-inline:14px}.track-choose{gap:8px}.track-title{font-size:0.8125rem}.track-artist{font-size:0.6875rem}.dock{padding:8px 8px 8px 12px;gap:4px}.dock-title{font-size:0.75rem}.dock-artist{font-size:0.6875rem}.dock>.icon-button:last-child{display:none}.bottom-nav{display:flex;justify-content:space-around;gap:8px;padding:18px 0 2px;color:var(--muted);font-size:0.625rem}.bottom-nav span{display:grid;justify-items:center;gap:5px;min-width:50px}.bottom-nav .active{color:var(--primary)}.bottom-nav svg{width:19px;height:19px}.expanded{inset:12px 12px 12px;padding:18px;border-radius:16px}.expanded-heading{margin-bottom:26px}.listening-grid{display:flex;flex-direction:column;gap:26px}.expanded .cover{width:min(100%,250px);margin-inline:auto}.player-body{width:100%}.now-title{font-size:1.7rem}.expanded .transport{justify-content:space-around;gap:5px}.app[data-theme="grafito"] .expanded{inset:12px;width:auto}.app[data-theme="grafito"] .expanded .cover{width:140px;margin-inline:0}.app[data-theme="tinta"] .workspace{min-height:700px}.app[data-theme="tinta"] .album-hero>.cover{width:170px}.app[data-theme="tinta"] .expanded .cover{width:210px}.app[data-theme="tinta"] .album-heading h1{font-size:2.5rem}.app[data-theme="tinta"] .dock{border-radius:18px}.menu{bottom:145px}.direction-note{font-size:0.8125rem}.swatches i{width:15px;height:15px}.lab-tools{font-size:0.6875rem}.transport .play-toggle{width:58px;height:58px}.transport .icon-button:not(.play-toggle){width:44px;height:44px}.album-footer{font-size:0.625rem}}
+@media (prefers-reduced-motion:reduce){.app *{transition:none!important;animation:none!important}.app button:active{transform:none}}
+@media (prefers-contrast:more){.app{--muted:var(--foreground)}.app button{outline-offset:3px}.dock,.expanded{border-width:2px}}
+/* Keep media proportions independent of intrinsic SVG sizing and flex shrink. */
+.cover{flex-shrink:0}.cover:not(.missing)>svg{position:absolute;inset:0;width:100%;height:100%}
+.expanded-heading{position:sticky;top:-20px;z-index:2;padding-block:8px;background:var(--card)}
+.app[data-theme="tinta"] .expanded-heading{background:var(--background)}
+@media(max-width:580px){.expanded,.app[data-theme="grafito"] .expanded{position:fixed;inset:var(--prototype-visible-top,0px) 0 auto;block-size:var(--prototype-visible-height,100dvh);width:auto;border-radius:0;scroll-padding-block:70px 16px}.expanded-heading{top:-18px}.expanded .cover,.app[data-theme="tinta"] .expanded .cover{height:auto;aspect-ratio:1/1;flex:none}}
+/* Text enlargement can turn a side-by-side album header into two rows. */
+.app h1{overflow-wrap:anywhere}.track-number{width:1.4em}.seek,.volume-row input{height:44px}
+@media(max-width:580px){.album-hero{display:flex;flex-wrap:wrap}.album-hero>.cover{width:112px;flex:0 0 112px}.album-heading{min-width:0;flex:1 1 9rem}.app[data-theme="tinta"] .album-hero{flex-direction:column;align-items:center}.app[data-theme="tinta"] .album-hero>.cover{flex-basis:auto}.app[data-theme="tinta"] .album-heading{flex-basis:auto;width:100%}}
+/* The neutral picker below is copied from prototype/PICKER.md. */
+.proto-picker {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(10, 10, 10, 0.82);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 8px 24px rgba(0, 0, 0, 0.24),
+    0 2px 6px rgba(0, 0, 0, 0.12);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.proto-picker-highlight {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  will-change: transform;
+}
+.proto-picker[data-ready] .proto-picker-highlight {
+  transition:
+    transform 250ms cubic-bezier(0.23, 1, 0.32, 1),
+    width 250ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .proto-picker[data-ready] .proto-picker-highlight { transition: none; }
+}
+.proto-picker-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font: inherit;
+  cursor: pointer;
+  transition: color 150ms ease-out;
+}
+.proto-picker-item:hover { color: rgba(255, 255, 255, 0.85); }
+.proto-picker-item:active { transform: scale(0.97); }
+.proto-picker-item:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.4); outline-offset: 2px; }
+.proto-picker-item[data-active] { color: #fff; }
+.proto-picker-divider { width: 1px; height: 16px; margin: 0 4px; background: rgba(255, 255, 255, 0.12); }
+.proto-picker-replay { padding: 0 10px; font-size: 14px; }
+.proto-picker[data-position="top"] { bottom: auto; top: 24px; }
+</style>
+</head>
+<body>
+<div class="lab-tools"><span>PULSO · EXPLORACIÓN DE DISEÑO 01</span><label>Contenido<select id="dataset"><option value="demo">Muestra</option><option value="long">Títulos largos</option><option value="empty">Sin canciones</option><option value="one">Una canción</option></select></label></div>
+<div id="stage"></div>
+<div class="direction-note"><div class="swatches" aria-hidden="true" id="swatches"></div><p id="direction-copy"></p></div>
+<p class="lab-foot">Prototipo independiente. Datos ficticios y audio instrumental de prueba generado al reproducir. Prueba abrir el reproductor, cambiar de pista y ver la cola. Teclas 1–3: cambiar propuesta · Esc: cerrar.</p>
+<nav class="proto-picker" data-position="top" aria-label="Prototype variants">
+  <span class="proto-picker-highlight" aria-hidden="true"></span>
+  <button class="proto-picker-item" data-active aria-current="true">Bruma</button>
+  <button class="proto-picker-item">Grafito</button>
+  <button class="proto-picker-item">Tinta</button>
+</nav>
+<script>
+'use strict';
+const glyphs={
+ wave:'<path d="M3 13V9m4 9V6m5 16V2m5 16V6m4 7V9"/>',
+ home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',
+ search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
+ library:'<path d="M4 3v18M9 3v18m5-17 6 16M14 4l3-1 6 16-3 1Z"/>',
+ play:'<path d="m9 5 11 7-11 7Z" fill="currentColor" stroke-linejoin="round"/>',
+ pause:'<path d="M8 5v14M16 5v14" stroke-width="4"/>',
+ next:'<path d="m5 5 10 7-10 7Z" fill="currentColor"/><path d="M19 5v14"/>',
+ previous:'<path d="m19 5-10 7 10 7Z" fill="currentColor"/><path d="M5 5v14"/>',
+ down:'<path d="m6 9 6 6 6-6"/>',
+ up:'<path d="m6 15 6-6 6 6"/>',
+ more:'<circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ check:'<path d="m5 12 4 4L19 6"/>',
+ heart:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>',
+ queue:'<path d="M4 5h16M4 10h16M4 15h10M4 20h10m4-5 4 3-4 3Z"/>',
+ volume:'<path d="m12 4-6 5H2v6h4l6 5Zm4 4a7 7 0 0 1 0 8m3-11a11 11 0 0 1 0 14"/>',
+ shuffle:'<path d="M3 6h3c5 0 6 12 11 12h4m-4-4 4 4-4 4M3 18h3c1.5 0 3-1.5 4-3m4-6c1-1.5 2-3 3-3h4m-4-4 4 4-4 4"/>',
+ repeat:'<path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4m14-1v2a3 3 0 0 1-3 3H3"/>',
+ music:'<path d="M9 18V5l12-2v13M9 9l12-2"/><ellipse cx="6" cy="18" rx="3" ry="3"/><ellipse cx="18" cy="16" rx="3" ry="3"/>'
+};
+function icon(name){return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${glyphs[name]||glyphs.music}</svg>`;}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const directions=[
+ {id:'bruma',name:'Bruma',colors:['#f4f6fa','#ffffff','#172335','#235ad7'],copy:'Claridad editorial. Blanco frío y azul cobalto; reproductor amplio en dos columnas. Da aire al contenido, a cambio de mostrar menos en cada vista.'},
+ {id:'grafito',name:'Grafito',colors:['#141414','#1e1d1d','#f7f5f2','#ff8775'],copy:'Biblioteca compacta. Carbón y coral; reproductor lateral que mantiene el álbum a la vista. Más control en menos espacio, con mayor densidad visual.'},
+ {id:'tinta',name:'Tinta',colors:['#111527','#1b2038','#f3f1ff','#b4a5ff'],copy:'Escucha inmersiva. Azul noche y lavanda; portada y controles centrados. Más personalidad y protagonismo de la música, con más desplazamiento.'}
+];
+const sampleTracks=[
+ {title:'Órbita',artist:'Estudio Pulso',duration:24,root:220},
+ {title:'La casa del sol',artist:'Estudio Pulso',duration:28,root:196},
+ {title:'Volver despacio',artist:'Estudio Pulso',duration:20,root:174.61}
+];
+let tracks=sampleTracks.map(x=>({...x})),chosen=0,expanded=false,queueOpen=false,menuOpen=false,favorites=new Set(),members=new Set(),shuffle=false,repeat='off',volume=.22,source=null,audioContext=null,gain=null,offset=0,startedAt=0,playing=false,playGeneration=0,frame=0,lastOpener=null,buffers=new Map(),feedbackTimer;
+function time(n){n=Math.max(0,Math.floor(Number(n)||0));return `${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`;}
+function currentTrack(){return tracks[chosen]||null;}
+function currentTime(){return playing?Math.min(currentTrack()?.duration||0,offset+audioContext.currentTime-startedAt):offset;}
+function stopAudio(){playGeneration++;if(playing)offset=currentTime();playing=false;if(source){source.onended=null;try{source.stop();}catch{}source.disconnect();source=null;}cancelAnimationFrame(frame);}
+function makeBuffer(track){
+ const key=track.root+':'+track.duration;if(buffers.has(key))return buffers.get(key);
+ const rate=22050,buffer=audioContext.createBuffer(1,rate*track.duration,rate),out=buffer.getChannelData(0),chords=[[1,1.25,1.5],[.75,1,1.25],[.833333,1,1.5],[.666667,1,1.25]];
+ for(let beat=0;beat<track.duration*2;beat++){
+  const start=beat*.5,notes=chords[Math.floor(beat/8)%chords.length],freq=track.root*notes[beat%3]*(beat%4===3?2:1);
+  for(let j=0;j<rate*1.7&&start*rate+j<out.length;j++){const t=j/rate,envelope=Math.min(1,t/.008)*Math.exp(-t*3.7),v=(Math.sin(2*Math.PI*freq*t)+.18*Math.sin(2*Math.PI*freq*2*t))*.18*envelope;out[Math.floor(start*rate)+j]+=v;}
+ }
+ for(let i=0;i<out.length;i++)out[i]*=Math.min(1,(out.length-i)/rate);
+ buffers.set(key,buffer);return buffer;
+}
+async function play(){
+ const track=currentTrack();if(!track||playing)return;
+ const generation=++playGeneration;
+ try{
+  const Context=window.AudioContext||window.webkitAudioContext;if(!Context)throw new Error('Audio no disponible');
+  audioContext??=new Context();gain??=audioContext.createGain();gain.gain.value=volume;gain.disconnect();gain.connect(audioContext.destination);
+  await audioContext.resume();if(generation!==playGeneration)return;
+  if(audioContext.state!=='running')throw new Error('Audio bloqueado');
+  if(offset>=track.duration)offset=0;
+  source=audioContext.createBufferSource();source.buffer=makeBuffer(track);source.connect(gain);source.start(0,offset);startedAt=audioContext.currentTime;playing=true;
+  source.onended=()=>{source=null;playing=false;offset=0;if(repeat==='one'){void play();return;}if(chosen<tracks.length-1||repeat==='all'||shuffle){chooseTrack(nextIndex(1),true);}else{update();}};
+  update();tick();
+ }catch{playing=false;announce('El navegador no permitió el audio de prueba. Puedes seguir explorando el diseño.',true);update();}
+}
+function pause(){stopAudio();update();}
+function nextIndex(delta){return shuffle&&tracks.length>1?(chosen+1+Math.floor(Math.random()*(tracks.length-1)))%tracks.length:(chosen+delta+tracks.length)%tracks.length;}
+function chooseTrack(index,autoplay){stopAudio();chosen=index;offset=0;update();if(autoplay)void play();}
+function tick(){updateProgress();if(playing)frame=requestAnimationFrame(tick);}
+function announce(text,error=false){clearTimeout(feedbackTimer);const el=stage.querySelector('.feedback');if(el){el.textContent=text;el.toggleAttribute('data-error',error);}feedbackTimer=setTimeout(()=>{if(el?.isConnected)el.textContent='';},6500);}
+function cover(){
+ if(document.getElementById('dataset').value==='long')return `<div class="cover missing">${icon('music')}<span>Sin portada</span></div>`;
+ return `<div class="cover" role="img" aria-label="Portada original de muestra: un sol y líneas orbitales"><svg viewBox="0 0 300 300" aria-hidden="true"><rect width="300" height="300" fill="var(--art-bg)"/><circle cx="185" cy="123" r="68" fill="var(--art-sun)"/><path d="M-20 242C50 120 125 136 318 218v110H-20Z" fill="var(--art-ink)"/><g fill="none" stroke="var(--art-ink)" opacity=".5" stroke-width=".7"><ellipse cx="150" cy="158" rx="180" ry="52" transform="rotate(-33 150 158)"/><ellipse cx="150" cy="158" rx="180" ry="65" transform="rotate(-33 150 158)"/><ellipse cx="150" cy="158" rx="180" ry="78" transform="rotate(-33 150 158)"/></g><path d="M32 258h236" stroke="var(--art-sun)" stroke-width=".7"/></svg><span class="cover-top">ESTUDIO PULSO</span><span class="cover-edition">VOL. 01</span><span class="cover-bottom" style="color:var(--art-sun)">Puntos de luz.</span></div>`;
+}
+function rows(){return tracks.map((t,i)=>`<li class="track-row" data-index="${i}" ${i===chosen?'data-current':''}><button class="track-choose" data-action="choose" data-index="${i}" aria-label="Reproducir ${esc(t.title)}"><span class="track-number">${String(i+1).padStart(2,'0')}</span><span class="track-copy"><span class="track-title" dir="auto">${esc(t.title)}</span><span class="track-artist" dir="auto">${esc(t.artist||'Artista desconocido')}</span></span></button><span class="track-duration">${time(t.duration)}</span><button class="icon-button row-favorite" data-action="row-favorite" data-index="${i}" aria-label="Favorito: ${esc(t.title)}" aria-pressed="false">${icon('heart')}</button></li>`).join('');}
+function transport(){return `<div class="transport"><button class="icon-button shuffle" data-action="shuffle" aria-label="Aleatorio" aria-pressed="false">${icon('shuffle')}</button><button class="icon-button skip" data-action="previous" aria-label="Canción anterior">${icon('previous')}</button><button class="icon-button play-toggle" data-action="play" aria-label="Reproducir">${icon('play')}</button><button class="icon-button skip" data-action="next" aria-label="Canción siguiente">${icon('next')}</button><button class="icon-button repeat" data-action="repeat" aria-label="Repetición desactivada" aria-pressed="false">${icon('repeat')}</button></div>`;}
+function render(theme){
+ const dir=directions.find(d=>d.id===theme),track=currentTrack();expanded=false;queueOpen=false;menuOpen=false;stopAudio();offset=0;document.documentElement.classList.remove('prototype-player-open');picker.hidden=false;picker.inert=false;
+ document.getElementById('direction-copy').innerHTML=`<strong>${dir.name}.</strong> ${esc(dir.copy)}`;
+ document.getElementById('swatches').innerHTML=dir.colors.map(c=>`<i style="--swatch:${c}" title="${c}"></i>`).join('');
+ return `<section class="app" data-theme="${theme}" aria-label="Pulso, propuesta ${dir.name}">
+ <div class="workspace"><aside class="sidebar" aria-label="Contexto visual de navegación"><div class="brand">${icon('wave')}pulso</div><ul class="side-list"><li>${icon('home')}Inicio</li><li>${icon('search')}Buscar</li><li class="active">${icon('library')}Biblioteca</li></ul><p class="side-heading">TU COLECCIÓN</p><div class="side-caption"><span>Favoritos</span><span>Álbumes</span><span>Playlists</span></div></aside>
+ <div class="context"><div class="appbar"><div class="mobile-brand"><div class="brand">${icon('wave')}pulso</div><span class="profile-mark" aria-hidden="true">P</span></div><label class="search">${icon('search')}<span class="sr-only">Filtrar canciones de muestra</span><input type="search" placeholder="Buscar en este álbum" autocomplete="off" enterkeyhint="search"></label><span class="profile-mark" aria-hidden="true">P</span></div>
+ <div class="album-hero">${cover()}<div class="album-heading"><p class="eyebrow">Álbum · Estudio Pulso</p><h1>Puntos<br>de luz.</h1><p class="album-meta"><strong>Estudio Pulso</strong><br>2026 · ${tracks.length} ${tracks.length===1?'canción':'canciones'} · ${time(tracks.reduce((s,t)=>s+t.duration,0))}</p></div></div>
+ <div class="album-actions"><button class="button-primary" data-action="album-play" ${track?'':'disabled'}>${icon('play')}Escuchar</button><button class="button-secondary album-add" data-action="album-add" ${track?'':'disabled'}>Añadir álbum</button><button class="icon-button" data-action="menu" aria-label="Opciones de la canción" aria-expanded="false" aria-controls="song-menu" ${track?'':'disabled'}>${icon('more')}</button></div>
+ <div class="tracks-heading"><strong>CANCIONES</strong><span>Audio de muestra</span></div><ol class="track-list">${rows()}</ol><div class="empty-state" ${tracks.length?'hidden':''}>${icon('music')}<strong>Todavía no hay canciones.</strong>El reproductor estará aquí cuando elijas una.</div><div class="empty-state no-results" hidden><strong>No hay coincidencias.</strong>Prueba otro título o artista.</div><p class="album-footer">ESTUDIO PULSO · SESIONES ORIGINALES<br>Contenido creado para esta exploración visual.</p></div></div>
+ <div class="dock"><button class="dock-copy" data-action="open" aria-label="Abrir reproductor" aria-expanded="false" aria-controls="expanded-player" ${track?'':'disabled'}><span class="dock-title">${esc(track?.title||'Sin selección')}</span><span class="dock-artist">${esc(track?.artist||'Elige una canción')}</span></button><button class="icon-button dock-expand" data-action="open" aria-label="Expandir reproductor" ${track?'':'disabled'}>${icon('up')}</button><button class="icon-button play-toggle" data-action="play" aria-label="Reproducir" ${track?'':'disabled'}>${icon('play')}</button><button class="icon-button dock-next" data-action="next" aria-label="Canción siguiente" ${track?'':'disabled'}>${icon('next')}</button><button class="icon-button" data-action="menu" aria-label="Opciones de la canción" aria-expanded="false" aria-controls="song-menu" ${track?'':'disabled'}>${icon('more')}</button></div>
+ <div class="bottom-nav" aria-label="Contexto visual de navegación"><span>${icon('home')}Inicio</span><span>${icon('search')}Buscar</span><span class="active">${icon('library')}Biblioteca</span></div>
+ <div class="menu" id="song-menu" aria-label="Acciones de la canción" hidden><button data-action="library"><span class="library-symbol">${icon('plus')}</span><span class="library-label">Añadir a Biblioteca</span></button><button data-action="favorite"><span>${icon('heart')}</span><span class="favorite-label">Añadir a Favoritos</span></button></div>
+ <section class="expanded" id="expanded-player" aria-label="Reproductor expandido" role="dialog" aria-modal="true" hidden><div class="expanded-heading"><h2 tabindex="-1">Ahora suena<span>Puntos de luz · Estudio Pulso</span></h2><button class="icon-button" data-action="close" aria-label="Cerrar reproductor">${icon('down')}</button></div><div class="listening-grid">${cover()}<div class="player-body"><div class="now-meta"><div><h3 class="now-title" dir="auto">${esc(track?.title||'Sin selección')}</h3><p class="now-artist" dir="auto">${esc(track?.artist||'Artista desconocido')}</p></div><button class="icon-button now-favorite" data-action="favorite" aria-label="Favorito de canción actual" aria-pressed="false">${icon('heart')}</button></div><label class="sr-only" for="seek">Posición de reproducción</label><input class="seek" id="seek" type="range" min="0" max="${track?.duration||1}" value="0" step=".1" aria-valuetext="0 minutos, 0 segundos"><div class="time-row"><span class="elapsed">0:00</span><span class="duration">${time(track?.duration||0)}</span></div>${transport()}<div class="volume-row">${icon('volume')}<label class="sr-only" for="volume">Volumen de la muestra</label><input id="volume" type="range" min="0" max="1" step=".01" value="${volume}"></div><div class="player-subtools"><span class="local-label">${icon('music')}Muestra original</span><button class="queue-toggle" data-action="queue" aria-expanded="false" aria-controls="player-queue">${icon('queue')}Cola</button></div></div></div><section class="queue" id="player-queue" aria-label="Cola de reproducción" hidden><h3>En esta sesión</h3><p class="queue-caption">${tracks.length} ${tracks.length===1?'canción':'canciones'} · ${time(tracks.reduce((s,t)=>s+t.duration,0))}</p><ol>${tracks.map((t,i)=>`<li><button data-action="choose" data-index="${i}" ${i===chosen?'aria-current="true"':''}><span>${String(i+1).padStart(2,'0')}</span><span dir="auto">${esc(t.title)}</span><span>${time(t.duration)}</span></button></li>`).join('')}</ol></section></section><p class="feedback" role="status" aria-live="polite"></p></section>`;
+}
+function updateProgress(){const t=currentTrack(),n=currentTime();stage.querySelectorAll('.seek').forEach(el=>{el.max=t?.duration||1;if(document.activeElement!==el)el.value=n;el.setAttribute('aria-valuetext',`${Math.floor(n/60)} minutos, ${Math.floor(n%60)} segundos de ${time(t?.duration||0)}`);});stage.querySelectorAll('.elapsed').forEach(el=>el.textContent=time(n));}
+function update(){
+ const t=currentTrack();stage.querySelectorAll('.dock-title,.now-title').forEach(el=>el.textContent=t?.title||'Sin selección');stage.querySelectorAll('.dock-artist,.now-artist').forEach(el=>el.textContent=t?.artist||'Artista desconocido');stage.querySelectorAll('.duration').forEach(el=>el.textContent=time(t?.duration||0));
+ stage.querySelectorAll('.play-toggle').forEach(el=>{el.innerHTML=icon(playing?'pause':'play');el.setAttribute('aria-label',playing?'Pausar':'Reproducir');});
+ stage.querySelectorAll('.row-favorite').forEach(el=>el.setAttribute('aria-pressed',String(favorites.has(Number(el.dataset.index)))));
+ stage.querySelectorAll('.now-favorite').forEach(el=>el.setAttribute('aria-pressed',String(favorites.has(chosen))));
+ stage.querySelectorAll('.track-row').forEach(el=>el.toggleAttribute('data-current',Number(el.dataset.index)===chosen));
+ stage.querySelectorAll('.queue [data-action="choose"]').forEach(el=>{if(Number(el.dataset.index)===chosen)el.setAttribute('aria-current','true');else el.removeAttribute('aria-current');});
+ stage.querySelectorAll('.library-label').forEach(el=>el.textContent=members.has(chosen)?'Quitar de Biblioteca':'Añadir a Biblioteca');stage.querySelectorAll('.library-symbol').forEach(el=>el.innerHTML=icon(members.has(chosen)?'check':'plus'));stage.querySelectorAll('.favorite-label').forEach(el=>el.textContent=favorites.has(chosen)?'Quitar de Favoritos':'Añadir a Favoritos');
+ stage.querySelectorAll('.shuffle').forEach(el=>el.setAttribute('aria-pressed',String(shuffle)));stage.querySelectorAll('.repeat').forEach(el=>{el.setAttribute('aria-pressed',String(repeat!=='off'));el.setAttribute('aria-label',`Repetición: ${repeat==='off'?'desactivada':repeat==='all'?'toda la cola':'una canción'}`);el.innerHTML=icon('repeat')+(repeat==='one'?'<span class="sr-only">Una</span>':'');});
+ const added=tracks.length>0&&tracks.every((_,i)=>members.has(i));stage.querySelectorAll('.album-add').forEach(el=>{el.textContent=added?'Álbum añadido':'Añadir álbum';el.setAttribute('aria-pressed',String(added));});updateProgress();
+}
+function measurePlayerViewport(){const viewport=window.visualViewport;document.documentElement.style.setProperty('--prototype-visible-height',`${viewport?.height??innerHeight}px`);document.documentElement.style.setProperty('--prototype-visible-top',`${viewport?.offsetTop??0}px`);}
+addEventListener('resize',measurePlayerViewport);window.visualViewport?.addEventListener('resize',measurePlayerViewport);window.visualViewport?.addEventListener('scroll',measurePlayerViewport);
+function setExpanded(value,opener){expanded=value;measurePlayerViewport();document.documentElement.classList.toggle('prototype-player-open',value);picker.hidden=value;picker.inert=value;const panel=stage.querySelector('.expanded');panel.hidden=!value;stage.querySelector('.workspace').inert=value;stage.querySelector('.dock').inert=value;stage.querySelector('.bottom-nav').inert=value;stage.querySelector('.dock-copy').setAttribute('aria-expanded',String(value));menuOpen=false;stage.querySelector('.menu').hidden=true;stage.querySelectorAll('[data-action="menu"]').forEach(el=>el.setAttribute('aria-expanded','false'));
+ if(value){lastOpener=opener;panel.scrollTop=0;panel.querySelector('h2').focus({preventScroll:true});if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&opener?.matches(':focus-visible')===false)panel.animate([{opacity:0,transform:'translateY(12px)'},{opacity:1,transform:'translateY(0)'}],{duration:190,easing:'cubic-bezier(.23,1,.32,1)'});}else if(lastOpener?.isConnected)lastOpener.focus({preventScroll:true});}
+const variants=directions.map(d=>()=>render(d.id));
+const stage=document.getElementById('stage');
+const picker=document.querySelector('.proto-picker');
+const highlight=picker.querySelector('.proto-picker-highlight');
+const items=[...picker.querySelectorAll('.proto-picker-item:not(.proto-picker-replay)')];
+const replay=picker.querySelector('.proto-picker-replay');
+let current=0,mountTicket=0;
+function moveHighlight(){const el=items[current];highlight.style.width=el.offsetWidth+'px';highlight.style.transform=`translateX(${el.offsetLeft}px)`;}
+function mount(i){stopAudio();expanded=false;const ticket=++mountTicket;stage.innerHTML='';requestAnimationFrame(()=>{if(ticket!==mountTicket)return;stage.innerHTML=variants[i]();update();});}
+function setActive(i){if(i<0||i>=variants.length)return;current=i;items.forEach((el,j)=>{el.toggleAttribute('data-active',j===i);if(j===i)el.setAttribute('aria-current','true');else el.removeAttribute('aria-current');});moveHighlight();
+ // srcdoc/about: frames cannot replace their URL; local HTML keeps ?v=N.
+ try{const url=new URL(location);url.searchParams.set('v',i+1);history.replaceState(null,'',url);}catch{}
+ mount(i);
+}
+items.forEach((el,i)=>el.addEventListener('click',()=>setActive(i)));replay?.addEventListener('click',()=>mount(current));window.addEventListener('resize',moveHighlight);
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'){if(expanded){e.preventDefault();setExpanded(false);}else if(menuOpen){menuOpen=false;stage.querySelector('.menu').hidden=true;stage.querySelectorAll('[data-action="menu"]').forEach(el=>el.setAttribute('aria-expanded','false'));lastOpener?.focus();}return;}
+ if(expanded&&e.key==='Tab'){const focusable=[...stage.querySelector('.expanded').querySelectorAll('button,input')].filter(el=>!el.disabled&&el.getClientRects().length),first=focusable[0],last=focusable.at(-1);if(e.shiftKey&&(document.activeElement===first||document.activeElement.tagName==='H2')){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}return;}
+ if(expanded||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)||e.target.isContentEditable||e.metaKey||e.ctrlKey||e.altKey)return;
+ const num=parseInt(e.key,10);if(num>=1&&num<=variants.length)setActive(num-1);else if(e.key==='ArrowRight'){e.preventDefault();setActive((current+1)%variants.length);}else if(e.key==='ArrowLeft'){e.preventDefault();setActive((current-1+variants.length)%variants.length);}else if(e.key==='r'||e.key==='R')mount(current);
+});
+stage.addEventListener('click',event=>{
+ const button=event.target.closest('button[data-action]');if(!button||button.disabled)return;const action=button.dataset.action;
+ if(action==='play')playing?pause():void play();
+ else if(action==='choose')chooseTrack(Number(button.dataset.index),true);
+ else if(action==='album-play')chooseTrack(0,true);
+ else if(action==='previous')chooseTrack(nextIndex(-1),playing);
+ else if(action==='next')chooseTrack(nextIndex(1),playing);
+ else if(action==='open')setExpanded(true,button);
+ else if(action==='close')setExpanded(false);
+ else if(action==='queue'){queueOpen=!queueOpen;stage.querySelector('.queue').hidden=!queueOpen;button.setAttribute('aria-expanded',String(queueOpen));}
+ else if(action==='shuffle'){shuffle=!shuffle;announce(shuffle?'Aleatorio activado.':'Aleatorio desactivado.');update();}
+ else if(action==='repeat'){repeat=repeat==='off'?'all':repeat==='all'?'one':'off';update();announce(button.getAttribute('aria-label'));}
+ else if(action==='menu'){lastOpener=button;menuOpen=!menuOpen;stage.querySelector('.menu').hidden=!menuOpen;stage.querySelectorAll('[data-action="menu"]').forEach(el=>el.setAttribute('aria-expanded',String(menuOpen)));if(menuOpen)stage.querySelector('.menu button').focus();}
+ else if(action==='favorite'||action==='row-favorite'){const i=action==='row-favorite'?Number(button.dataset.index):chosen;favorites.has(i)?favorites.delete(i):favorites.add(i);update();announce(favorites.has(i)?'Añadida a Favoritos en esta muestra.':'Quitada de Favoritos en esta muestra.');}
+ else if(action==='library'){members.has(chosen)?members.delete(chosen):members.add(chosen);update();announce(members.has(chosen)?'Añadida a Biblioteca en esta muestra.':'Quitada de Biblioteca; la copia de muestra se conserva.');}
+ else if(action==='album-add'){tracks.forEach((_,i)=>members.add(i));update();announce('Álbum añadido a la Biblioteca de muestra.');}
+});
+stage.addEventListener('input',event=>{
+ const el=event.target;
+ if(el.id==='seek'){const wasPlaying=playing;stopAudio();offset=Number(el.value);updateProgress();if(wasPlaying)void play();}
+ else if(el.id==='volume'){volume=Number(el.value);if(gain)gain.gain.value=volume;}
+ else if(el.type==='search'){const q=el.value.trim().toLocaleLowerCase('es');let matches=0;stage.querySelectorAll('.track-row').forEach(row=>{const t=tracks[Number(row.dataset.index)],show=`${t.title} ${t.artist||''}`.toLocaleLowerCase('es').includes(q);row.hidden=!show;if(show)matches++;});stage.querySelector('.no-results').hidden=matches>0||tracks.length===0;}
+});
+document.getElementById('dataset').addEventListener('change',event=>{stopAudio();const mode=event.target.value;tracks=mode==='empty'?[]:mode==='one'?[{...sampleTracks[0]}]:sampleTracks.map(t=>({...t}));if(mode==='long'){tracks[0].title='Cuando las luces de la ciudad se apagan (sesión acústica al atardecer)';tracks[0].artist='Estudio Pulso, La Orquesta de las Pequeñas Cosas y Mar del Norte';tracks[1].title='夜の散歩 — paseo bajo la lluvia';tracks[1].artist=null;tracks[2].title='J';tracks[2].artist='Jo';}chosen=0;members.clear();favorites.clear();mount(current);});
+window.addEventListener('pagehide',()=>{stopAudio();void audioContext?.close();});
+const requested=parseInt(new URLSearchParams(location.search).get('v'),10)||1;setActive(requested>=1&&requested<=3?requested-1:0);requestAnimationFrame(()=>requestAnimationFrame(()=>picker.setAttribute('data-ready','')));
+</script>
+</body>
+</html>

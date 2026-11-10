@@ -1,10 +1,11 @@
 import Long from 'long';
+import {parseSavedBots,type SavedBot} from './saved-session';
 import type {tl} from '@mtcute/core';
 import {assertRawBudget} from './sources-page';
 import {dataArray,isUuid,parseAccountBinding,positive,sourceName,type AccountBinding} from './sources-protocol';
 import {BOT_PROVIDERS_BOUNDS as B,copyBotEnvelope,copyBotRow,parseBotProvidersCommand,parseBotUsername,type BotEnvelope,type BotProviderRow,type BotProvidersError,type BotProvidersReply,type BotProvidersSnapshot} from './bot-providers-protocol';
 /** Worker-private. This dependency cannot send, start, search, enumerate chats or read history. */
-export interface BotProvidersDependency {resolveIdentity(username:string,signal:AbortSignal):Promise<unknown>;invalidateSession():void}
+export interface BotProvidersDependency {resolveIdentity(username:string,signal:AbortSignal):Promise<unknown>;invalidateSession():void;saveSelection?(bots:SavedBot[]):Promise<boolean>}
 export interface BotProvidersContext {readonly signal:AbortSignal;readonly current:()=>boolean}
 export interface BotProvidersClock {now():number;setTimeout(fn:()=>void,ms:number):ReturnType<typeof setTimeout>;clearTimeout(timer:ReturnType<typeof setTimeout>):void}
 /** Worker-private authority: never serialize this capture or expose it through session DTOs.
@@ -65,12 +66,14 @@ function identity(raw:unknown,username:string):Identity|null {
  * It includes root review/foreign mutation/Activity/proof/scope/DB/worker guards as applicable.
  * A reply is correlation only and needs that same receiving guard before UI publication.
  */
-export function createBotProvidersDriver(bindingInput:AccountBinding,sessionId:string,dependency:BotProvidersDependency,time:BotProvidersClock=clock):BotProvidersDriver {
+export function createBotProvidersDriver(bindingInput:AccountBinding,sessionId:string,dependency:BotProvidersDependency,time:BotProvidersClock=clock,initial:SavedBot[]=[]):BotProvidersDriver {
  const binding=parseAccountBinding(bindingInput);if(!binding||!isUuid(sessionId))throw Error('protocol');
- let closed=false,invalidated=false,revision=0;let selected:string[]=[];
+ const restored=parseSavedBots({version:1,bots:initial});if(!restored)throw Error('session-storage');
+ let closed=false,invalidated=false,revision=0,saving=false;let selected:string[]=[];
  const offers=new Map<string,{row:BotProviderRow;identity:Identity;revision:number}>();
  // Lifetime username pins detect transfer rather than silently replacing an approved identity.
  const usernames=new Map<string,number>(),requests=new Set<string>(),steps=new Set<string>();
+ for(const bot of restored){const row:BotProviderRow=Object.freeze({providerRef:crypto.randomUUID(),username:bot.username,label:bot.label,status:'verified-profile',compatibility:'unverified'});offers.set(row.providerRef,{row,identity:{id:bot.id,hash:new Long(bot.low,bot.high,false),label:bot.label},revision});selected.push(row.providerRef);usernames.set(bot.username,bot.id);}
  let cooldown:Failure|null=null,settlement=Promise.resolve(true);
  type Flight={request:string;operation:string;cause:Failure|null;stop:(cause:Failure)=>void};let flight:Flight|null=null;
  const close=()=>{if(closed)return;closed=true;selected=[];offers.clear();usernames.clear();requests.clear();steps.clear();cooldown=null;flight?.stop(fail('cancelled'));};
@@ -82,9 +85,9 @@ export function createBotProvidersDriver(bindingInput:AccountBinding,sessionId:s
   getSnapshot(){return closed?null:snapshot();},close,
   captureSearchProvider(providerRef:string,expectedRevision:number){
    const offer=offers.get(providerRef);
-   if(closed||flight||expectedRevision!==revision||!selected.includes(providerRef)||!offer||offer.revision!==revision)return null;
+   if(closed||flight||saving||expectedRevision!==revision||!selected.includes(providerRef)||!offer||offer.revision!==revision)return null;
    const capturedRevision=revision,held=offer;
-   const current=()=>!closed&&revision===capturedRevision&&selected.includes(providerRef)&&offers.get(providerRef)===held;
+   const current=()=>!closed&&!saving&&revision===capturedRevision&&selected.includes(providerRef)&&offers.get(providerRef)===held;
    return Object.freeze({username:held.row.username,current,verifyIdentity(raw:unknown){
     if(!current())return null;let fresh:Identity|null;try{fresh=identity(raw,held.row.username);}catch{return null;}
     if(!fresh)return null;
@@ -106,7 +109,7 @@ export function createBotProvidersDriver(bindingInput:AccountBinding,sessionId:s
     if(!flight||flight.request!==c.targetRequestId||flight.operation!==c.operationId)return response(e,fail('expired'));
     flight.stop(fail('cancelled'));return Object.freeze({...e,type:'bots.cancelled',targetRequestId:c.targetRequestId});
    }
-   if(flight)return response(e,fail('busy'));
+   if(flight||saving)return response(e,fail('busy'));
    const step=`${c.operationId}:${c.type}`;if(steps.has(step))return response(e,fail('expired'));steps.add(step);
    if(c.type==='bots.setOrder'){
     const held=c.providerRefs.map(ref=>offers.get(ref));
@@ -114,6 +117,9 @@ export function createBotProvidersDriver(bindingInput:AccountBinding,sessionId:s
     if(new Set(held.map(x=>x!.identity.id)).size!==held.length)return response(e,fail('unsupported'));
     if(!live(ctx))return response(e,fail('cancelled'));
     const changed=selected.length!==c.providerRefs.length||selected.some((ref,i)=>ref!==c.providerRefs[i]);
+    if(changed&&dependency.saveSelection){
+     saving=true;let settleSave!:(ok:boolean)=>void;settlement=new Promise<boolean>(resolve=>{settleSave=resolve;});try{const records=held.map(o=>({username:o!.row.username,label:o!.row.label,id:o!.identity.id,low:o!.identity.hash.low,high:o!.identity.hash.high}));if(!await dependency.saveSelection(records)||!live(ctx)){invalidate();return response(e,fail('session-expired'));}}catch{invalidate();return response(e,fail('session-expired'));}finally{saving=false;settleSave(true);}
+    }
     if(changed){if(!Number.isSafeInteger(revision+1)){invalidate();return response(e,fail('limit'));}revision++;selected=c.providerRefs.slice();for(const [ref,o] of offers){if(selected.includes(ref))o.revision=revision;else offers.delete(ref);}}
     return Object.freeze({...e,type:'bots.ordered',changed,...snapshot()});
    }

@@ -4,8 +4,8 @@ import {build, preview} from 'vite';
 import {chromium} from 'playwright-core';
 import {readFile, writeFile, mkdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-const dir = '.local/bot-providers-panel-r130';
-const evidence = '.local/evidence/bot-providers-panel-r130.json';
+const dir = '.local/bot-providers-panel-current';
+const evidence = '.local/evidence/bot-providers-panel-current.json';
 const report = {passed: false, cases: [], errors: [], external: [], attempts: [], limits: [
   'Synthetic props and callbacks only; no SDK, Telegram, real profiles, compatibility, musical search/download or account.',
   'Desktop sandboxed Chromium; no iPhone/Safari/VoiceOver, actual touch or real zoom. 200% uses CSS root font enlargement.',
@@ -62,8 +62,9 @@ try {
  assert.equal(await button('Comprobar y añadir').isDisabled(), true);
  assert.deepEqual(await page.evaluate(() => window.panelIO), []);
  pass('initial zero rows, no defaults, actionable empty state and zero mount callbacks/network/storage');
- await button('Usar sugerencia @ivkmbot').click(); assert.equal(await input().inputValue(), '@ivkmbot');
- await button('Usar sugerencia @LyDBot').click(); assert.equal(await input().inputValue(), '@LyDBot');
+ assert.deepEqual(await page.locator('[aria-label=\"Sugerencias de bots\"] button').allTextContents(), ['@KDMusic_Bot', '@DeezerMusicBot']);
+ await button('Usar sugerencia @KDMusic_Bot').click(); assert.equal(await input().inputValue(), '@KDMusic_Bot');
+ await button('Usar sugerencia @DeezerMusicBot').click(); assert.equal(await input().inputValue(), '@DeezerMusicBot');
  assert.deepEqual(await calls(), []); assert.deepEqual(await order(), []);
  await input().fill(' https://t.me/another_fixturebot ');
  assert.deepEqual(await calls(), []);
@@ -73,8 +74,8 @@ try {
  assert.deepEqual(await page.evaluate(() => window.panelIO), []);
  pass('suggestions/fill perform no IO/callback; explicit keyboard submit emits trimmed public input once, rows stay controlled');
  await host('reset'); await host('seed', 5);
- await button('Usar sugerencia @ivkmbot').click();
- assert.equal(await input().inputValue(), '@ivkmbot'); assert.equal(await button('Comprobar y añadir').isDisabled(), true);
+ await button('Usar sugerencia @KDMusic_Bot').click();
+ assert.equal(await input().inputValue(), '@KDMusic_Bot'); assert.equal(await button('Comprobar y añadir').isDisabled(), true);
  await page.locator('form').evaluate(form => form.requestSubmit());
  assert.deepEqual(await calls(), []); assert.equal((await order()).length, 5);
  assert.ok(await page.getByText('Has alcanzado el límite de 5 bots.', {exact: false}).isVisible());

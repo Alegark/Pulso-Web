@@ -2,26 +2,27 @@ import test from 'node:test';import assert from 'node:assert/strict';import {ran
 import {createBotProvidersDriver} from '../../src/telegram/bot-providers-driver';
 import type {BotProvidersClock} from '../../src/telegram/bot-providers-driver';
 import {createBotSearchSdkDriver} from '../../src/telegram/bot-search-driver';
-import {parseBotSearchReply,BOT_SEARCH_BOUNDS} from '../../src/telegram/bot-search-protocol';
-const identity=()=>({_:'contacts.resolvedPeer',peer:{_:'peerUser',userId:101},chats:[],users:[{_:'user',id:101,bot:true,username:'ivkmbot',accessHash:new Long(123,45),firstName:'Own fixture'}]});
+import {parseBotSearchReply,BOT_SEARCH_BOUNDS,type BotSearchTarget} from '../../src/telegram/bot-search-protocol';
+const identity=(username='ivkmbot')=>({_:'contacts.resolvedPeer',peer:{_:'peerUser',userId:101},chats:[],users:[{_:'user',id:101,bot:true,username,accessHash:new Long(123,45),firstName:'Own fixture'}]});
 const history=(messages:unknown[]=[])=>({_:'messages.messages',messages,users:[],chats:[]});
 const target={title:'Own Song',artist:'Own Artist',album:null,durationSeconds:1};
 const bytes=new Uint8Array(100);bytes.set(new TextEncoder().encode('RIFF'));bytes.set(new TextEncoder().encode('WAVE'),8);
 const doc=(size=100)=>({_:'document',id:new Long(11,3),accessHash:new Long(25,4),fileReference:new Uint8Array([1,3]),dcId:2,mimeType:'audio/wav',size,attributes:[{_:'documentAttributeAudio',duration:1,title:target.title,performer:target.artist}]});
 const msg=(media?:unknown,peer=101)=>({_:'message',id:12,peerId:{_:'peerUser',userId:peer},fromId:{_:'peerUser',userId:peer},message:'',replyTo:{_:'messageReplyHeader',replyToMsgId:10},...(media?{media:{_:'messageMediaDocument',document:media}}:{replyMarkup:{_:'replyInlineMarkup',rows:[{_:'keyboardInlineButtonRow',buttons:[{_:'keyboardInlineButton',text:'Own Song — Own Artist',type:{_:'inlineButtonTypeCallback',data:new Uint8Array([8,9])}}]}]}})});
-async function setup(option=false,mutate?:(r:any,defaultValue:any,callbackDone:boolean)=>any,time?:BotProvidersClock){
+async function setup(option=false,mutate?:(r:any,defaultValue:any,callbackDone:boolean)=>any,time?:BotProvidersClock,profile?:{username?:string;target?:BotSearchTarget}){
+ const username=profile?.username??'ivkmbot',wanted=profile?.target??target;
  const binding={accountRef:randomUUID(),accountEpoch:1},sessionId=randomUUID(),ctx={signal:new AbortController().signal,current:()=>true};let invalidations=0,callbackDone=false;
- const pool=createBotProvidersDriver(binding,sessionId,{resolveIdentity:async()=>identity(),invalidateSession(){invalidations++;}});
+ const pool=createBotProvidersDriver(binding,sessionId,{resolveIdentity:async()=>identity(username),invalidateSession(){invalidations++;}});
  const env=()=>({protocol:'pulso-bot-providers',version:1,...binding,sessionId,providerRevision:0,operationId:randomUUID(),requestId:randomUUID()});
- const offer=await pool.handle({...env(),type:'bots.validate',input:'ivkmbot'},ctx);assert.equal(offer?.type,'bots.validated');const ref=offer!.type==='bots.validated'?offer.offer.providerRef:'';
+ const offer=await pool.handle({...env(),type:'bots.validate',input:username},ctx);assert.equal(offer?.type,'bots.validated');const ref=offer!.type==='bots.validated'?offer.offer.providerRef:'';
  await pool.handle({...env(),type:'bots.setOrder',expectedRevision:0,providerRefs:[ref]},ctx);
  const calls:any[]=[],progress:any[]=[];
  const driver=createBotSearchSdkDriver(binding,sessionId,{providers:pool,current(s){if(s.aborted)throw Error('cancelled');},getAccountCooldown:()=>null,invalidateSession(){invalidations++;},call:async(r:any,o:any)=>{
   calls.push({r,o});let v:any;
-  switch(r._){case 'contacts.resolveUsername':v=identity();break;case 'messages.sendMessage':v={_:'updateShortSentMessage',out:true,id:10};break;case 'messages.getHistory':v=r.limit===1?history():history([msg(option&&!callbackDone?undefined:doc())]);break;case 'messages.getMessages':v=history([msg(option&&!callbackDone?undefined:doc())]);break;case 'messages.getBotCallbackAnswer':assert.deepEqual(r.data,new Uint8Array([8,9]));callbackDone=true;v={_:'messages.botCallbackAnswer',cacheTime:0};break;case 'upload.getFile':assert.equal(o.dcId,2);assert.equal(o.kind,'download');v={_:'upload.file',bytes:bytes.slice(),mtime:0};break;default:throw Error('unexpected');}
+  switch(r._){case 'contacts.resolveUsername':v=identity(username);break;case 'messages.sendMessage':v={_:'updateShortSentMessage',out:true,id:10};break;case 'messages.getHistory':v=r.limit===1?history():history([msg(option&&!callbackDone?undefined:doc())]);break;case 'messages.getMessages':v=history([msg(option&&!callbackDone?undefined:doc())]);break;case 'messages.getBotCallbackAnswer':assert.deepEqual(r.data,new Uint8Array([8,9]));callbackDone=true;v={_:'messages.botCallbackAnswer',cacheTime:0};break;case 'upload.getFile':assert.equal(o.dcId,2);assert.equal(o.kind,'download');v={_:'upload.file',bytes:bytes.slice(),mtime:0};break;default:throw Error('unexpected');}
   return mutate?await mutate(r,v,callbackDone):v;
  }} as never,time);
- const command={protocol:'pulso-bot-search' as const,version:1 as const,...binding,sessionId,providerRevision:1,queryId:randomUUID(),requestId:randomUUID(),type:'bot-search.search',providerRef:ref,query:target.title,target,consent:true};
+ const command={protocol:'pulso-bot-search' as const,version:1 as const,...binding,sessionId,providerRevision:1,queryId:randomUUID(),requestId:randomUUID(),type:'bot-search.search',providerRef:ref,query:wanted.title,target:wanted,consent:true};
  const response=await driver.handle(command,ctx);assert.equal(response?.type,'bot-search.result');
  const dl={...command,type:'bot-search.download',requestId:randomUUID(),rowRef:response?.type==='bot-search.result'?response.rows[0].rowRef:''};delete (dl as any).query;
  return {driver,dl,ctx,calls,progress,get invalidations(){return invalidations;},download:()=>driver.handle(dl,{...ctx,publish:r=>progress.push(r)})};
@@ -34,11 +35,24 @@ test('direct audio uses private location, one sequential download, exact hash/Bl
  assert.equal((await s.driver.handle({...s.dl,requestId:randomUUID()},s.ctx))?.type,'bot-search.error');s.driver.close();
 });
 test('explicit option sends exact callback once, then downloads a reply audio',async()=>{const s=await setup(true);const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);s.driver.close();});
+test('Deezer exact artist-first album-version option carries the recording title to the importer',async()=>{
+ const wanted={...target,album:'Own album'};
+ const s=await setup(true,(request,value,clicked)=>{
+  if(!['messages.getHistory','messages.getMessages'].includes(request._)||request.limit===1)return value;
+  if(clicked){const d=doc();d.attributes[0].title=target.title+' (Album Version)';return history([msg(d)]);}
+  const m=msg();m.replyMarkup!.rows[0].buttons[0].text='1. Own Artist - Own Song (Album Version)';return history([m]);
+ },undefined,{username:'deezermusicbot',target:wanted});
+ try{const result=await s.download();assert.equal(result?.type,'bot-search.downloaded');assert.ok(parseBotSearchReply(result,s.dl as never));if(result?.type==='bot-search.downloaded')assert.equal(result.audio.recordingTitle,'Own Song (Album Version)');assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);}finally{s.driver.close();}
+});
+test('Deezer does not use the historical title-substring fallback for a foreign performer',async()=>{
+ const s=await setup(true,(request,value)=>{if(!['messages.getHistory','messages.getMessages'].includes(request._)||request.limit===1)return value;const m=msg();m.replyMarkup!.rows[0].buttons[0].text='Own Song - Other Artist';return history([m]);},undefined,{username:'deezermusicbot'});
+ try{const result=await s.download();assert.equal(result?.type,'bot-search.error');assert.equal(s.calls.some(x=>x.r._==='messages.getBotCallbackAnswer'||x.r._==='upload.getFile'),false);}finally{s.driver.close();}
+});
 test('changed menu and foreign known peer reject before callback or bytes',async()=>{
  for(const foreign of [false,true]){const s=await setup(true,(r,v)=>r._==='messages.getMessages'?history([foreign?msg(undefined,202):{...msg(),message:'changed'}]):v);const r=await s.download();assert.equal(r?.type,'bot-search.error');assert.equal(s.calls.some(x=>['upload.getFile','messages.getBotCallbackAnswer'].includes(x.r._)),false);s.driver.close();}
 });
 test('oversize rejected before bytes; short and wrong headers never return a file',async()=>{
- for(const mode of ['size','short','header']){const s=await setup(false,(r,v)=>mode==='size'&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([msg(doc(8388609))]):r._==='upload.getFile'?{...v,bytes:mode==='short'?bytes.slice(1):new Uint8Array(100)}:v);const r=await s.download();assert.equal(r?.type,'bot-search.error');if(r?.type==='bot-search.error')assert.equal(r.error,mode==='size'?'file-too-large':'file-invalid');if(mode==='size')assert.equal(s.calls.some(x=>x.r._==='upload.getFile'),false);s.driver.close();}
+ for(const mode of ['size','short','header']){const s=await setup(false,(r,v)=>mode==='size'&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([msg(doc(AUDIO_FILE_MAX_BYTES+1))]):r._==='upload.getFile'?{...v,bytes:mode==='short'?bytes.slice(1):new Uint8Array(100)}:v);const r=await s.download();assert.equal(r?.type,'bot-search.error');if(r?.type==='bot-search.error')assert.equal(r.error,mode==='size'?'file-too-large':'file-invalid');if(mode==='size')assert.equal(s.calls.some(x=>x.r._==='upload.getFile'),false);s.driver.close();}
 });
 test('unthreaded exact private audio can complete the chosen-song operation without a second click',async()=>{
  let baselines=0;
@@ -64,7 +78,17 @@ test('cancel preserves the file RPC lane and observes a late revocation without 
 });
 
 test('a file part larger than the remaining document never emits invalid progress',async()=>{
- const s=await setup(false,(r,v)=>r._==='upload.getFile'?{...v,bytes:new Uint8Array(101)}:v);const r=await s.download();assert.equal(r?.type,'bot-search.error');assert.equal(s.progress.some(p=>p.type==='bot-search.download-progress'),false);s.driver.close();
+ const s=await setup(false,(r,v)=>r._==='upload.getFile'?{...v,bytes:new Uint8Array(101)}:v);const r=await s.download();assert.equal(r?.type,'bot-search.error');assert.equal(s.progress.some(p=>p.type==='bot-search.download-progress'&&p.bytes>0),false);assert(s.progress.filter(p=>p.type==='bot-search.download-progress').every(p=>p.bytes===0&&p.total===100));s.driver.close();
+});
+
+test('validated document readiness is visible while the first file RPC is still pending',async()=>{
+ let release!:(value:unknown)=>void;const pending=new Promise(resolve=>{release=resolve;});
+ const s=await setup(false,(r,v)=>r._==='upload.getFile'?pending:v);
+ try{const result=s.download();while(!s.calls.some(x=>x.r._==='upload.getFile'))await new Promise(r=>setImmediate(r));
+ assert(s.progress.some(p=>p.type==='bot-search.download-progress'&&p.bytes===0&&p.total===100));
+ assert.equal(s.progress.some(p=>p.type==='bot-search.download-progress'&&p.bytes>0),false);
+ release({_:'upload.file',bytes,mtime:0});assert.equal((await result)?.type,'bot-search.downloaded');assert.equal(await s.driver.whenSettled(),true);
+ }finally{s.driver.close();}
 });
 test('download deadline is 120 seconds and keeps the RPC lane until settlement',async()=>{
  let now=0,id=0;const timers=new Map<number,{at:number;fn:()=>void}>();
@@ -92,3 +116,44 @@ test('after a callback the closest compatible duration wins before file transfer
  const s=await setup(true,(r,v,clicked)=>clicked&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([{...msg({...doc(),attributes:[{_:'documentAttributeAudio',duration:3,title:target.title,performer:target.artist}]}),id:13},{...msg(doc()),id:14}]):v);
  const result=await s.download();assert.equal(result?.type,'bot-search.downloaded');assert.deepEqual(s.calls.filter(x=>x.r._==='messages.getMessages').map(x=>x.r.id[0].id),[12,14,14]);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);s.driver.close();
 });
+
+test('one unrelated audio after the callback does not finish before the requested recording arrives',async()=>{
+ let polls=0;
+ const time:BotProvidersClock={now:()=>Date.now(),setTimeout:(fn,ms)=>setTimeout(fn,ms===BOT_SEARCH_BOUNDS.pollMs?1:ms),clearTimeout:timer=>clearTimeout(timer)};
+ const unrelated={...doc(8388609),id:new Long(99,3),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
+ const s=await setup(true,(r,v,clicked)=>{
+  if(clicked&&r._==='messages.getHistory'&&r.limit===20){polls++;return history([{...msg(polls===1?unrelated:doc()),id:polls===1?13:14}]);}
+  if(clicked&&r._==='messages.getMessages')return history([{...msg(doc()),id:14}]);
+  return v;
+ },time);
+ try{const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(polls,2);assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert(s.calls.filter(x=>x.r._==='upload.getFile').every(x=>x.r.location.id.equals(new Long(11,3))));}finally{s.driver.close();}
+});
+test('unrelated audio only reaches a bounded final result without callback retry or file bytes',async()=>{
+ let polls=0;
+ const time:BotProvidersClock={now:()=>Date.now(),setTimeout:(fn,ms)=>setTimeout(fn,ms===BOT_SEARCH_BOUNDS.pollMs?1:ms),clearTimeout:timer=>clearTimeout(timer)};
+ const unrelated={...doc(8388609),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
+ const s=await setup(true,(r,v,clicked)=>{if(clicked&&r._==='messages.getHistory'&&r.limit===20){polls++;return history([{...msg(unrelated),id:13}]);}return v;},time);
+ try{const r=await s.download();assert.equal(r?.type,'bot-search.result');assert.equal(polls,BOT_SEARCH_BOUNDS.downloadReads);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.some(x=>x.r._==='upload.getFile'),false);assert.equal(s.progress.some(x=>x.type==='bot-search.download-progress'),false);}finally{s.driver.close();}
+});
+
+test('targeted search waits past an unrelated audio for the matching menu without resending',async()=>{
+ let polls=0;
+ const time:BotProvidersClock={now:()=>Date.now(),setTimeout:(fn,ms)=>setTimeout(fn,ms===BOT_SEARCH_BOUNDS.pollMs?1:ms),clearTimeout:timer=>clearTimeout(timer)};
+ const unrelated={...doc(8388609),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
+ const s=await setup(true,(r,v,clicked)=>{if(!clicked&&r._==='messages.getHistory'&&r.limit===20){polls++;if(polls===1)return history([{...msg(unrelated),id:11}]);}return v;},time);
+ try{assert.equal(polls,2);const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);}finally{s.driver.close();}
+});
+
+test('caption, preview and optional sender refresh do not replace an immutable matching audio file',async()=>{
+ const s=await setup(false,(r,v)=>r._==='messages.getMessages'?history([{...msg({...doc(),thumbs:[{_:'photoSize',type:'s',w:64,h:64,size:99}]}),fromId:undefined,message:'Updated inert caption',replyMarkup:{_:'replyInlineMarkup',rows:[]}}]):v);
+ try{const result=await s.download();assert.equal(result?.type,'bot-search.downloaded');assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert.equal(s.calls.some(x=>x.r._==='messages.getBotCallbackAnswer'),false);}finally{s.driver.close();}
+});
+test('audio identity and current musical metadata remain fenced despite caption tolerance',async()=>{
+ for(const mode of ['id','hash','dc','size','mime','title','artist','duration','voice','reply','peer']){
+  const s=await setup(false,(r,v)=>{if(r._!=='messages.getMessages')return v;const d:any=doc();let m:any=msg(d);
+   if(mode==='id')d.id=new Long(99,3);if(mode==='hash')d.accessHash=new Long(999,4);if(mode==='dc')d.dcId=3;if(mode==='size')d.size=101;if(mode==='mime')d.mimeType='audio/mp4';
+   if(mode==='title')d.attributes[0].title='Other song';if(mode==='artist')d.attributes[0].performer='Other artist';if(mode==='duration')d.attributes[0].duration=50;if(mode==='voice')d.attributes[0].voice=true;if(mode==='reply')m.replyTo.replyToMsgId=99;if(mode==='peer')m=msg(d,202);return history([m]);});
+  try{const result=await s.download();assert.equal(result?.type,'bot-search.error');if(result?.type==='bot-search.error')assert.equal(result.error,mode==='peer'?'unsupported':'conflict',mode);assert.equal(s.calls.some(x=>x.r._==='upload.getFile'),false);}finally{s.driver.close();}
+ }
+});
+import {AUDIO_FILE_MAX_BYTES} from '../../src/storage/audio-limits';

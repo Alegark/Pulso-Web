@@ -12,5 +12,5 @@ else
   systemd-run --user --unit=pulso-web-iphone-review \
     --property=Restart=on-failure --property=RestartSec=2 \
     --property="WorkingDirectory=$pulso_root" \
-    /usr/bin/python3 "$pulso_root/scripts/serve_review.py"
+    /usr/bin/python3 "$pulso_root/scripts/serve_review.py" --catalog-relay
 fi

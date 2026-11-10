@@ -39,3 +39,8 @@ La evaluación anterior se conserva como historia. Pulso ahora extrae automátic
 Pruebas reales: 14 unitarias, 33 grupos del modelo en Chromium y 5 casos completos de importación/panel, más 6 regresiones de interfaz manual. El producto no realizó solicitudes externas en los casos automáticos. Evidencia reproducible: docs/evidence-embedded-lyrics-web.json. Misma copia privada autorizada actualizada; probe HTTPS y compatibilidad con SW anterior PASS para sus casos separados. No se atribuye al probe manual la cobertura positiva de extracción del runner local.
 
 128 KiB limitan el payload compartido del extractor de letras; los metadatos generales del audio tienen presupuesto separado de 2 MiB. SYLT en frames MPEG no se convierte ni se anuncia soportado. LRCLIB y cualquier proveedor siguen desactivados, D08 pendiente; no se garantiza letra para un archivo que no la contiene. iPhone y offline del origen privado continúan pendientes.
+
+
+## Activación del reproductor · 2026-11-10
+
+Las letras de LRCLIB están habilitadas para la pista activa al abrir el reproductor, conforme a la petición del propietario. El resultado es temporal en RAM y conserva la prioridad local y de ausencia manual. Se verificó contenido sincronizado visible en el navegador compartido, sin guardar texto en la evidencia. [Resultado y límites](evidence-player-content-web.json).

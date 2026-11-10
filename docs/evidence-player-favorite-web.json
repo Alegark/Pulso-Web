@@ -1,0 +1,33 @@
+{
+  "status": "PASS_WITH_LIMITS",
+  "release": "/releases/3a856decc1a904d1.html",
+  "runtimeSources": 187,
+  "unitPassed": 642,
+  "lint": "PASS",
+  "component": [
+    "direct favorite",
+    "pending no false check",
+    "error",
+    "keyboard",
+    "stale callback",
+    "320px/200%",
+    "reduced motion",
+    "200ms pointer transition",
+    "no replay when already favorite"
+  ],
+  "fullMain": [
+    "native IndexedDB favorite",
+    "same audio source/instance",
+    "time advances",
+    "view remains player",
+    "favorite persisted after reload"
+  ],
+  "productionSmoke": "PASS Chromium/WebKit",
+  "update": "PASS from 87ed63ead44eff76",
+  "archiveFiles": 3747,
+  "httpsVerified": true,
+  "retainedImmutable": 314,
+  "realTelegram": false,
+  "iPhone": false,
+  "P0Complete": false
+}

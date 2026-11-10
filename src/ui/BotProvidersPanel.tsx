@@ -1,4 +1,5 @@
 import React from 'react';
+import {PULSO_BOT_SUGGESTIONS} from '../telegram/bot-chat-profiles';
 import './bot-providers.css';
 
 /** Presentation DTO only. Profile identity is not musical compatibility. */
@@ -27,7 +28,7 @@ export interface BotProvidersPanelProps {
   onCancel?: () => void;
 }
 
-const suggestions = ['ivkmbot', 'LyDBot'] as const;
+const suggestions = PULSO_BOT_SUGGESTIONS;
 const profileLabels = {
   verified: 'Perfil comprobado',
   unverified: 'Perfil sin comprobar',
@@ -145,7 +146,8 @@ function BotProvidersPanelScope(props: BotProvidersPanelProps) {
         </div>
       </li>)}
     </ol>
-    <p>Sugerencias no activas: sólo rellenan el campo; no añaden ni comprueban el bot.</p>
+    <p>Sugeridos por Pulso. También puedes añadir otros bots y cambiar su prioridad.</p>
+    <p>Elegir una sugerencia sólo rellena el campo; pulsa «Comprobar y añadir» para añadirla.</p>
     <div className="bot-providers-actions" aria-label="Sugerencias de bots">
       {suggestions.map(username => <button type="button" key={username} disabled={!enabled}
         aria-label={`Usar sugerencia @${username}`} onClick={() => {

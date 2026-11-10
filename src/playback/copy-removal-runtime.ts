@@ -1,3 +1,4 @@
+import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import type {LocalAsset} from '../library/library';
 import {makeFailure,type FailureV1} from '../errors/app-failure';
 import {closedObject,copySourceAsset,sameSourceAsset} from './local-source-protocol';
@@ -10,7 +11,7 @@ export interface CopyRemovalRuntime {
 export type CopyRemovalRuntimeResult=
  | {readonly kind:'ready';readonly runtime:CopyRemovalRuntime}
  | {readonly kind:'blocked';readonly reason:CopyRemovalRuntimeReason;readonly failure:FailureV1|null};
-const LIMIT=8*1024*1024;
+const LIMIT=AUDIO_FILE_MAX_BYTES;
 const DEADLINE=1500;
 function supported(value:unknown):boolean {
  const m=closedObject(value,['version','type','readerProtocol','backends','idbLifecycle','physicalSources']);

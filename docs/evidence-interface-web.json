@@ -1,0 +1,59 @@
+{
+  "project": "Pulso-Web",
+  "date": "2026-11-09",
+  "scope": "Real interface integrated from design; no new audio/storage/Telegram domain changes",
+  "release": "/releases/23f7276a5003d3e8.html",
+  "runtimeSourceFiles": 176,
+  "runtimeFreezeSha256": "5749917dd5c1691db5ddf7b740c12d1e765cc3a569ba947807daad9186d4af2c",
+  "nativeInterface": {
+    "groups": 16,
+    "passed": true,
+    "engines": [
+      "Chromium 154 Linux",
+      "WebKit 27.2 Linux"
+    ],
+    "fixture": "Own synthetic IDB audio and intercepted metadata; no SDK or account",
+    "serviceWorker": "blocked for UI matrix; update tested separately",
+    "externalRequestsObserved": 0,
+    "pageErrors": 0,
+    "webkitCspWarnings": {
+      "styleSrcAttr": 24,
+      "styleSrcElem": 14
+    },
+    "reportSha256": "3d17f3d4b41bda4cf13edc8a3be2cedb3e7fefdcc8049c5ca0e61d834362b591"
+  },
+  "buildAudit": {
+    "passed": true,
+    "archiveMembers": 3726,
+    "runtimeMembersExact": 176,
+    "privateIdentityAbsent": true
+  },
+  "update": {
+    "passed": true,
+    "oldAudioPreserved": true,
+    "newPaused": true,
+    "activationAfterNormalClosure": true
+  },
+  "privateDelivery": {
+    "files": 38,
+    "verified": true,
+    "oldHashedAssetsAndEntriesPreserved": 296
+  },
+  "pending": [
+    "physical iPhone/Safari/VoiceOver/keyboard/safe areas",
+    "native seek verification of new desktop bar",
+    "real Telegram under new interface",
+    "full P0-W"
+  ],
+  "limitations": [
+    "WebKit CSP warnings retained; no zero-CSP claim",
+    "No RPC counters in interface tests",
+    "Early WebKit catalogue response bypassed route through SW; invalid run excluded, final runs use closed proxy and disabled SW"
+  ],
+  "unitTests": {
+    "passed": 627,
+    "failed": 0,
+    "finalProductSources": true
+  },
+  "typecheckAndLint": "PASS"
+}

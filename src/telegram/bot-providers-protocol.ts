@@ -33,7 +33,7 @@ function row(v:unknown):BotProviderRow|null {
  return r&&isUuid(r.providerRef)&&parseBotUsername(r.username)===r.username&&typeof r.label==='string'&&r.label.length<=320&&utf8Bytes(r.label)<=640&&sourceName(r.label)===r.label&&r.status==='verified-profile'&&r.compatibility==='unverified'?Object.freeze({providerRef:r.providerRef,username:r.username as string,label:r.label,status:'verified-profile',compatibility:'unverified'}):null;
 }
 export function copyBotRow(r:BotProviderRow):BotProviderRow {return Object.freeze({providerRef:r.providerRef,username:r.username,label:r.label,status:'verified-profile',compatibility:'unverified'});}
-function rows(v:unknown):readonly BotProviderRow[]|null {
+export function parseBotRows(v:unknown):readonly BotProviderRow[]|null {
  const a=dataArray(v,5);if(!a)return null;const r=a.map(row);
  return r.every((x):x is BotProviderRow=>x!==null)&&new Set(r.map(x=>x.providerRef)).size===r.length&&new Set(r.map(x=>x.username)).size===r.length?Object.freeze(r):null;
 }
@@ -56,7 +56,7 @@ export function parseBotProvidersReply(raw:unknown,expected:BotEnvelope):BotProv
   const r=dataRecord(raw);if(!r)return null;const e=envelope(r);if(!e||keys.some(k=>e[k]!==expected[k]))return null;let extra:string[],out:BotProvidersReply;
   switch(r.type){
    case 'bots.validated':{const offer=row(r.offer);if(!offer)return null;extra=['offer'];out={...e,type:'bots.validated',offer};break;}
-   case 'bots.ordered':{const providers=rows(r.providers);if(!providers||!revision(r.revision)||typeof r.changed!=='boolean'||r.revision!==e.providerRevision+(r.changed?1:0))return null;extra=['revision','changed','providers'];out={...e,type:'bots.ordered',revision:r.revision,changed:r.changed,providers};break;}
+   case 'bots.ordered':{const providers=parseBotRows(r.providers);if(!providers||!revision(r.revision)||typeof r.changed!=='boolean'||r.revision!==e.providerRevision+(r.changed?1:0))return null;extra=['revision','changed','providers'];out={...e,type:'bots.ordered',revision:r.revision,changed:r.changed,providers};break;}
    case 'bots.cancelled':if(!isUuid(r.targetRequestId))return null;extra=['targetRequestId'];out={...e,type:'bots.cancelled',targetRequestId:r.targetRequestId};break;
    case 'bots.error':if(!['cancelled','timeout','busy','expired','session-expired','limit','unsupported','identity-changed','rate-limit','network'].includes(r.error as string)||r.retryAt!==null&&(!revision(r.retryAt)||r.retryAt===0)||typeof r.retryBlocked!=='boolean')return null;extra=['error','retryAt','retryBlocked'];out={...e,type:'bots.error',error:r.error as BotProvidersError,retryAt:r.retryAt as number|null,retryBlocked:r.retryBlocked};break;
    default:return null;

@@ -27,3 +27,31 @@ test('uncertain row is checked locally before continuing and is never dispatched
 test('album choice retains full credit for local verification and primary artist for query',()=>{
  const choice=albumTrackChoice({...detail.tracks[0],artist:'Artist, Guest',primaryArtist:'Artist'},'Album');assert.equal(choice.artist,'Artist, Guest');assert.equal(choice.searchArtist,'Artist');
 });
+
+function noMatchingClient(patch:Record<string,unknown>={}){
+ let state:any={queryId:'before',providerRef:'provider',providerRevision:1,pending:false,available:true,error:null,delivery:'acknowledged',retryBlocked:false,retryAt:null,rows:[],expectedTarget:null};let searches=0,downloads=0;
+ const target={title:'Track 1',artist:'Artist',album:'Album',durationSeconds:60};
+ const bad={rowRef:'returned-audio',kind:'audio',correlation:'reply',title:'Track 1 (Remix)',performer:'Other Artist',durationSeconds:80,mimeType:'audio/wav',bytes:100};
+ const client={botsSnapshot:()=>({revision:1}),searchSnapshot:()=>state,captureBotsCurrent:()=>()=>true,captureSearchActionCurrent:()=>()=>true,captureSearchCancel:()=>()=>{throw Error('unexpected cancel');},subscribeSearch:()=>()=>{},searchBot(_input:unknown,current:()=>boolean,started:(v:any)=>void){assert(current());searches++;state={...state,queryId:'after',expectedTarget:target,rows:[{rowRef:'choice',kind:'option',correlation:'reply',label:'Track 1 — Artist'}]};started({queryId:state.queryId,cancel:()=>{}});},async downloadBot(_ref:string,current:()=>boolean,started:(v:any)=>void){assert(current());downloads++;started({queryId:state.queryId,cancel:()=>{}});state={...state,rows:[bad],...patch};return null;}};
+ return {client:client as never,get searches(){return searches;},get downloads(){return downloads;}};
+}
+test('confirmed terminal audio mismatch fails that row and continues the album without retrying it',async()=>{
+ addCurrent=async()=>true;const mock=noMatchingClient();let looked=0,result:AlbumProgress|undefined;const uncertainty=new Set<number>();
+ await acquireAlbum({detail,attempt:attempt(async()=>++looked===2?'verified-second':null),client:mock.client,provider:'provider',revision:1,management:()=>manager(async()=>true),signal:new AbortController().signal,current:()=>true,rows:initial(),uncertainTracks:uncertainty,update:v=>{result=v;}});
+ assert.equal(looked,2);assert.equal(result?.rows[0].state,'failed');assert.equal(result?.rows[0].confirmed,false);assert.equal(result?.rows[1].confirmed,true);assert.equal(mock.searches,1);assert.equal(mock.downloads,1);assert.equal(uncertainty.size,0);assert.match(result!.message,/incompleto/);
+});
+test('unsettled, quarantined, foreign or still-compatible snapshots cannot be relabelled as confirmed no-match',async()=>{
+ for(const patch of [{pending:true},{available:false},{delivery:'uncertain'},{queryId:'foreign'},{expectedTarget:{title:'Other',artist:'Artist',album:'Album',durationSeconds:60}},{rows:[{rowRef:'audio',kind:'audio',correlation:'reply',title:'Track 1',performer:'Artist',durationSeconds:60,mimeType:'audio/wav',bytes:100}]}]){
+  addCurrent=async()=>true;const mock=noMatchingClient(patch);let looked=0,result:AlbumProgress|undefined;
+  await acquireAlbum({detail,attempt:attempt(async()=>++looked===2?'must-not-add':null),client:mock.client,provider:'provider',revision:1,management:()=>manager(async()=>true),signal:new AbortController().signal,current:()=>true,rows:initial(),update:v=>{result=v;}});
+  assert.equal(looked,1);assert.equal(result?.rows[0].state,'uncertain');assert.equal(result?.rows[1].confirmed,false);assert.equal(mock.searches,1);assert.equal(mock.downloads,1);
+ }
+});
+
+test('terminal byte-validation failure continues only after settlement of the exact target',async()=>{
+ for(const unavailable of [false,true]){
+  addCurrent=async()=>true;const mock=noMatchingClient({error:'file-invalid',...(unavailable?{available:false}:{})});let looked=0,result:AlbumProgress|undefined;
+  await acquireAlbum({detail,attempt:attempt(async()=>++looked===2?'verified-second':null),client:mock.client,provider:'provider',revision:1,management:()=>manager(async()=>true),signal:new AbortController().signal,current:()=>true,rows:initial(),update:v=>{result=v;}});
+  assert.equal(looked,unavailable?1:2);assert.equal(result?.rows[0].state,unavailable?'uncertain':'failed');assert.equal(result?.rows[1].confirmed,!unavailable);assert.equal(mock.searches,1);assert.equal(mock.downloads,1);
+ }
+});

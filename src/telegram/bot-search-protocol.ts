@@ -1,4 +1,6 @@
+import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {dataArray,dataRecord,isUuid,parseAccountBinding,utf8Bytes,type AccountBinding} from './sources-protocol';
+import {recordingTitleCandidate} from '../library/recording-title';
 export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:16,downloadReads:60,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadMs:120000});
 // Catalogue and file metadata may differ by a few seconds. This never relaxes
 // the required title/performer/version match or the ranking by closest duration.
@@ -25,8 +27,9 @@ export type BotSearchRow=
  |(Row&{readonly kind:'audio';readonly title:string|null;readonly performer:string|null;readonly durationSeconds:number;readonly mimeType:string;readonly bytes:number})
  |(Row&{readonly kind:'option';readonly label:string})
  |(Row&{readonly kind:'message';readonly text:string});
-export type BotDownloadedAudio=Readonly<{blob:Blob;bytes:number;mime:'audio/mpeg'|'audio/mp4'|'audio/wav';sha256:string;target:BotSearchTarget}>;
+export type BotDownloadedAudio=Readonly<{blob:Blob;bytes:number;mime:'audio/mpeg'|'audio/mp4'|'audio/wav';sha256:string;target:BotSearchTarget;recordingTitle?:string}>;
 export type BotSearchReply=
+ |(BotSearchEnvelope&{readonly type:'bot-search.provider-notice';readonly text:string})
  |(BotSearchEnvelope&{readonly type:'bot-search.download-progress';readonly bytes:number;readonly total:number})
  |(BotSearchEnvelope&{readonly type:'bot-search.downloaded';readonly audio:BotDownloadedAudio})
  |(BotSearchEnvelope&{readonly type:'bot-search.sending';readonly delivery:'uncertain'})
@@ -82,7 +85,8 @@ export function parseBotSearchCommand(raw:unknown):BotSearchCommand|null {
 export function parseBotSearchReply(raw:unknown,expected:BotSearchEnvelope):BotSearchReply|null {
  try{const r=dataRecord(raw);if(!r)return null;const e=envelope(r);if(!e||keys.some(k=>e[k]!==expected[k]))return null;let extra:string[],out:BotSearchReply;
  switch(r.type){
- case 'bot-search.download-progress':if(!revision(r.bytes)||!revision(r.total)||r.total<=0||r.total>8388608||r.bytes>r.total)return null;extra=['bytes','total'];out={...e,type:r.type,bytes:r.bytes,total:r.total};break;
+ case 'bot-search.provider-notice':if(!text(r.text,500))return null;extra=['text'];out={...e,type:r.type,text:r.text};break;
+ case 'bot-search.download-progress':if(!revision(r.bytes)||!revision(r.total)||r.total<=0||r.total>AUDIO_FILE_MAX_BYTES||r.bytes>r.total)return null;extra=['bytes','total'];out={...e,type:r.type,bytes:r.bytes,total:r.total};break;
  case 'bot-search.downloaded':{const audio=parseBotDownloadedAudio(r.audio);if(!audio)return null;extra=['audio'];out={...e,type:r.type,audio};break;}
  case 'bot-search.sending':if(r.delivery!=='uncertain')return null;extra=['delivery'];out={...e,type:r.type,delivery:'uncertain'};break;
  case 'bot-search.cancelled':if(!isUuid(r.targetRequestId))return null;extra=['targetRequestId'];out={...e,type:r.type,targetRequestId:r.targetRequestId};break;
@@ -98,7 +102,14 @@ export function parseBotSearchReply(raw:unknown,expected:BotSearchEnvelope):BotS
 const blobSize=Object.getOwnPropertyDescriptor(Blob.prototype,'size')!.get!;
 const blobType=Object.getOwnPropertyDescriptor(Blob.prototype,'type')!.get!;
 export function parseBotDownloadedAudio(raw:unknown):BotDownloadedAudio|null {
- try{const r=dataRecord(raw,['blob','bytes','mime','sha256','target']);if(!r||!revision(r.bytes)||r.bytes<=0||r.bytes>8388608||!['audio/mpeg','audio/mp4','audio/wav'].includes(r.mime as string)||typeof r.sha256!=='string'||! /^[a-f0-9]{64}$/.test(r.sha256)||blobSize.call(r.blob)!==r.bytes||blobType.call(r.blob)!==r.mime)return null;const target=parseBotSearchTarget(r.target);return target?Object.freeze({blob:r.blob as Blob,bytes:r.bytes,mime:r.mime as BotDownloadedAudio['mime'],sha256:r.sha256,target}):null;}catch{return null;}
+ try{
+  const r=dataRecord(raw),required=['blob','bytes','mime','sha256','target'];
+  if(!r||required.some(k=>!Object.hasOwn(r,k))||Object.keys(r).some(k=>!required.includes(k)&&k!=='recordingTitle')||!revision(r.bytes)||r.bytes<=0||r.bytes>AUDIO_FILE_MAX_BYTES||!['audio/mpeg','audio/mp4','audio/wav'].includes(r.mime as string)||typeof r.sha256!=='string'||! /^[a-f0-9]{64}$/.test(r.sha256)||blobSize.call(r.blob)!==r.bytes||blobType.call(r.blob)!==r.mime)return null;
+  const target=parseBotSearchTarget(r.target);if(!target)return null;
+  const recordingTitle=Object.hasOwn(r,'recordingTitle')?botSearchText(r.recordingTitle,300):undefined;
+  if(Object.hasOwn(r,'recordingTitle')&&(!recordingTitle||!target.album||target.durationSeconds===null||target.durationSeconds<=0||!recordingTitleCandidate(recordingTitle,target.title,target.album,target.durationSeconds)))return null;
+  return Object.freeze({blob:r.blob as Blob,bytes:r.bytes,mime:r.mime as BotDownloadedAudio['mime'],sha256:r.sha256,target,...(recordingTitle?{recordingTitle}:{})});
+ }catch{return null;}
 }
 
 // Presentation normalization; never acoustic identity or a substitute for worker peer/epoch checks.
@@ -113,17 +124,22 @@ export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTa
  const score=(row:BotSearchRow):number=>{
   const correlation=row.correlation==='reply'?1:0;
   if(row.kind==='audio'){
-   if(!row.title||!row.performer||musicIdentityText(row.title)!==title||musicIdentityText(row.performer)!==artist)return 0;
+   if(!row.title||!row.performer||!recordingTitleCandidate(row.title,target.title,target.album,target.durationSeconds)||musicIdentityText(row.performer)!==artist)return 0;
    const delta=target.durationSeconds===null?0:Math.abs(target.durationSeconds-row.durationSeconds);
-   return delta<=BOT_SEARCH_DURATION_TOLERANCE_SECONDS?4000-Math.round(delta*100)+correlation:0;
+   const tolerance=musicIdentityText(row.title)===title?BOT_SEARCH_DURATION_TOLERANCE_SECONDS:1;
+   return delta<=tolerance?4000-Math.round(delta*100)+correlation:0;
   }
   if(row.kind!=='option')return 0;
-  const matches=(label:string)=>label.split(/\s+[–—−-]\s+/u).some((_,i,parts)=>i<parts.length-1&&
-   musicIdentityText(parts.slice(0,i+1).join(' - '))===title&&musicIdentityText(parts.slice(i+1).join(' - '))===artist);
+  const matches=(label:string)=>label.split(/\s+[–—−-]\s+/u).some((_,i,parts)=>{
+   if(i>=parts.length-1)return false;
+   const left=parts.slice(0,i+1).join(' - '),right=parts.slice(i+1).join(' - ');
+   return recordingTitleCandidate(left,target.title,target.album,target.durationSeconds)&&musicIdentityText(right)===artist||
+    musicIdentityText(left)===artist&&recordingTitleCandidate(right,target.title,target.album,target.durationSeconds);
+  });
   if(matches(row.label))return 2000+correlation;
   // Numbered results and an optional displayed duration are formatting only.
   // Do not strip live/remix/cover/version text or words from the performer.
-  const clean=row.label.replace(/^\s*(?:#\d{1,3}|\d{1,3}[.)])\s+/u,'').replace(/\s*[[(]\d{1,2}:[0-5]\d[)\]]\s*$/u,'');
+  const clean=row.label.replace(/^\s*(?:#\d{1,3}\s+|\d{1,3}\s*[.)]\s*)/u,'').replace(/\s*[[(]\d{1,2}:[0-5]\d[)\]]\s*$/u,'');
   return matches(clean)?1900+correlation:0;
  };
  return rows.map((row,index)=>({row,index,score:score(row)})).filter(v=>v.score>0)

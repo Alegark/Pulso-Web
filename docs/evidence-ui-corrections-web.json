@@ -1,0 +1,57 @@
+{
+  "project": "Pulso-Web",
+  "date": "2026-11-09",
+  "release": "6b28ffbe1295f963",
+  "changes": [
+    "One live result list while typing; no dropdown or combobox",
+    "Always-mounted mini player; empty, playing and fresh gesture states",
+    "Controlled player layout from design; full cover visible at opening",
+    "Local plain/timed lyrics preview and full reader; seek without autoplay"
+  ],
+  "native": {
+    "groups": 22,
+    "passed": true,
+    "sourceFiles": 180,
+    "freezeSha256": "829c595fc98a40494b99d82f22f05107e6d353f38784551ffd9fc5ec15f8b02f",
+    "reportSha256": "52f713937a79a54db8b3c0fd7537c21c23c7c30cf23d43b41d98a8be6cd341ef",
+    "engines": [
+      "Chromium154 Linux",
+      "WebKit27.2 Linux"
+    ],
+    "externalRequestsObserved": 0,
+    "pageErrors": 0,
+    "serviceWorker": "blocked; update tested separately",
+    "webkitCspWarnings": {
+      "styleSrcAttr": 20,
+      "styleSrcElem": 14
+    }
+  },
+  "syntheticSdk": {
+    "passed": true,
+    "source": "revision-1; revision-2 changes only opening scroll/focus",
+    "sends": 1,
+    "callbacks": 1,
+    "nativeAudioProgress": true,
+    "reselectNewRpc": 0,
+    "singleAsset": true,
+    "libraryMembershipFalse": true,
+    "realTelegram": false
+  },
+  "units": {
+    "passed": 627,
+    "failed": 0
+  },
+  "lintTypecheckBuildAudit": "PASS",
+  "update": true,
+  "delivery": {
+    "files": 38,
+    "oldAssetsAndEntriesExact": 299,
+    "httpsReadback": true
+  },
+  "limits": [
+    "User playback failure did not reproduce in tested baseline cached or synthetic bot paths; no claimed root cause for real account",
+    "Real Telegram and physical iPhone remain unverified",
+    "No online lyrics provider activated; reader uses actual stored local lyrics",
+    "CSP warnings retained without attributing cause or claiming zero CSP"
+  ]
+}

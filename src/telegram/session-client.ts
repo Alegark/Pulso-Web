@@ -12,8 +12,10 @@ interface SourcesPending {command:SourcesCommand;token:ActivityToken;current:()=
 export interface BotsSnapshot {binding:AccountBinding|null;providers:readonly BotProviderRow[];revision:number;scopeKey:string;pending:boolean;cancelling:boolean;error:string|null;notice:string|null;retryAt:number|null;retryBlocked:boolean}
 const emptyBots=():BotsSnapshot=>({binding:null,providers:[],revision:0,scopeKey:'',pending:false,cancelling:false,error:null,notice:null,retryAt:null,retryBlocked:false});
 interface BotPlan {worker:SessionWorker;command:BotProvidersCommand;refs:readonly string[];operationId:string;revision:number;epoch:number;token:ActivityToken;current:()=>boolean;timer:ReturnType<typeof setTimeout>;cancelled:boolean;cancelCommand:BotProvidersCommand|null;cancelAck:boolean;done:boolean;result:BotProvidersReply|null;until:number}
-export interface BotSearchSnapshot {binding:AccountBinding|null;scopeKey:string;pending:boolean;cancelling:boolean;rows:readonly BotSearchRow[];queryId:string|null;providerRef:string|null;providerRevision:number;expectedTarget:BotSearchTarget|null;delivery:BotSearchDelivery;expiresAt:number|null;error:BotSearchError|null;retryAt:number|null;retryBlocked:boolean;available:boolean;downloadProgress?:{bytes:number;total:number}|null}
-const emptySearch=():BotSearchSnapshot=>({binding:null,scopeKey:'',pending:false,cancelling:false,rows:[],queryId:null,providerRef:null,providerRevision:0,expectedTarget:null,delivery:'not-dispatched',expiresAt:null,error:null,retryAt:null,retryBlocked:false,available:false});
+export interface BotSearchSnapshot {binding:AccountBinding|null;scopeKey:string;pending:boolean;cancelling:boolean;rows:readonly BotSearchRow[];queryId:string|null;providerRef:string|null;providerRevision:number;expectedTarget:BotSearchTarget|null;delivery:BotSearchDelivery;expiresAt:number|null;error:BotSearchError|null;retryAt:number|null;retryBlocked:boolean;available:boolean;providerNotice:string|null;downloadProgress?:{bytes:number;total:number}|null}
+/** Cancellation receipt for this admitted plan only; never looks up a newer plan. */
+export interface BotSearchAdmission {readonly queryId:string;readonly cancel:()=>void}
+const emptySearch=():BotSearchSnapshot=>({binding:null,scopeKey:'',pending:false,cancelling:false,rows:[],queryId:null,providerRef:null,providerRevision:0,expectedTarget:null,delivery:'not-dispatched',expiresAt:null,error:null,retryAt:null,retryBlocked:false,available:false,providerNotice:null});
 interface SearchPlan {worker:SessionWorker;command:Exclude<BotSearchCommand,{type:'bot-search.cancel'}>;token:ActivityToken;current:()=>boolean;timer:ReturnType<typeof setTimeout>;until:number;cancelCommand:BotSearchCommand|null;cancelAck:boolean;done:boolean;cancelled:boolean;resolveDownload?:(audio:BotDownloadedAudio|null)=>void;audio?:BotDownloadedAudio|null}
 export interface SessionWorker {onmessage:((event:MessageEvent)=>void)|null;onerror:((event:ErrorEvent)=>void)|null;onmessageerror:((event:MessageEvent)=>void)|null;postMessage(message:SessionCommand|SourcesCommand|BotProvidersCommand|BotSearchCommand):void;terminate():void}
 interface Pending {request:string;type:SessionCommand['type'];token:ActivityToken;timer:ReturnType<typeof setTimeout>}
@@ -31,12 +33,12 @@ export class TelegramSessionClient {
  private readonly searchListeners=new Set<(snapshot:BotSearchSnapshot)=>void>();
  subscribeSearch(listener:(snapshot:BotSearchSnapshot)=>void):()=>void {this.searchListeners.add(listener);return()=>{this.searchListeners.delete(listener);};}
  private publishSearch(){const snapshot=this.searchSnapshot();this.searchChanged(snapshot);for(const listener of this.searchListeners){try{listener(this.searchSnapshot());}catch{/* Observers do not own transport. */}}}
- private invalidateSearch(){if(this.searchExpiry!==null)clearTimeout(this.searchExpiry);this.searchExpiry=null;this.searchEpoch++;this.search={...this.search,rows:[],queryId:null,providerRef:null,expectedTarget:null,expiresAt:null,error:null,delivery:'not-dispatched'};}
+ private invalidateSearch(){if(this.searchExpiry!==null)clearTimeout(this.searchExpiry);this.searchExpiry=null;this.searchEpoch++;this.search={...this.search,rows:[],queryId:null,providerRef:null,expectedTarget:null,expiresAt:null,error:null,delivery:'not-dispatched',providerNotice:null};}
  private expireSearch(){if(this.search.expiresAt===null||Date.now()<this.search.expiresAt)return;this.invalidateSearch();this.search={...this.search,error:'expired'};const epoch=this.searchEpoch,worker=this.worker;queueMicrotask(()=>{if(this.searchEpoch===epoch&&this.worker===worker)this.publishSearch();});}
  captureSearchCurrent():()=>boolean {this.expireSearch();const lifetime=this.captureBotLifetime(),epoch=this.searchEpoch,query=this.search.queryId;return()=>{this.expireSearch();return lifetime()&&this.state.phase==='connected'&&this.searchEpoch===epoch&&this.search.queryId===query;};}
  captureSearchActionCurrent():()=>boolean {this.expireSearch();const lifetime=this.captureBotLifetime(),admission=this.captureCommandCurrent(),epoch=this.searchEpoch,revision=this.bots.revision,commands=this.commandEpoch;const allowed=()=>{this.expireSearch();return lifetime()&&admission()&&this.state.phase==='connected'&&this.searchEpoch===epoch&&this.bots.revision===revision&&this.commandEpoch===commands;};this.searchGuards.set(allowed,()=>lifetime()&&admission());return allowed;}
  clearSearch(allowed:()=>boolean=this.captureSearchActionCurrent()){if(!this.searchGuards.has(allowed)||!allowed()||this.searchPlan)return;this.invalidateSearch();this.commandEpoch++;this.publishSearch();}
- searchBot(input:{providerRef:string;query:string;target?:BotSearchTarget;consent:true},allowed:()=>boolean=this.captureSearchActionCurrent()){
+ searchBot(input:{providerRef:string;query:string;target?:BotSearchTarget;consent:true},allowed:()=>boolean=this.captureSearchActionCurrent(),started?:(admission:BotSearchAdmission)=>void){
   const root=this.searchGuards.get(allowed);if(!root||!allowed()||!this.botReady()||!this.remoteAllowed())return;
   let fields:Record<string,unknown>|null;try{fields=dataRecord(input);}catch{return;}if(!fields)return;
   const worker=this.worker!,binding=this.botBinding!;
@@ -46,9 +48,10 @@ export class TelegramSessionClient {
   this.invalidateSearch();this.commandEpoch++;const epoch=this.searchEpoch,session=this.session,revision=this.bots.revision;
   const p:SearchPlan={worker,command,token,current:()=>root()&&token.current()&&this.worker===worker&&this.session===session&&this.botBinding?.accountRef===binding.accountRef&&this.botBinding?.accountEpoch===binding.accountEpoch&&(this.state.phase==='disconnecting'||this.bots.revision===revision),timer:setTimeout(()=>{if(this.searchPlan===p)this.cancelSearch(p,true);},BOT_SEARCH_BOUNDS.timeoutMs),until:Date.now()+BOT_SEARCH_BOUNDS.timeoutMs,cancelCommand:null,cancelAck:false,done:false,cancelled:false};
   this.searchPlan=p;this.search={...this.search,binding:{...binding},queryId:command.queryId,providerRef:command.providerRef,providerRevision:revision,expectedTarget:command.target??null};this.publishSearch();this.publishBots();this.publishSources();
-  if(!p.current()||this.searchEpoch!==epoch){this.stop('cancelled');return;}try{worker.postMessage(command);}catch{this.stop('protocol');}
+  if(!p.current()||this.searchEpoch!==epoch){this.stop('cancelled');return;}try{worker.postMessage(command);}catch{this.stop('protocol');return;}
+  try{started?.(Object.freeze({queryId:command.queryId,cancel:()=>{if(this.searchPlan===p&&this.state.phase==='connected')this.cancelSearch(p);}}));}catch{/* Observing admission cannot change transport authority. */}
  }
- downloadBot(rowRef:string,allowed:()=>boolean):Promise<BotDownloadedAudio|null> {
+ downloadBot(rowRef:string,allowed:()=>boolean,started?:(admission:BotSearchAdmission)=>void):Promise<BotDownloadedAudio|null> {
   const root=this.searchGuards.get(allowed);this.expireSearch();
   if(!root||!allowed()||!this.botReady()||!this.remoteAllowed()||!this.search.queryId||!this.search.providerRef||!this.search.expectedTarget||!this.search.rows.some(r=>r.rowRef===rowRef&&r.kind!=='message'))return Promise.resolve(null);
   const worker=this.worker!,binding=this.botBinding!,session=this.session,revision=this.bots.revision;
@@ -58,9 +61,11 @@ export class TelegramSessionClient {
   this.searchEpoch++;this.commandEpoch++;
   let resolveDownload!:(audio:BotDownloadedAudio|null)=>void;const done=new Promise<BotDownloadedAudio|null>(r=>resolveDownload=r);
   const p:SearchPlan={worker,command,token,current:()=>root()&&token.current()&&this.worker===worker&&this.session===session&&this.botBinding?.accountRef===binding.accountRef&&this.botBinding?.accountEpoch===binding.accountEpoch&&(this.state.phase==='disconnecting'||this.bots.revision===revision),timer:setTimeout(()=>{if(this.searchPlan===p)this.cancelSearch(p,true);},BOT_SEARCH_BOUNDS.downloadMs),until:Date.now()+BOT_SEARCH_BOUNDS.downloadMs,cancelCommand:null,cancelAck:false,done:false,cancelled:false,resolveDownload};
-  this.searchPlan=p;this.search={...this.search,error:null,delivery:'not-dispatched',expiresAt:null,downloadProgress:{bytes:0,total:0}};if(this.searchExpiry!==null)clearTimeout(this.searchExpiry);this.searchExpiry=null;
+  this.searchPlan=p;this.search={...this.search,error:null,delivery:'not-dispatched',expiresAt:null,providerNotice:null,downloadProgress:{bytes:0,total:0}};if(this.searchExpiry!==null)clearTimeout(this.searchExpiry);this.searchExpiry=null;
   this.publishSearch();this.publishBots();this.publishSources();
-  if(!p.current()){this.stop('cancelled');return done;}try{worker.postMessage(command);}catch{this.stop('protocol');}return done;
+  if(!p.current()){this.stop('cancelled');return done;}try{worker.postMessage(command);}catch{this.stop('protocol');return done;}
+  try{started?.(Object.freeze({queryId:command.queryId,cancel:()=>{if(this.searchPlan===p&&this.state.phase==='connected')this.cancelSearch(p);}}));}catch{/* Observing admission cannot change transport authority. */}
+  return done;
  }
  captureSearchCancel():(()=>void)|undefined {const p=this.searchPlan;if(!p||p.cancelled)return undefined;return()=>{if(this.searchPlan===p&&this.state.phase==='connected')this.cancelSearch(p);};}
  private cancelSearch(p:SearchPlan,timeout=false){
@@ -81,6 +86,7 @@ export class TelegramSessionClient {
    if(command===p.cancelCommand){p.cancelAck=true;this.finishSearch(p);return true;}
    if(p.done)return true;
    if(reply.type==='bot-search.error'&&reply.delivery==='not-dispatched'&&this.search.delivery!=='not-dispatched'){this.quarantineSearch('protocol');return true;}
+   if(reply.type==='bot-search.provider-notice'){if(p.command.type!=='bot-search.download'||bridge.sessionClosed){this.quarantineSearch('protocol');return true;}if(!p.cancelled&&Date.now()<p.until&&this.search.providerNotice===null){this.search={...this.search,providerNotice:reply.text,delivery:'acknowledged'};this.publishSearch();}return true;}
    if(reply.type==='bot-search.sending'){this.search={...this.search,delivery:'uncertain'};this.publishSearch();return true;}
    if(reply.type==='bot-search.download-progress'){const prev=this.search.downloadProgress;if(prev&&reply.bytes<prev.bytes){this.quarantineSearch('protocol');return true;}this.search={...this.search,downloadProgress:{bytes:reply.bytes,total:reply.total}};this.publishSearch();return true;}
    p.done=true;
@@ -270,7 +276,7 @@ export class TelegramSessionClient {
   if(!this.current()){this.stop('cancelled');return;}
   const reply=parseSessionReply(raw,this.session,pending.request);if(!reply){this.stop('protocol');return;}
   clearTimeout(pending.timer);pending.token.end();this.pending=null;
-  if(reply.phase==='connected'){this.search={...emptySearch(),binding:reply.binding,scopeKey:crypto.randomUUID(),available:true};this.botBinding=reply.binding;this.bots={...emptyBots(),binding:reply.binding,scopeKey:crypto.randomUUID()};this.botEpoch++;this.publishBots();this.sources={...emptySources(),binding:reply.binding,rows:[reply.saved!],listEpoch:1,operationId:crypto.randomUUID()};this.touchSources();this.publishSources();}
+  if(reply.phase==='connected'){this.search={...emptySearch(),binding:reply.binding,scopeKey:crypto.randomUUID(),available:true};this.botBinding=reply.binding;this.bots={...emptyBots(),binding:reply.binding,providers:reply.bots??[],scopeKey:crypto.randomUUID()};this.botEpoch++;this.publishBots();this.sources={...emptySources(),binding:reply.binding,rows:[reply.saved!],listEpoch:1,operationId:crypto.randomUUID()};this.touchSources();this.publishSources();}
   if(reply.phase==='error'||reply.phase==='disconnected'){this.drop();}
   this.publish({phase:reply.phase,error:reply.error,retryAt:reply.retryAt,delivery:reply.delivery});
  }

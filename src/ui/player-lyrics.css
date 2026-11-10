@@ -1,0 +1,12 @@
+.player-lyrics-source { color:var(--pulso-muted);font-size:.8rem;line-height:1.5; }
+.player-lyrics-lines { margin-block:2rem; }
+.pulso-app .player-lyrics-lines button,.player-lyrics-lines p { display:block;width:100%;max-width:100%;min-width:0;text-align:left;font-size:clamp(1.4rem,4vw,2.2rem);font-weight:700;line-height:1.45;letter-spacing:-.025em;overflow-wrap:anywhere;white-space:pre-wrap;margin:.8rem 0;padding:.35rem 0; }
+.pulso-app .player-lyrics-lines button { border:0;background:transparent;color:var(--pulso-muted); }
+.pulso-app .player-lyrics-lines button[aria-current="true"] { color:var(--pulso-foreground);background:transparent; }
+.pulso-app .player-lyrics-lines button:disabled { opacity:1; }
+.player-lyrics-empty { padding-block:1.25rem; }
+.player-lyrics-empty h3 { margin-block:.4rem; }
+.player-lyrics-empty p { color:var(--pulso-muted);line-height:1.6; }
+.player-lyrics-preview p { margin:.5rem 0;font-weight:650; }
+.player-lyrics-options { margin-top:2rem;border-top:1px solid var(--pulso-border);padding-top:.5rem; }
+.player-lyrics-options summary { cursor:pointer; }

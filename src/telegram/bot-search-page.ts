@@ -61,8 +61,16 @@ export function botSearchAck(raw:unknown,botId:number,randomId:Long):number|null
  for(const u of a){if(searchOwn(u,'_')!=='updateNewMessage')continue;const m=searchOwn(u,'message');if(searchOwn(m,'id')===ids[0]&&(!samePeer(searchOwn(m,'peerId'),botId)||searchOwn(m,'out')!==true))return null;}
  return ids[0];
 }
-export interface BotSearchPrivateRef {readonly messageId:number;readonly callbackData?:Uint8Array;readonly fingerprint?:string;readonly row?:BotSearchRow}
+export interface BotSearchPrivateRef {readonly messageId:number;readonly callbackData?:Uint8Array;readonly fingerprint?:string;readonly audioFingerprint?:string;readonly row?:BotSearchRow}
 export interface BotSearchPage {readonly rows:readonly BotSearchRow[];readonly refs:ReadonlyMap<string,BotSearchPrivateRef>;readonly concurrent:boolean;readonly unrecognized:boolean}
+/** A callback can edit its original menu into audio. Include only that exact
+ * message with a different document and messages newer than the pre-callback baseline; older neighbouring
+ * recordings do not belong to this attempt. The raw window still has the same
+ * twenty-message limit and peer validation as ordinary history. */
+export function projectBotCallbackPage(raw:unknown,botId:number,baseline:number,outgoing:number,selectedMessage:number,selectedDocumentId:string|null,target:BotSearchTarget):BotSearchPage {
+ const messages=history(raw,botId,20).filter(message=>{const id=searchOwn(message,'id') as number;return id===selectedMessage?botSearchDocumentIdentity(message)!==selectedDocumentId:id>baseline;});
+ return projectBotSearchPage({_: 'messages.messages',messages,users:[],chats:[]},botId,Math.min(baseline,selectedMessage-1),outgoing,[selectedMessage],target);
+}
 export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,outgoing:number,additionalReplies:readonly number[]=[],target:BotSearchTarget|null=null):BotSearchPage {
  const messages=history(raw,botId,20),rows:BotSearchRow[]=[],refs=new Map<string,BotSearchPrivateRef>();let concurrent=false,unrecognized=false;
  const add=(m:number,row:Omit<Extract<BotSearchRow,{kind:'option'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'message'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'audio'}>,'rowRef'>,data?:Uint8Array)=>{
@@ -97,7 +105,7 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
    }
   }
   const text=botSearchText(searchOwn(m,'message'),1000);if(text)add(id,{kind:'message',correlation,text});
-  for(const row of rows.slice(start)){const previous=refs.get(row.rowRef)!;refs.set(row.rowRef,Object.freeze({...previous,fingerprint,row}));}
+  for(const row of rows.slice(start)){const previous=refs.get(row.rowRef)!;const audioFingerprint=row.kind==='audio'?botSearchAudioFingerprint(m):null;refs.set(row.rowRef,Object.freeze({...previous,fingerprint,...(audioFingerprint?{audioFingerprint}:{}),row}));}
   if(rows.length===start)unrecognized=true;
  }
  // Decode and inspect every bounded candidate BEFORE truncating so concurrency
@@ -140,3 +148,28 @@ export function botSearchDocument(message:unknown):{location:{_: 'inputDocumentF
  return {location:{_:'inputDocumentFileLocation',id,accessHash,fileReference:ref.slice(),thumbSize:''},dcId};
 }
 export function botSearchKnownMessage(raw:unknown,botId:number,id:number):unknown {return history(raw,botId,20).find(m=>searchOwn(m,'id')===id&&incomingBot(m,botId));}
+
+/** Re-reading a recording may refresh its caption, preview or optional sender.
+ * Pin the exact private message, reply anchor and immutable file descriptor;
+ * the driver separately reprojects and checks current musical metadata.
+ * Menu/callback snapshots continue to use the complete fingerprint above. */
+export function botSearchAudioFingerprint(message:unknown):string|null {
+ const id=searchOwn(message,'id'),peer=searchOwn(message,'peerId'),botId=searchOwn(peer,'userId');
+ if(!messageId(id)||!positive(botId)||!incomingBot(message,botId))return null;
+ const document=botSearchDocument(message);if(!document)return null;
+ const raw=searchOwn(searchOwn(message,'media'),'document'),size=searchOwn(raw,'size'),mime=searchOwn(raw,'mimeType');
+ if(typeof size!=='number'||!Number.isSafeInteger(size)||size<=0||typeof mime!=='string'||!/^audio\/[a-z0-9.+-]{1,64}$/.test(mime))return null;
+ const reply=searchOwn(message,'replyTo');let parent:number|null=null;
+ if(reply!==undefined){const replyId=searchOwn(reply,'replyToMsgId'),replyPeer=searchOwn(reply,'replyToPeerId');
+  if(searchOwn(reply,'_')!=='messageReplyHeader'||!messageId(replyId)||replyPeer!==undefined&&!samePeer(replyPeer,botId))return null;
+  parent=replyId;
+ }
+ const {location,dcId}=document;
+ return JSON.stringify([id,botId,parent,location.id.low,location.id.high,location.accessHash.low,location.accessHash.high,dcId,size,mime]);
+}
+
+/** A changed caption, keyboard or renewed fileReference is not a new recording.
+ * This validated document identity stays in worker RAM and is never exported. */
+export function botSearchDocumentIdentity(message:unknown):string|null {
+ const document=botSearchDocument(message);return document?JSON.stringify([document.location.id.low,document.location.id.high]):null;
+}

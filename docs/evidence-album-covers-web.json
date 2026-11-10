@@ -1,0 +1,46 @@
+{
+  "status": "PASS_WITH_LIMITS",
+  "release": "/releases/87ed63ead44eff76.html",
+  "runtimeSources": 187,
+  "unit": {
+    "passed": 642,
+    "failed": 0
+  },
+  "lint": "PASS",
+  "fullMainChromium": {
+    "passed": 7,
+    "frozenSourcesBeforeAfter": 187
+  },
+  "uiMain": {
+    "passed": 22,
+    "engines": [
+      "Chromium154",
+      "WebKit27.2"
+    ],
+    "runtimeSources": 186,
+    "historicalWebKitCsp": 34
+  },
+  "uiFocalPassed": 12,
+  "publicCatalog": {
+    "album": "MOSCA",
+    "artist": "Nsqk",
+    "tracks": 17,
+    "songAndAlbumCoversDecoded": true,
+    "dimensions": [
+      100,
+      100
+    ],
+    "requestCount": 9,
+    "telegramRequests": 0,
+    "differenceToFinal": "CSS only"
+  },
+  "productionSmoke": "PASS",
+  "updateFrom": "de0967e84ee0d9f9",
+  "publicationVerified": true,
+  "retainedImmutable": 311,
+  "httpsVerified": true,
+  "originalScreenshotCause": "not reproduced",
+  "iPhone": false,
+  "realTelegram": false,
+  "P0Complete": false
+}

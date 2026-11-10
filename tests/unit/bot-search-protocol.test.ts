@@ -1,9 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {formatBotSearchQuery,parseBotSearchCommand,parseBotSearchReply,type BotSearchCommand} from '../../src/telegram/bot-search-protocol';
+import {formatBotSearchQuery,parseBotSearchCommand,parseBotSearchReply,parseBotDownloadedAudio,type BotSearchCommand} from '../../src/telegram/bot-search-protocol';
+import {AUDIO_FILE_MAX_BYTES} from '../../src/storage/audio-limits';
 const e=()=>({protocol:'pulso-bot-search',version:1,sessionId:randomUUID(),accountRef:randomUUID(),accountEpoch:1,providerRevision:1,queryId:randomUUID(),requestId:randomUUID()});
 const c=()=>({...e(),type:'bot-search.search',providerRef:randomUUID(),query:'A song',consent:true});
+test('download progress and downloaded audio admit the exact file limit and reject one byte more',()=>{
+ const envelope=e() as never;
+ const progress={...envelope,type:'bot-search.download-progress',bytes:AUDIO_FILE_MAX_BYTES,total:AUDIO_FILE_MAX_BYTES};
+ assert.ok(parseBotSearchReply(progress,envelope));assert.equal(parseBotSearchReply({...progress,total:AUDIO_FILE_MAX_BYTES+1},envelope),null);
+ const blob=new Blob([new Uint8Array(AUDIO_FILE_MAX_BYTES)],{type:'audio/wav'});
+ const audio={blob,bytes:AUDIO_FILE_MAX_BYTES,mime:'audio/wav',sha256:'a'.repeat(64),target:{title:'Song',artist:'Artist',album:null,durationSeconds:null}};
+ assert.ok(parseBotDownloadedAudio(audio));assert.equal(parseBotDownloadedAudio({...audio,bytes:AUDIO_FILE_MAX_BYTES+1}),null);
+});
 test('closed data-only query admission: explicit consent, no controls/commands/multiline/unknown fields',()=>{
  const good=c();assert.ok(parseBotSearchCommand(good));
  for(const query of ['', ' ', ' a','a ', '/start','/anything','a\nb','a\rb','a\tb','a\u2028b','a\u202eb','a\ud800','x'.repeat(161)])assert.equal(parseBotSearchCommand({...good,query}),null,JSON.stringify(query));

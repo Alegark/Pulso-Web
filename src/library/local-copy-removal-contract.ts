@@ -1,8 +1,9 @@
+import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import type {LocalAsset} from './library';
 import type {FailureV1} from '../errors/app-failure';
 import {closedObject,copySourceAsset} from '../playback/local-source-protocol';
 export const REMOVAL_PREFIX='local-copy-removal:v1:';
-export const REMOVAL_LIMITS=Object.freeze({assets:10000,tracks:20000,playlistEntries:20000,jobs:20000,settings:20000,metadataBytes:8388608,aliases:32,audioBytes:8388608,journals:32,prefixBytes:262144});
+export const REMOVAL_LIMITS=Object.freeze({assets:10000,tracks:20000,playlistEntries:20000,jobs:20000,settings:20000,metadataBytes:8388608,aliases:32,audioBytes:AUDIO_FILE_MAX_BYTES,journals:32,prefixBytes:262144});
 export const removalUUID=(v:unknown):v is string=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v);
 export const positive=(v:unknown):v is number=>Number.isSafeInteger(v)&&Number(v)>0;
 export interface RemovalTracking {readonly incarnation:string;readonly operationId:string}

@@ -1,10 +1,11 @@
+import {AUDIO_FILE_MAX_BYTES,AUDIO_BLOB_TOTAL_MAX_BYTES} from '../storage/audio-limits';
 import {claimBlobCredit} from './local-copy-protection';
 import {readRecord} from '../storage/database';
 import {openAssetReader} from '../storage/asset-reader';
 import {validAsset,type LocalAsset} from '../library/library';
 import {AppFailure,atBoundary,fail,issuedFailure,makeFailure} from '../errors/app-failure';
-export const MAX_BLOB_ASSET=8*1024*1024;
-export const MAX_BLOB_QUEUE=24*1024*1024;
+export const MAX_BLOB_ASSET=AUDIO_FILE_MAX_BYTES;
+export const MAX_BLOB_QUEUE=AUDIO_BLOB_TOTAL_MAX_BYTES;
 import {copySourceAsset,sameSourceAsset,copySourceIds,sourceProof,type PreparedLocalSource,type PreparedLocalSources,type BlobCredit,type SourceAllocation} from './local-source-protocol';
 export function validateBlobBudget(assets:LocalAsset[]) {
  if(assets.some(asset=>!validAsset(asset)))fail('validate','internal','input-invalid','none');

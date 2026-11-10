@@ -1,6 +1,6 @@
 # Elegir una canción y escucharla
 
-Enter y Buscar abren el catálogo de Pulso y no envían mensajes. Elegir una canción comprueba primero su copia local. Si está íntegra, Pulso la reproduce sin consultar Telegram, aunque no haya sesión. La elección de una canción que falta autoriza la consulta al primer bot compatible configurado, la obtención de su audio, una copia local verificada y la reproducción bajo esa intención todavía vigente.
+Enter y Buscar abren el catálogo de Pulso y no envían mensajes. Elegir una canción comprueba primero su copia local. Si está íntegra, Pulso la reproduce sin consultar Telegram, aunque no haya sesión. La elección de una canción que falta autoriza la consulta a los bots compatibles configurados, en su orden y con continuación sólo tras fallos confirmados, la obtención de su audio, una copia local verificada y la reproducción bajo esa intención todavía vigente. Los límites y las condiciones de parada están en [Obtención secuencial de canciones](ORDERED-BOT-ACQUISITION.md).
 
 Una operación por canción comparte el trabajo de selecciones repetidas mientras está pendiente. No se duplica la consulta ni la descarga. Una respuesta musical reciente, vigente y del mismo ámbito puede reutilizarse. No se reenvía automáticamente una consulta fallida o incierta ni se cambia de bot por silencio.
 
@@ -12,7 +12,7 @@ No se pide una segunda elección de versión: las coincidencias compatibles se o
 
 ## Una copia y referencias durables
 
-La descarga tiene un máximo de 8 MiB, partes secuenciales de 64 KiB y plazo efectivo de 120 segundos. No hay incremento de buffers ni streaming progresivo en este cambio. Se verifican longitud, cabecera y SHA-256; el importador separado verifica también tags presentes, bytes y publicación. El hash identifica esos bytes, no una canción por su nombre.
+La descarga tiene un máximo de 32 MiB, partes secuenciales de 64 KiB y plazo efectivo de 120 segundos. No hay incremento de buffers ni streaming progresivo en este cambio. Se verifican longitud, cabecera y SHA-256; el importador separado verifica también tags presentes, bytes y publicación. El hash identifica esos bytes, no una canción por su nombre.
 
 Después del recibo y refresh se asocia el id público LRCLIB y sus metadatos de versión a la ficha y su huella. La asociación vive en settings, sin credenciales, cuentas, chats, IDs de documentos o callbacks Telegram. Se verifica en cada uso: un manifiesto ausente permite conseguir la copia de nuevo; corrupción, IO desconocido y referencias inconsistentes detienen la operación. La asociación no depende de la sesión de Telegram. Una sugerencia local apunta directamente a su Track. No se fusionan grabaciones por título solo ni se inventa identidad para artistas desconocidos.
 
@@ -73,3 +73,10 @@ El tercer fallo sí se aisló como metadata-artist-mismatch: la etiqueta M4A con
 [Evidencia y límites](evidence-real-selected-song-web.json): 513 unitarias y lint/tipos PASS; una selección final de 40/40 en Chromium154 con main íntegro/SDK sintético y 155 fuentes exactas, cero pageerrors/CSP/externos y cleanup. La entrega compilada pasa Chromium y WebKit desktop con metadatos sintéticos/audio propio; conserva los diez avisos históricos style-src-attr de WebKit. Update normal mantiene audio antiguo y espera cierre de clientes; no se fuerza SW. Los RED y errores iniciales quedan preservados. Una retirada G13 falló sin journal durable en una selección intermedia; aislada y en las finales39/40 pasó, sin atribuir su causa a producto o arnés.
 
 La cuenta real acredita este caso focal en el Chromium compartido, no iPhone físico, Safari móvil, todos los bots/canciones, identidad acústica, offline privado, background ni cierre P0. El pool sigue en RAM por conexión. Música y autorización viven en el navegador del usuario, no en Cloudflare ni un backend de Pulso.
+
+
+## 2026-11-10 · Resultados agrupados y etiquetas de vídeo
+
+La lista agrupa títulos de presentación equivalentes del mismo crédito declarado; no agrupa intérpretes diferentes ni elimina calificadores Live, Remix, Acoustic o Album Version. Se retiran etiquetas terminales exactas Visualizer/Official Video/Official Audio y un prefijo redundante del artista comprobado por nombre completo. Un título literal Visualizer o Live Visualizer permanece intacto. Si hay un resultado remoto limpio se prefiere ese registro original; una copia local sigue teniendo prioridad por ID.
+
+Para una elección LRCLIB se usa el título limpio visible como objetivo de consulta y validación; el registro remoto original no se modifica. Una elección local conserva título e identidad originales. Esta normalización de presentación no es una prueba de identidad acústica. No modifica archivos ni organización guardada.

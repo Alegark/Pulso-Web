@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-10",
+  "release": "a6298e0bb1031db6",
+  "frozenRuntime": 182,
+  "delta": "design-fidelity.css and import after responsive-shell.css; functional sources preserved",
+  "existingIntegratedBrowserGroups": {
+    "passed": 22,
+    "failed": 0,
+    "chromiumAndWebkit": true
+  },
+  "buildAudit": true,
+  "productionSmoke": {
+    "passed": true,
+    "entrySha256": "a6298e0bb1031db611da707545ac21969ab93ce3d5c0a16123bca7dc6c10140a",
+    "engines": [
+      {
+        "name": "chromium",
+        "version": "154.0.8037.57",
+        "passed": true,
+        "externalRequests": 0,
+        "pageErrors": 0
+      },
+      {
+        "name": "webkit",
+        "version": "27.2",
+        "passed": true,
+        "externalRequests": 0,
+        "pageErrors": 0
+      }
+    ]
+  },
+  "update": {
+    "passed": true,
+    "iphoneVerified": false,
+    "browserVersion": "154.0.8037.57",
+    "result": {
+      "oldEntrySHA256": "adfa04ecd00a7695ca926305dabbb3eaa18ef52dab4c8ed715ce338d19f5b0df",
+      "newEntry": "/releases/a6298e0bb1031db6.html",
+      "newVersionBypassesOldShell": true,
+      "stableLauncherSelectsCurrentBuild": true,
+      "waitingBeforeClosingClients": true,
+      "oldStillPlaying": true,
+      "newIsPaused": true,
+      "activatedAfterClientClosure": true,
+      "restoredPaused": true
+    }
+  },
+  "privateDelivery": {
+    "files": 38,
+    "immutablePreviousFilesPreserved": 305,
+    "httpsExact": true,
+    "configurationSeparateNoStore": true
+  },
+  "realTelegramTrialRepeated": false,
+  "physicalIPhone": false,
+  "remainingStructuralDifferences": "design/FIDELITY-REVIEW.md"
+}
