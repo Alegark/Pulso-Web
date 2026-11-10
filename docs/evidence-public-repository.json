@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "url": "https://github.com/Alegark/Pulso-Web",
+  "isPublic": true,
+  "anonymousAccess": true,
+  "defaultBranch": "main",
+  "integrationCommit": "82d14925ec5c30ab699c63e011848439be31b91b",
+  "remoteHeadMatches": true,
+  "lint": true,
+  "unitPassed": 659,
+  "serverPassed": 10,
+  "privateRootsExcluded": true,
+  "knownCredentialsHistoryAuditPassed": true,
+  "websiteDeliveryChanged": false,
+  "iphoneValidated": false
+}
