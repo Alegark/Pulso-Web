@@ -96,7 +96,7 @@ La versión9006dcecc26d4049 corrige la búsqueda directa de iTunes en Safari sin
 
 ## Actualización automática y MB · 2026-11-15
 
-Publicada la entrada `d586ee3e549273ac`. Pulso comprueba nuevas versiones y recarga cuando está visible, sin música ni operaciones pendientes. Conserva la cola y usa una entrada versionada sin forzar la activación del service worker de otras pestañas. Configuración muestra el estado comprobado y «Recargar app»; la acción manual pausa música y espera que terminen las operaciones.
+La entrada `d586ee3e549273ac` publicó la actualización segura. El 2026-11-15 se publicó `d87da0091a3ec082` para mantener la tarjeta abierta «Actualización de la app» al inicio de Configuración, con estado comprobado y «Recargar app», visible antes y después del inicio de sesión. El incremento cambia sólo UI/CSS; el Worker es idéntico. La comprobación HTTPS confirmó 75 rutas públicas con bytes y SHA-256 exactos, el entry actual y los bindings ASSETS/CATALOG/TELEGRAM_API_IDENTITY; previews permanecen desactivadas. La acción manual pausa música y espera que terminen las operaciones.
 
 Los tamaños de descargas, caché, cuotas, archivos locales, progreso y espacio liberado se muestran en MB decimales. No cambian los límites internos ni los datos guardados. Verificación combinada708/708unidades y36/36grupos Chromium/WebKit; comprobación publicada de actualización mientras sonaba música, recarga tras pausa/manual y conservación de Telegram.72/72archivos de origen coinciden en contexto nuevo. [Evidencia](evidence-automatic-update-web.json). iPhone físico pendiente.
 
