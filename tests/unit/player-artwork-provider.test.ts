@@ -14,6 +14,16 @@ test('ambiguity and truncated result sets fail closed',()=>{
  for(const patch of [{collectionId:8},{collectionName:'Other'},{artworkUrl100:'https://is1-ssl.mzstatic.com/other.jpg'},{artworkUrl100:'https://evil.example/a'}])assert.equal(selectPlayerArtwork(data([row,{...row,...patch}]),q),null);
  assert.equal(selectPlayerArtwork(data(Array(50).fill(row)),q),null);
 });
+test('declared collection artist may supply artwork only with a matching known album, duration and unambiguous edition',()=>{
+ const primary={title:row.trackName,artist:'Artist',album:'Album',durationSeconds:100};
+ const full={...row,collectionArtistName:'Artist',trackId:9};
+ assert.ok(selectPlayerArtwork(data([full]),primary));
+ assert.equal(selectPlayerArtwork(data([full]),{...primary,album:null}),null);
+ assert.equal(selectPlayerArtwork(data([full]),{...primary,album:'Different'}),null);
+ assert.equal(selectPlayerArtwork(data([full]),{...primary,durationSeconds:110}),null);
+ assert.equal(selectPlayerArtwork(data([full,{...full,collectionId:8}]),primary),null);
+ assert.equal(selectPlayerArtwork(data([full]),{...primary,editionId:7,trackId:9}),null);
+});
 test('URL allowlist and limits',()=>{
  for(const url of ['http://is1-ssl.mzstatic.com/a','https://is1-ssl.mzstatic.com.evil/a','https://user@is1-ssl.mzstatic.com/a','https://is1-ssl.mzstatic.com:444/a','https://is1-ssl.mzstatic.com/a#frag','https://is1-ssl.mzstatic.com/'+ 'a'.repeat(2048)])assert.equal(artworkUrl(url),null);
 });

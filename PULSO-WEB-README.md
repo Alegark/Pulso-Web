@@ -6,6 +6,8 @@ La prioridad es una buena experiencia en **iPhone desde Safari o Chrome**, inclu
 
 > **Estado · 2026-11-10:** prototipo web funcional con búsqueda de canciones, álbumes y artistas, reproducción, playlists, favoritos y gestión de copias locales. Las pruebas automatizadas locales no sustituyen la aceptación física en iPhone, que sigue pendiente. El SPEC conserva la propuesta original; las tareas ODD y la evidencia documentan los incrementos implementados.
 
+**Web pública:** [Abrir Pulso](https://pulso-web.pruebassoftware.workers.dev). La conexión a Telegram y la música local pertenecen a cada navegador/origen; no se migran desde el enlace anterior.
+
 ## Documentación principal
 
 [**SPEC.md**](SPEC.md) es la especificación detallada: alcance, decisiones pendientes, interfaz, contratos de datos, Telegram, audio, almacenamiento, seguridad, referencias de código, pruebas y tareas.
@@ -113,6 +115,8 @@ npm run build
 La compilación genera `dist/`. Engram es una herramienta local de desarrollo, no una dependencia del producto. El uso de Telegram requiere configurar una identidad API propia por el procedimiento de [configuración privada](docs/TELEGRAM-SETUP.md); el repositorio no incluye credenciales ni sesiones. Para desplegar, usa HTTPS y conserva las políticas de seguridad indicadas en la documentación.
 
 Las funciones e investigaciones actuales están en [interfaz](docs/UI-INTEGRATION.md), [álbumes y artistas](docs/ALBUMS-AND-ARTISTS.md), [copias y Biblioteca](docs/PLAYBACK-COPIES-AND-LIBRARY.md), [bots sugeridos](docs/BOT-SUGGESTIONS.md) y [portadas](docs/ARTWORK-PROVIDERS.md). La investigación de fuentes directas fue [descartada por el propietario](docs/DIRECT-AUDIO-SOURCES.md).
+
+La [preparación para Cloudflare](docs/CLOUDFLARE.md) incluye el frontend y el relay de catálogo, con build aislado mediante `npm run build:cloudflare`. La configuración comienza con URLs remotas deshabilitadas hasta conectar la cuenta y decidir el acceso; preparar el build no equivale a publicar.
 
 Pulso guarda las copias musicales y la sesión personal en el dispositivo. El relay opcional del prototipo sólo maneja metadatos públicos y portadas temporalmente; no almacena música en Cloudflare. `.local/`, `.tools/`, `node_modules/`, `dist/` y archivos de entorno quedan fuera de Git.
 

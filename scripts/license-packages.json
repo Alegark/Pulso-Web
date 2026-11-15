@@ -313,6 +313,25 @@
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
         }
       ]
+    },
+    {
+      "name": "qrcode-generator",
+      "version": "2.0.4",
+      "license": "MIT",
+      "noticeFiles": [
+        {
+          "file": "node_modules/qrcode-generator/dist/qrcode.mjs",
+          "bytes": 51907,
+          "sha256": "ea91d7118a5395289170da848b7c6758b996163bfbccf312591ab65a4911b7c0"
+        }
+      ],
+      "additionalNoticeFiles": [
+        {
+          "file": "vendor/qr-code/LICENSE",
+          "bytes": 1071,
+          "sha256": "3a850fa5f08101db6f40676c2786e10bd2cd5fff7b12ffdf1e0c434d4e49d90c"
+        }
+      ]
     }
   ]
 }

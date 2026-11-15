@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-13",
+  "url": "https://pulso-web.publiex.workers.dev",
+  "release": "/releases/1aed1b16ebcce0e8.html",
+  "indexSHA256": "1aed1b16ebcce0e884e992ef9d8ec48ea4c54eba52c3e785db4c3a210d7a75ae",
+  "change": "Official Telegram QR authorization with an explicit approval check, independent of login-code delivery",
+  "validation": {
+    "unitPass": 674,
+    "lint": "PASS",
+    "sdkAdapterGroups": 7,
+    "workerVMGroups": 7,
+    "nativeQRBrowserGroups": 16,
+    "nativeCodeResendRegressionGroups": 10,
+    "engines": [
+      "chromium",
+      "webkit"
+    ],
+    "independentQRDecoder": "PASS",
+    "buildAndAudit": "PASS",
+    "publicFileHashes": {
+      "passed": 45,
+      "total": 45
+    },
+    "previousPublishedImmutableFilesRetained": 19,
+    "unpublishedIntermediatePaths404": 3,
+    "publicRealQRGeneration": "PASS",
+    "localConnectionStoppedAfterGeneration": true,
+    "ownedBrowserTabClosed": true,
+    "cloudflareMCPWorkerReadback": "PASS"
+  },
+  "protocol": {
+    "fixedMethods": [
+      "auth.exportLoginToken",
+      "auth.importLoginToken"
+    ],
+    "automaticPolling": false,
+    "phoneRequiredForQR": false,
+    "ticketPersisted": false,
+    "ticketInDiagnostics": false,
+    "authorizationBeforeServerConfirmation": false,
+    "explicitCheckAfterPhoneApproval": true,
+    "twoFactorPasswordSupported": true
+  },
+  "limits": {
+    "causeOfMissingCode": "unknown",
+    "realCodeRequestedByAgent": false,
+    "realAccountApprovalOrQRScan": false,
+    "physicalIPhone": false,
+    "catalog429NotRevalidatedOrFixed": true,
+    "P0Complete": false
+  },
+  "license": {
+    "qrGenerator": "qrcode-generator 2.0.4 MIT; zero transitive dependencies",
+    "decoder": "jsqr 1.4.0 BSD; development-only"
+  },
+  "credentialOrSessionValuesIncluded": false
+}

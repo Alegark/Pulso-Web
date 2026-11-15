@@ -3,6 +3,17 @@ import assert from 'node:assert/strict';
 import {musicSearchCatalog,musicCatalogKey,MUSIC_CATALOG_LIMITS} from '../../src/library/music-search-catalog';
 import type {Track} from '../../src/library/library';
 const row=(id:number,title='Hello',artist='Own Artist',album='Album',duration=200)=>({id,trackName:title,artistName:artist,albumName:album,duration});
+test('corroborated scraped media labels do not repeat a song or turn null into an album',()=>{
+ const rows=[row(1,'Flores','Own Artist','Single',160),row(2,'FLORES','Video • Own Artist','null',164),row(3,'Flores','Song, Own Artist','null',160)];
+ const out=musicSearchCatalog('flores own artist',[],rows);assert.deepEqual(out.filter(r=>r.kind==='track').map(r=>r.id),['lrclib:1']);assert.equal(out.some(r=>r.album==='null'),false);
+ assert.equal(rows[1].artistName,'Video • Own Artist');
+});
+test('missing corroboration, valid full credit, a distinct version or incompatible duration stay separate',()=>{
+ const out=musicSearchCatalog('flores',[],[row(1,'Flores','Own Artist','Single',160),row(2,'Flores','Song, Own Artist','Record',160),row(3,'Flores (Live)','Video • Own Artist','null',164),row(4,'Flores','Song, Own Artist','null',200),row(5,'Flores','Video • Another Artist','null',160)]);
+ assert.deepEqual(out.filter(r=>r.kind==='track').map(r=>r.id),['lrclib:1','lrclib:2','lrclib:3','lrclib:5']);
+ const distant=musicSearchCatalog('flores',[],[row(1,'Flores','Own Artist','Single',160),row(4,'Flores','Song, Own Artist','null',200)]);
+ assert.equal(distant.filter(r=>r.kind==='track').length,2);
+});
 test('same title/performer groups releases and durations without losing literal version qualifiers',()=>{
  const result=musicSearchCatalog('hello',[],[row(1),row(2,'HELLO','own artist','Compilation',199),row(3,'Hello','Own Artist','Deluxe',204),row(4,'Hello (Live)'),row(5,'Hello (Remix)'),row(6,'Hello','Another performer')]);
  assert.equal(result.filter(r=>r.kind==='track').length,4);
@@ -179,7 +190,46 @@ test('song batch parser rejects malformed, oversized and conflicting identities'
  const {catalogSongsFromBatch}=await import('../../src/library/album-catalog');
  const row={wrapperType:'track',kind:'song',collectionId:4,trackId:9,discNumber:1,trackNumber:1,trackName:'Song',artistName:'Guest',collectionArtistName:'Main',collectionName:'Album',trackTimeMillis:120000};
  assert.equal(catalogSongsFromBatch({resultCount:1,results:[row]})[0].artist,'Guest');
+ assert.equal(catalogSongsFromBatch({resultCount:1,results:[row]})[0].primaryArtist,'Main');
  for(const bad of [{trackId:0},{discNumber:21},{trackNumber:201},{trackTimeMillis:-1},{trackTimeMillis:null},{artistName:''}])assert.deepEqual(catalogSongsFromBatch({resultCount:1,results:[{...row,...bad}]}),[]);
  assert.deepEqual(catalogSongsFromBatch({resultCount:2,results:[row,{...row,artistName:'Different'}]}),[]);
  assert.deepEqual(catalogSongsFromBatch({resultCount:201,results:Array(201).fill(row)}),[]);
+});
+
+test('corroborated album and declared primary credit group display while preserving local identity and full catalogue credit',()=>{
+ const hints=[{releaseId:4,trackId:9,disc:1,position:1,title:'¿Qué Tan Cerca?',artist:'Main & Guest',primaryArtist:'Main',album:'Record',durationMs:200000,artworkUrl:'https://is1-ssl.mzstatic.com/own.jpg'}];
+ const local={id:'owned',title:'?Que Tan Cerca?',artist:'MAIN',album:'Record',duration:201} as Track;
+ const remote=[row(1,'¿Qué Tan Cerca?','Main','Record',200)];
+ const out=musicSearchCatalog('cerca',[local],remote,[],[],[],hints).filter(r=>r.kind==='track');
+ assert.equal(out.length,1);assert.equal(out[0].id,'local:owned');assert.equal(out[0].artist,'MAIN');assert.equal(out[0].title,local.title);assert.equal(out[0].artworkUrl,hints[0].artworkUrl);
+ const onlyRemote=musicSearchCatalog('cerca',[],remote,[],[],[],hints).filter(r=>r.kind==='track');assert.equal(onlyRemote.length,1);assert.equal(onlyRemote[0].artist,'Main & Guest');assert.equal(onlyRemote[0].source,'itunes');
+ for(const patch of [{artist:'Other'},{album:'Different'}])assert.equal(musicSearchCatalog('cerca',[{...local,...patch}],[],[],[],[],hints).filter(r=>r.kind==='track').length,2);
+ const durationVariant=musicSearchCatalog('cerca',[{...local,duration:250}],[],[],[],[],hints).filter(r=>r.kind==='track');assert.equal(durationVariant.length,1);assert.equal(durationVariant[0].duration,250);
+ const ambiguous=[...hints,{...hints[0],trackId:10,artist:'Main & Other Guest'}];assert.equal(musicSearchCatalog('cerca',[local],[],[],[],[],ambiguous).filter(r=>r.kind==='track').length,3);
+});
+
+test('a unique declared album cover also serves local and lyric-only rows without extra per-track requests',()=>{
+ const cover='https://is1-ssl.mzstatic.com/own.jpg',hints=[{id:4,title:'Record',artist:'Own Artist',artworkUrl:cover}];
+ const local={id:'owned',title:'Song',artist:'Own Artist',album:'Record',duration:200} as Track;
+ assert.equal(musicSearchCatalog('song',[local],[],[],[],hints).find(r=>r.kind==='track')?.artworkUrl,cover);
+ assert.equal(musicSearchCatalog('song',[],[row(1,'Song','Own Artist','Record')],[],[],hints).find(r=>r.kind==='track')?.artworkUrl,cover);
+ assert.equal(musicSearchCatalog('song',[local],[],[],[],[...hints,{...hints[0],id:5}]).find(r=>r.kind==='track')?.artworkUrl,undefined);
+ assert.equal(musicSearchCatalog('song',[{...local,artist:'Other'}],[],[],[],hints).find(r=>r.kind==='track')?.artworkUrl,undefined);
+});
+
+test('downloaded collaboration credits use canonical display grouping without extra inferred albums',()=>{
+ const cover='https://is1-ssl.mzstatic.com/own.jpg';
+ const songs=[{releaseId:4,trackId:9,disc:1,position:1,title:'Song',artist:'Main & Guest',album:'Record',durationMs:200000,artworkUrl:cover}];
+ const albums=[{id:4,title:'Record',artist:'Main',artworkUrl:cover}];
+ const local={id:'owned',title:'Song',artist:'Main, Guest',album:'Record',duration:200} as Track;
+ const original={...local};
+ const out=musicSearchCatalog('record main',[local],[row(1,'Song','Main, Guest','Record')],[],[],albums,songs);
+ assert.deepEqual(out.filter(r=>r.kind==='track').map(r=>({id:r.id,artist:r.artist,cover:r.artworkUrl})),[{id:'local:owned',artist:'Main, Guest',cover}]);
+ assert.deepEqual(out.filter(r=>r.kind==='album').map(r=>r.id),['itunes:album:4']);
+ assert.deepEqual(local,original);
+ for(const artist of ['Guest, Main','Main, Another Guest','Main, Guest, Extra']){
+  assert.equal(musicSearchCatalog('record',[{...local,artist}],[],[],[],albums,songs).filter(r=>r.kind==='track').length,2);
+ }
+ const foreign=[{...albums[0],id:5,artist:'Unrelated'}];
+ assert.ok(musicSearchCatalog('record',[local],[],[],[],foreign,songs).some(r=>r.kind==='album'&&r.artist==='Main, Guest'));
 });

@@ -4,6 +4,29 @@ import {createCatalogTransport} from '../../src/library/catalog-fetch';
 const query='https://itunes.apple.com/search?term=Night&entity=album&country=US';
 const enabled=()=>Response.json({version:1,itunes:true,artwork:true});
 
+test('browser metadata and relayed artwork can use independent capability flags',async()=>{
+ const calls:{url:string;options:RequestInit|undefined}[]=[];
+ const fake:typeof fetch=async(input,options)=>{const url=String(input);calls.push({url,options});return url.endsWith('/catalog-config.json')?Response.json({version:1,itunes:false,artwork:true}):Response.json({});};
+ const client=createCatalogTransport({origin:'https://pulso.example',fetcher:fake,metadataIntervalMs:0});
+ await client.fetch(query,{credentials:'omit'});await client.fetch('https://is1-ssl.mzstatic.com/own.jpg');
+ assert.equal(calls[1].url,query);assert.equal(calls[1].options?.credentials,'omit');
+ assert.match(calls[2].url,/^https:\/\/pulso.example\/catalog\/artwork\?/);assert.equal(client.mode(),'direct');
+});
+test('cancelling a queued metadata request preserves the running predecessor and never dispatches it',async()=>{
+ let finish!:(r:Response)=>void;const calls:string[]=[];
+ const fake:typeof fetch=async input=>{const url=String(input);if(url.endsWith('/catalog-config.json'))return Response.json({version:1,itunes:false,artwork:true});calls.push(url);return calls.length===1?new Promise<Response>(resolve=>{finish=resolve;}):Response.json({});};
+ const client=createCatalogTransport({origin:'https://pulso.example',fetcher:fake,metadataIntervalMs:0});
+ const first=client.fetch(query);await new Promise(resolve=>setTimeout(resolve,5));
+ const abort=new AbortController(),cancelled=client.fetch(query+'&limit=1',{signal:abort.signal});abort.abort();await assert.rejects(cancelled,{name:'AbortError'});
+ const third=client.fetch(query+'&limit=2');await new Promise(resolve=>setTimeout(resolve,5));assert.equal(calls.length,1);
+ finish(Response.json({}));await Promise.all([first,third]);assert.equal(calls.length,2);assert.match(calls[1],/limit=2$/);
+});
+test('a direct metadata limit is shared and returned without a retry or dispatch',async()=>{
+ let calls=0;const fake:typeof fetch=async input=>String(input).endsWith('/catalog-config.json')?Response.json({version:1,itunes:false,artwork:false}):(calls++,new Response(null,{status:429,headers:{'Retry-After':'8'}}));
+ const client=createCatalogTransport({origin:'https://pulso.example',fetcher:fake,metadataIntervalMs:0});
+ assert.equal((await client.fetch(query)).status,429);const later=await client.fetch(query+'&limit=2');assert.equal(later.status,429);assert.ok(Number(later.headers.get('retry-after'))>=7);assert.equal(calls,1);
+});
+
 test('capability probe is lazy and shared; public metadata and covers use own origin',async()=>{
  const calls:{url:string;options:RequestInit|undefined}[]=[];
  const fake:typeof fetch=async(input,options)=>{const url=String(input);calls.push({url,options});return url.endsWith('/catalog-config.json')?enabled():Response.json({results:[]});};

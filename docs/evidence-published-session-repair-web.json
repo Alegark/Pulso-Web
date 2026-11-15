@@ -1,0 +1,213 @@
+{
+  "date": "2026-11-15",
+  "url": "https://pulso-web.pruebassoftware.workers.dev",
+  "release": "/releases/9c78c674d7ab20a8.html",
+  "environment": {
+    "browser": "T3 shared Chromium",
+    "profile": "default persistent",
+    "publishedSite": true,
+    "syntheticBrowserFixtures": false,
+    "phonePhysical": false
+  },
+  "session": {
+    "ownerLoginRetained": true,
+    "restoredAfterReload": true,
+    "restoredAfterNormalTabClose": true,
+    "authenticatedAtEnd": true,
+    "tabLeftOpen": true,
+    "credentialsReadOrExported": false
+  },
+  "bots": {
+    "principal": "KDMusic_Bot",
+    "secondary": "DeezerMusicBot",
+    "restoredAfterReload": true
+  },
+  "findingsAndChanges": [
+    "Cloudflare metadata relay returned429; browser-direct public iTunes returned200. Announce direct metadata with one shared3.1s lane and cooldown, retain bounded image relay; no automatic fallback retry after429.",
+    "Group corroborated album/title/declared-primary metadata for presentation, preserve every chosen audio identity and complete credit. Suppress corroborated scraped media-label duplicates.",
+    "Use a unique declared album cover for related rows; primary collection credit may resolve non-exact artwork only with known album, matching duration and unambiguous edition.",
+    "Normalize cached followed-redirect shell responses before navigation; preserve headers/body. updateViaCache:none, normal client-close activation, no cache or session deletion.",
+    "Advance to the next captured provider for conflict+not-dispatched only after the admitted lane has settled and exact guards still hold; keep acknowledged/uncertain conflicts terminal. Covered by unit tests; later real retry succeeded on first provider, so no live fallback claim.",
+    "Corroborate complete artist word sequences for comma/ampersand presentation variants and use declared collection identity to suppress invented collaboration albums after downloads. Keep full source metadata and audio admission untouched."
+  ],
+  "liveValidation": {
+    "downloads": [
+      {
+        "song": "Dientes De Fierro",
+        "searchCommands": 2,
+        "downloadCommands": 1,
+        "downloadedEvents": 1,
+        "autoplay": true,
+        "release": "/releases/788efa107893a433.html"
+      },
+      {
+        "song": "SAMSA",
+        "fromAlbumPage": true,
+        "searchCommands": 1,
+        "downloadCommands": 1,
+        "downloadedEvents": 1,
+        "autoplay": true,
+        "release": "/releases/cd05eedf3c41b4cd.html"
+      }
+    ],
+    "reuse": {
+      "song": "Dientes De Fierro",
+      "doubleSelection": true,
+      "afterReopen": true,
+      "searchCommands": 0,
+      "downloadCommands": 0,
+      "playbackAdvanced": true,
+      "release": "/releases/36d6bfe33cb42787.html"
+    },
+    "album": {
+      "title": "mosca",
+      "artist": "Nsqk",
+      "orderedTracks": 17,
+      "coverWidth": 600,
+      "openingBotCommands": 0,
+      "confirmedCopiesInLibrary": 14
+    },
+    "search": {
+      "mosca": {
+        "tracks": 18,
+        "duplicates": 0,
+        "allDisplayedCoversLoaded": true,
+        "distinctAcousticVersionKept": true,
+        "albums": 1,
+        "afterRealAlbumAcquisition": true
+      },
+      "flores": {
+        "trackRows": 1,
+        "canonicalSingleCoverLoaded": true,
+        "inferredUnconfirmedAlbumHasNoCover": true
+      }
+    },
+    "playerArt": {
+      "SAMSA": [
+        600,
+        600
+      ],
+      "DientesDeFierro": [
+        1000,
+        1000
+      ]
+    },
+    "favorite": {
+      "song": "SAMSA",
+      "checkmark": true,
+      "navigationAway": false,
+      "persisted": true
+    },
+    "playlist": {
+      "name": "Prueba web Pulso",
+      "song": "SAMSA",
+      "entries": 1,
+      "persistedAfterReload": true,
+      "extraBotCommands": 0
+    },
+    "final": {
+      "connected": true,
+      "bothBotsRestored": true,
+      "paused": true,
+      "temporaryObserversRemoved": true
+    },
+    "publicFiles": {
+      "pass": 60,
+      "total": 60
+    },
+    "cloudflareWorkerReadback": true,
+    "albumBatch": {
+      "release": "/releases/36d6bfe33cb42787.html",
+      "tracks": 17,
+      "confirmedInLibrary": 13,
+      "initialCopyReused": 1,
+      "newDownloads": 12,
+      "unattempted": 0,
+      "uncertain": 4,
+      "searchCommands": 16,
+      "downloadCommands": 16,
+      "downloadedEvents": 12,
+      "progressEvents": 639,
+      "errorEnum": "conflict",
+      "uncertainRowsResent": false,
+      "continuations": "explicit UI gestures, confirmed copies reused, uncertain rows skipped",
+      "notConfirmed": [
+        "Lo Tuvimos Pero Ya No Está",
+        "Estar Así Siempre",
+        "No Basta Con Querernos Más",
+        "Ghost In The Shell"
+      ],
+      "rootCauseOfConflictsEstablished": false,
+      "persistedMembershipTitlesAfterReload": 13,
+      "laterKnownNonDispatchedRetry": {
+        "song": "Lo Tuvimos Pero Ya No Está",
+        "release": "/releases/74401b5c1722e911.html",
+        "searchCommands": 1,
+        "downloadCommands": 1,
+        "downloadedEvents": 1,
+        "autoplay": true,
+        "addedToLibrary": true,
+        "fallbackActuallyUsed": false
+      },
+      "confirmedAfterLaterSelection": 14,
+      "remainingUnconfirmed": [
+        "Estar Así Siempre",
+        "No Basta Con Querernos Más",
+        "Ghost In The Shell"
+      ]
+    },
+    "postBatchPlayback": {
+      "song": "MARGOT",
+      "autoplay": true,
+      "clockAdvanced": true,
+      "mediaError": null,
+      "extraBotCommands": 0,
+      "playerCover": [
+        600,
+        600
+      ],
+      "pausedAfterTest": true
+    },
+    "reuseAfterAlbumDownloads": {
+      "song": "tuffluv",
+      "searchCommands": 0,
+      "downloadCommands": 0,
+      "autoplay": true,
+      "clockAdvanced": true,
+      "playerCover": [
+        600,
+        600
+      ],
+      "release": "/releases/9c78c674d7ab20a8.html"
+    }
+  },
+  "localSupportingChecks": {
+    "unitPass": 689,
+    "lint": "PASS",
+    "buildAndAudit": "PASS",
+    "sourceInputsEqualBuild": 272,
+    "rootDistUnchanged": true,
+    "runtimeSources": 198
+  },
+  "limits": {
+    "fullAlbumAudioBatchNotRun": false,
+    "physicalIPhone": false,
+    "audibleOrAcousticIdentityNotIndependentlyVerified": true,
+    "arbitraryBotsOrAllSearches": false,
+    "P0Complete": false,
+    "fullAlbumComplete": false,
+    "globalCrossCatalogReuseVerified": false,
+    "localLibraryEditionGroupingUnified": false
+  },
+  "negativeEvidencePreserved": [
+    "429 relay responses",
+    "scraped and primary/full-credit duplicates",
+    "stale shell hashes49/54",
+    "cached redirected navigation ERR_FAILED",
+    "selectors corrected after timeouts",
+    "real album batch: four conflict errors and partial result13/17",
+    "post-download local comma vs catalogue ampersand duplicates and inferred collaboration albums",
+    "local MCP helper OAuth401, native MCP refreshed authentication before successful deployment"
+  ],
+  "privateDataOrSessionValuesIncluded": false
+}

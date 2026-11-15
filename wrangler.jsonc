@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pulso-web",
+  "main": "deployment/cloudflare/worker.mjs",
+  "compatibility_date": "2026-11-13",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": ".local/cloudflare-setup/site",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": [
+      "/",
+      "/*.html",
+      "/releases/*",
+      "/assets/session.worker-*",
+      "/sw.js",
+      "/catalog/*",
+      "/catalog-config.json",
+      "/telegram-config.json"
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CATALOG",
+        "class_name": "CatalogCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "CatalogCoordinator"
+      ]
+    }
+  ],
+  "observability": {
+    "enabled": false
+  }
+}

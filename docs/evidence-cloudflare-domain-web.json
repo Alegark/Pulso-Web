@@ -1,0 +1,76 @@
+{
+  "date": "2026-11-14",
+  "url": "https://pulso-web.pruebassoftware.workers.dev",
+  "previousUrl": "https://pulso-web.publiex.workers.dev",
+  "release": "/releases/788efa107893a433.html",
+  "ownerApprovedAccountWideRename": true,
+  "via": "official Cloudflare MCP",
+  "rename": {
+    "status": 200,
+    "subdomain": "pruebassoftware",
+    "withoutDeletion": true,
+    "workersCodeAndModifiedDatesUnchanged": 4,
+    "workerFlagsUnchanged": true
+  },
+  "validation": {
+    "publicBrowserOrigin": "https://pulso-web.pruebassoftware.workers.dev",
+    "secureContext": true,
+    "publicFiles": {
+      "pass": 48,
+      "total": 48,
+      "failures": []
+    },
+    "telegramConfig": {
+      "status": 200,
+      "noStore": true,
+      "valid": true
+    },
+    "serviceWorker": {
+      "status": 200,
+      "noCache": true,
+      "scope": "/"
+    },
+    "root": {
+      "origin": "https://pulso-web.pruebassoftware.workers.dev",
+      "path": "/",
+      "title": "Pulso · Tu música",
+      "appReady": true,
+      "secure": true
+    },
+    "search": {
+      "searchVisible": true,
+      "currentNav": "Buscar",
+      "miniHeight": 88
+    },
+    "library": {
+      "libraryVisible": true,
+      "currentNav": "Biblioteca"
+    },
+    "account": {
+      "accountSection": true,
+      "qrEntryAvailable": true,
+      "phoneEntryAvailable": true,
+      "noActiveQR": true,
+      "noAudioPlaying": true
+    },
+    "miniHeight": 88,
+    "ownedIncognitoTabClosed": true
+  },
+  "transientFailures": {
+    "initialCreateAPI409": {
+      "code": 10036,
+      "resolvedBy": "allow-rename:1 header used by official legacy Wrangler"
+    },
+    "initialTLS": "ERR_SSL_VERSION_OR_CIPHER_MISMATCH; resolved before final HTTPS validation"
+  },
+  "limits": {
+    "telegramAccountAuthorization": false,
+    "musicDownloadOrPlayback": false,
+    "physicalIPhone": false,
+    "fullP0": false,
+    "previousOriginDataNotMigrated": true,
+    "catalog429NotRetested": true
+  },
+  "noCredentialsOrTicketsIncluded": true,
+  "publicTestingIsDefault": true
+}

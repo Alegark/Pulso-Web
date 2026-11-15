@@ -1,0 +1,73 @@
+{
+  "date": "2026-11-13",
+  "release": "/releases/788efa107893a433.html",
+  "url": "https://pulso-web.publiex.workers.dev",
+  "change": "Compact bottom transport: aligned playback and seek, discrete volume, reserved page space",
+  "runtimeDelta": [
+    "src/ui/MiniPlayer.tsx",
+    "src/ui/mini-player.css",
+    "src/main.tsx (stylesheet import only relative to this increment)"
+  ],
+  "validation": {
+    "lint": "PASS",
+    "isolatedBuildAndAudit": "PASS",
+    "runtimeSources": 197,
+    "browserGroups": {
+      "chromium": {
+        "pass": 20,
+        "total": 20
+      },
+      "webkit": {
+        "pass": 20,
+        "total": 20
+      }
+    },
+    "pageErrors": 0,
+    "unexpectedExternalRequests": 0,
+    "cleanup": true,
+    "testedViewports": [
+      320,
+      390,
+      844,
+      1024,
+      1366,
+      1864
+    ],
+    "text200Percent": true,
+    "desktopHeightPx": 88,
+    "mobileHeightPx": 68,
+    "controls": [
+      "play",
+      "pause",
+      "seek",
+      "volume keyboard",
+      "expand",
+      "playlist actions"
+    ],
+    "singleAudioContinuity": true,
+    "syntheticAudioAndCatalog": true,
+    "HTTPSFiles": {
+      "pass": 48,
+      "total": 48
+    },
+    "previousImmutableFilesRetained": 23,
+    "cloudflareMCPWorkerReadback": "PASS"
+  },
+  "observations": {
+    "interruptedFirstRun": "exit143, no final suite result claimed",
+    "webkitHarnessVolumeAssertion": "native float0.6000000238418579; changed exact equality to1e-6 tolerance, final20/20",
+    "webkitCSPEvents": {
+      "styleSrcAttr": 92,
+      "styleSrcElem": 20
+    },
+    "zeroCSPNotClaimed": true
+  },
+  "scope": {
+    "noTelegramOrMusicMutations": true,
+    "noNewDependencies": true,
+    "physicalIPhone": false,
+    "P0Complete": false,
+    "rootDistUnchanged": true
+  },
+  "credentialsIncluded": false
+}
