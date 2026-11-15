@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-13",
+  "url": "https://pulso-web.publiex.workers.dev",
+  "hosting": "DEPLOYED_AND_HTTPS_VERIFIED",
+  "publicAccessAuthorized": true,
+  "plan": {
+    "name": "Workers Free",
+    "evidence": "owner-confirmed",
+    "billingAPIReadable": false,
+    "paidPlanEnabledByThisTask": false
+  },
+  "management": "official Cloudflare MCP with OAuth",
+  "assetTransfer": "official Direct Upload using temporary session JWT issued through MCP",
+  "worker": {
+    "sha256": "5d357fa1f73f443991c39416061d6a28347dc7e5ab3cfbc43c2ddc3539c2d077",
+    "remoteContentMatchesBundle": true,
+    "previewsEnabled": false
+  },
+  "release": {
+    "entry": "/releases/df3bba813e88c8e3.html",
+    "indexSHA256": "df3bba813e88c8e3d25d506f55831b3614ccecf4b4708342a8917eea5937c4fb",
+    "publicFilesVerified": 38,
+    "sourceBuildInputFilesVerified": 200,
+    "frontendRuntimeSources": 193
+  },
+  "checks": {
+    "https": {
+      "pass": 9,
+      "total": 9
+    },
+    "publicBrowserSmoke": {
+      "pass": 2,
+      "total": 2,
+      "engines": [
+        "chromium",
+        "webkit"
+      ],
+      "webkitStyleCSPWarnings": 6
+    },
+    "publicMetadataLookup": {
+      "name": "Real public MOSCA metadata and cover through deployed Durable Object",
+      "status": "PASS",
+      "metadataHTTP": 200,
+      "tracks": 17,
+      "coverHTTP": 200,
+      "coverBytes": 53701,
+      "noAudio": true
+    },
+    "publicSearchAlbumJourney": {
+      "status": "BLOCKED_RATE_LIMIT",
+      "http": 429,
+      "observedRetryAfterSeconds": [
+        "46",
+        "44"
+      ],
+      "noEndToEndAlbumPASS": true
+    },
+    "relayUnitTests": {
+      "pass": 8,
+      "total": 8
+    },
+    "lint": "PASS"
+  },
+  "resourceScope": {
+    "preExistingWorkers": 3,
+    "after": 4,
+    "onlyNewWorker": "pulso-web",
+    "preExistingUnchanged": true
+  },
+  "preservation": {
+    "previousRootDistUnchanged": true,
+    "previousTelegramSessionAndMusicUntouched": true,
+    "newOriginDoesNotMigrateBrowserStorage": true
+  },
+  "limits": [
+    "The full public album search journey remains blocked by observed upstream 429 responses.",
+    "An initial remote lookup returned 403; subsequent exact lookup and artwork returned 200 without establishing a cause for the first rejection.",
+    "No real Telegram login or musical download on this new origin.",
+    "No physical iPhone acceptance or global P0-W acceptance."
+  ],
+  "privateValuesIncluded": false,
+  "scope": "Initial public deployment, retained as historical evidence",
+  "supersededBy": "evidence-telegram-code-resend-web.json"
+}

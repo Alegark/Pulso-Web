@@ -534,3 +534,8 @@ La referencia IMG_6734 se aplica al componente real de búsqueda: lista mixta en
 ## Detalle de playlist en producto · 2026-11-10
 
 IMG_6736 se aplica al detalle real: carátula local o mosaico, corazón en Favoritos, nombre/cantidad/duración, Play/Pausa circular y filas compactas con menú. Formularios y metadatos secundarios pasan a Opciones, sin alterar contratos de organización. Componentes, decisiones y evidencia final en [PLAYLISTS.md](PLAYLISTS.md). 34/34grupos web locales, con modo WebKit persistente de prueba separado para PNG en IDB; no aceptación física ni publicación desde UI.
+
+
+## Revisión global de la app funcional · 2026-11-13
+
+Inicio con portadas locales, Biblioteca mixta, lateral de escritorio, álbumes/artistas y Configuración agrupada. Informe de decisiones, recorridos, evidencia y límites en [VISUAL-AUDIT.md](VISUAL-AUDIT.md). Se conserva la dirección Bruma y los contratos del producto.

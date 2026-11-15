@@ -9,6 +9,7 @@ import {validManifest} from '../storage/manifest';
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import {resolveRange} from './ranges';
+import {cachedShellResponse} from './shell-response';
 import {copySourceAsset,copySourceRequest,sameSourceAsset,sourceUUID,sourceProof,type SourceCause,type PinnedRequest,type ReleaseRequest} from '../playback/local-source-protocol';
 import type {LocalAsset} from '../library/library';
 declare const self: ServiceWorkerGlobalScope;
@@ -231,7 +232,7 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/_pulso/media/')) { event.respondWith(media(event).catch(() => new Response(null, {status: 503}))); return; }
   if (event.request.method === 'GET' && FILES.includes(url.pathname)) {
-    event.respondWith(caches.open(SHELL).then(async cache => await cache.match(url.pathname, {ignoreVary: true}) ?? fetch(event.request)));
+    event.respondWith(caches.open(SHELL).then(async cache => {const cached=await cache.match(url.pathname,{ignoreVary:true});return cached?cachedShellResponse(cached):fetch(event.request);}));
   }
 });
 declare const SHELL_FILES: string[];

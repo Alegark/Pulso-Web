@@ -30,6 +30,7 @@
 .pulso-app .library-detail .tracks { margin:0;padding:0; }
 .pulso-app .library-detail .tracks>li { position:relative;display:grid;grid-template-columns:48px minmax(0,1fr) 44px;column-gap:.75rem;row-gap:0;align-items:center;padding:.55rem 0;border:0; }
 .library-detail .tracks .collection-track-art { inline-size:48px;block-size:48px;border-radius:.3rem;overflow:hidden; }
+.collection-track-art img { display:block;inline-size:100%;block-size:100%;object-fit:cover; }
 .pulso-app .library-detail .collection-track-main { display:block;text-align:start;min-inline-size:0;inline-size:100%;padding:0;border:0;background:transparent; }
 .collection-track-main strong,.collection-track-main>span { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .collection-track-main strong { font-size:1rem;font-weight:500;line-height:1.4; }.collection-track-main>span { color:var(--pulso-muted);font-size:.85rem;margin-block-start:.15rem; }

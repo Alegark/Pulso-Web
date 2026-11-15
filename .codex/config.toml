@@ -4,3 +4,9 @@ command = "/usr/bin/python3"
 args = ["/data/home/Proyectos/Pulso-Web/scripts/engram_local.py"]
 startup_timeout_sec = 20
 tool_timeout_sec = 30
+
+# Cloudflare oficial; OAuth se guarda fuera de los archivos versionados.
+[mcp_servers.cloudflare]
+url = "https://mcp.cloudflare.com/mcp"
+startup_timeout_sec = 30
+tool_timeout_sec = 120

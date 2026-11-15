@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-13",
+  "url": "https://pulso-web.publiex.workers.dev",
+  "release": "/releases/a8f2d85a8844bc03.html",
+  "indexSHA256": "a8f2d85a8844bc032bc59469242c80b71c9ea0d1af90d4f6b499d4667289abd9",
+  "change": "Manual login-code resend only after Telegram advertises a supported next method and its deadline",
+  "automaticCodeResends": false,
+  "supportedNextMethods": [
+    "sms",
+    "call"
+  ],
+  "phoneAndChallengeStayInWorker": true,
+  "newSavedCredentials": false,
+  "validation": {
+    "unitPass": 663,
+    "lint": "PASS",
+    "sdkAdapterGroups": 6,
+    "workerGroups": 7,
+    "nativePanelBrowserGroups": 10,
+    "engines": [
+      "chromium",
+      "webkit"
+    ],
+    "publicSmoke": 2,
+    "publicHTTPSGroups": 4,
+    "immutableAssets": {
+      "name": "Current and retained immutable assets match public bytes/SHA without auth",
+      "status": "PASS",
+      "publicFiles": 41,
+      "previousImmutableFilesRetained": 16
+    }
+  },
+  "limits": {
+    "realLoginCodeRequestedByAgent": false,
+    "realLoginCodeReceived": false,
+    "physicalIPhone": false,
+    "telegramMayOfferNoAlternative": true,
+    "catalog429NotRevalidatedOrFixed": true
+  },
+  "credentialsOrSessionValuesIncluded": false
+}

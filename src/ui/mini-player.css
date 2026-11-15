@@ -1,0 +1,73 @@
+/* One compact transport surface. Range controls retain native keyboard behaviour. */
+.pulso-app { padding-block-end: calc(var(--nav-height, 0px) + var(--mini-height, 0px) + 2rem); }
+.pulso-app .mini-player {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: .25rem;
+  min-block-size: 68px;
+  padding: .5rem .75rem;
+  overflow: visible;
+}
+.pulso-app .mini-player__details {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  max-inline-size: none;
+  min-inline-size: 0;
+  padding: .25rem;
+}
+.mini-player__copy { display: block; min-inline-size: 0; }
+.mini-player__cover { display: block; flex: 0 0 44px; inline-size: 44px; block-size: 44px; overflow: hidden; border-radius: .4rem; }
+.mini-player__cover img { display: block; inline-size: 100%; block-size: 100%; object-fit: cover; }
+.pulso-app .mini-player__title { font-size: .875rem; font-weight: 650; line-height: 1.4; }
+.pulso-app .mini-player__artist { margin-block-start: .15rem; font-size: .75rem; line-height: 1.4; }
+.pulso-app .mini-player__actions { align-items: center; gap: .25rem; margin: 0; }
+.pulso-app .mini-player__utilities { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; min-inline-size: 0; }
+.pulso-app .mini-player__toggle { inline-size: 44px; block-size: 44px; min-block-size: 44px; padding: 0; }
+.pulso-app .mini-player__expand { background: transparent; color: var(--pulso-muted); }
+.pulso-app .mini-player .desktop-transport,
+.pulso-app .mini-player .desktop-seek,
+.pulso-app .mini-player .desktop-volume { display: none; }
+.pulso-app .mini-player__range { display: grid; align-items: center; min-inline-size: 0; flex: 1 1 auto; }
+.pulso-app .mini-player__range > * { grid-area: 1 / 1; margin: 0; inline-size: 100%; min-inline-size: 0; }
+.pulso-app .mini-player__range progress { appearance: none; display: block; block-size: 3px; border: 0; border-radius: 2px; overflow: hidden; background: var(--pulso-border); color: var(--pulso-accent); }
+.mini-player__range progress::-webkit-progress-bar { background: var(--pulso-border); }
+.mini-player__range progress::-webkit-progress-value { background: var(--pulso-accent); }
+.mini-player__range progress::-moz-progress-bar { background: var(--pulso-accent); }
+.pulso-app .mini-player__range input[type="range"] { appearance: none; display: block; block-size: 28px; min-block-size: 28px; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: pointer; }
+.mini-player__range input::-webkit-slider-runnable-track { block-size: 3px; background: transparent; border: 0; }
+.mini-player__range input::-webkit-slider-thumb { appearance: none; inline-size: 10px; block-size: 10px; margin-block-start: -3.5px; border: 0; border-radius: 50%; background: var(--pulso-foreground); }
+.mini-player__range input::-moz-range-track { block-size: 3px; background: transparent; border: 0; }
+.mini-player__range input::-moz-range-thumb { inline-size: 10px; block-size: 10px; border: 0; border-radius: 50%; background: var(--pulso-foreground); }
+.pulso-app .mini-player__range input:disabled { cursor: default; opacity: .4; }
+.pulso-app .mini-player__range input:focus-visible { outline: 2px solid var(--pulso-accent); outline-offset: 3px; border-radius: .25rem; }
+.mini-player__time { font-size: .6875rem; line-height: 1; color: var(--pulso-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (min-width: 1024px) {
+  .pulso-app .mini-player {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-rows: 44px 24px;
+    column-gap: clamp(1rem, 3vw, 3rem);
+    row-gap: 0;
+    min-block-size: 88px;
+    padding: .5rem clamp(1rem, 2vw, 2rem);
+    border: 0;
+    border-block-start: 1px solid var(--pulso-border);
+    box-shadow: 0 -.25rem 1rem #0711200a;
+  }
+  .pulso-app .mini-player__details { grid-column: 1; grid-row: 1 / 3; }
+  .pulso-app .mini-player__actions { grid-column: 2; grid-row: 1; justify-content: center; }
+  .pulso-app .mini-player .desktop-transport { display: grid; place-items: center; inline-size: 44px; block-size: 44px; padding: 0; background: transparent; color: var(--pulso-muted); border: 0; }
+  .pulso-app .mini-player__toggle { inline-size: 36px; min-inline-size: 36px; block-size: 36px; min-block-size: 36px; margin-inline: .375rem; }
+  .pulso-app .mini-player__toggle svg { inline-size: 18px; block-size: 18px; }
+  .pulso-app .mini-player .desktop-seek { display: grid; grid-template-columns: minmax(2rem, auto) minmax(0, 1fr) minmax(2rem, auto); grid-column: 2; grid-row: 2; align-items: center; gap: .625rem; margin: 0; }
+  .desktop-seek .mini-player__time:first-child { text-align: end; }
+  .pulso-app .mini-player__utilities { grid-column: 3; grid-row: 1 / 3; }
+  .pulso-app .mini-player .desktop-volume { display: flex; align-items: center; inline-size: min(100%, 9rem); min-inline-size: 0; gap: .625rem; margin: 0; }
+  .pulso-app .desktop-volume > svg { inline-size: 18px; block-size: 18px; flex: 0 0 18px; color: var(--pulso-muted); }
+}
+@media (pointer: coarse) and (min-width: 1024px) {
+  .pulso-app .mini-player { grid-template-rows: 44px 44px; }
+  .pulso-app .mini-player__range input[type="range"],
+  .pulso-app .mini-player__toggle { min-block-size: 44px; }
+}

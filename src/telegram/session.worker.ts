@@ -11,8 +11,11 @@ import type {BotProvidersBridgeReply} from './bot-providers-bridge-protocol';
 import {copyBotSearchEnvelope,parseBotSearchCommand,parseBotSearchReply,type BotSearchCommand,type BotSearchReply} from './bot-search-protocol';
 import type {BotSearchDriver} from './bot-search-driver';
 import type {BotSearchBridgeReply} from './bot-search-bridge-protocol';
+import type {QrLoginChallenge} from './qr-login-protocol';
 declare const self:DedicatedWorkerGlobalScope;
 let session='',phase:SessionReply['phase']='disconnected',active=false,phone='';
+let codeDelivery:Delivery|null=null;
+let qrChallenge:QrLoginChallenge|null=null;
 let client:import('./temporary-sdk').TemporaryTelegramDriver|undefined;
 const abort=new AbortController();
 let sources:SourcesDriver|undefined,page:Promise<void>|null=null,control=false;
@@ -23,7 +26,7 @@ const remoteAllowed=()=>!retryBlocked&&(retryAt===null||Date.now()>=retryAt);
 function observeRemote(reply:{type:string;retryAt?:number|null;retryBlocked?:boolean}){if(reply.type!=='bots.error'&&reply.type!=='sources.error'&&reply.type!=='bot-search.error')return;retryBlocked ||=!!reply.retryBlocked;if(reply.retryAt!=null)retryAt=Math.max(retryAt??0,reply.retryAt);}
 /** Optional only for historic synthetic SDK fixtures. Production factory implements this accessor. */
 function refreshCooldown(){const cooldown=client?.getAccountCooldown?.();if(cooldown){retryBlocked ||=cooldown.retryBlocked;if(cooldown.retryAt!==null)retryAt=Math.max(retryAt??0,cooldown.retryAt);}}
-function closeLocal(){abort.abort();search?.close();bots?.close();sources?.close();void client?.close().catch(()=>{});self.close();}
+function closeLocal(){qrChallenge=null;abort.abort();search?.close();bots?.close();sources?.close();void client?.close().catch(()=>{});self.close();}
 async function searchCommand(command:BotSearchCommand){
  if(!client||phase!=='connected'||active||command.sessionId!==session||command.type!=='bot-search.cancel'&&(searchFlight||searchControl||botFlight||botControl||page||control)||command.type==='bot-search.cancel'&&(!search||!searchFlight||searchControl)){closeLocal();return;}
  const driver=client,binding=parseAccountBinding(driver.getAccountBinding());
@@ -96,14 +99,18 @@ async function open(){
  const identity=await configuration();
  const {openTemporaryTelegram}=await import('./temporary-sdk');client=await openTemporaryTelegram(identity,abort.signal);return client;
 }
-function reply(command:SessionCommand,error:SessionReply['error']=null,retryAt:number|null=null,delivery:Delivery|null=null){self.postMessage({version:2,session,request:command.request,phase,error,retryAt,delivery,binding:phase==='connected'?parseAccountBinding(client!.getAccountBinding()):null,saved:phase==='connected'?parseSaved(sources!.getSaved()):null,...(phase==='connected'&&bots?{bots:bots.getSnapshot()!.providers}:{})} satisfies SessionReply);}
+function reply(command:SessionCommand,error:SessionReply['error']=null,waitUntil:number|null=null,delivery:Delivery|null=phase==='code'?codeDelivery:null){
+ const offered=phase==='code'&&!retryBlocked?client?.getCodeResend?.():null;
+ const codeResend=offered?{delivery:offered.delivery,availableAt:Math.max(offered.availableAt,retryAt??0)}:null;
+ self.postMessage({version:2,session,request:command.request,phase,error,retryAt:waitUntil,delivery,binding:phase==='connected'?parseAccountBinding(client!.getAccountBinding()):null,saved:phase==='connected'?parseSaved(sources!.getSaved()):null,...(phase==='code'?{codeResend}:{}),...(phase==='qr'&&qrChallenge?{qr:qrChallenge}:{}),...(phase==='connected'&&bots?{bots:bots.getSnapshot()!.providers}:{})} satisfies SessionReply);
+}
 self.onmessage=event=>{
  if(event.data?.protocol==='pulso-bot-search'){const command=parseBotSearchCommand(event.data);if(!command){closeLocal();return;}void searchCommand(command);return;}
  if(event.data?.protocol==='pulso-bot-providers'){const bot=parseBotProvidersCommand(event.data);if(!bot){closeLocal();return;}void botCommand(bot);return;}
  if(event.data?.protocol==='pulso-sources'){const source=parseSourcesCommand(event.data);if(!source){closeLocal();return;}void sourceCommand(source);return;}
  const command=parseSessionCommand(event.data);if(!command||active||session&&command.session!==session){closeLocal();return;}
- if(!session){if(!['begin','restore','forget'].includes(command.type)){closeLocal();return;}session=command.session;}
- if(['begin','restore','forget'].includes(command.type)&&phase!=='disconnected'||command.type==='code'&&phase!=='code'||command.type==='password'&&phase!=='password'||command.type==='logout'&&phase!=='connected'){closeLocal();return;}
+ if(!session){if(!['begin','qr-begin','restore','forget'].includes(command.type)){closeLocal();return;}session=command.session;}
+ if(['begin','qr-begin','restore','forget'].includes(command.type)&&phase!=='disconnected'||(command.type==='code'||command.type==='resend')&&phase!=='code'||command.type==='qr-check'&&phase!=='qr'||command.type==='password'&&phase!=='password'||command.type==='logout'&&phase!=='connected'){closeLocal();return;}
  active=true;
  void (async()=>{
   try{
@@ -120,21 +127,38 @@ self.onmessage=event=>{
     if(page){const settled=await sources!.quiesce();await page;if(!settled||!client?.getAccountBinding()){phase='error';reply(command,'logout-unconfirmed');closeLocal();return;}}
     await client!.logout(abort.signal);client=undefined;phone='';phase='disconnected';reply(command);self.close();return;
    }
-   if(command.type==='begin'){
+   if(command.type==='qr-begin'||command.type==='qr-check'){
+    const ready=command.type==='qr-begin'?await open():client!;refreshCooldown();
+    if(!remoteAllowed()){
+     if(qrChallenge){phase='qr';reply(command,'rate-limit',retryAt);return;}
+     throw {text:'FLOOD_WAIT',seconds:retryAt===null?undefined:Math.max(1,Math.ceil((retryAt-Date.now())/1000))};
+    }
+    const method=command.type==='qr-begin'?ready.beginQr:ready.checkQr;if(!method)throw Error('unsupported');
+    qrChallenge=await method(abort.signal);if(abort.signal.aborted)return;
+    if(qrChallenge){phase='qr';reply(command);return;}
+   }else if(command.type==='begin'){
     const ready=await open();phone=command.value;
     const delivery=await ready.begin(phone,abort.signal);
-    if(delivery!==null){phase='code';reply(command,null,null,delivery);return;}
+    if(delivery!==null){codeDelivery=delivery;phase='code';reply(command);return;}
+   }else if(command.type==='resend'){
+    const offered=client?.getCodeResend?.();refreshCooldown();
+    if(!remoteAllowed()){reply(command,'rate-limit',retryAt);return;}
+    if(!offered||!client?.resendCode){reply(command,'unsupported');return;}
+    if(Date.now()<offered.availableAt){reply(command,'rate-limit',offered.availableAt);return;}
+    codeDelivery=await client.resendCode(abort.signal);if(abort.signal.aborted)return;
+    phase='code';reply(command);return;
    }else if(command.type==='code')await client!.code(phone,command.value,abort.signal);
    else if(command.type==='password')await client!.password(command.value,abort.signal);
    if(!parseAccountBinding(client!.getAccountBinding())){phase='error';reply(command,'protocol');closeLocal();return;}
    sources=client!.createSources(session);if(!parseSaved(sources.getSaved())){phase='error';reply(command,'protocol');closeLocal();return;}
    bots=client!.createBotProviders?.(session);if(bots&&!bots.getSnapshot())throw Error('session-storage');
-   phase='connected';phone='';reply(command);
+   phase='connected';phone='';qrChallenge=null;reply(command);
   }catch(error){
    const safe=sessionFailure(error);
-   if(safe.passwordNeeded&&(command.type==='code'||command.type==='begin')){phase='password';reply(command);return;}
-   const retryable=command.type==='code'&&safe.error==='code-invalid'||command.type==='password'&&safe.error==='password-invalid'||(command.type==='code'||command.type==='password')&&safe.error==='rate-limit';
-   if(retryable){phase=command.type==='code'?'code':'password';reply(command,safe.error,safe.retryAt);return;}
+   if(safe.passwordNeeded&&['code','begin','qr-begin','qr-check'].includes(command.type)){qrChallenge=null;phase='password';reply(command);return;}
+   if(command.type==='qr-check'&&safe.error==='rate-limit'&&qrChallenge){retryBlocked ||=safe.retryAt===null;if(safe.retryAt!==null)retryAt=Math.max(retryAt??0,safe.retryAt);phase='qr';reply(command,safe.error,safe.retryAt);return;}
+   const retryable=command.type==='code'&&safe.error==='code-invalid'||command.type==='password'&&safe.error==='password-invalid'||(command.type==='code'||command.type==='resend'||command.type==='password')&&safe.error==='rate-limit';
+   if(retryable){if(safe.error==='rate-limit'){retryBlocked ||=safe.retryAt===null;if(safe.retryAt!==null)retryAt=Math.max(retryAt??0,safe.retryAt);}phase=command.type==='password'?'password':'code';reply(command,safe.error,safe.retryAt);return;}
    phase='error';phone='';reply(command,command.type==='logout'&&safe.error!=='session-storage'?'logout-unconfirmed':safe.error,safe.retryAt);
    abort.abort();await client?.close().catch(()=>{});self.close();
   }finally{active=false;}

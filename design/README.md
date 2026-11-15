@@ -133,3 +133,8 @@ del producto con pantalla bloqueada.
 ## Interfaz del producto integrada · 2026-11-09
 
 La presentación de Inicio, Buscar, Biblioteca, colecciones, ajustes y reproductor ya se conecta a los datos reales de la aplicación. Las muestras anteriores siguen siendo independientes y conservan sus datos ficticios. Véase [contrato y validación del producto](../docs/UI-INTEGRATION.md). La integración no cambia la semántica de Biblioteca, Favoritos o copias de escucha. iPhone físico sigue pendiente.
+
+
+## Revisión global de la app funcional · 2026-11-13
+
+Inicio con portadas locales, Biblioteca mixta, lateral de escritorio, álbumes/artistas y Configuración agrupada. Informe de decisiones, recorridos, evidencia y límites en [VISUAL-AUDIT.md](VISUAL-AUDIT.md). Se conserva la dirección Bruma y los contratos del producto.

@@ -9,11 +9,28 @@ async function withSignal<T>(work:Promise<T>,signal:AbortSignal|null|undefined):
  const stopped=new Promise<never>((_,reject)=>{abort=()=>reject(new DOMException('Consulta cancelada.','AbortError'));signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();});
  try{return await Promise.race([work,stopped]);}finally{signal.removeEventListener('abort',abort);}
 }
-export function createCatalogTransport(deps:{fetcher?:typeof fetch;origin?:string|null;capabilityTimeoutMs?:number}={}){
+export function createCatalogTransport(deps:{fetcher?:typeof fetch;origin?:string|null;capabilityTimeoutMs?:number;metadataIntervalMs?:number}={}){
  const fetcher=deps.fetcher??nativeFetch;
  const origin=deps.origin===undefined?(typeof location==='undefined'?null:location.origin):deps.origin;
  const timeout=Math.max(1,Math.min(4000,deps.capabilityTimeoutMs??3000));
  let config:RelayConfig|null=origin?null:disabled,probe:Promise<RelayConfig>|null=null;
+ const interval=Math.max(0,Math.min(3100,deps.metadataIntervalMs??3100));
+ let metadataTail:Promise<void>=Promise.resolve(),nextMetadata=0,cooldown=0;
+ async function directMetadata(url:string,init:RequestInit,direct:typeof fetch):Promise<Response>{
+  const previous=metadataTail;let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
+  // A cancelled queued request cannot release the still-running predecessor.
+  metadataTail=Promise.allSettled([previous,gate]).then(()=>{});
+  try{
+   await withSignal(previous,init.signal);cancelled(init.signal);
+   if(cooldown>Date.now())return new Response(null,{status:429,headers:{'Retry-After':String(Math.ceil((cooldown-Date.now())/1000))}});
+   const delay=Math.max(0,nextMetadata-Date.now());
+   if(delay){let timer:ReturnType<typeof setTimeout>|undefined;try{await withSignal(new Promise<void>(resolve=>{timer=setTimeout(resolve,delay);}),init.signal);}finally{clearTimeout(timer);}}
+   cancelled(init.signal);nextMetadata=Date.now()+interval;
+   const response=await direct(url,init);
+   if(response.status===429||response.status===503){const raw=response.headers.get('retry-after'),ms=raw&&/^\d+$/.test(raw)?Number(raw)*1000:raw?Date.parse(raw)-Date.now():NaN;cooldown=Math.max(cooldown,Date.now()+(Number.isFinite(ms)&&ms>=0?Math.max(3100,ms):60000));}
+   return response;
+  }finally{release();}
+ }
  function capabilities():Promise<RelayConfig>{
   if(config)return Promise.resolve(config);if(probe)return probe;
   const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;
@@ -38,7 +55,8 @@ export function createCatalogTransport(deps:{fetcher?:typeof fetch;origin?:strin
   const artwork=address.protocol==='https:'&&/^is[1-5]-ssl\.mzstatic\.com$/.test(address.hostname)&&!address.port&&!address.username&&!address.password;
   if(!origin||!itunes&&!artwork||init.method&&init.method!=='GET')return direct(url,init);
   const mode=await withSignal(capabilities(),init.signal);cancelled(init.signal);
-  if(itunes&&!mode.itunes||artwork&&!mode.artwork)return direct(url,init);
+  if(itunes&&!mode.itunes)return directMetadata(url,init,direct);
+  if(artwork&&!mode.artwork)return direct(url,init);
   const target=itunes?new URL('/catalog/itunes'+address.pathname+address.search,origin):new URL('/catalog/artwork?'+new URLSearchParams({u:address.href}),origin);
   return direct(target.href,{...init,headers:{Accept:itunes?'application/json':'image/png,image/jpeg,image/webp'},credentials:'same-origin',redirect:'error',referrerPolicy:'no-referrer'});
  }

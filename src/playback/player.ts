@@ -4,6 +4,7 @@ export interface Entry { id: string; trackId: string; title: string; src: string
 export type PlayerFailureCode = 'autoplay-denied'|'media-aborted'|'media-network'|'media-decode'|'media-unsupported'|'media-unknown'|'unknown';
 export type FailureObserver = (phase:'play'|'read') => ((code:PlayerFailureCode)=>void)|undefined;
 export type State = 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
+export type PlayerChange = 'state' | 'progress';
 export interface Media {
   readonly error?: {readonly code:number}|null;
   src: string; currentTime: number; duration: number; ended: boolean;
@@ -26,7 +27,7 @@ export class Player {
   repeat: 'off'|'one'|'all' = 'off';
   shuffleOrder: string[]|null = null;
   private listeners: [string, EventListener][] = [];
-  private subscribers = new Set<() => void>();
+  private subscribers = new Set<(change:PlayerChange) => void>();
   private suspended = false;
   constructor(readonly audio: Media, private admitted: () => boolean = () => true, private failureObserver?:FailureObserver) {}
   private observe(phase:'play'|'read') {
@@ -40,8 +41,8 @@ export class Player {
     this.audio.src = ''; this.audio.load(); this.state = 'paused'; this.emit();
   }
   private get allowed() { return !this.inserting && !this.suspended && this.admitted(); }
-  subscribe = (fn: () => void) => { this.subscribers.add(fn); return () => { this.subscribers.delete(fn); }; };
-  private emit() { this.subscribers.forEach(fn => fn()); }
+  subscribe = (fn: (change:PlayerChange) => void) => { this.subscribers.add(fn); return () => { this.subscribers.delete(fn); }; };
+  private emit(change:PlayerChange='state') { this.subscribers.forEach(fn => fn(change)); }
   get current() { return this.entries[this.index]; }
   setQueue(entries: Entry[]) {
     if (this.inserting || !this.admitted()) return; this.suspended = false;
@@ -102,7 +103,7 @@ export class Player {
     on('playing', () => { this.error='';this.lastFailure=null;this.state = 'playing'; this.emit(); });
     on('pause', () => { if (this.state !== 'ended') this.state = 'paused'; this.emit(); });
     on('waiting', () => { this.state = 'buffering'; this.emit(); });
-    on('timeupdate', () => this.emit());
+    on('timeupdate', () => this.emit('progress'));
     on('loadedmetadata', () => { if (restorePosition > 0) { this.seek(restorePosition); restorePosition = 0; } if (this.state === 'loading') this.state = 'paused'; this.emit(); });
     on('error', () => { let code:PlayerFailureCode='media-unknown';try{switch(this.audio.error?.code){case 1:code='media-aborted';break;case 2:code='media-network';break;case 3:code='media-decode';break;case 4:code='media-unsupported';break;}}catch{/* unknown */}failed(code);this.lastFailure=code; this.state = 'error'; this.error = 'No se pudo leer el audio. Puedes reintentar o elegir la siguiente pista.'; this.emit(); });
     on('ended', () => {

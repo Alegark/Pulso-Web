@@ -5,7 +5,7 @@ export type AlbumFailure = 'cancelled' | 'timeout' | 'network' | 'http' | 'rate-
 export type AlbumStage = 'album-search' | 'artist-search' | 'artist-albums' | 'album-detail'
 export type AlbumResult<T> = { ok: true; value: T } | { ok: false; reason: AlbumFailure; stage?: AlbumStage; httpStatus?: number }
 export interface CatalogArtist { id: number; name: string }
-export interface CatalogSongHint { releaseId:number; trackId:number; disc:number; position:number; title:string; artist:string; album:string; durationMs:number; artworkUrl?:string }
+export interface CatalogSongHint { releaseId:number; trackId:number; disc:number; position:number; title:string; artist:string; primaryArtist?:string; album:string; durationMs:number; artworkUrl?:string }
 export interface AlbumHint { id: number; title: string; artist: string | null; artworkUrl?: string }
 export interface AlbumEdition { id: number; title: string; artist: string; trackCount: number; releaseDate: string | null; artworkUrl?: string }
 export interface AlbumTrack { releaseId: number; trackId: number; disc: number; position: number; title: string; artist: string; durationMs: number | null; primaryArtist?: string }
@@ -91,7 +91,7 @@ export function catalogSongsFromBatch(data:unknown):readonly CatalogSongHint[] {
  for(const row of all){
   if(row.wrapperType!=='track'||row.kind!=='song'||!pos(row.collectionId)||!pos(row.trackId)||!pos(row.discNumber)||row.discNumber>20||!pos(row.trackNumber)||row.trackNumber>200||!text(row.trackName)||!text(row.artistName)||!text(row.collectionName)||!Number.isSafeInteger(row.trackTimeMillis)||(row.trackTimeMillis as number)<0||(row.trackTimeMillis as number)>86400000)continue;
   const art=artworkUrl(row.artworkUrl100);
-  const song:CatalogSongHint={releaseId:row.collectionId,trackId:row.trackId,disc:row.discNumber,position:row.trackNumber,title:row.trackName,artist:row.artistName,album:row.collectionName,durationMs:row.trackTimeMillis as number,...(art?{artworkUrl:art}:{})};
+  const song:CatalogSongHint={releaseId:row.collectionId,trackId:row.trackId,disc:row.discNumber,position:row.trackNumber,title:row.trackName,artist:row.artistName,...(text(row.collectionArtistName)?{primaryArtist:row.collectionArtistName}:{}),album:row.collectionName,durationMs:row.trackTimeMillis as number,...(art?{artworkUrl:art}:{})};
   const key=`${song.releaseId}:${song.disc}:${song.position}:${song.trackId}`,previous=found.get(key);
   if(previous===undefined)found.set(key,Object.freeze(song));
   else if(previous&&JSON.stringify(previous)!==JSON.stringify(song))found.set(key,null);

@@ -9,6 +9,15 @@ class Fake extends EventTarget implements Media {
 }
 const entries = ['A','B','A'].map((trackId,i) => ({id: `q${i}`,trackId,title: trackId,src: `https://test.invalid/${trackId}`}));
 function setup() { const audio = new Fake(); const player = new Player(audio); player.setQueue(entries); return {audio,player}; }
+test('el progreso no cambia la cola y callbacks de otra selección no actualizan el reloj', () => {
+ const {audio,player}=setup(),changes:string[]=[],old:EventListener[]=[];
+ const add=audio.addEventListener.bind(audio);audio.addEventListener=(type,fn,options)=>{if(type==='timeupdate')old.push(fn as EventListener);add(type,fn,options);};
+ const off=player.subscribe(change=>changes.push(change));player.select(0);changes.length=0;
+ const revision=player.queueRevision,epoch=player.queueEpoch;audio.currentTime=2;audio.dispatchEvent(new Event('timeupdate'));
+ assert.deepEqual(changes,['progress']);assert.equal(player.queueRevision,revision);assert.equal(player.queueEpoch,epoch);assert.equal(player.index,0);
+ player.select(1);assert.equal(changes.at(-1),'state');changes.length=0;old[0](new Event('timeupdate'));assert.deepEqual(changes,[]);
+ audio.dispatchEvent(new Event('timeupdate'));assert.deepEqual(changes,['progress']);off();audio.dispatchEvent(new Event('timeupdate'));assert.deepEqual(changes,['progress']);
+});
 test('cola conserva ocurrencias A/B/A y seleccionar no reproduce por defecto', () => {
  const {audio,player} = setup(); player.select(0); assert.equal(audio.plays,0); assert.notEqual(player.entries[0].id,player.entries[2].id);
 });

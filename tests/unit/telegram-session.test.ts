@@ -51,3 +51,22 @@ test('restore can recover a session without phone/code/password or concurrent wo
 test('an absent saved authorization settles disconnected without requesting a code',()=>{const s=setup();s.client.restore();s.workers[0].reply('disconnected');assert.equal(s.client.snapshot().phase,'disconnected');assert.equal(s.activity.count,0);assert.equal(s.workers[0].messages.length,1);assert.equal(s.workers[0].terminations,1);s.client.dispose();});
 test('revoked restoration guard rejects late success',()=>{const s=setup();s.client.restore();s.activity.invalidate();s.activity.open();s.workers[0].reply('connected');assert.equal(s.client.snapshot().phase,'error');assert.equal(s.workers[0].terminations,1);assert.equal(s.activity.count,0);s.client.dispose();});
 test('forget uses only its empty command and reports a local storage failure honestly',()=>{const s=setup();s.client.forgetSavedSession();const w=s.workers[0];assert.equal(w.messages[0].type,'forget');assert.equal(s.client.snapshot().phase,'disconnecting');w.onerror?.({preventDefault(){}} as ErrorEvent);assert.equal(s.client.snapshot().error,'session-storage');assert.equal(s.activity.count,0);s.client.forgetSavedSession();s.workers[1].reply('disconnected');assert.equal(s.client.snapshot().phase,'disconnected');s.client.dispose();});
+
+test('resend carries no credential and accepts only advertised SMS/call deadlines',()=>{
+ const s=crypto.randomUUID(),r=crypto.randomUUID(),command={version:2,session:s,request:r,type:'resend',value:''};
+ assert.ok(parseSessionCommand(command));assert.equal(parseSessionCommand({...command,value:'private challenge'}),null);
+ const reply={version:2,session:s,request:r,phase:'code',error:null,retryAt:null,delivery:'app',binding:null,saved:null};
+ for(const delivery of ['sms','call'])assert.ok(parseSessionReply({...reply,codeResend:{delivery,availableAt:Date.now()+1000}},s,r));
+ for(const codeResend of [{delivery:'app',availableAt:0},{delivery:'sms',availableAt:NaN},{delivery:'sms',availableAt:-1},{delivery:'sms',availableAt:0,phoneCodeHash:'not permitted'}])assert.equal(parseSessionReply({...reply,codeResend},s,r),null);
+ assert.equal(parseSessionReply({...reply,phase:'password',codeResend:{delivery:'sms',availableAt:0}},s,r),null);
+});
+test('resend is manual, deadline-gated, singleflight and bound to the existing worker',()=>{
+ const s=setup();s.client.begin(phone);const w=s.workers[0],c=w.messages[0];
+ const reply=(availableAt:number)=>w.onmessage?.({data:{version:2,session:c.session,request:c.request,phase:'code',error:null,retryAt:null,delivery:'app',binding:null,saved:null,codeResend:{delivery:'sms',availableAt}}} as MessageEvent);
+ reply(Date.now()+60000);s.client.resend();assert.equal(w.messages.length,1);s.client.stop();
+ s.client.begin(phone);const active=s.workers[1],begin=active.messages[0];active.onmessage?.({data:{version:2,session:begin.session,request:begin.request,phase:'code',error:null,retryAt:null,delivery:'app',binding:null,saved:null,codeResend:{delivery:'sms',availableAt:0}}} as MessageEvent);
+ assert.equal(active.messages.length,1);const stale=s.client.captureSessionCurrent();s.client.resend();s.client.resend();assert.equal(active.messages.length,2);assert.equal(active.messages[1].type,'resend');assert.equal(active.messages[1].value,'');assert.equal(s.workers.length,2);assert.equal(stale(),false);assert.equal(s.client.snapshot().phase,'sending-code');s.client.stop();active.reply('code');assert.equal(s.client.snapshot().phase,'error');assert.equal(s.activity.count,0);s.client.dispose();
+});
+test('missing offer, flood wait and lost admission never dispatch resend',()=>{
+ for(const mode of ['missing','flood','denied'] as const){const s=setup();s.client.begin(phone);const w=s.workers[0],c=w.messages[0];w.onmessage?.({data:{version:2,session:c.session,request:c.request,phase:'code',error:mode==='flood'?'rate-limit':null,retryAt:mode==='flood'?Date.now()+60000:null,delivery:'app',binding:null,saved:null,...(mode==='missing'?{}:{codeResend:{delivery:'sms',availableAt:0}})}} as MessageEvent);if(mode==='denied')s.deny();s.client.resend();assert.equal(w.messages.length,1);s.client.dispose();}
+});

@@ -8,7 +8,7 @@ export function orderedProviders(bots:BotsSnapshot|null):OrderedProvider[] {
  const seen=new Set<string>(),usernames=new Set<string>();
  return (bots?.providers??[]).filter(p=>{const username=p.username.toLowerCase();if(!['ivkmbot','lydbot','ansmusicbot','kdmusic_bot','deezermusicbot'].includes(username)||seen.has(p.providerRef)||usernames.has(username))return false;seen.add(p.providerRef);usernames.add(username);return true;}).slice(0,5).map(p=>({providerRef:p.providerRef,label:p.label}));
 }
-export type AcquisitionFailureReason='no-compatible-row'|'returned-audio-mismatch'|'file-too-large'|'file-invalid';
+export type AcquisitionFailureReason='no-compatible-row'|'returned-audio-mismatch'|'file-too-large'|'file-invalid'|'selection-changed';
 /** Closed explanations shared by individual and album acquisition. Never assert
  * catalogue absence from a local validation failure. */
 export function acquisitionFailureText(reasons:readonly AcquisitionFailureReason[]):string {
@@ -17,6 +17,7 @@ export function acquisitionFailureText(reasons:readonly AcquisitionFailureReason
   'returned-audio-mismatch':'Se recibió audio, pero sus metadatos no coinciden con la canción elegida (título, artista, versión o duración). [D02]',
   'file-too-large':`El bot entregó un archivo que supera el límite actual de ${AUDIO_FILE_MAX_BYTES/1048576} MiB de Pulso. No se descargó. [D03]`,
   'file-invalid':'El archivo recibido está incompleto o su formato no es compatible. No se guardó. [D04]',
+  'selection-changed':'La opción del bot cambió antes de confirmar la descarga. [D05]',
  };
  return [...new Set(reasons)].map(reason=>messages[reason]).join(' ')||'No se pudo confirmar una coincidencia musical.';
 }
@@ -60,6 +61,10 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
    if(!live())return {state:'uncertain'};
    const after=client.searchSnapshot();if(!same(after,provider.providerRef,queryId))return {state:'uncertain'};
    if(audio)return JSON.stringify(audio.target)===JSON.stringify(target)?{state:'audio',audio}:{state:'uncertain'};
+   // The exact-menu/file revalidation failed before any callback was sent.
+   // The original lane has settled; keep its strict validation and try only the
+   // next captured provider. An acknowledged/uncertain callback still stops.
+   if(after.error==='conflict'&&after.delivery==='not-dispatched'){reasons.push('selection-changed');continue;}
    if(after.error==='file-too-large'&&after.delivery!=='uncertain'){reasons.push('file-too-large');continue;}
    if(after.delivery==='acknowledged'&&after.error==='file-invalid'){reasons.push('file-invalid');continue;}
    if(after.delivery==='acknowledged'&&after.error===null&&after.rows.some(r=>r.kind==='audio')&&!matchingSongRows(after.rows,target).length){reasons.push('returned-audio-mismatch');continue;}

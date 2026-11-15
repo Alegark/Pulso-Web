@@ -8,7 +8,7 @@ const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 function checkPackage(record,root){
  const actual=JSON.parse(readFileSync(resolve(root,'node_modules',record.name,'package.json'),'utf8'));
  if(actual.name!==record.name||actual.version!==record.version||actual.license!==record.license)throw new Error(`License review required for ${record.name}: package metadata changed`);
- return record.noticeFiles.map(notice=>{
+ return [...record.noticeFiles,...record.additionalNoticeFiles??[]].map(notice=>{
   const bytes=readFileSync(resolve(root,notice.file));
   if(bytes.length!==notice.bytes||digest(bytes)!==notice.sha256)throw new Error(`License review required for ${record.name}: original notice changed`);
   return {notice,bytes};

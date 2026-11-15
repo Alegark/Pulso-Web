@@ -27,7 +27,7 @@ export function writeTelegramSources(directory){
  }
  writeFileSync(notices,Buffer.concat(countryChunks));manifest.sha256=sha(readFileSync(notices));
  manifest.phoneCountryData={license:'Apache-2.0',source:'vendor/phone-countries/SOURCE.json',notices:countryNotices};
- const sourceFiles=['package.json','package-lock.json','vite.config.ts','tsconfig.json','index.html','pilot.html','samples.html','src','public','scripts','tests','vendor/telegram-wasm','vendor/phone-countries',...names.map(n=>`node_modules/${n}`)];
+ const sourceFiles=['package.json','package-lock.json','vite.config.ts','tsconfig.json','wrangler.jsonc','index.html','pilot.html','samples.html','src','public','scripts','tests','deployment','vendor/telegram-wasm','vendor/phone-countries','vendor/qr-code',...names.map(n=>`node_modules/${n}`)];
  // All roots are explicit. No .local, owner configuration, attachment or session is archived.
  execFileSync('tar',['--sort=name','--mtime=2026-11-02T00:00:00Z','--owner=0','--group=0','--numeric-owner','-czf',resolve(out,'telegram-sources.tar.gz'),...sourceFiles],{cwd:root,stdio:'pipe'});
  manifest.telegramSources.sha256=sha(readFileSync(resolve(out,'telegram-sources.tar.gz')));writeFileSync(resolve(out,'third-party-licenses.json'),JSON.stringify(manifest,null,2)+'\n');

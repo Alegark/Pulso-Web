@@ -32,7 +32,8 @@ export function selectPlayerArtwork(data:unknown,q:PlayerArtworkQuery,limit=50):
   const r=item as Record<string,unknown>;
   if(r.wrapperType!=='track'||r.kind!=='song'||!validText(r.trackName)||!validText(r.artistName))continue;
   if(q.editionId!==undefined&&(r.collectionId!==q.editionId||r.trackId!==q.trackId))continue;
-  if(clean(r.trackName)!==clean(q.title)||clean(r.artistName)!==clean(q.artist))continue;
+  const creditMatches=clean(r.artistName)===clean(q.artist)||q.editionId===undefined&&q.album!==null&&validText(r.collectionArtistName)&&clean(r.collectionArtistName)===clean(q.artist);
+  if(clean(r.trackName)!==clean(q.title)||!creditMatches)continue;
   if(typeof r.trackTimeMillis!=='number'||!Number.isFinite(r.trackTimeMillis)||Math.abs(r.trackTimeMillis/1000-q.durationSeconds)>5)continue;
   if(!validText(r.collectionName)||q.album!==null&&clean(r.collectionName)!==clean(q.album))continue;
   const url=artworkImageUrl(r.artworkUrl100);

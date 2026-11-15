@@ -1,5 +1,13 @@
 # Búsqueda musical: catálogo antes del bot
 
+## Comprobación en la web publicada · 2026-11-15
+
+La [evidencia con la sesión real](evidence-published-session-repair-web.json) confirma bots configurados, reproducción, copia reutilizada, MOSCA con17pistas y carátula, y los ejemplos de búsqueda MOSCA/Flores. La sesión se conserva tras recarga y reapertura del perfil del navegador.
+
+El catálogo agrupa para presentación las diferencias de crédito principal frente al completo sólo cuando iTunes corrobora título, álbum y crédito principal declarado. La elección mantiene ID, título, crédito y duración originales; no se cambia la identidad del audio, el alias durable ni la admisión de copias. Las versiones literales siguen separadas y la corroboración ambigua no se fusiona. Las etiquetas de scrape «Video •»/«Song,» con álbum vacío o literalnull se suprimen sólo si existe su contraparte limpia. Un álbum declarado y único puede aportar su carátula a varias filas sin búsquedas por pista. Las decisiones manuales sobre imágenes conservan prioridad.
+
+La portada del reproductor puede usar el artista principal declarado de la colección para una búsqueda sin identidad exacta, únicamente con álbum conocido, duración compatible y edición sin ambigüedad. Las consultas por identidad exacta mantienen el crédito completo. No se amplían las condiciones de aceptación de audio.
+
 La búsqueda admite nombres de canciones y álbumes. La orden del propietario del 2026-11-08 añade también la búsqueda de artistas y su página con publicaciones asociadas; sustituye la exclusión histórica de esa categoría. El artista sigue calificando las palabras de una canción para preparar la consulta precisa. El estado de integración y publicación de la página se recoge en [ALBUMS-AND-ARTISTS.md](ALBUMS-AND-ARTISTS.md).
 
 Escribir muestra hasta seis sugerencias de canciones, álbumes y artistas: en móvil aparecen en flujo debajo de la barra; en escritorio pueden superponerse. Hay un solo botón Buscar. Enter, Buscar y Ver todos los resultados muestran las coincidencias disponibles de las tres categorías dentro de Pulso y nunca envían un mensaje a Telegram. Los filtros de resultados permiten elegir Todo, Canciones, Álbumes o Artistas. Vaciar el campo cancela las consultas de metadatos, limpia resultados y descarta respuestas antiguas; no hay botones separados para buscar álbumes, artistas o cancelar el borrador. Escape o Cerrar sugerencias sólo cierran la lista breve. Elegir un álbum abre su edición y pistas; elegir un artista abre su página por identidad del catálogo. Ninguna de estas navegaciones reproduce ni descarga música.
@@ -38,3 +46,12 @@ El acceso temporal descrito arriba queda sustituido para la autorización por la
 ## Validación de la búsqueda unificada
 
 La entrega privada `6955592aa1587a88` incorpora este flujo. Cinco grupos nativos actuales y las pruebas del dist en Chromium y WebKit de escritorio pasaron con SDK, catálogo y audio sintéticos. El regreso durante una consulta pendiente conserva las filas conocidas y completa las restantes; un éxito posterior limpia el aviso anterior. La actualización normal conservó audio y organización. Los avisos históricos de WebKit y los intentos anteriores se registran por separado en [evidence-unified-search-web.json](evidence-unified-search-web.json). No acredita cuenta Telegram real, iPhone ni P0-W.
+
+
+## Correcciones verificadas con la sesión publicada · 2026-11-15
+
+La búsqueda agrupa presentación corroborada por título/álbum/crédito declarado, conserva versiones literales y mantiene intactos IDs, duración y créditos de admisión de audio. Créditos locales separados por comas y los mismos créditos completos del catálogo separados por ampersand se agrupan sólo si coinciden todas las palabras en el mismo orden y existe corroboración inequívoca del catálogo. Las colaboraciones no inventan álbumes adicionales si la identidad de colección declarada las vincula con la edición conocida. Esta regla no cambia las fichas guardadas ni la compatibilidad de audio.
+
+En el sitio publicado, tras descargas reales, MOSCA muestra1álbum y18canciones sin títulos duplicados (17deálbum más acústica literal), con imágenes cargadas; abrirlo presenta17pistas y portada600sin mensajes al bot. Reproducción automática desde archivo, reutilización0comandosbot y acción explícita de Biblioteca comprobadas. Persisten límites:3pistas de MOSCA sin confirmar, créditos completos/álbum del archivo pueden separar tarjetas de Biblioteca y no se afirma deduplicación acústica global entre catálogos.
+
+Un conflicto durante revalidación de selección antes de enviar callback permite pasar únicamente al siguiente bot configurado (D05), manteniendo guardas/revisión/target/cadencia y sin repetir el bot original. Si hubo callback acknowledged o entrega uncertain, se detiene. Se prueba esta distinción con unidades; no se presenta como causa exacta de los conflictos reales ni como bypass de las validaciones del worker. Recibo actual: evidence-published-session-repair-web.json.
