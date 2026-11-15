@@ -8,7 +8,7 @@ El propietario autorizó el cambio de toda la cuenta de `publiex` a `pruebassoft
 
 ## Acceso Telegram por QR · versión actual
 
-La entrada directa actual es [9c78c674d7ab20a8](https://pulso-web.pruebassoftware.workers.dev/releases/9c78c674d7ab20a8.html), con las [correcciones probadas en la sesión real](evidence-published-session-repair-web.json). Conserva **Configuración → Cuenta y fuentes → Entrar con Telegram o QR**. Escanea y aprueba desde Telegram del teléfono, en Ajustes → Dispositivos → Vincular dispositivo; después pulsa **Ya autoricé el acceso** en Pulso. La contraseña de dos pasos, si corresponde, se introduce sólo en Pulso. Véanse [persistencia](TELEGRAM-PERSISTENCE.md) y [evidencia original del QR](evidence-telegram-qr-login-web.json).
+La entrada directa actual es [9006dcecc26d4049](https://pulso-web.pruebassoftware.workers.dev/releases/9006dcecc26d4049.html), con las [correcciones probadas en la sesión real](evidence-published-session-repair-web.json). Conserva **Configuración → Cuenta y fuentes → Entrar con Telegram o QR**. Escanea y aprueba desde Telegram del teléfono, en Ajustes → Dispositivos → Vincular dispositivo; después pulsa **Ya autoricé el acceso** en Pulso. La contraseña de dos pasos, si corresponde, se introduce sólo en Pulso. Véanse [persistencia](TELEGRAM-PERSISTENCE.md) y [evidencia original del QR](evidence-telegram-qr-login-web.json).
 
 Se verificaron 45 rutas públicas por bytes/SHA, los bindings conservados y la generación de un QR real, sin aprobar una cuenta. No se modificó el secret ni se añadió una migración, pago o recurso. La recepción de códigos y el límite429 del catálogo siguen pendientes.
 
@@ -87,3 +87,22 @@ La sesión real del propietario se conservó en el perfil persistente compartido
 Entrada final9c78c674d7ab20a8;60/60rutas públicas exactas por bytes/SHA,62entradas del manifiesto incluidos2metadatos no servidos. Se retienen los inmutables publicados previos y se excluyen3intermedios nunca publicados. Cloudflare MCP conserva ASSETS/CATALOG/secret, sin migración ni recursos de pago. Evidencia actual en evidence-published-session-repair-web.json; los recibos y negativos completos permanecen privados en .local/published-session-tests.
 
 El lote MOSCA inicial terminó13/17, con4conflictos; una selección explícita posterior de la fila cuyo snapshot confirmó no-dispatched consiguió audio y elevó a14las pistas añadidas. Tres siguen sin confirmar. La continuación automática a otro proveedor sólo admite conflict+not-dispatched tras liquidación y guardas exactas; acknowledged/uncertain detienen. No equivale a demostrar los17audios ni recepción universal de códigos.
+
+
+## Safari: catálogo y carátulas · 2026-11-15
+
+La versión9006dcecc26d4049 corrige la búsqueda directa de iTunes en Safari sin seguir redirecciones: se omite media=music cuando entity ya identifica álbum, canción o artista. WebKit desviaba las consultas anteriores al esquema nativo musics://; no era una pérdida de la sesión de Telegram. La aceptación publicada sin sustituciones pasa4/4grupos en WebKit de Linux, con portadas,17pistas deMOSCA y62publicaciones deNsqk.62/62rutas públicas verificadas; perfilpersistente real conectado y pausado tras reapertura. iPhone físico sigue pendiente. [Evidencia](evidence-safari-catalog-web.json) y [alternativas](CATALOG-ALTERNATIVES.md).
+
+
+## Actualización automática y MB · 2026-11-15
+
+Publicada la entrada `d586ee3e549273ac`. Pulso comprueba nuevas versiones y recarga cuando está visible, sin música ni operaciones pendientes. Conserva la cola y usa una entrada versionada sin forzar la activación del service worker de otras pestañas. Configuración muestra el estado comprobado y «Recargar app»; la acción manual pausa música y espera que terminen las operaciones.
+
+Los tamaños de descargas, caché, cuotas, archivos locales, progreso y espacio liberado se muestran en MB decimales. No cambian los límites internos ni los datos guardados. Verificación combinada708/708unidades y36/36grupos Chromium/WebKit; comprobación publicada de actualización mientras sonaba música, recarga tras pausa/manual y conservación de Telegram.72/72archivos de origen coinciden en contexto nuevo. [Evidencia](evidence-automatic-update-web.json). iPhone físico pendiente.
+
+
+## Recargar pestañas antiguas · 2026-11-15
+
+La reparación publicada en deployment9a3c36e13ae64f5b8f2b7a3d2aaa8c07 evita que un service worker viejo mantenga indefinidamente el HTML anterior al recargar. La instalación del worker nuevo añade un puente a los documentos públicos cacheados; en la próxima navegación abre la versión actual, con fallback de la app anterior sin conexión. No borra música ni sesiones, ni activa el worker a la fuerza sobre una reproducción. Las navegaciones futuras prefieren red con fallback offline. Abrir una URL de versión vieja en el navegador también sirve la app actual; el fetch de metadatos conserva sus bytes originales.
+
+El navegador debe recibir primero el SW reparado: las páginas con código anterior no se pueden actualizar retroactivamente en memoria. Su primer refresco puede instalar la reparación antes de que la siguiente carga use el puente. La prueba pública se hizo con la misma pestaña antigua de raíz, sin enlace especial: tras instalar el SW y recargar apareció el botón, mientras otra pestaña conservó audio y Telegram. [Evidencia](evidence-legacy-update-web.json).

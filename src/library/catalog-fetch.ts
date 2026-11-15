@@ -55,7 +55,14 @@ export function createCatalogTransport(deps:{fetcher?:typeof fetch;origin?:strin
   const artwork=address.protocol==='https:'&&/^is[1-5]-ssl\.mzstatic\.com$/.test(address.hostname)&&!address.port&&!address.username&&!address.password;
   if(!origin||!itunes&&!artwork||init.method&&init.method!=='GET')return direct(url,init);
   const mode=await withSignal(capabilities(),init.signal);cancelled(init.signal);
-  if(itunes&&!mode.itunes)return directMetadata(url,init,direct);
+  if(itunes&&!mode.itunes){
+   const api=new URL(address);
+   // On mobile Safari, media=music can route /search into the native musics:
+   // scheme instead of the JSON API. An explicit music entity is sufficient;
+   // retain it, the market, limits and redirect:error rather than following it.
+   if(api.pathname==='/search'&&api.searchParams.get('media')==='music'&&['album','song','musicArtist'].includes(api.searchParams.get('entity')??''))api.searchParams.delete('media');
+   return directMetadata(api.href,init,direct);
+  }
   if(artwork&&!mode.artwork)return direct(url,init);
   const target=itunes?new URL('/catalog/itunes'+address.pathname+address.search,origin):new URL('/catalog/artwork?'+new URLSearchParams({u:address.href}),origin);
   return direct(target.href,{...init,headers:{Accept:itunes?'application/json':'image/png,image/jpeg,image/webp'},credentials:'same-origin',redirect:'error',referrerPolicy:'no-referrer'});

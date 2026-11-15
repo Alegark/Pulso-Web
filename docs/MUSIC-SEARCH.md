@@ -55,3 +55,8 @@ La búsqueda agrupa presentación corroborada por título/álbum/crédito declar
 En el sitio publicado, tras descargas reales, MOSCA muestra1álbum y18canciones sin títulos duplicados (17deálbum más acústica literal), con imágenes cargadas; abrirlo presenta17pistas y portada600sin mensajes al bot. Reproducción automática desde archivo, reutilización0comandosbot y acción explícita de Biblioteca comprobadas. Persisten límites:3pistas de MOSCA sin confirmar, créditos completos/álbum del archivo pueden separar tarjetas de Biblioteca y no se afirma deduplicación acústica global entre catálogos.
 
 Un conflicto durante revalidación de selección antes de enviar callback permite pasar únicamente al siguiente bot configurado (D05), manteniendo guardas/revisión/target/cadencia y sin repetir el bot original. Si hubo callback acknowledged o entrega uncertain, se detiene. Se prueba esta distinción con unidades; no se presenta como causa exacta de los conflictos reales ni como bypass de las validaciones del worker. Recibo actual: evidence-published-session-repair-web.json.
+
+
+## Safari: parámetro de búsqueda y portadas · 2026-11-15
+
+Las consultas directas a iTunes usan entity explícito sin media=music para evitar que Safari las derive a musics://. Se conserva redirect:error y la validación de metadatos/edición; no se incorporan scripts remotos. La carátula faltaba porque no llegaba el lote de metadatos de búsqueda. El bundle publicado9006dcecc26d4049 pasa el recorrido de búsqueda, portadas, detalleMOSCA y páginaNsqk en WebKit aislado sin sustituciones. No equivale a iPhone físico ni cambia el resultado anterior14/17audios. Véase evidence-safari-catalog-web.json.

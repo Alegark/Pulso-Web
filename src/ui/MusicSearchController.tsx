@@ -1,4 +1,6 @@
+import {formatStorageMB} from '../library/storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
+import {registerUpdateBlocker} from '../service-worker/update-blockers';
 import {acquireFromOrderedBots,orderedProviders,acquisitionFailureText} from '../library/ordered-bot-acquisition';
 import {SelectedSongActions} from './SelectedSongActions';
 import type {BotDownloadedAudio} from '../telegram/bot-search-protocol';
@@ -34,7 +36,7 @@ const fold=(s:string)=>s.normalize('NFC').trim().toLocaleLowerCase('es');
 function resultView(row:BotSearchRow,target:BotSearchTarget|null):MusicSearchResultRow {
  let title:string,subtitle:string|null,match:MusicSearchResultRow['match']='unknown';
  if(row.kind==='audio'){
-  title=row.title??'Audio sin título informado';subtitle=[row.performer,row.durationSeconds+' s',Math.round(row.bytes/1024)+' KiB'].filter(Boolean).join(' · ');
+  title=row.title??'Audio sin título informado';subtitle=[row.performer,row.durationSeconds+' s',formatStorageMB(row.bytes)].filter(Boolean).join(' · ');
   if(target){const titleKnown=!!row.title,artistKnown=!!row.performer&&!!target.artist;
    if(titleKnown&&fold(row.title!)!==fold(target.title)||artistKnown&&fold(row.performer!)!==fold(target.artist!))match='conflict';
    else if(titleKnown&&artistKnown)match='compatible';
@@ -44,7 +46,7 @@ function resultView(row:BotSearchRow,target:BotSearchTarget|null):MusicSearchRes
  return {id:row.rowRef,kind:row.kind,title,subtitle,correlation:row.correlation,match};
 }
 const searchErrors:Record<Exclude<BotSearchError,BotSearchLimitError>,string>={
- 'file-too-large':`El archivo supera el límite de ${AUDIO_FILE_MAX_BYTES/1048576} MiB de Pulso. No se descargó.`, 'file-invalid':'El archivo está incompleto o no es un audio compatible.', conflict:'La opción, el documento o sus metadatos cambiaron. Busca y elige de nuevo.',
+ 'file-too-large':`El archivo supera el límite de ${formatStorageMB(AUDIO_FILE_MAX_BYTES)} de Pulso. No se descargó.`, 'file-invalid':'El archivo está incompleto o no es un audio compatible.', conflict:'La opción, el documento o sus metadatos cambiaron. Busca y elige de nuevo.',
  cancelled:'Consulta detenida. Un mensaje ya enviado puede permanecer en tu chat.',timeout:'El bot no respondió dentro del plazo. No se repetirá la consulta automáticamente.',busy:'Hay otra operación de Telegram pendiente.',expired:'Estos resultados han caducado. Haz una consulta nueva si quieres continuar.',
  'session-expired':'La sesión de Telegram ha caducado. Vuelve a conectarla.',limit:'La consulta o la respuesta supera los límites admitidos.',unsupported:'Este bot o su respuesta todavía no son compatibles con este adaptador.','identity-changed':'El perfil del bot ha cambiado. Comprueba su identidad y vuelve a añadirlo.',
  'rate-limit':'Telegram ha limitado las consultas. Respeta la espera indicada antes de volver a buscar.',network:'No se pudo completar la consulta al bot.',uncertain:'No se pudo confirmar si el bot recibió o completó la consulta. Revisa su chat antes de repetirla.','needs-start':'Abre el chat del bot en Telegram e inícialo allí; después vuelve a buscar aquí.',
@@ -80,6 +82,7 @@ export function MusicSearchController(props:Props){
  const [remote,setRemote]=React.useState<readonly MusicSuggestion[]>([]),[remoteQuery,setRemoteQuery]=React.useState<string|null>(null),[suggesting,setSuggesting]=React.useState(false),[suggestionError,setSuggestionError]=React.useState<string|null>(null),[suggestionNotice,setSuggestionNotice]=React.useState<string|null>(null);
  const [retry,setRetry]=React.useState(0),[notice,setNotice]=React.useState<string|null>(null),[displayedQuery,setDisplayedQuery]=React.useState<string|null>(null),[selectedResult,setSelectedResult]=React.useState<string|null>(null);
  const downloadAbort=React.useRef<AbortController|null>(null),flight=React.useRef<SongFlight|null>(null);
+ React.useLayoutEffect(()=>registerUpdateBlocker(()=>albumCoordinator.running||!!flight.current&&!['done','error'].includes(flight.current.phase)),[]);
  const [download,setDownload]=React.useState<{phase:'network'|'saving'|'saved'|'failed'|'uncertain';bytes:number;total:number}|null>(null);
  const [organizing,setOrganizing]=React.useState(false),[songError,setSongError]=React.useState<string|null>(null);
  const actionArea=React.useRef<HTMLDivElement>(null);

@@ -1,4 +1,6 @@
+import {formatStorageMB} from '../library/storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
+import {registerUpdateBlocker} from '../service-worker/update-blockers';
 import type {BotDownloadedAudio} from '../telegram/bot-search-protocol';
 import type {SongPlaybackAttempt,SongManagement,SongCopyInspection} from '../library/selected-song';
 import React from 'react';
@@ -25,6 +27,13 @@ export function TelegramPanel({activity,canConnect,scopeKey,captureCurrent,captu
  const resumeTried=React.useRef<TelegramSessionClient|null>(null);
  const [state,setState]=React.useState<SessionState>(initialSessionState);const [phone,setPhone]=React.useState('');const [country,setCountry]=React.useState('');const [code,setCode]=React.useState('');const [password,setPassword]=React.useState('');const [consent,setConsent]=React.useState(false);
  const [now,setNow]=React.useState(Date.now);const client=React.useRef<TelegramSessionClient|null>(null);const heading=React.useRef<HTMLHeadingElement>(null);const input=React.useRef<HTMLInputElement>(null);const current=React.useRef(captureCurrent);current.current=captureCurrent;
+ const updateState=React.useRef({phase:state.phase,phone,code,password,country});updateState.current={phase:state.phase,phone,code,password,country};
+ React.useLayoutEffect(()=>registerUpdateBlocker(()=>{
+  const service=client.current,phase=service?.snapshot().phase??updateState.current.phase;
+  const search=service?.searchSnapshot(),bots=service?.botsSnapshot(),sources=service?.sourcesSnapshot();
+  return !['disconnected','connected','error'].includes(phase)||Object.entries(updateState.current).some(([key,value])=>key!=='phase'&&value.trim()!=='')||
+   !!(search?.pending||search?.cancelling||bots?.pending||bots?.cancelling||sources?.pending||sources?.reading||sources?.cancelling);
+ }),[]);
  const lifetime=React.useRef(captureLifetime);lifetime.current=captureLifetime;
  const panel=React.useRef<HTMLElement>(null),focusIntent=React.useRef(false);
  React.useEffect(()=>{let live=true;const service=new TelegramSessionClient(activity,()=>lifetime.current(),value=>{if(live)setState(value);},undefined,undefined,value=>{if(live)setSources(value);},undefined,undefined,value=>{if(live)setBots(value);},value=>{if(live)setSearchState(value);},()=>current.current());client.current=service;setState(initialSessionState());setSources(null);setBots(null);setSearchState(null);return()=>{live=false;client.current=null;service.dispose();};},[activity,scopeKey]);
@@ -58,7 +67,7 @@ export function TelegramPanel({activity,canConnect,scopeKey,captureCurrent,captu
  const submit=(event:React.FormEvent)=>{event.preventDefault();if(client.current!==actionClient||!sessionAction?.()||!actionCurrent()||!canConnect||pending||retrying)return;focusIntent.current=true;if(state.phase==='code'){client.current?.submit('code',code);setCode('');}else if(state.phase==='password'){client.current?.submit('password',password);setPassword('');}};
  return <section ref={panel} className="telegram-panel" aria-label="Conexión a Telegram"><h2 ref={heading} tabIndex={-1}>Tu cuenta de Telegram</h2>
  <p>Conecta tu propia cuenta. Pulso conserva la autorización de Telegram en este navegador para recuperar la conexión al volver. No guarda tu código ni tu contraseña. «Cerrar sesión en Telegram» elimina la autorización guardada de esta conexión; la música y las playlists se conservan.</p>
- <p>En Buscar puedes consultar sugerencias y enviar una consulta al bot elegido. Al elegir una opción musical puedes obtener su audio y obtener una copia de reproducción de hasta {AUDIO_FILE_MAX_BYTES/1048576} MiB en este navegador. Se elige automáticamente la mejor coincidencia; «Agregar canción» y «Añadir a playlist» son acciones aparte.</p>
+ <p>En Buscar puedes consultar sugerencias y enviar una consulta al bot elegido. Al elegir una opción musical puedes obtener su audio y obtener una copia de reproducción de hasta {formatStorageMB(AUDIO_FILE_MAX_BYTES)} en este navegador. Se elige automáticamente la mejor coincidencia; «Agregar canción» y «Añadir a playlist» son acciones aparte.</p>
  {libraryPending&&<p role="status">Hay una comprobación pendiente de la biblioteca local. Puedes iniciar sesión en Telegram; los cambios en la biblioteca siguen en pausa.</p>}
  {!canConnect&&<div><p role="status">{telegramBlockText[blockedReason??'busy']}</p>{blockedReason==='no-control'&&<div className="controls">{onCheckControl&&<button onClick={onCheckControl}>Comprobar control</button>}{onRequestControl&&<button onClick={onRequestControl}>Usar en esta pestaña</button>}</div>}</div>}
  {(state.phase==='disconnected'||state.phase==='error')&&savedSession==='present'&&<div><p role="status">Hay una sesión de Telegram guardada en este navegador.</p><button disabled={!canConnect||pending||retrying} onClick={()=>{if(client.current!==actionClient||!sessionAction?.()||!actionCurrent()||!canConnect||retrying)return;resumeTried.current=actionClient;actionClient?.restore();}}>Reconectar Telegram</button></div>}

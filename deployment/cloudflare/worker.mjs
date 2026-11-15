@@ -1,6 +1,7 @@
 import {DurableObject} from 'cloudflare:workers';
 import {CatalogRelay,RelayError} from './relay.mjs';
 import {decodeTelegramApiIdentity} from '../../src/telegram/api-identity.ts';
+import {shellAssetRequest} from './navigation.mjs';
 const base="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 const documentPolicy=base.replace("connect-src 'self';","connect-src 'self' https://lrclib.net https://itunes.apple.com https://is1-ssl.mzstatic.com https://is2-ssl.mzstatic.com https://is3-ssl.mzstatic.com https://is4-ssl.mzstatic.com https://is5-ssl.mzstatic.com;");
 const sdkPolicy="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' wss://pluto.web.telegram.org wss://venus.web.telegram.org wss://aurora.web.telegram.org wss://vesta.web.telegram.org wss://flora.web.telegram.org; object-src 'none'; base-uri 'none'";
@@ -30,9 +31,10 @@ export default {
    return env.CATALOG.get(env.CATALOG.idFromName('public-catalog-v1')).fetch(new Request('https://catalog.internal'+path+url.search));
   }
   if(path.split('/').some(p=>p.startsWith('.'))||/[\\\x00]/.test(path))return response('{}',404);
-  const asset=await env.ASSETS.fetch(request),headers=new Headers(asset.headers);
+  const asset=await env.ASSETS.fetch(shellAssetRequest(request)),headers=new Headers(asset.headers);
   headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','no-referrer');
   headers.set('Content-Security-Policy',/\/session\.worker-[^/]+\.js$/.test(path)?sdkPolicy:(asset.headers.get('content-type')??'').startsWith('text/html')?documentPolicy:base);
+  if((asset.headers.get('content-type')??'').startsWith('text/html'))headers.set('Cache-Control','no-store');
   if(path==='/sw.js'){headers.set('Cache-Control','no-cache');headers.set('Service-Worker-Allowed','/');}
   return new Response(asset.body,{status:asset.status,statusText:asset.statusText,headers});
  }
