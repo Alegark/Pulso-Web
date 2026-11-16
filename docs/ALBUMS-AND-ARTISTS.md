@@ -128,3 +128,14 @@ MusicBrainz no entrega audio en este recorrido. Abrir un álbum no consulta bots
 La [API de MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API) es gratuita para uso no comercial sin API key. Se identifica Pulso mediante User-Agent con el repositorio de contacto, se comparten límites de 1,1 segundos en el coordinador y se respetan cooldowns. No se crean cuentas, recursos de pago ni un nuevo almacenamiento de usuarios. iTunes conserva su cola y cuota separadas. El catálogo puede tener información incompleta o indisponibilidad; no se promete cobertura universal.
 
 Evidencia local:718/718 unidades,13/13 servidor,20/20 de respaldo Chromium/WebKit y36/36 interfaz general/playlist. Metadata sintética; archivos propios con IDB/Audio nativos para comprobar reutilización sin una nueva sesión SDK. Sin aceptación física de iPhone. La disponibilidad pública del incremento se registra por separado en [la evidencia](evidence-album-backup-web.json).
+
+
+## Descarga de álbum al navegar · 2026-11-16
+
+Añadir álbum conserva el trabajo al ir a Inicio, Biblioteca, Configuración o volver a los resultados. El progreso y «Detener descarga de álbum» quedan visibles fuera del detalle. La lista del álbum recupera sus recibos y vuelve a verificar las copias cuando se abre de nuevo.
+
+La incorporación usa una captura propia para descargar y organizar; pausar la música no la cancela y el lote no puede iniciar Play. Se conservan las guardas de cuenta, proveedor, control exclusivo, almacenamiento, recuperación y transacción. Cancelar explícitamente o detener Telegram sí interrumpe la operación; una copia cuyo commit ya ganó puede conservarse como caché sin añadirse tarde a Biblioteca. Las pistas verificadas se reutilizan y las ocurrencias repetidas comparten archivo.
+
+Esta continuidad cubre la navegación dentro del documento abierto. No añade una cola persistente para recuperar el lote tras cerrar o recargar Pulso y no acredita ejecución mientras el sistema suspende el navegador. Los casos inciertos conservan las restricciones de revisión existentes.
+
+Aceptación local:15/15 casos musicales de main con SDK TESTONLY y archivos propios,36/36 de interfaz Chromium/WebKit y724/724 unitarias. El archivo físico purgado sólo fue un fixture negativo de chunks IDB; no se convierte en aceptación de retirada por UI. [Evidencia y estado de publicación](evidence-album-background-web.json). iPhone físico y cuenta real siguen separados.
