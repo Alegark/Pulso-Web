@@ -67,6 +67,13 @@ El texto `albumName` de LRCLIB por sí solo no crea una sugerencia de álbum: es
 Las pistas con duración desconocida conservan entradas separadas. Para duración conocida, cada miembro de un grupo debe quedar dentro de cinco segundos de todos los demás; el orden de llegada no permite que un representante cree una cadena de tolerancia. La regla es de presentación y conserva título, crédito, versión e identidad de adquisición.
 
 
+## 2026-11-16 · Selección e integración de singles
+
+La selección de un single conserva la identidad de canción y la pertenencia a playlist, reutiliza una copia local íntegra cuando existe y limita la adquisición a una consulta explícita, un callback, una importación y un Play. Cancelar o editar/ocultar la selección no deja viva una resolución que habilite la actualización automática; mientras la metadata retenida pertenece al intento de single, el blocker real de actualización observa ese trabajo pendiente. La integración no reinicia el reproductor ni cambia la pista o su procedencia, y no añade una consulta RPC al navegar por el catálogo.
+
+La aceptación integrada source-stable usa SDK y metadata sintéticos, con Audio/OPFS/IndexedDB/Web Locks nativos según cada navegador. El freeze de 262 fuentes es `88b9ffd391deba2b357c6804bd3666094fe0424bec533fec76b1db0c28d31839`; recibos y límites reproducibles están en [evidence-singles-integration-web.json](evidence-singles-integration-web.json) y `.local/singles-integration-acceptance/`. Chromium 9/9; WebKit persistente 5/5, efímero fail-closed 1/1 e IndexedDB 1/1. El baseline CSP de WebKit es separado y conocido; esto no es una afirmación de CSP global cero. No acredita bot/Telegram/cuentas reales, iPhone/Safari físico, actualización forzada durante metadata pendiente, segundo plano de iOS ni P0-W global.
+
+
 ## Safari: parámetro de búsqueda y portadas · 2026-11-15
 
 Las consultas directas a iTunes usan entity explícito sin media=music para evitar que Safari las derive a musics://. Se conserva redirect:error y la validación de metadatos/edición; no se incorporan scripts remotos. La carátula faltaba porque no llegaba el lote de metadatos de búsqueda. El bundle publicado9006dcecc26d4049 pasa el recorrido de búsqueda, portadas, detalleMOSCA y páginaNsqk en WebKit aislado sin sustituciones. No equivale a iPhone físico ni cambia el resultado anterior14/17audios. Véase evidence-safari-catalog-web.json.

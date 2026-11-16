@@ -20,7 +20,7 @@ export interface MusicSearchPanelProps {
  resultsVisible:boolean;selectedSuggestionId:string|null;playingTrackIds?:ReadonlySet<string>;
  primaryProvider:MusicSearchProviderRow|null;
  hasSupportedProvider?:boolean;
- sessionReady:boolean;canSearch:boolean;searchPending:boolean;
+ sessionReady:boolean;canSearch:boolean;searchPending:boolean;searchPendingLabel?:string;
  /** Catalogue results only. This callback never submits a Telegram query. */
  onSearch:()=>void;
  onChooseSuggestion:(id:string,opener:HTMLButtonElement)=>void;onCancel:()=>void;
@@ -108,7 +108,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    {!props.songActions&&<>{props.searchPending&&<button type="button" onClick={()=>{if(committed.current===props&&props.searchPending)(props.onCancelDownload??props.onCancel)();}}>Cancelar consulta</button>}
    {props.downloadProgress&&props.downloadProgress.total>0&&<progress aria-label="Progreso de la descarga" value={props.downloadProgress.bytes} max={props.downloadProgress.total}/>}
    {props.downloadStatus&&<p role="status">{props.downloadStatus}</p>}
-   <div role="status">{props.searchPending?'Consultando la canción elegida…':props.status}</div>
+   <div role="status">{props.searchPending?(props.searchPendingLabel??'Consultando la canción elegida…'):props.status}</div>
    {props.error&&<p role="alert">{props.error}</p>}
    {props.uncertain&&<p>Resultado incierto: no se ha confirmado la respuesta del bot. No se reintentará ni cambiará de bot automáticamente.</p>}
    </>}

@@ -200,7 +200,7 @@ test('song-batch album candidates retain edition identity for title and title pl
  });
  test('artist-only results use declared full words; combined queries exclude unrelated provider rows',()=>{
  const tracks=[row(1,'Mosca','Nsqk','Mosca'),row(2,'Otro','Nsqk','Otro'),row(3,'Mosca','Otro','Mosca'),row(4,'Algo','Nsqk Extra','Otro')];
- const editions=[{id:5,title:'Mosca',artist:'Nsqk',trackCount:1,releaseDate:null},{id:6,title:'Otro',artist:'Nsqk',trackCount:1,releaseDate:null}];
+ const editions=[{id:5,title:'Mosca',artist:'Nsqk',trackCount:2,releaseDate:null},{id:6,title:'Otro',artist:'Nsqk',trackCount:2,releaseDate:null}];
  const artists=[{id:7,name:'Nsqk'},{id:8,name:'Nsqk Mosca'}];
  for(const query of ['Nsqk mosca','mosca nsqk']){
   const out=musicSearchCatalog(query,[],tracks,editions,artists);
