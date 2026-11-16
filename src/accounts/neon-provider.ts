@@ -7,10 +7,18 @@ function userOf(value:unknown):AccountUser|null {
  if(!session||!user||typeof user.id!=='string'||!user.id||typeof user.email!=='string'||typeof user.name!=='string'||typeof user.emailVerified!=='boolean')throw new AccountFailure('INVALID_RESPONSE');
  return {id:user.id,name:user.name,email:user.email,verified:user.emailVerified};
 }
-async function createProvider():Promise<AccountProvider>{
+async function createClient(){
+ // Pulso keeps a strict CSP. Configure Zod before importing schemas from the SDK.
+ const {config}=await import('zod/v4/core');config({jitless:true});
  const {createAuthClient}=await import('@neon/auth');
  const {BetterAuthVanillaAdapter}=await import('@neon/auth/vanilla/adapters');
- const client=createAuthClient(window.location.origin+'/api/account-auth',{adapter:BetterAuthVanillaAdapter({fetchOptions:{retry:0,timeout:15000}})});
+ return createAuthClient(window.location.origin+'/api/account-auth',{adapter:BetterAuthVanillaAdapter({fetchOptions:{retry:0,timeout:15000}})});
+}
+let authClient:ReturnType<typeof createClient>|null=null;
+/** One official SDK client for the prebuilt forms and the header's checked profile. */
+export function getAccountAuthClient(){return authClient??=createClient();}
+async function createProvider():Promise<AccountProvider>{
+ const client=await getAccountAuthClient();
  const callback=window.location.origin+'/?pulso-account=callback';
  return {
   async session(){const r=await client.getSession({fetchOptions:{cache:'no-store'}});checked(r);return userOf(r.data);},

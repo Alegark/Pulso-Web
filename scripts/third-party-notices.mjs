@@ -7,7 +7,7 @@ export const reviewedPackages=JSON.parse(readFileSync(new URL('./license-package
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 function checkPackage(record,root){
  const actual=JSON.parse(readFileSync(resolve(root,record.packageRoot??`node_modules/${record.name}`,'package.json'),'utf8'));
- if(actual.name!==record.name||actual.version!==record.version||actual.license!==record.license)throw new Error(`License review required for ${record.name}: package metadata changed`);
+ if(actual.name!==record.name||actual.version!==record.version||(record.metadataLicense===null?actual.license!==undefined:actual.license!==record.license))throw new Error(`License review required for ${record.name}: package metadata changed`);
  return [...record.noticeFiles,...record.additionalNoticeFiles??[]].map(notice=>{
   const bytes=readFileSync(resolve(root,notice.file));
   if(bytes.length!==notice.bytes||digest(bytes)!==notice.sha256)throw new Error(`License review required for ${record.name}: original notice changed`);
@@ -25,9 +25,9 @@ export function verifyBundledModule(id,{root=projectRoot,packages=reviewedPackag
  const record=packages.find(p=>p.name===name&&p.version===actual.version);
  if(!record&&packages.some(p=>p.name===name))throw new Error(`License review required for bundled ${name}: package metadata changed`);
  if(!record)throw new Error(`License review required before bundling ${name}@${actual.version}`);
- if(actual.version!==record.version||actual.name!==record.name||actual.license!==record.license)throw new Error(`License review required for bundled ${name}: package metadata changed`);
+ if(actual.version!==record.version||actual.name!==record.name||(record.metadataLicense===null?actual.license!==undefined:actual.license!==record.license))throw new Error(`License review required for bundled ${name}: package metadata changed`);
  for(const notice of record.noticeFiles){
-  const file=resolve(packageRoot,notice.file.slice((record.packageRoot??`node_modules/${name}`).length+1));
+  const file=notice.external?resolve(root,notice.file):resolve(packageRoot,notice.file.slice((record.packageRoot??`node_modules/${name}`).length+1));
   const bytes=readFileSync(file);
   if(bytes.length!==notice.bytes||digest(bytes)!==notice.sha256)throw new Error(`License review required for bundled ${name}: original notice changed`);
  }
