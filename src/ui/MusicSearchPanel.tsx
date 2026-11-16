@@ -5,7 +5,7 @@ import './music-search.css';
 import {CatalogArtwork} from './CatalogArtwork';
 
 export interface MusicSearchSuggestionRow {
- id:string;kind:'track'|'album'|'artist';title:string;subtitle:string|null;source:'local'|'lrclib'|'itunes';artworkUrl?:string|null;trackId?:string;
+ id:string;kind:'track'|'album'|'artist';title:string;subtitle:string|null;source:'local'|'lrclib'|'itunes'|'musicbrainz';artworkUrl?:string|null;trackId?:string;
 }
 export interface MusicSearchProviderRow {id:string;username:string;label:string;supported:boolean}
 export interface MusicSearchResultRow {
@@ -122,7 +122,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
   </section>
   <details className="catalog-sources"><summary>Opciones de búsqueda</summary>
    {props.onRetrySuggestions&&props.query.trim().length>=3&&<button type="button" disabled={props.suggestionsPending||props.searchPending} onClick={()=>{if(active()&&!props.suggestionsPending&&!props.searchPending)props.onRetrySuggestions?.();}}>Actualizar sugerencias</button>}
-   <p>Las sugerencias externas proceden de iTunes US y <a href="https://lrclib.net/docs" target="_blank" rel="noopener noreferrer">LRCLIB</a>. Las coincidencias repetidas se agrupan; las versiones distintas se conservan. Los resultados no confirman disponibilidad en Telegram ni álbumes completos.</p>
+   <p>Las sugerencias externas proceden de iTunes US, MusicBrainz como respaldo y <a href="https://lrclib.net/docs" target="_blank" rel="noopener noreferrer">LRCLIB</a>. Las coincidencias repetidas se agrupan; las versiones distintas se conservan. Los resultados no confirman disponibilidad en Telegram ni álbumes completos.</p>
   </details>
  </section>;
 }

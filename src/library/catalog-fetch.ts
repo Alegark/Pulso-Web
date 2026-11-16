@@ -1,5 +1,5 @@
 /** Optional prototype metadata relay. Static hosts retain direct provider access. */
-interface RelayConfig {version:1;itunes:boolean;artwork:boolean}
+interface RelayConfig {version:1;itunes:boolean;artwork:boolean;musicbrainz?:boolean}
 const disabled:RelayConfig=Object.freeze({version:1,itunes:false,artwork:false});
 const nativeFetch:typeof fetch=(...args)=>fetch(...args);
 function cancelled(signal:AbortSignal|null|undefined){if(signal?.aborted)throw new DOMException('Consulta cancelada.','AbortError');}
@@ -43,7 +43,7 @@ export function createCatalogTransport(deps:{fetcher?:typeof fetch;origin?:strin
    try{while(true){const part=await reader.read();if(controller.signal.aborted)return disabled;if(part.done)break;size+=part.value.length;if(size>1024)return disabled;chunks.push(part.value);}
     const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
     const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)) as Record<string,unknown>;
-    return value&&value.version===1&&typeof value.itunes==='boolean'&&typeof value.artwork==='boolean'?{version:1,itunes:value.itunes,artwork:value.artwork}:disabled;
+    return value&&value.version===1&&typeof value.itunes==='boolean'&&typeof value.artwork==='boolean'?{version:1,itunes:value.itunes,artwork:value.artwork,...(value.musicbrainz===true?{musicbrainz:true}:{})}:disabled;
    }finally{controller.signal.removeEventListener('abort',cancel);cancel();try{reader.releaseLock();}catch{/* A timed-out read may still settle. */}}
   })().catch(()=>disabled);
   probe=Promise.race([load,expired]).then(value=>{clearTimeout(timer);config=value;return value;});
@@ -67,8 +67,10 @@ export function createCatalogTransport(deps:{fetcher?:typeof fetch;origin?:strin
   const target=itunes?new URL('/catalog/itunes'+address.pathname+address.search,origin):new URL('/catalog/artwork?'+new URLSearchParams({u:address.href}),origin);
   return direct(target.href,{...init,headers:{Accept:itunes?'application/json':'image/png,image/jpeg,image/webp'},credentials:'same-origin',redirect:'error',referrerPolicy:'no-referrer'});
  }
- return {fetch:request,mode:():'unresolved'|'relay'|'direct'=>config===null?'unresolved':config.itunes?'relay':'direct'};
+ return {musicbrainz:async(signal?:AbortSignal)=>!!(await withSignal(capabilities(),signal)).musicbrainz,fetch:request,mode:():'unresolved'|'relay'|'direct'=>config===null?'unresolved':config.itunes?'relay':'direct'};
 }
 const transport=createCatalogTransport();
 export const catalogFetch=transport.fetch;
 export const catalogTransportMode=transport.mode;
+
+export const musicBrainzEnabled=transport.musicbrainz;

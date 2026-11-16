@@ -1,4 +1,5 @@
 import {DurableObject} from 'cloudflare:workers';
+import {createMusicBrainzRelay} from './musicbrainz-relay.mjs';
 import {CatalogRelay,RelayError} from './relay.mjs';
 import {decodeTelegramApiIdentity} from '../../src/telegram/api-identity.ts';
 import {shellAssetRequest} from './navigation.mjs';
@@ -9,8 +10,8 @@ function response(body,status=200,mime='application/json',retry=null){const head
 // A single SQLite-backed object coordinates the upstream quota across locations.
 // Only last-request/cooldown timestamps persist; query results stay in bounded RAM.
 export class CatalogCoordinator extends DurableObject{
- constructor(ctx,env){super(ctx,env);this.ready=ctx.blockConcurrencyWhile(async()=>{const initial=await ctx.storage.get('quota')??{};this.relay=new CatalogRelay({initial,checkpoint:quota=>ctx.storage.put('quota',quota)});});}
- async fetch(request){await this.ready;const url=new URL(request.url);try{const value=await this.relay.get(url.pathname,url.search);return response(value.body,200,value.mime);}catch(e){return response('{}',e instanceof RelayError?e.status:502,'application/json',e instanceof RelayError?e.retryAfter:null);}}
+ constructor(ctx,env){super(ctx,env);this.ready=ctx.blockConcurrencyWhile(async()=>{const initial=await ctx.storage.get('quota')??{};this.relay=new CatalogRelay({initial,checkpoint:quota=>ctx.storage.put('quota',quota)});const secondary=await ctx.storage.get('quota-musicbrainz')??{};this.musicbrainz=createMusicBrainzRelay({initial:secondary,checkpoint:quota=>ctx.storage.put('quota-musicbrainz',quota)});});}
+ async fetch(request){await this.ready;const url=new URL(request.url);try{const value=await (url.pathname.startsWith('/catalog/musicbrainz/')?this.musicbrainz:this.relay).get(url.pathname,url.search);return response(value.body,200,value.mime);}catch(e){return response('{}',e instanceof RelayError?e.status:502,'application/json',e instanceof RelayError?e.retryAfter:null);}}
 }
 export default {
  async fetch(request,env){
@@ -18,7 +19,7 @@ export default {
   if(!['GET','HEAD'].includes(request.method))return response('{}',405);
   // Public iTunes metadata works from the browser; this edge egress is rate-limited.
   // Keep the bounded image relay and older metadata endpoints for existing tabs.
-  if(path==='/catalog-config.json')return response(request.method==='HEAD'?null:JSON.stringify({version:1,itunes:false,artwork:!!env.CATALOG}));
+  if(path==='/catalog-config.json')return response(request.method==='HEAD'?null:JSON.stringify({version:1,itunes:false,artwork:!!env.CATALOG,musicbrainz:!!env.CATALOG}));
   if(path==='/telegram-config.json'){
    const config=decodeTelegramApiIdentity(env.TELEGRAM_API_IDENTITY);if(!config)return response('{}',503);
    return response(request.method==='HEAD'?null:JSON.stringify({api_id:config.apiId,api_hash:config.apiHash}));

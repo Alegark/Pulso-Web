@@ -1,3 +1,4 @@
+import type {CatalogId} from './catalog-id';
 import type {Track} from './library';
 import type {MusicSuggestion} from './music-suggestions';
 import type {AlbumEdition,AlbumHint,CatalogArtist,CatalogSongHint} from './album-catalog';
@@ -9,10 +10,10 @@ interface ChoiceBase {
  readonly artist:string|null;
  readonly album:string|null;
  readonly duration:number|null;
- readonly source:'local'|'lrclib'|'itunes';
+ readonly source:'local'|'lrclib'|'itunes'|'musicbrainz';
  readonly artworkUrl?:string;
 }
-export type MusicCatalogChoice = (ChoiceBase & {readonly kind:'track'}) | (ChoiceBase & {readonly kind:'album'; readonly editionId?:number}) | (ChoiceBase & {readonly kind:'artist'; readonly artistId:number});
+export type MusicCatalogChoice = (ChoiceBase & {readonly kind:'track'}) | (ChoiceBase & {readonly kind:'album'; readonly editionId?:CatalogId}) | (ChoiceBase & {readonly kind:'artist'; readonly artistId:CatalogId});
 export const MUSIC_CATALOG_LIMITS=Object.freeze({localMatches:50,tracks:70,albums:20,preview:6});
 // Ignore presentation differences, not recording/version qualifiers or performers.
 export function musicCatalogKey(text:string):string {
@@ -67,7 +68,7 @@ function albumMatches(query:string,album:string,artist:string|null):boolean {
 export function musicSearchCatalog(query:string,local:readonly Track[],remote:readonly MusicSuggestion[], editions:readonly AlbumEdition[] = [], artists:readonly CatalogArtist[] = [], hints:readonly AlbumHint[] = [], songHints:readonly CatalogSongHint[] = []):readonly MusicCatalogChoice[] {
  const q=musicCatalogKey(query);if(!q)return [];
  const songs=new Map<string,MusicCatalogChoice>(),albums=new Map<string,MusicCatalogChoice>();
- const add=(id:string,title:string,artist:string|null,album:string|null,duration:number|null,source:'local'|'lrclib'|'itunes',artworkUrl?:string)=>{
+ const add=(id:string,title:string,artist:string|null,album:string|null,duration:number|null,source:'local'|'lrclib'|'itunes'|'musicbrainz',artworkUrl?:string)=>{
   if(!score(q,title,artist,album))return;
   const displayTitle=displayTrackTitle(title,artist);
   // Presentation grouping only: an authoritative album/title/credit match
@@ -80,7 +81,7 @@ export function musicSearchCatalog(query:string,local:readonly Track[],remote:re
   const cover=artworkUrl??corroborated?.artworkUrl??albumCover;
   const key=JSON.stringify([musicCatalogKey(corroborated?.title??displayTitle),musicCatalogKey(corroborated?.artist??artist??'')]);
   const existing=songs.get(key);
-  const priority={local:3,itunes:2,lrclib:1};
+  const priority={local:3,itunes:2,lrclib:1,musicbrainz:2};
   if((!existing&&songs.size<MUSIC_CATALOG_LIMITS.tracks)||(existing&&(priority[source]>priority[existing.source]||priority[source]===priority[existing.source]&&existing.displayTitle!==undefined&&displayTitle===title)))
    songs.set(key,Object.freeze({id,kind:'track',title,...(displayTitle!==title?{displayTitle}:{}),artist,album,duration,source,...(cover?{artworkUrl:cover}:{})}));
   else if(existing&&!existing.artworkUrl&&artworkUrl)songs.set(key,Object.freeze({...existing,artworkUrl}));
@@ -116,9 +117,9 @@ export function musicSearchCatalog(query:string,local:readonly Track[],remote:re
  for(const {t} of reliableRemote.map((t,index)=>({t,index,score:score(q,t.trackName,t.artistName,t.albumName||null)})).filter(item=>item.score>0).sort((a,b)=>b.score-a.score||a.index-b.index))add('lrclib:'+t.id,t.trackName,t.artistName,['null','undefined'].includes(musicCatalogKey(t.albumName))?null:t.albumName||null,t.duration,'lrclib');
  const ranked=[...songs.values()].map((choice,index)=>({choice,index,score:score(q,choice.title,choice.artist,choice.album)}))
   .sort((a,b)=>b.score-a.score||a.index-b.index).map(item=>item.choice);
- const editionChoices:MusicCatalogChoice[]=editions.filter(e=>albumMatches(q,e.title,e.artist)).slice().sort((a,b)=>score(q,b.title,b.artist,null)-score(q,a.title,a.artist,null)).map(e=>Object.freeze({id:'itunes:album:'+e.id,kind:'album',editionId:e.id,title:e.title,artist:e.artist,album:e.title,duration:null,source:'itunes',artworkUrl:e.artworkUrl}));
- const artistChoices:MusicCatalogChoice[]=artists.filter(a=>relevance(q,[a.name],true)>0).map(a=>Object.freeze({id:'itunes:artist:'+a.id,kind:'artist',artistId:a.id,title:a.name,artist:null,album:null,duration:null,source:'itunes'}));
+ const editionChoices:MusicCatalogChoice[]=editions.filter(e=>albumMatches(q,e.title,e.artist)).slice().sort((a,b)=>score(q,b.title,b.artist,null)-score(q,a.title,a.artist,null)).map(e=>Object.freeze({id:(typeof e.id==='string'?'musicbrainz:album:':'itunes:album:')+e.id,kind:'album',editionId:e.id,title:e.title,artist:e.artist,album:e.title,duration:null,source:typeof e.id==='string'?'musicbrainz':'itunes',artworkUrl:e.artworkUrl}));
+ const artistChoices:MusicCatalogChoice[]=artists.filter(a=>relevance(q,[a.name],true)>0).map(a=>Object.freeze({id:(typeof a.id==='string'?'musicbrainz:artist:':'itunes:artist:')+a.id,kind:'artist',artistId:a.id,title:a.name,artist:null,album:null,duration:null,source:typeof a.id==='string'?'musicbrainz':'itunes'}));
  const hintKeys=new Set(hints.filter(h=>albumMatches(q,h.title,h.artist)).map(h=>JSON.stringify([musicCatalogKey(h.artist??''),musicCatalogKey(h.title)])));
  const concreteKeys=new Set(editions.filter(e=>albumMatches(q,e.title,e.artist)).map(e=>JSON.stringify([musicCatalogKey(e.artist),musicCatalogKey(e.title)])));
- return Object.freeze([...ranked,...editionChoices,...[...albums.entries()].filter(([key,value])=>value.kind==='album'&&value.editionId!==undefined?!editions.some(e=>e.id===value.editionId):!concreteKeys.has(key)&&!hintKeys.has(key)).map(([,value])=>value).sort((a,b)=>score(q,b.title,b.artist,null)-score(q,a.title,a.artist,null)),...artistChoices]);
+ return Object.freeze([...ranked,...editionChoices,...[...albums.entries()].filter(([key,value])=>value.kind==='album'&&value.editionId!==undefined?!editions.some(e=>e.id===value.editionId||typeof e.id==='string'&&musicCatalogKey(e.title)===musicCatalogKey(value.title)&&musicCatalogKey(e.artist)===musicCatalogKey(value.artist??'')):!concreteKeys.has(key)&&!hintKeys.has(key)).map(([,value])=>value).sort((a,b)=>score(q,b.title,b.artist,null)-score(q,a.title,a.artist,null)),...artistChoices]);
 }

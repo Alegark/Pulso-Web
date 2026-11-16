@@ -26,3 +26,6 @@ Fuentes primarias consultadas:
 - [Search API de Apple](https://performance-partners.apple.com/search-api).
 
 El contracontrol inicial se ejecutó contra la web publicada con una sustitución explícita de opciones de red; es diagnóstico, no aceptación de una versión reparada. La aceptación posterior debe usar el bundle publicado sin sustituciones. WebKit de Linux no acredita Safari en un iPhone físico. La sesión real del propietario se conserva en otro perfil y no se copia a las pruebas aisladas.
+
+
+Actualización 2026-11-16: MusicBrainz se integra como respaldo, manteniendo iTunes como principal. La investigación histórica anterior se conserva; el contrato, las pruebas y los límites actuales están en [Álbumes y artistas](ALBUMS-AND-ARTISTS.md#2026-11-16--musicbrainz-como-respaldo-de-álbumes). No se cambian las fuentes de audio.

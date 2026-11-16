@@ -397,7 +397,7 @@ function captureSongPlayback():SongPlaybackAttempt|null {
   },
   async lookup(choice:SongChoice,signal:AbortSignal){
    const live=()=>current()&&!signal.aborted;
-   primaryArtist=(choice.source==='itunes'?choice.searchArtist:choice.source==='lrclib'?choice.artist:null)?.trim()||null;
+   primaryArtist=((choice.source==='itunes'||choice.source==='musicbrainz')?choice.searchArtist:choice.source==='lrclib'?choice.artist:null)?.trim()||null;
    if(!live()||!songAdmissionIdle())throw Error('La biblioteca está ocupada.');const token=control.activity.begin();if(!token)throw Error('Sin control.');
    try{
     const id=await readSongAlias(choice,()=>live()&&token.current());if(!live())throw Error('cancelled');rememberedId=id;

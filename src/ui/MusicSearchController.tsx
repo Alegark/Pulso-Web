@@ -1,3 +1,4 @@
+import type {CatalogId} from '../library/catalog-id';
 import {formatStorageMB} from '../library/storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {registerUpdateBlocker} from '../service-worker/update-blockers';
@@ -64,7 +65,7 @@ export function BotProviderNotice({text}:{text:string}) {return <p role="status"
 interface SongFlight {key:string;choice:SongChoice;target:BotSearchTarget;attempt:SongPlaybackAttempt;abort:AbortController;scope:string;client:TelegramSessionClient|null;networkCurrent:(()=>boolean)|null;revision:number|undefined;queryId:string|null;trackId?:string;phase:'lookup'|'query'|'choice'|'download'|'saving'|'play'|'done'|'error'}
 export function MusicSearchController(props:Props){
  const [query,setQuery]=React.useState('');
- const [album,setAlbum]=React.useState<{title:string;artist:string|null;editionId?:number;artworkUrl?:string}|null>(null);
+ const [album,setAlbum]=React.useState<{title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string}|null>(null);
  const [artist,setArtist]=React.useState<CatalogArtist|null>(null);
  const [editions,setEditions]=React.useState<readonly AlbumEdition[]>([]),[artists,setArtists]=React.useState<readonly CatalogArtist[]>([]),[catalogQuery,setCatalogQuery]=React.useState<string|null>(null),[catalogPending,setCatalogPending]=React.useState(false),[catalogError,setCatalogError]=React.useState<string|null>(null);
  const artistOpener=React.useRef<HTMLButtonElement|null>(null),albumOpener=React.useRef<HTMLButtonElement|null>(null);

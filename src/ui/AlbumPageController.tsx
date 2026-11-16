@@ -1,3 +1,5 @@
+import {musicBrainzId} from '../library/catalog-id';
+import type {CatalogId} from '../library/catalog-id';
 import {catalogTransportMode} from '../library/catalog-fetch';
 import type {OrderedProvider} from '../library/ordered-bot-acquisition';
 import React from 'react';
@@ -11,14 +13,14 @@ import './album-page.css';
 import {CatalogArtwork} from './CatalogArtwork';
 const catalog=new AlbumCatalog((...args)=>fetch(...args));
 const detailKey=(detail:AlbumDetail)=>JSON.stringify(detail.tracks.map(track=>albumTrackChoice(track,detail.edition.title))); 
-export interface AlbumCoordinator {running:boolean;uncertainTracks:Set<number>;remoteClock:{settledAt:number};rows:Map<number,{key:string;rows:AlbumRow[]}>;listeners:Set<()=>void>}
-interface Props {coordinator:AlbumCoordinator;captureInspection?:()=>SongCopyInspection|null;selectedKey:string|null;libraryTrackIds?:ReadonlySet<string>;title:string;artist:string|null;editionId?:number;artworkUrl?:string;searchBatch?:{data:unknown;pending:boolean};backLabel?:string;scope:string;visible:boolean;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;providers:readonly OrderedProvider[];capture:()=>SongPlaybackAttempt|null;management:(id:string)=>SongManagement|null;onBack:()=>void;onChoose:(choice:SongChoice)=>void;songActions:React.ReactNode}
+export interface AlbumCoordinator {running:boolean;uncertainTracks:Set<CatalogId>;remoteClock:{settledAt:number};rows:Map<CatalogId,{key:string;rows:AlbumRow[]}>;listeners:Set<()=>void>}
+interface Props {coordinator:AlbumCoordinator;captureInspection?:()=>SongCopyInspection|null;selectedKey:string|null;libraryTrackIds?:ReadonlySet<string>;title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;searchBatch?:{data:unknown;pending:boolean};backLabel?:string;scope:string;visible:boolean;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;providers:readonly OrderedProvider[];capture:()=>SongPlaybackAttempt|null;management:(id:string)=>SongManagement|null;onBack:()=>void;onChoose:(choice:SongChoice)=>void;songActions:React.ReactNode}
 const metadataIdentity=(props:Props)=>JSON.stringify([props.title,props.artist,props.editionId??null,props.scope]);
-const catalogError=(reason:AlbumFailure,detail:boolean,stage?:AlbumStage,httpStatus?:number)=>{
+const catalogError=(reason:AlbumFailure,detail:boolean,stage?:AlbumStage,httpStatus?:number,backup=false)=>{
  const prefix=detail?'No se pudo verificar la lista completa de pistas.':'No se pudo consultar el catálogo de álbumes.';
  const message=reason==='rate-limited'?'El catálogo ha limitado temporalmente las consultas.':reason==='timeout'?'La consulta tardó demasiado.':reason==='network'||reason==='http'?'Comprueba la conexión e inténtalo de nuevo.':'La respuesta del catálogo no se pudo verificar.';
  const entry=location.pathname.match(/\/releases\/([a-f0-9]{16})\.html$/)?.[1]??'local';
- const diagnostic=[detail?'album-detail':stage??'album-search',catalogTransportMode(),reason,...(Number.isInteger(httpStatus)&&httpStatus!>=400&&httpStatus!<=599?[String(httpStatus)]:[]),entry].join(' · ');
+ const diagnostic=[detail?'album-detail':stage??'album-search',backup?'musicbrainz-relay':catalogTransportMode(),reason,...(Number.isInteger(httpStatus)&&httpStatus!>=400&&httpStatus!<=599?[String(httpStatus)]:[]),entry].join(' · ');
  return `${prefix} ${message} Diagnóstico: ${diagnostic}.`;
 };
 export function AlbumPageController(props:Props){
@@ -61,8 +63,16 @@ export function AlbumPageController(props:Props){
   return()=>abort.abort();
  },[props.title,props.artist,props.editionId,props.scope,props.visible,relevantBatch?.pending,relevantBatch?.data,retryVersion]);
  async function load(edition:AlbumEdition,abort:AbortController,live:()=>boolean){
-  setRetryTarget(undefined);setStatus('Cargando pistas…');const result=await catalog.load(edition.id,{signal:abort.signal,current:live});if(!live())return;
-  if(!result.ok){if(result.reason!=='cancelled'){setStatus(catalogError(result.reason,true,undefined,result.httpStatus));setRetryTarget(edition);}return;}loadedMetadata.current=metadataIdentity(props);setDetail(result.value);setCopies({});inspectedEdition.current=null;const saved=props.coordinator.rows.get(result.value.edition.id),compatible=saved?.key===detailKey(result.value);rows.current=compatible?saved.rows.map(r=>({...r})):result.value.tracks.map(()=>({state:'unattempted',trackId:null,confirmed:false,message:''}));setProgress(compatible?{rows:rows.current,message:'Comprueba las copias antes de continuar.'}:null);setStatus('');
+  setRetryTarget(undefined);setStatus('Cargando pistas…');let usedBackup=musicBrainzId(edition.id);let result=await catalog.load(edition.id,{signal:abort.signal,current:live});if(!live())return;
+  if(!result.ok&&result.reason!=='cancelled'&&!musicBrainzId(edition.id)){
+   setStatus('Consultando el respaldo de álbumes…');
+   const alternative=await catalog.alternatives(edition.title,edition.artist,{signal:abort.signal,current:live});if(!live())return;
+   if(alternative.ok){const candidates=alternative.value.filter(e=>musicCatalogKey(e.title)===musicCatalogKey(edition.title)&&(!edition.artist||musicCatalogKey(e.artist)===musicCatalogKey(edition.artist))&&(edition.trackCount===0||e.trackCount===edition.trackCount));
+    if(candidates.length===1){usedBackup=true;result=await catalog.load(candidates[0].id,{signal:abort.signal,current:live});if(!live())return;}
+    else if(candidates.length>1){setEditions(candidates);setRetryTarget(null);setStatus('iTunes no pudo entregar las pistas. Elige una edición del respaldo MusicBrainz.');return;}
+   }
+  }
+  if(!result.ok){if(result.reason!=='cancelled'){setStatus(catalogError(result.reason,true,undefined,result.httpStatus,usedBackup));setRetryTarget(edition);}return;}loadedMetadata.current=metadataIdentity(props);setDetail(result.value);setCopies({});inspectedEdition.current=null;const saved=props.coordinator.rows.get(result.value.edition.id),compatible=saved?.key===detailKey(result.value);rows.current=compatible?saved.rows.map(r=>({...r})):result.value.tracks.map(()=>({state:'unattempted',trackId:null,confirmed:false,message:''}));setProgress(compatible?{rows:rows.current,message:'Comprueba las copias antes de continuar.'}:null);setStatus('');
  }
  const chooseEdition=(edition:AlbumEdition)=>{if(!active())return;stop();metadata.current?.abort();const abort=new AbortController();metadata.current=abort;setDetail(null);const identity=metadataIdentity(props);const live=()=>mounted.current&&metadata.current===abort&&!abort.signal.aborted&&latest.current.visible&&metadataIdentity(latest.current)===identity;void load(edition,abort,live);};
  React.useEffect(()=>{if(op.current&&!op.current.signal.aborted&&!props.visible)stop();});
@@ -109,6 +119,6 @@ export function AlbumPageController(props:Props){
    {progress&&<div role="status"><p>{progress.message}</p><p>{progress.rows.filter(r=>r.confirmed).length}/{progress.rows.length} en Biblioteca · {progress.rows.filter(r=>r.state==='reused').length} reutilizadas · {progress.rows.filter(r=>r.state==='downloaded').length} descargadas · {progress.rows.filter(r=>r.state==='failed').length} fallidas · {progress.rows.filter(r=>r.state==='unattempted').length} sin intentar · {progress.rows.filter(r=>r.state==='uncertain').length} requieren revisión</p></div>}
    {inspecting&&<p role="status">Comprobando copias locales…</p>}{props.songActions}<h3 className="album-tracks-heading">Canciones</h3><ol className="album-tracks">{detail.tracks.map(t=><li key={`${t.disc}:${t.position}`}><button type="button" disabled={busy||inspecting||props.coordinator.running} onClick={()=>{if(active()&&!flight.current&&!props.coordinator.running&&!inspecting){props.onChoose(albumTrackChoice(t,detail.edition.title));}}}><span className="album-track-number" aria-label={`Disco ${t.disc}, pista ${t.position}`}>{t.position}</span><span className="album-track-copy"><strong><bdi dir="auto">{t.title}</bdi></strong><span><bdi dir="auto">{t.artist}</bdi></span></span></button>{(()=>{const copy=copies[albumTrackChoice(t,detail.edition.title).id],row=progress?.rows[detail.tracks.indexOf(t)],trackId=row?.trackId??copy?.trackId,member=trackId&&props.libraryTrackIds?props.libraryTrackIds.has(trackId):copy?.inLibrary===true;return <span className="album-track-badges">{busy&&row?.confirmed||copy?.state==='available'?'Descargada':copy?.state==='missing'?'Sin descarga':'Copia sin comprobar'}{member?' · En Biblioteca':''}</span>;})()}{progress&&<span className="album-track-message">{progress.rows[detail.tracks.indexOf(t)]?.message||'Sin intentar'}</span>}</li>)}</ol></>}
 
-   <details className="catalog-sources"><summary>Fuente de los metadatos</summary><p>Catálogo <a href="https://www.apple.com/itunes/" target="_blank" rel="noopener noreferrer">iTunes US</a>.</p></details>
+   <details className="catalog-sources"><summary>Fuente de los metadatos</summary><p>Catálogo {detail&&musicBrainzId(detail.edition.id)||!detail&&editions.some(e=>musicBrainzId(e.id))?<a href={detail&&musicBrainzId(detail.edition.id)?'https://musicbrainz.org/release/'+detail.edition.id.slice(12):'https://musicbrainz.org'} target="_blank" rel="noopener noreferrer">MusicBrainz · respaldo</a>:<a href="https://www.apple.com/itunes/" target="_blank" rel="noopener noreferrer">iTunes US</a>}.</p></details>
  </section>;
 }
