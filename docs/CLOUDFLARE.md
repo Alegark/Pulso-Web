@@ -109,3 +109,14 @@ El navegador debe recibir primero el SW reparado: las páginas con código anter
 
 
 El incremento de álbumes añade `musicbrainz:true` a catalog-config cuando existe CATALOG. Las rutas cerradas `/catalog/musicbrainz/{search,artists,artist-albums,release,artwork}` usan el mismo Durable Object, con estado de cuota propio y sin migración ni binding nuevo. Sólo se persisten marcas de tiempo/cooldown; respuestas públicas se cachean en RAM con límites. User-Agent identifica Pulso y su contacto. No se reenvían cookies, autorización ni headers del visitante. El respaldo se usa sólo si iTunes falla o queda vacío; no cambia TELEGRAM_API_IDENTITY ni la sesión del navegador. La prueba publicada del incremento queda separada de los fixtures en evidence-album-backup-web.json.
+
+
+## Apertura desde pantalla de inicio · 2026-11-16
+
+El candidato corrige el rechazo `shell-network` al reabrir una entrada antigua: el service worker solicita la raíz del mismo origen y dispone de un fallback al documento canónico del shell actual. Si faltan red y cache, presenta un reintento legible en vez del error de Safari. Cloudflare también reconoce navegación HTML sin los encabezados Fetch Metadata de navegadores recientes. Los fetch ordinarios de versiones conservan sus bytes históricos.
+
+La instalación espera el cierre normal de los clientes; no interrumpe música ni elimina sesiones o descargas. La prueba conjunta local de reapertura pasó16/16 en Chromium/WebKit con audio propio y sesión sintética; iPhone instalado sigue pendiente. La UI/entry no cambia en esta entrega, pero sí el Worker y sw.js. Estado de publicación y límites en [la evidencia](evidence-standalone-shell-web.json).
+
+### Publicación: reapertura desde Inicio · 2026-11-16
+
+El Worker del release `/releases/459fa7098cf7442f.html` ahora incluye la detección de navegación HTML sin Fetch Metadata para el shell anterior. Publicación por MCP oficial, Workers Free/USD 0: deployment `ca7380a75366452cb2d04d2ec036e9cb`. Worker SHA-256 `76d57a098e23b1a03d6573d972a9e8d99ed6296adda83f07c1f04584474815fe`; conserva `ASSETS`, `CATALOG` y `TELEGRAM_API_IDENTITY`, subdominio `pruebassoftware` habilitado y previews desactivadas. Readback confirmado. 79/79 rutas del manifest, `/`, `/latest.json` y `/sw.js` responden 200 con bytes/SHA esperados; raíz y manifiesto no-cache/no-store según recurso, SW permite scope `/`. La aceptación de navegación pública no se ejecutó: preview browser reportó `available=false`; GET HTTP común sólo verifica artefactos. iPhone instalado pendiente. Evidencia: `docs/evidence-standalone-shell-web.json`; recibos completos en `.local/standalone-shell-repair/release/`.
