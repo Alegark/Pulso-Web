@@ -3,6 +3,7 @@ import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import React from 'react';
 import './music-search.css';
 import {CatalogArtwork} from './CatalogArtwork';
+import {PlaybackIndicator} from './PlaybackIndicator';
 
 export interface MusicSearchSuggestionRow {
  id:string;kind:'track'|'album'|'artist';title:string;subtitle:string|null;source:'local'|'lrclib'|'itunes'|'musicbrainz';artworkUrl?:string|null;trackId?:string;
@@ -16,7 +17,7 @@ export interface MusicSearchPanelProps {
  query:string;onQueryChange:(query:string)=>void;
  suggestions:readonly MusicSearchSuggestionRow[];suggestionsPending:boolean;
  suggestionsError?:string|null;suggestionsNotice?:string|null;onRetrySuggestions?:()=>void;
- resultsVisible:boolean;selectedSuggestionId:string|null;
+ resultsVisible:boolean;selectedSuggestionId:string|null;playingTrackIds?:ReadonlySet<string>;
  primaryProvider:MusicSearchProviderRow|null;
  hasSupportedProvider?:boolean;
  sessionReady:boolean;canSearch:boolean;searchPending:boolean;
@@ -65,6 +66,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
   <CatalogArtwork className={`catalog-art catalog-art--${row.kind}`} url={row.artworkUrl} trackId={row.trackId} fallback={row.kind==='artist'?Array.from(row.title.trim())[0]?.toLocaleUpperCase('es')??'♪':row.kind==='album'?'◉':'♪'}/>
   <span className="catalog-row-copy"><strong><bdi dir="auto">{row.title}</bdi></strong>
   <span className="catalog-row-meta">{kindLabels[row.kind]}{row.subtitle&&<> · <bdi dir="auto">{row.subtitle}</bdi></>}</span></span><span className="catalog-chevron" aria-hidden="true">›</span>
+  {row.trackId&&props.playingTrackIds?.has(row.trackId)&&<PlaybackIndicator/>}
  </button>;
  return <section className="music-search" data-search-active={searching?'true':undefined} aria-labelledby={`${id}-heading`}>
   <p className="catalog-eyebrow">DESCUBRE</p><h2 ref={heading} tabIndex={-1} id={`${id}-heading`}>Buscar música</h2><p className="catalog-intro">Encuentra canciones, álbumes y artistas.</p>

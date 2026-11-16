@@ -17,6 +17,8 @@
       "/sw.js",
       "/catalog/*",
       "/catalog-config.json",
+      "/account-config.json",
+      "/api/account-auth/*",
       "/telegram-config.json"
     ]
   },

@@ -31,11 +31,31 @@ export function songChoiceKey(choice:SongChoice):string|null {
  // Exact public catalogue id AND version-bearing metadata: never title alone.
  return JSON.stringify([choice.id,choice.title.normalize('NFC'),choice.artist.normalize('NFC'),choice.album?.normalize('NFC')??null,choice.duration]);
 }
+/** Coalesce only pending cross-catalog selections with the same full credit,
+ * version-bearing title and near-identical duration. This is not persistence identity. */
+export function samePendingSong(a:SongChoice,b:SongChoice):boolean {
+ if(!a.artist||!b.artist||a.duration===null||b.duration===null||!Number.isFinite(a.duration)||!Number.isFinite(b.duration)||a.duration<=0||b.duration<=0||Math.abs(a.duration-b.duration)>5)return false;
+ const words=(value:string)=>value.normalize('NFD').replace(/\p{M}/gu,'').toLocaleLowerCase('es').replace(/[^\p{L}\p{N}]+/gu,' ').trim().split(/\s+/u).filter(Boolean).join(' ');
+ const title=(value:string)=>words(value.replace(/\s+\((?:visualizer|official video|official audio)\)\s*$/iu,''));
+ const edition=(value:string|null)=>{const all=words(value??'').split(' ');return all.filter(x=>['live','studio','acoustic','remix','demo','instrumental','karaoke'].includes(x)).sort().join(' ');};
+ // A different collection name alone is not a recording conflict; version
+ // qualifiers in the title and complete performer credit remain significant.
+ return !!title(a.title)&&title(a.title)===title(b.title)&&words(a.artist)===words(b.artist)&&(!edition(a.album)&&!edition(b.album)||edition(a.album)===edition(b.album));
+}
 const aliasKey=(key:string)=>['music-catalog-alias',1,key];
 interface Alias {version:1;key:string;trackId:string;sha256:string;bytes:number;displayArtist?:string}
 function alias(value:unknown,key:string):Alias|null {
  const r=dataRecord(value);if(!r||!['version','key','trackId','sha256','bytes'].every(k=>Object.hasOwn(r,k))||Object.keys(r).some(k=>!['version','key','trackId','sha256','bytes','displayArtist'].includes(k)))return null;
  return r.version===1&&r.key===key&&isUuid(r.trackId)&&typeof r.sha256==='string'&&/^[a-f0-9]{64}$/.test(r.sha256)&&Number.isSafeInteger(r.bytes)&&Number(r.bytes)>0&&Number(r.bytes)<=AUDIO_FILE_MAX_BYTES&&(!Object.hasOwn(r,'displayArtist')||typeof r.displayArtist==='string'&&!!r.displayArtist.trim()&&r.displayArtist.length<=300)?r as unknown as Alias:null;
+}
+/** Read exact catalogue keys bound to the currently playing fingerprint. This
+ * is a bounded, read-only indicator aid; it does not verify or hash audio. */
+export async function readSongAliasKeys(track:Track,current:()=>boolean):Promise<ReadonlySet<string>> {
+ if(!current()||!validAudioFingerprint(track.audioFingerprint))return new Set();const db=await openExistingDatabase();
+ try{if(!current())return new Set();const tx=admittedTransaction(db,['settings'],'readonly'),done=transactionDone(tx),store=tx.objectStore('settings'),range=IDBKeyRange.bound(['music-catalog-alias',1],['music-catalog-alias',1,[]]);
+  const [keys,values]=await Promise.all([request<IDBValidKey[]>(store.getAllKeys(range,2001)),request<unknown[]>(store.getAll(range,2001))]);await done;if(!current()||keys.length>2000||keys.length!==values.length)return new Set();const out=new Set<string>();
+  for(let i=0;i<keys.length;i++){const k=keys[i];if(!Array.isArray(k)||k.length!==3||typeof k[2]!=='string')continue;const a=alias(values[i],k[2]);if(a&&a.trackId===track.id&&a.sha256===track.audioFingerprint.sha256&&a.bytes===track.audioFingerprint.bytes)out.add(a.key);}return out;
+ }finally{closeDatabase(db);}
 }
 /** Presentation only: accept an unambiguous catalogue artist for these exact bytes. */
 export async function readSongDisplayArtist(track:Track,current:()=>boolean):Promise<string|null> {
@@ -97,7 +117,7 @@ export async function readSongAlias(choice:SongChoice,current:()=>boolean,allowC
  try{
   if(!current())throw Error('cancelled');const tx=admittedTransaction(db,['settings','tracks'],'readonly'),done=transactionDone(tx);
   const raw=await request<unknown>(tx.objectStore('settings').get(aliasKey(key)));
-  if(raw===undefined){await done;return allowCompatible&&(choice.source==='itunes'||choice.source==='musicbrainz')?await compatibleLocalSong(db,choice,current):null;}const a=alias(raw,key);if(!a){await done;throw Error('Alias musical inválido; revisa el almacenamiento.');}
+  if(raw===undefined){await done;return allowCompatible?await compatibleLocalSong(db,choice,current):null;}const a=alias(raw,key);if(!a){await done;throw Error('Alias musical inválido; revisa el almacenamiento.');}
   const track=await request<Track|undefined>(tx.objectStore('tracks').get(a.trackId));await done;
   if(!current())throw Error('cancelled');
   if(!track)return null;

@@ -41,6 +41,15 @@ function displayTrackTitle(title:string,artist:string|null):string {
 function tokens(s:string|null):string[] {
  return musicCatalogKey(s??'').normalize('NFD').replace(/\p{M}/gu,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim().split(/\s+/u).filter(Boolean);
 }
+// Dedupe only presentation-equivalent recordings. Keep version words and the
+// complete performer credit; accent/punctuation differences are harmless.
+function recordingGroupBase(title:string,artist:string|null):string {
+ const canonical=(value:string)=>tokens(value).join(' ');
+ return JSON.stringify([canonical(displayTrackTitle(title,artist)),canonical(artist??'')]);
+}
+function recordingGroupKey(title:string,artist:string|null,duration:number|null):string {
+ return JSON.stringify([recordingGroupBase(title,artist),duration]);
+}
 // Every query word must be accounted for by the candidate's own metadata.
 // Prefixes support typing, but a performer-only match requires whole words.
 function relevance(query:string,fields:readonly (string|null)[],performerOnly=false):number {
@@ -67,25 +76,29 @@ function albumMatches(query:string,album:string,artist:string|null):boolean {
  */
 export function musicSearchCatalog(query:string,local:readonly Track[],remote:readonly MusicSuggestion[], editions:readonly AlbumEdition[] = [], artists:readonly CatalogArtist[] = [], hints:readonly AlbumHint[] = [], songHints:readonly CatalogSongHint[] = []):readonly MusicCatalogChoice[] {
  const q=musicCatalogKey(query);if(!q)return [];
- const songs=new Map<string,MusicCatalogChoice>(),albums=new Map<string,MusicCatalogChoice>();
+ const songs=new Map<string,MusicCatalogChoice>(),songGroupBases=new Map<string,string>(),songGroupDurations=new Map<string,number[]>(),albums=new Map<string,MusicCatalogChoice>();
  const add=(id:string,title:string,artist:string|null,album:string|null,duration:number|null,source:'local'|'lrclib'|'itunes'|'musicbrainz',artworkUrl?:string)=>{
   if(!score(q,title,artist,album))return;
   const displayTitle=displayTrackTitle(title,artist);
   // Presentation grouping only: an authoritative album/title/credit match
   // can corroborate a primary-only label or punctuation variant. Audio lookup
   // and admission keep the original choice and its complete declared credits.
-  const counterparts=source!=='itunes'&&artist&&album?songHints.filter(h=>musicCatalogKey(h.album)===musicCatalogKey(album)&&tokens(h.title).join(' ')===tokens(displayTitle).join(' ')&&(tokens(h.artist).join(' ')===tokens(artist).join(' ')||!!h.primaryArtist&&musicCatalogKey(h.primaryArtist)===musicCatalogKey(artist))):[];
+  const counterparts=artist&&album?songHints.filter(h=>musicCatalogKey(h.album)===musicCatalogKey(album)&&tokens(h.title).join(' ')===tokens(displayTitle).join(' ')&&(tokens(h.artist).join(' ')===tokens(artist).join(' ')||!!h.primaryArtist&&musicCatalogKey(h.primaryArtist)===musicCatalogKey(artist))):[];
   const corroborated=counterparts.length&&new Set(counterparts.map(h=>JSON.stringify([musicCatalogKey(h.title),musicCatalogKey(h.artist)]))).size===1?counterparts[0]:null;
   const albumHints=artist&&album?hints.filter(h=>h.artist&&musicCatalogKey(h.title)===musicCatalogKey(album)&&musicCatalogKey(h.artist)===musicCatalogKey(artist)):[];
   const albumCover=albumHints.length&&new Set(albumHints.map(h=>h.id)).size===1?albumHints[0].artworkUrl:undefined;
   const cover=artworkUrl??corroborated?.artworkUrl??albumCover;
-  const key=JSON.stringify([musicCatalogKey(corroborated?.title??displayTitle),musicCatalogKey(corroborated?.artist??artist??'')]);
-  const existing=songs.get(key);
+  const baseKey=recordingGroupBase(corroborated?.title??displayTitle,corroborated?.artist??artist);
+  const key=recordingGroupKey(corroborated?.title??displayTitle,corroborated?.artist??artist,duration);
+  const existingEntry=duration===null?undefined:[...songs.entries()].find(([group,value])=>(songGroupBases.get(group)??recordingGroupBase(value.title,value.artist))===baseKey&&songGroupDurations.get(group)?.every(d=>Math.abs(d-duration)<=5));
+  const groupedKey=existingEntry?.[0]??(duration===null?`${key}:${id}`:key),existing=existingEntry?.[1]??songs.get(groupedKey);
+  if(duration!==null)songGroupDurations.set(groupedKey,[...(songGroupDurations.get(groupedKey)??[]),duration]);
   const priority={local:3,itunes:2,lrclib:1,musicbrainz:2};
   if((!existing&&songs.size<MUSIC_CATALOG_LIMITS.tracks)||(existing&&(priority[source]>priority[existing.source]||priority[source]===priority[existing.source]&&existing.displayTitle!==undefined&&displayTitle===title)))
-   songs.set(key,Object.freeze({id,kind:'track',title,...(displayTitle!==title?{displayTitle}:{}),artist,album,duration,source,...(cover?{artworkUrl:cover}:{})}));
-  else if(existing&&!existing.artworkUrl&&artworkUrl)songs.set(key,Object.freeze({...existing,artworkUrl}));
-  if(source!=='itunes'&&album&&albumMatches(q,album,artist)){
+   songs.set(groupedKey,Object.freeze({id,kind:'track',title,...(displayTitle!==title?{displayTitle}:{}),artist,album,duration,source,...(cover?{artworkUrl:cover}:{})})),songGroupBases.set(groupedKey,baseKey);
+  else if(existing&&!existing.artworkUrl&&artworkUrl)songs.set(groupedKey,Object.freeze({...existing,artworkUrl}));
+  const confirmedLrclibAlbum=source==='lrclib'&&artist&&album? hints.some(h=>h.artist&&musicCatalogKey(h.title)===musicCatalogKey(album)&&musicCatalogKey(h.artist)===musicCatalogKey(artist))||editions.some(e=>musicCatalogKey(e.title)===musicCatalogKey(album)&&musicCatalogKey(e.artist)===musicCatalogKey(artist)):false;
+  if((source==='local'||confirmedLrclibAlbum)&&album&&albumMatches(q,album,artist)){
    // A local collaboration is not another edition of the same album. Use only
    // the corroborating recording's declared collection identity/credit; never
    // split a performer string or rewrite the chosen recording's metadata.
@@ -109,6 +122,8 @@ export function musicSearchCatalog(query:string,local:readonly Track[],remote:re
  // Suppress only a corroborated duplicate with placeholder album metadata; do
  // not rewrite full credits, merge distinct versions or guess a missing artist.
  const reliableRemote=remote.filter(t=>{
+  // A zero length result is malformed metadata, not a usable recording.
+  if(!Number.isFinite(t.duration)||t.duration<=0)return false;
   if(!['','null','undefined'].includes(musicCatalogKey(t.albumName)))return true;
   const label=t.artistName.match(/^(?:song|canción|video)\s*(?:[•·]|,)\s*(.+)$/iu);
   if(!label)return true;
