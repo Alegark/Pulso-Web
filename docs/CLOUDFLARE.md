@@ -120,3 +120,14 @@ La instalación espera el cierre normal de los clientes; no interrumpe música n
 ### Publicación: reapertura desde Inicio · 2026-11-16
 
 El Worker del release `/releases/459fa7098cf7442f.html` ahora incluye la detección de navegación HTML sin Fetch Metadata para el shell anterior. Publicación por MCP oficial, Workers Free/USD 0: deployment `ca7380a75366452cb2d04d2ec036e9cb`. Worker SHA-256 `76d57a098e23b1a03d6573d972a9e8d99ed6296adda83f07c1f04584474815fe`; conserva `ASSETS`, `CATALOG` y `TELEGRAM_API_IDENTITY`, subdominio `pruebassoftware` habilitado y previews desactivadas. Readback confirmado. 79/79 rutas del manifest, `/`, `/latest.json` y `/sw.js` responden 200 con bytes/SHA esperados; raíz y manifiesto no-cache/no-store según recurso, SW permite scope `/`. La aceptación de navegación pública no se ejecutó: preview browser reportó `available=false`; GET HTTP común sólo verifica artefactos. iPhone instalado pendiente. Evidencia: `docs/evidence-standalone-shell-web.json`; recibos completos en `.local/standalone-shell-repair/release/`.
+
+
+## Instalación Chrome Android · 2026-11-16
+
+El candidato2c93d02f856193ad añade manifiesto estable en `/manifest.webmanifest`, inicio/identidad raíz y tres iconos PNG locales. Configuración ofrece instalar sólo con la capacidad nativa del navegador y dispone de instrucciones manuales cuando no la hay. El Worker/secret/bindings no cambian; los recursos de instalación se incluyen en el shell.
+
+Chromium de escritorio con perfil aislado acepta el manifiesto y emite el evento real; no equivale a una instalación WebAPK en Android físico. Publicación y límites: [evidencia](evidence-android-install-web.json), [instalación](INSTALLATION.md).
+
+### Publicación: instalación Chrome Android · 2026-11-16
+
+Publicado por MCP oficial en Workers Free (USD 0): deployment `4c9ed0261c81431796048d6c1bee0f34`, origen `https://pulso-web.pruebassoftware.workers.dev`, entry `/releases/2c93d02f856193ad.html`. El Worker es idéntico al anterior (SHA-256 `76d57a098e23b1a03d6573d972a9e8d99ed6296adda83f07c1f04584474815fe`); `ASSETS`, `CATALOG` y `TELEGRAM_API_IDENTITY` siguen presentes, `pruebassoftware` habilitado y previews desactivadas. Readback confirma el deployment exacto. 86 rutas públicas y `/`, `/latest.json`, `/sw.js` pasan bytes/SHA; manifest e iconos responden HTTP 200 con MIME correcto. La navegación de página en browser preview queda pendiente porque `preview_status` devolvió `available=false`; la verificación HTTP no se presenta como aceptación de UI. Tampoco se instaló ni abrió WebAPK en Android físico. [Evidencia](evidence-android-install-web.json); recibos privados en `.local/android-install-repair/release/`.

@@ -59,7 +59,7 @@
 .pulso-app .settings-view>button { float:inline-end;border:0;background:transparent;font-size:.8rem;padding-inline:.5rem; }
 .settings-intro { clear:both;color:var(--pulso-muted);font-size:.85rem;padding-block:.5rem 1rem;margin:0; }
 .settings-groups,.settings-secondary { max-inline-size:76rem;margin-inline:auto; }
-.settings-app-update>h3 { padding:1rem 1.25rem 0;margin:0;font-size:1rem; }
+.settings-app-update>h3,.settings-app-install>h3 { padding:1rem 1.25rem 0;margin:0;font-size:1rem; }
 .settings-group { margin:0 0 .75rem;border:1px solid var(--pulso-border);border-radius:1rem;background:var(--pulso-surface);min-inline-size:0; }
 .settings-group>summary { position:relative;display:flex;flex-direction:column;justify-content:center;min-block-size:72px;padding:1rem 3rem 1rem 1.25rem;list-style:none;cursor:pointer;font-size:.95rem;font-weight:600; }
 .settings-group>summary::-webkit-details-marker { display:none; }
