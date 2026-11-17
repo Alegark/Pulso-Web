@@ -39,3 +39,25 @@ html[data-theme="dark"] .now-playing-view { --np-card:#344a5f; }
 .np-favorite[aria-pressed="true"] .np-favorite__check { opacity:1; transform:scale(1); }
 .np-favorite:focus-visible .np-favorite__icon { transition:none; }
 @media (prefers-reduced-motion: reduce) { .np-favorite__icon { transition:none; } }
+
+/* Make transport hierarchy legible while retaining generous touch targets. */
+.pulso-app .np-play svg { inline-size:32px; block-size:32px; }
+.np-seek>div { font-variant-numeric:tabular-nums; }
+.np-status:empty { display:none; }
+.pulso-app .np-secondary button { min-block-size:44px; padding-inline:.5rem; border-radius:.75rem; }
+.np-detail>.np-transport { position:sticky; inset-block-end:0; z-index:1; padding:.75rem 0; border-block:1px solid var(--pulso-border); border-radius:1.25rem; background:var(--pulso-surface); box-shadow:0 -.5rem 1.5rem #0711200d; }
+.np-lyrics-content { padding-inline:.25rem; }
+.pulso-app .player-queue ol { display:grid; gap:.75rem; margin-block:1rem 1.5rem; }
+.pulso-app .player-queue li { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.25rem; padding:.5rem; border:1px solid var(--pulso-border); border-radius:1rem; }
+.pulso-app .player-queue li>button { min-inline-size:44px; min-block-size:44px; border:0; background:transparent; padding-inline:.4rem; overflow-wrap:anywhere; }
+.pulso-app .player-queue li>button:first-child { grid-column:1/-1; padding:.5rem; font-size:1rem; font-weight:600; text-align:start; }
+.pulso-app .player-queue li>button[aria-current="true"] { background:var(--pulso-soft); color:var(--pulso-accent); border-radius:.65rem; }
+.pulso-app .player-queue li>button[aria-current="true"]:not(:focus-visible) { outline:none; }
+.pulso-app .np-round:focus-visible,.pulso-app .np-favorite:focus-visible { outline:3px solid var(--pulso-accent); outline-offset:3px; }
+@media (hover:hover) and (pointer:fine) {
+  .pulso-app .np-secondary button:hover,.pulso-app .player-queue li>button:not(:disabled):hover { background:var(--pulso-soft); }
+}
+@media (min-width:600px) {
+  .pulso-app .player-queue li { grid-template-columns:minmax(0,1fr) repeat(3,auto); }
+  .pulso-app .player-queue li>button:first-child { grid-column:auto; }
+}

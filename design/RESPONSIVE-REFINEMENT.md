@@ -1,0 +1,48 @@
+# Revisión responsive y menú de canciones · 2026-11-17
+
+Se conserva la dirección Bruma/azul y los temas claro/oscuro del diseño aprobado. Se revisa la aplicación funcional, con tres subagentes por biblioteca, búsqueda y reproductor; integración, correcciones y validación final del responsable principal.
+
+## Cambios de experiencia
+
+| Apartado | Problema observado | Resultado |
+| --- | --- | --- |
+| Navegación móvil | El cálculo del dock corría antes de admitir la cuenta y conservaba alturas cero; el mini quedaba debajo de la navegación. | Se vuelven a medir las barras al aparecer la cuenta. Comprobado espacio de 8px entre mini y navegación en 390px. |
+| Playlists | Portada dependiente de la altura cambiante del navegador; opciones inline deformaban la lista. | Portada estable por ancho y opciones en diálogo compacto de escritorio/hoja inferior de teléfono. |
+| Canción seleccionada | Outline azul excesivo y barras de reproducción añadían una línea a la fila. | Color discreto y marcador situado sin cambiar altura; foco de teclado conservado. |
+| Menú de canción | Metadata y formularios competían con acciones musicales. | Favorito y cola visibles; playlist, orden e información en apartados del menú. Cierre, Escape, fondo, foco contenido y retorno al control de la fila. |
+| Álbum/artista | Estados y título competían por espacio. | Filas de escritorio con disponibilidad alineada; móvil mantiene estados debajo. |
+| Buscar | Títulos demasiado truncados, mensajes vacíos contradictorios, filtros sin salida clara. | Dos líneas, tipos explícitos, estado vacío sólo cuando corresponde y acción para volver a todos los resultados. El formulario desktop no queda detrás de la cabecera. |
+| Reproductor/letra/cola | Play pequeño, barra mini sin progreso, transporte lejos de letras largas, cola sin jerarquía. | Play legible, progreso discreto móvil, transporte accesible durante scroll y cola con acciones ordenadas. Se conserva seek+play al tocar versos. |
+| Configuración | Instrucciones de instalación extensas antes de los demás ajustes. | Instrucciones plegadas y disponibles; visibles automáticamente cuando falla o se descarta el aviso nativo. |
+| Cuenta | Separador de 10px, botón de contraseña estrecho y fondo con tokens incorrectos. | Separador de 1px, botón de 44px y colores coherentes con el tema. |
+| Inicio/Biblioteca/almacenamiento/respaldo/archivos | Revisión de composición, scroll, texto ampliado y foco. | Se conserva la estructura aprobada y se comprueba junto al nuevo dock. |
+
+Las acciones conservan los controladores y sus comprobaciones. El menú no crea una descarga inexistente: «Gestionar copia local» abre la revisión vigente. Quitar de playlist conserva la cola copiada. Las confirmaciones de retirada y los formularios de datos siguen siendo superficies separadas. Abrir el menú no reproduce ni modifica música.
+
+## Validación
+
+La raíz compartida conserva los cambios funcionales del otro responsable. Los builds de esta revisión están aislados bajo `.local/visual-refinement/`; no se modifica `dist` ni se publica por inferencia. Todas las canciones, letras e imágenes de pruebas son sintéticas/originales; cuenta TESTONLY y sin Telegram real.
+
+- Matriz visual antes del nuevo menú: 12/12 grupos, 32 vistas; Chromium154/WebKit27.2, anchos320/390/1366 y texto200%, temas claro/oscuro. Capturas inspeccionadas por root. `.local/visual-refinement/visual3/report.json`.
+- Cuenta: 10/10 comprobaciones de geometría, divisor, contraseña y navegación a registro. Anchos320/390/844/1366, texto200%; no registro ni correo real. `.local/visual-refinement/accounts/report.json`.
+- Búsqueda: 12/12 grupos finales, sin errores JS ni conexiones externas. `.local/design-search-mobile/focal/report.json`.
+- Instalación: 12/12 grupos con eventos de instalación TESTONLY; sin instalar en un dispositivo. `.local/android-install-repair/focused.json`.
+- Menú y playlists finales: 18/18 grupos PASS en Chromium/WebKit, incluyendo filas sin salto al seleccionar, submenús, cola, reordenación, Escape, fondo, ciclo de Tab y retorno de foco. `.local/interface-browser-validation/2026-11-17T05-33-57-744Z/report.json`.
+- Integración completa final: 40/40 grupos PASS; cero errores JS y conexiones externas no previstas, limpieza confirmada, 274 fuentes idénticas al snapshot. `.local/interface-browser-validation/2026-11-17T05-37-15-786Z/report.json`.
+- TypeScript/lint y `git diff --check`: PASS.
+
+## Evidencia negativa y correcciones
+
+La primera matriz visual detectó targets pequeños en mini desktop y cola; se corrigieron a44px. El arnés visual conservaba una expectativa antigua de audio pausado al seleccionar una canción; la prueba funcional independiente verifica continuidad y reproducción real. No se acredita playback por la matriz de capturas.
+
+La prueba focal móvil de WebKit retenía layout390px tras solicitar320px incluso en HTML mínimo, con o sin foco; `innerWidth` sí cambiaba. El arnés ahora abre un documento nuevo para cada tamaño y exige que `clientWidth` coincida antes de comprobar overflow. No se relajó la condición ni se añadió ocultación de desbordamiento al producto. Probes y negativo: `.local/visual-refinement/search-resize-diagnosis.md`.
+
+La primera integración del menú detectó la salida del foco de Tab del diálogo nativo: se añadió ciclo explícito de Tab/Shift+Tab, excluyendo contenido plegado. Los selectores antiguos ambiguos entre título de fila y cabecera de diálogo se acotaron a la fila, sin ocultar contenido para acomodar pruebas. Recibos negativos conservados.
+
+En la integración de 40 grupos, una ejecución terminó 39/40: WebKit agotó 8 segundos esperando avance de `currentTime` tras redimensionar/cerrar el reproductor. El mismo caso pasó en la repetición, sin cambio al motor de audio; la causa del timeout no está demostrada. Se conserva el negativo `.local/interface-browser-validation/2026-11-17T05-31-32-179Z/report.json` y se añadió diagnóstico de estado del audio para futuras recurrencias. No se presenta como un fallo corregido del reproductor.
+
+## Límites
+
+WebKit Linux, dimensiones móviles y capturas no acreditan Safari físico, teclado de iPhone, barras reales, VoiceOver ni PWA instalada. Queda aceptación del propietario en su iPhone13. La revisión de Cloudflare pudo ver el acceso público; los apartados musicales se probaron con la app local integrada y datos sintéticos, sin entrar a la cuenta real del propietario.
+
+ODD/Engram: lecturas inicial y final oficiales FullContentVerified:true (16 tareas verificadas en la final). Se mantiene el HOLD de escrituras de este hilo; registro privado para coordinación, sin sobrescribir tareas funcionales. No se declara P0-W completo.
