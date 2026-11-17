@@ -1,6 +1,7 @@
 import {createDownloadRemovalController} from './ui/download-removal-state';
 import {DownloadRemovalDialog} from './ui/DownloadRemovalDialog';
-import {SpotifyPlaylistExport} from './ui/SpotifyPlaylistExport';
+import {SpotifyPlaylistImport} from './ui/SpotifyPlaylistImport';
+import {importSpotifyPlaylist} from './playlists/spotify-import';
 import {groupStorageDownloads} from './library/storage-groups';
 import {StorageSettings} from './ui/StorageSettings';
 import './ui/settings-layout.css';
@@ -914,6 +915,14 @@ function App(){
  function navigate(next:typeof page){setSettingsOpen(false);++navigationIntent.current;const current=shellResponse();moveFocus.current=null;favoriteFocus.current=null;returnContext.current=null;setPlayerOpen(false);routeScroll.current[page]=window.scrollY;setPage(next);requestAnimationFrame(()=>{if(current())window.scrollTo(0,routeScroll.current[next]);});return current;}
  function openPlayer(opener:HTMLButtonElement){++navigationIntent.current;const current=shellResponse();moveFocus.current=null;favoriteFocus.current=null;returnContext.current={page,scroll:window.scrollY,opener};setPlayerOpen(true);requestAnimationFrame(()=>{if(!current())return;playerHeading.current?.focus({preventScroll:true});const surface=playerHeading.current?.closest<HTMLElement>('.player-surface');if(surface)surface.scrollTop=0;});}
  function closePlayer(){++navigationIntent.current;const current=shellResponse();const context=returnContext.current;returnContext.current=null;setPlayerOpen(false);if(!context)return;setPage(context.page);requestAnimationFrame(()=>{if(!current())return;window.scrollTo(0,context.scroll);(context.opener.isConnected?context.opener:context.page==='inicio'?document.getElementById('home-heading'):routeHeading.current)?.focus({preventScroll:true});});}
+ function openSpotifyPlaylist(id:string){
+  if(!playlists.some(list=>list.id===id))return;
+  libraryOpener.current=null;
+  setLibraryTab('playlists');setLibraryDetail(true);
+  setViews(old=>({...old,biblioteca:{...emptyShellView(),listId:id}}));
+  const current=navigate('biblioteca');
+  requestAnimationFrame(()=>{if(current())routeHeading.current?.focus({preventScroll:true});});
+ }
  const playAuth=accountEpoch,playScope=scopeId,playProof=control.proof,playGeneration=databaseGeneration;const playCurrent=()=>accountAvailable()&&playAuth===accountEpoch&&playScope===scopeId&&playProof===control.proof&&playGeneration===databaseGeneration;
  const play=()=>{if(!playCurrent()||collectionBlocked())return;if(!owner){void useThisTab(true);return;}transferPlayIntent=null;if(!busy&&player.entries.length){cancelSelectedSongIntent();void player.play();}};const pause=()=>{if(!playCurrent())return;transferPlayIntent=null;if(owner&&!busy&&player.current){cancelSelectedSongIntent();player.pause();}};
  React.useLayoutEffect(()=>{
@@ -980,15 +989,21 @@ function App(){
  const libraryPagination=useLibraryPage(routeTotals.biblioteca,JSON.stringify([views.biblioteca,metadataScope]));
  const searchPagination=useLibraryPage(routeTotals.buscar,JSON.stringify([views.buscar,metadataScope]));
  const pagination=destination==='buscar'?searchPagination:libraryPagination;
- const collectionPlaybackViewKey=JSON.stringify([viewScope,selected?.revision,visible.map(({key,track})=>[key,track.id])]);
+ const playableCollection=selected?visible.filter(({track})=>trackAvailability(track,availability)==='available'):visible;
+ const collectionPlaybackViewKey=JSON.stringify([viewScope,selected?.revision,playableCollection.map(({key,track})=>[key,track.id])]);
  const latestCollectionPlaybackView=React.useRef(collectionPlaybackViewKey);latestCollectionPlaybackView.current=collectionPlaybackViewKey;
- const collectionQueueMatches=visible.length>0&&player.entries.length===visible.length&&player.entries.every((entry,index)=>entry.trackId===visible[index].track.id);
+ const collectionQueueMatches=playableCollection.length>0&&player.entries.length===playableCollection.length&&player.entries.every((entry,index)=>entry.trackId===playableCollection[index].track.id);
  const [collectionPreparing,setCollectionPreparing]=React.useState<{view:string;trackId:string}|null>(null);
  async function playCollection(startKey?:string){
   if(!replacementCurrent()||!owner||busy||copyRemovalBlocked()||!sourceReview.canPrepare()||!visible.length)return;
-  const startIndex=startKey===undefined?null:visible.findIndex(row=>row.key===startKey);
+  if(!playableCollection.length){
+   const track=visible[0].track;
+   requestLibraryDownload([track.id],track.title,true);
+   return;
+  }
+  const startIndex=startKey===undefined?null:playableCollection.findIndex(row=>row.key===startKey);
   if(startIndex===-1)return;
-  if(startIndex!==null&&player.state==='playing'&&player.current&&visible[startIndex].track.id===player.current.trackId)return;
+  if(startIndex!==null&&player.state==='playing'&&player.current&&playableCollection[startIndex].track.id===player.current.trackId)return;
   if(collectionQueueMatches&&player.current){
    if(startIndex===null){if(player.state==='playing')pause();else play();}
    else if(player.index===startIndex){if(player.state!=='playing')play();}
@@ -998,7 +1013,7 @@ function App(){
   const view=shellResponse(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent(),key=collectionPlaybackViewKey;
   cancelSelectedSongIntent();const playbackIntent=selectedSongIntent;
   const live=()=>playbackIntent===selectedSongIntent&&view()&&raw()&&review()&&latestCollectionPlaybackView.current===key;
-  const ids=visible.map(({track})=>track.id),epoch=player.queueEpoch;
+  const ids=playableCollection.map(({track})=>track.id),epoch=player.queueEpoch;
   const preparing={view:key,trackId:ids[startIndex??0]};setCollectionPreparing(preparing);
   try{await viewQueue(ids,undefined,[],live);
   if(!live()||document.visibilityState==='hidden'||busy||copyRemovalBlocked()||queueForeignBlocked()||!sourceReview.canPrepare()||player.queueEpoch!==epoch+1||!player.current||player.entries.length!==ids.length||!player.entries.every((entry,index)=>entry.trackId===ids[index]))return;
@@ -1105,7 +1120,19 @@ function App(){
   <button type="button" onClick={()=>{setSettingsOpen(false);requestAnimationFrame(()=>settingsOpener.current?.focus());}}>Cerrar configuración</button>
 <p className="settings-intro">Tu cuenta, tu música y este navegador.</p><nav className="settings-navigation" aria-label="Secciones de configuración">{([['general','General'],['connections','Conexiones'],['tools','Herramientas']] as const).map(([id,label])=><button key={id} aria-current={settingsSection===id?'page':undefined} onClick={()=>setSettingsSection(id)}>{label}</button>)}</nav><div hidden={settingsSection!=='general'} className="settings-general">
 <StorageSettings key={settingsOpen?'open':'closed'} summary={storageSummary} groups={groupStorageDownloads(tracks,playlists,storedAssets)} onRemove={openDownloadRemoval} items={downloads.map(({asset,aliases})=>{const track=aliases[0],inUse=protectedAssetIds.has(asset.id)||aliases.some(t=>pendingTrackIds.has(t.id));return {id:asset.id,title:track?.title??'Archivo sin ficha',artist:track?.artist??'Artista desconocido',bytes:asset.bytes,protected:inUse,removable:!!track&&removalEligibleTracks.has(track.id),action:<button disabled={!canOrganize||!track||inUse||!removalEligibleTracks.has(track.id)} onClick={event=>{if(track)openRemoval(track,event.currentTarget);}} aria-label={`Quitar descarga de ${track?.title??'archivo sin ficha'}`}>Quitar descarga</button>};})} cacheCopies={listeningCache.copies} canClean={canOrganize} onClean={button=>openCollection({kind:'cache',scope:'global-listening-cache'},'Caché de escucha',button)} canCheck={owner&&!busy&&!botImportActive} onCheck={()=>void admitted('refresh-library',checkFiles)}/>
-{settingsOpen&&settingsSection==='general'&&<SpotifyPlaylistExport/>}
+{settingsOpen&&settingsSection==='general'&&<SpotifyPlaylistImport key={account.user.id} canImport={canOrganize&&mutationCurrent()}
+ onImport={async(data,uiCurrent)=>{
+  const saved:{result:Awaited<ReturnType<typeof importSpotifyPlaylist>>|null;refreshed:boolean}={result:null,refreshed:false};
+  let importError:unknown;
+  await viewAct(async current=>{
+   try{saved.result=await importSpotifyPlaylist(data,account.user!.id,()=>current()&&mutationCurrent()&&uiCurrent());}
+   catch(error){importError=error;}
+  },()=>{saved.refreshed=true;});
+  if(importError)throw importError;
+  if(!saved.result||!saved.refreshed)return null;
+  const available=saved.result.playlist.entries.filter(({trackId})=>availability.get(trackId)?.state==='available').length;
+  return {...saved.result,available};
+ }} onOpen={openSpotifyPlaylist}/>}
 <section className="settings-group settings-appearance"><h3>Apariencia</h3><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label></section><section className="settings-group settings-app-update" aria-labelledby="app-update-heading"><h3 id="app-update-heading">Actualización de la app</h3><div className="settings-group__body"><p role="status">{manualReloadPending?'Esperando a que terminen las operaciones para recargar…':updateState==='checking'?'Comprobando versión…':updateState==='current'?'Actualizada':updateState==='available'?'Nueva versión disponible':'No se pudo comprobar si hay actualizaciones.'}</p><button type="button" disabled={manualReloadPending||updateNavigationLocked} onClick={()=>{player.pause();automaticUpdates?.reload();}}>Recargar app</button><p>Recarga Pulso y conserva tus datos. Si hay música sonando, se pausará.</p></div></section><section className="settings-group" aria-label="Sincronización de biblioteca"><h3>Biblioteca de tu cuenta</h3><div className="settings-group__body"><p role="status">{librarySyncMessage[librarySyncState]}</p><p>Playlists, favoritos, álbumes y artistas se conservan con tu cuenta. La música se descarga por separado en cada dispositivo.</p><button type="button" disabled={!owner||busy||librarySyncState==='syncing'} onClick={()=>void librarySync.sync()}>Sincronizar biblioteca</button></div></section></div><div className="settings-groups">
 <section hidden={settingsSection!=='connections'} className="settings-group"><h3>Cuenta y fuentes</h3><div className="settings-group__body"><section aria-label="Música de Telegram"><details className="settings-help"><summary>Cómo buscar y escuchar</summary><p>En Buscar puedes consultar sugerencias musicales y las opciones del bot que elijas. Conecta tu cuenta de Telegram y configura tus bots para consultarlos. Al elegir una canción se comprueba tu copia local; si falta, se obtiene del bot para descargarla y escucharla. Límite por canción: {formatStorageMB(AUDIO_FILE_MAX_BYTES)}.</p></details><p role="status">{status}</p></section>
  <TelegramPanel requiredSetup onSetupReady={onSetupReady} accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureSongCopyInspection={captureSongCopyInspection} searchTarget={musicSearchTarget} searchVisible={page==='buscar'&&!settingsOpen} localTracks={tracks} libraryTrackIds={addedTrackIds} songPlaylists={playlists} playerTrackId={player.current?.trackId??null} playerPlaying={owner&&player.state==='playing'} captureSongManagement={captureSongManagement} captureDownloadSave={captureBotAudioSave}/></div></section>
@@ -1125,6 +1152,7 @@ function App(){
  {selected&&<button type="button" disabled={!canOrganize} onClick={event=>openCollection({kind:'playlist',id:selected.id,revision:selected.revision},selected.name,event.currentTarget)}>Eliminar playlist</button>}
  {activeGroup?.kind==='album'&&!activeGroup.unknown&&groupAlbums(libraryTracks).some(group=>group.key===activeGroup.key&&!group.unknown)&&<button type="button" disabled={!canOrganize} onClick={event=>openCollection({kind:'album',scope:'global-library',key:activeGroup.key},activeGroup.label,event.currentTarget)}>Retirar álbum</button>}
  <button type="button" disabled={!canOrganize||!visible.length} onClick={()=>requestLibraryDownload(visible.map(({track})=>track.id),selected?.name??activeGroup?.label??'Mi biblioteca')}>Descargar esta selección en este dispositivo</button>
+ {selected&&playableCollection.length<visible.length&&<p>{visible.length-playableCollection.length} canciones sin copia local.</p>}
  <details className="collection-tools"><summary><span aria-hidden="true">⋯</span><span>{selected?'Opciones de playlist':'Opciones de colección'}</span></summary><div className="collection-tools__content"><details><summary>Filtros de canciones</summary><label>Buscar por título, artista o álbum<input value={query} onChange={e=>setQuery(e.target.value)} type="search"/></label>
  <div hidden={page==='buscar'}><label>Solo favoritos<input type="checkbox" checked={favorites} onChange={e=>updateView({favorites:e.target.checked})}/></label><label>Solo copias presentes<input type="checkbox" checked={present} onChange={e=>updateView({present:e.target.checked})}/></label>
  <label>Vista<select aria-label="Vista" value={listId} onChange={e=>{setListId(e.target.value);}}><option value="">Todas las canciones</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
@@ -1143,7 +1171,7 @@ function App(){
  <details className="track-actions-playlist"><summary>Añadir a una playlist</summary><label>Playlist de destino<select value={target} onChange={e=>setTarget(e.target.value)}><option value="">Elige una playlist</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><button disabled={!canOrganize||!target||!!playlists.find(p=>p.id===target)?.entries.some(e=>e.trackId===track.id)} onClick={()=>{const list=playlists.find(p=>p.id===target);if(list)void viewAct(current=>changePlaylist(list.id,list.revision,{type:'add',trackId:track.id},current));}}>Añadir a playlist</button></details>
  {page!=='buscar'&&selected&&<><details className="track-actions-order"><summary>Ordenar en esta playlist</summary>{([-1,1]as const).map(delta=><button key={delta} ref={button=>{const id=`${delta}:${key}`;if(button)moveButtons.current.set(id,button);else moveButtons.current.delete(id);}} disabled={!canOrganize||filteredPlaylist||!moveAdjacent(key,delta)} aria-disabled={delta===-1?playlistIndex===0:playlistIndex===selected.entries.length-1} aria-label={`${delta===-1?'Subir':'Bajar'} ${track.title}`} onClick={event=>void moveEntry(key,delta,event.currentTarget)}>{delta===-1?'Subir canción':'Bajar canción'}</button>)}</details><button disabled={!canOrganize} onClick={()=>void viewAct(current=>changePlaylist(selected.id,selected.revision,{type:'remove',entryId:key},current))}>Quitar de playlist</button></>}
  <button data-menu-dismiss="true" disabled={!canOrganize||!removalEligibleTracks.has(track.id)} aria-label={`Revisar retirada de ${track.title}`} onClick={event=>openRemoval(track,trackActionOpener(event.currentTarget))}>Gestionar copia local</button>
- <details className="track-actions-info"><summary>Información de la canción</summary><p>{track.album??'Álbum desconocido'} · {Math.floor(track.duration/60)}:{String(Math.floor(track.duration%60)).padStart(2,'0')}</p><p>{availabilityText(trackAvailability(track,availability))}</p><AlbumMetadataInfo track={info.track.state==='known'?info.track.value:null} disc={info.disc.state==='known'?info.disc.value:null} albumArtist={info.albumArtist.state==='known'?info.albumArtist.value:null} compilation={info.compilation.state==='known'?info.compilation.value:null}/><button data-menu-dismiss="true" disabled={!canOrganize} aria-label={`Revisar datos del archivo de ${track.title}`} onClick={event=>openRescan(track.id,trackActionOpener(event.currentTarget))}>Revisar datos del archivo</button></details>
+ <details className="track-actions-info"><summary>Información de la canción</summary><p>{track.album??'Álbum desconocido'} · {track.duration>0?`${Math.floor(track.duration/60)}:${String(Math.floor(track.duration%60)).padStart(2,'0')}`:'Duración desconocida'}</p><p>{availabilityText(trackAvailability(track,availability))}</p><AlbumMetadataInfo track={info.track.state==='known'?info.track.value:null} disc={info.disc.state==='known'?info.disc.value:null} albumArtist={info.albumArtist.state==='known'?info.albumArtist.value:null} compilation={info.compilation.state==='known'?info.compilation.value:null}/><button data-menu-dismiss="true" disabled={!canOrganize} aria-label={`Revisar datos del archivo de ${track.title}`} onClick={event=>openRescan(track.id,trackActionOpener(event.currentTarget))}>Revisar datos del archivo</button></details>
  </TrackActionsMenu></li>;})}</ol>
  </div><details className="create-playlist" hidden={libraryDetail||libraryTab!==null&&libraryTab!=='playlists'}><summary>Crear una playlist</summary><form onSubmit={e=>{e.preventDefault();void viewAct(async current=>{const list=await createPlaylist(name,current);if(current()){setTarget(list.id);setName('');}});}}><label>Nueva playlist<input ref={createInput} value={name} onChange={e=>setName(e.target.value)} maxLength={100} required/></label><button disabled={!canOrganize}>Crear playlist</button></form></details></section>
  <DownloadRemovalDialog key={`downloads:${collectionKey}`} controller={downloadRemovalController} onClose={closeCollection}/>

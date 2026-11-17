@@ -121,7 +121,7 @@ function track(value: unknown, path: string, version:1|2|3): OrganizationTrack|O
   const t = object(value, ['ref', 'title', 'artist', 'album', 'duration', 'createdAt', 'manualOverrides', 'audio', ...(version>=2?['localAlbum']:[]),...(version===3?['inLibrary']:[])], [], path);
   const title = text(t.title, ORGANIZATION_LIMITS.metadataCharacters, true, `${path}.title`);
   const artist = nullableText(t.artist, `${path}.artist`), album = nullableText(t.album, `${path}.album`);
-  if (typeof t.duration !== 'number' || !Number.isFinite(t.duration) || t.duration <= 0) fail('format', `${path}.duration`);
+  if (typeof t.duration !== 'number' || !Number.isFinite(t.duration) || t.duration < 0 || t.duration === 0 && (version < 3 || t.audio !== null)) fail('format', `${path}.duration`);
   const o = object(t.manualOverrides, [], ['title', 'artist', 'album'], `${path}.manualOverrides`);
   const manualOverrides: OrganizationTrack['manualOverrides'] = {};
   for (const field of ['title', 'artist', 'album'] as const) {

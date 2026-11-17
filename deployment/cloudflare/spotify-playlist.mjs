@@ -9,8 +9,8 @@ export function parseSpotifyPlaylist(html){
  if(!entity||!Array.isArray(entity.trackList)||entity.trackList.length>1000)throw Error('Invalid playlist');
  const name=field(entity.name),rows=entity.trackList.slice(0,100),tracks=[];let omitted=0;
  for(const row of rows){
-  if(!row||typeof row.uri!=='string'||!/^spotify:track:[A-Za-z0-9]{22}$/.test(row.uri)){omitted++;continue;}
-  tracks.push({title:field(row.title),artists:field(row.subtitle),durationMs:Number.isSafeInteger(row.duration)&&row.duration>=0&&row.duration<=86400000?row.duration:null,url:`https://open.spotify.com/track/${row.uri.slice(14)}`});
+  if(!row||typeof row.uri!=='string'||!/^spotify:track:[A-Za-z0-9]{22}$/.test(row.uri)||typeof row.title!=='string'||!row.title.trim()||row.title.length>500){omitted++;continue;}
+  tracks.push({title:field(row.title),artists:typeof row.subtitle==='string'&&row.subtitle.length<=500?row.subtitle:'',durationMs:Number.isSafeInteger(row.duration)&&row.duration>=0&&row.duration<=86400000?row.duration:null,url:`https://open.spotify.com/track/${row.uri.slice(14)}`});
  }
  const total=Number.isSafeInteger(entity.totalTracks)&&entity.totalTracks>=entity.trackList.length?entity.totalTracks:null;
  return {name,tracks,readCount:rows.length,omitted,total,limited:entity.trackList.length>=100,complete:total!==null&&total===rows.length};
