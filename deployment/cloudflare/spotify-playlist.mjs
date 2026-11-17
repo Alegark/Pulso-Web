@@ -24,7 +24,9 @@ export async function spotifyPlaylist(request,fetcher=fetch){
  const controller=new AbortController(),abort=()=>controller.abort();request.signal.addEventListener('abort',abort,{once:true});if(request.signal.aborted)abort();
  const timer=setTimeout(abort,8000);let reader,stage='network',upstreamStatus;
  try{
-  const upstream=await fetcher(`https://open.spotify.com/embed/playlist/${match[1]}`,{redirect:'error',signal:controller.signal,credentials:'omit',headers:{Accept:'text/html'}});
+  // Workers supports manual/follow only; manual plus the !ok check rejects 3xx
+  // without following a redirect or forwarding any visitor credentials.
+  const upstream=await fetcher(`https://open.spotify.com/embed/playlist/${match[1]}`,{redirect:'manual',signal:controller.signal,credentials:'omit',headers:{Accept:'text/html'}});
   stage='upstream-response';upstreamStatus=upstream.status;
   if(!upstream.ok||!upstream.headers.get('content-type')?.includes('text/html')||Number(upstream.headers.get('content-length'))>MAX_BYTES)throw Error('Unavailable');
   reader=upstream.body.getReader();const decoder=new TextDecoder();let html='',bytes=0;

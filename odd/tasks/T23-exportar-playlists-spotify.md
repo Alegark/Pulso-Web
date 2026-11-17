@@ -1,6 +1,6 @@
 # T23 · Exportar listados públicos de playlists Spotify
 
-Fecha: 2026-11-17. Estado: revisión root aprobada y publicación efectuada; cierre funcional bloqueado por fetch de Spotify desde Cloudflare (502/network). Git entregado en rama `feat/spotify-playlist-export` y PR #3. No cierra P0-W ni aceptación física.
+Fecha: 2026-11-17. Estado: reparación de runtime publicada y verificada; API pública HTTP200 y serializadores concordantes. El fallo público anterior se conserva como evidencia histórica. Git entregado en rama `feat/spotify-playlist-export` y PR #3. No cierra P0-W ni aceptación física.
 
 ## Objetivo y autorización
 
@@ -51,3 +51,16 @@ Versión final 40 `9d8c0310-aed0-4b4a-b3b6-6738d37bcd60`, deployment `a5ffe3f6-3
 Evidencia mínima: `.local/test-evidence/spotify-delivery/{freeze,site-manifest,mcp-readback,https-readback,upload}.json`; lectura VM `.local/test-evidence/spotify-export-public-dduga3/report.json`. Pendiente resolver el fetch público dentro del diseño autorizado; después repetir lectura/serialización pública. iPhone físico, cuentas/Telegram reales y P0-W global siguen pendientes. Limpieza y Git se documentan en el recibo final de esta entrega.
 
 Git: PR https://github.com/Alegark/Pulso-Web/pull/3 contra `fix/pulso-updates-safari-lyrics`; implementación commit `86f04ef`. Snapshot/builds/payloads propios eliminados tras readback: 81800937 bytes; libre antes 4906528768, después 4993286144 bytes. Integración eliminó además 27634009 bytes mediante finally. Evidencia retenida: reportes/manifiestos/hashes/logs pequeños, necesarios para fallo y próximo publicador; ninguna dependencia compartida ni dato real eliminado.
+
+
+## Reparación de runtime y cierre funcional público · 2026-11-17
+
+Causa concreta demostrada por root: Workers/workerd rechaza `redirect: error` al construir Request, antes de red (`Invalid redirect value ... follow or manual`). `credentials: omit` sí es aceptado. No era evidencia de bloqueo de Spotify ni de DNS. La documentación oficial Request confirma los modos admitidos: https://developers.cloudflare.com/workers/runtime-apis/request/ . Se sustituye por `manual`; el control `!upstream.ok` existente rechaza 3xx sin seguirlos. La descripción inicial «redirects error» y el diagnóstico indeterminado anterior son históricos, supersedidos por esta causa reproducida.
+
+Root verificó 8/8 backend PASS, incluyendo handler real bajo Miniflare/workerd con compatibilidad 2026-11-13: Request acepta las opciones, metadata200 y redirect302 rechazado, una llamada cada caso; dispose en finally. Diff check PASS. Revisión del delta confirma sólo backend/test, sin UI. Compilación exacta Wrangler dry-run desde snapshot HEAD bb19c4f más el backend corregido PASS; un intento previo de esbuild sin sus imports no compiló ni publicó y fue sustituido por Wrangler.
+
+Publicación MCP oficial Cloudflare PUT /content con guard inmediato de versión40; conserva assets/config sin nuevo upload, infraestructura ni migraciones. Versión41 `ff8eec4b-5252-4a6d-900c-85fba52bbe09`, deployment `f8acfd60-3329-4baa-9051-c552f83e2ed9`, tráfico100%. Worker readback exacto 322536 bytes/SHA-256 `ac603bfc2b712a002df917bcdfbc9c964d654ec9af0ab1edaa54463ab89762a8`. Siete bindings y namespace conservados, compatibilidad2026-11-13/standard, Workers.dev activo y previewsOFF. USD0, sin lectura de secretos.
+
+Primera nueva prueba pública de esta reparación: HTTP200, 41 entradas leídas/exportables, 0 omitidas, total desconocido, complete=false/limited=false; CSV/TXT concordantes con los41 enlaces, serializados en RAM. No se guardaron nombre/listado/cuerpos/audio. 192/192 rutas estáticas bytes/SHA PASS, manifiesto vigente195archivos; raíz/latest/SW/entry `/releases/923694510c59acf7.html` sin cambio, GET+HEAD/CSP PASS. Account-config enabled/google true no-store; perfil/biblioteca anónimos401. Se conserva el fallo502 previo, ahora resuelto funcionalmente en esta prueba pública. No navegación nueva ni iPhone físico, cuentas reales, Telegram, audio o cierreP0-W.
+
+Evidencia mínima privada `.local/test-evidence/spotify-runtime-fix/`: freeze, manifiesto, readback MCP/HTTPS y cleanup. Se retiraron snapshot/build/map/readback crudo/payload propios:15326332bytes; libre antes build5006786560, antes limpieza4990046208 y después5008199680bytes (concurrencia impide atribuir todo el delta a esta tarea). No copias de dependencias, música ni perfiles creados. Sólo agregados y huellas conservados. Engram inicial18FullContentVerified confirmado por root; sync y lectura independiente requeridos al cerrar este apéndice.
