@@ -5,7 +5,7 @@
 .collection-cover__tile { display:grid;place-items:center;inline-size:100%;block-size:100%;min-inline-size:0;overflow:hidden;font-size:clamp(2rem,6vw,4rem); }
 .collection-cover__tile img { display:block;inline-size:100%;block-size:100%;object-fit:cover; }
 .pulso-app .collection-card__art:has(.collection-cover) { padding:0; }
-.pulso-app .library-detail>.collection-back { border:0;background:transparent;padding-inline:0;min-block-size:44px;font-size:.85rem;margin-block-end:.75rem; }
+
 .library-view:has(.library-detail:not([hidden]))>h2 { position:absolute;inline-size:1px;block-size:1px;margin:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap; }
 .pulso-app .library-view:has(.library-detail:not([hidden])) { margin-block-start:0; }
 .collection-header { display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;min-inline-size:0; }

@@ -28,7 +28,7 @@
 .pulso-app .settings-storage__details p { line-height:1.5;color:var(--pulso-muted); }
 .pulso-app .settings-appearance label { display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap; }
 .pulso-app .settings-appearance select,.pulso-app .settings-download-search input { min-inline-size:0;max-inline-size:100%;font-size:max(1rem,16px); }
-.pulso-app .settings-back { background:transparent;border:0;padding-inline:0;margin:0 0 .75rem;min-block-size:44px; }
+
 .pulso-app .settings-download-search { display:grid;gap:.5rem;font-size:.8rem; }
 .pulso-app .settings-storage .storage-downloads { list-style:none;padding:0;margin:1rem 0; }
 .pulso-app .settings-storage .storage-downloads>li { display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.85rem 0;border:0;border-bottom:1px solid var(--pulso-border);background:transparent;border-radius:0; }

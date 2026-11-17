@@ -35,7 +35,7 @@
 .create-playlist form { max-inline-size:30rem;padding-block-end:.5rem; }
 .create-playlist form>button { border-radius:2rem; }
 .pulso-app .album-page { margin-block:0;padding:0;border:0;background:transparent; }
-.pulso-app .album-page>button:first-child { padding-inline:0;background:transparent;border:0;font-size:.85rem; }
+
 .album-hero>div:last-child,.artist-hero>div:last-child { min-inline-size:0; }
 .pulso-app .album-hero h2,.pulso-app .artist-hero h2 { font-size:clamp(1.8rem,4vw,3rem);line-height:1.1;letter-spacing:-.045em; }
 .album-art,.artist-art { overflow:hidden;border-radius:.6rem; }

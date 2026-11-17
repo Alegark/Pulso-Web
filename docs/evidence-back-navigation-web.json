@@ -1,0 +1,21 @@
+{
+  "status": "local-verified-publication-pending",
+  "entry": "/releases/5715374fd4a96362.html",
+  "change": "Shared return button with chevron, destination, 44px target, theme and accessible focus; existing navigation guards unchanged.",
+  "validation": {
+    "browserGroups": "44/44 Chromium/WebKit",
+    "sourceInputs": 822,
+    "pageErrors": 0,
+    "externalObserved": 0,
+    "cleanup": true,
+    "CSP": "108 historical WebKit style warnings retained",
+    "lintBuildDryRun": "PASS"
+  },
+  "limits": [
+    "Synthetic musical/auth fixtures only",
+    "No real Telegram or account access",
+    "Physical iPhone acceptance pending"
+  ],
+  "evidenceDirectory": "/data/home/Proyectos/Pulso-Web/.local/test-evidence/back-buttons-1b9dPe",
+  "preservedConcurrentWork": "Spotify export excluded from the frozen source candidate"
+}

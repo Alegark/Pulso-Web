@@ -1,3 +1,4 @@
+import {BackButton} from './BackButton';
 import {useMemo,useRef,useState,type ReactNode} from 'react';
 import type {StorageGroup} from '../library/storage-groups';
 import {CollectionCover} from './CollectionCover';
@@ -19,7 +20,7 @@ export function StorageSettings({summary,items,groups=[],onRemove,cacheCopies,ca
  function openGroup(id:string|null){setGroupId(id);setQuery('');setPage(0);setSelection(new Set());focus();}
  return <section className="settings-storage settings-group" aria-label="Almacenamiento">
   {managing?<>
-   <button className="settings-back" onClick={()=>{if(groupId)openGroup(null);else{setManaging(false);setQuery('');setPage(0);requestAnimationFrame(()=>opener.current?.focus());}}}>{groupId?'← Todas las descargas':'← Volver al resumen'}</button>
+   <BackButton className="settings-back" onClick={()=>{if(groupId)openGroup(null);else{setManaging(false);setQuery('');setPage(0);requestAnimationFrame(()=>opener.current?.focus());}}}>{groupId?'Todas las descargas':'Volver al resumen'}</BackButton>
    <h3 ref={heading} tabIndex={-1}>{group?.title??'Tus descargas'}</h3>
    <p className="settings-note">{group?'Selecciona qué descargas quitar. Tu biblioteca y tus playlists se conservan.':'Organizadas por playlists y álbumes. Una canción puede aparecer en varios grupos, pero ocupa espacio una sola vez.'}</p>
    <label className="settings-download-search">{group?'Buscar en este grupo':'Buscar playlist o álbum'}<input type="search" value={query} placeholder={group?'Canción o artista':'Nombre de la colección'} onChange={e=>{setQuery(e.target.value);setPage(0);}}/></label>

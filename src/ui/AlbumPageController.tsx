@@ -1,3 +1,4 @@
+import {BackButton} from './BackButton';
 import {downloadNotifications} from '../pwa/download-notifications';
 import {musicBrainzId} from '../library/catalog-id';
 import type {CatalogId} from '../library/catalog-id';
@@ -127,7 +128,7 @@ export function AlbumPageController(props:Props){
  React.useEffect(()=>{if(!op.current||op.current.signal.aborted||!flight.current)return;let valid=false;try{valid=flight.current.current();}catch{/* Fail closed without tying work to route visibility. */}if(!valid)stop();});
  const renderedOperation=op.current,renderedRun=props.coordinator.active;
  return <section className="album-page" aria-labelledby="album-page-heading">
-  <button type="button" onClick={()=>{if(active()&&op.current===renderedOperation){props.onBack();}}}>{props.backLabel??'Volver a búsqueda'}</button>
+  <BackButton onClick={()=>{if(active()&&op.current===renderedOperation){props.onBack();}}}>{props.backLabel??'Volver a búsqueda'}</BackButton>
   <div className="album-hero"><CatalogArtwork className="album-art" url={detail?.edition.artworkUrl??props.artworkUrl??(editions.length===1?editions[0].artworkUrl:undefined)} enabled={props.visible}/><div><p className="catalog-eyebrow">ÁLBUM</p><h2 id="album-page-heading" ref={heading} tabIndex={-1}>{detail?.edition.title??props.title}</h2><p className="album-artist">{detail?.edition.artist??props.artist}</p>{detail&&<p>{detail.tracks.length} pistas · {new Set(detail.tracks.map(t=>t.disc)).size} discos</p>}</div></div>
 
   {status&&<p role="status">{status}</p>}
