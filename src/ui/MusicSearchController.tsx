@@ -1,3 +1,4 @@
+import {downloadNotifications} from '../pwa/download-notifications';
 import {resolveSearchSingle} from '../library/music-search-single';
 import type {CatalogId} from '../library/catalog-id';
 import {formatStorageMB} from '../library/storage-format';
@@ -123,7 +124,7 @@ export function MusicSearchController(props:Props){
  const results=displayedQuery!==null&&state?.queryId===displayedQuery?state.rows.map(row=>resultView(row,state.expectedTarget)):[];
  const revokeMetadata=()=>{++metadataEpoch.current;const attempt=metadataAttempt.current;metadataAttempt.current=null;attempt?.abort.abort();setSuggesting(false);};
  const bump=()=>{++viewEpoch.current;pulse();};
- const edit=(queryChanged=false)=>{singleAttempt.current?.abort();singleAttempt.current=null;setResolvingSingle(false);catalogAbort.current?.abort();catalogAbort.current=null;setCatalogPending(false);flight.current?.abort.abort();flight.current=null;downloadAbort.current?.abort();setDownload(null);setSongError(null);bump();chosenDraft.current=null;if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);}setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);if(action?.())client?.clearSearch(action);};
+ const edit=(queryChanged=false)=>{if(flight.current)downloadNotifications.dismiss('song',flight.current);singleAttempt.current?.abort();singleAttempt.current=null;setResolvingSingle(false);catalogAbort.current?.abort();catalogAbort.current=null;setCatalogPending(false);flight.current?.abort.abort();flight.current=null;downloadAbort.current?.abort();setDownload(null);setSongError(null);bump();chosenDraft.current=null;if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);}setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);if(action?.())client?.clearSearch(action);};
  React.useEffect(()=>{
   singleAttempt.current?.abort();singleAttempt.current=null;setResolvingSingle(false);
   const f=flight.current;if(f){f.abort.abort();f.networkCurrent=null;f.queryId=null;}bump();setDownload(null);setDisplayedQuery(null);setSelectedResult(null);
@@ -291,7 +292,7 @@ export function MusicSearchController(props:Props){
    f.phase='error';setDownload({phase:saved.state==='uncertain'?'uncertain':'failed',bytes:0,total:audio.bytes});setNotice(saved.state==='uncertain'?'La copia requiere revisión. No repitas la descarga hasta comprobar Almacenamiento.':'No se pudo guardar la canción.');pulse();
   }catch(error){if(flightCurrent(f)){f.phase='error';setDownload(null);setNotice(error instanceof Error?error.message:'No se pudo comprobar la copia local.');pulse();}}
  }
- function cancelSong(){if(!current())return;if(singleAttempt.current){singleAttempt.current.abort();singleAttempt.current=null;setResolvingSingle(false);setNotice('Comprobación detenida.');return;}const f=flight.current;if(!f||f!==selected||['done','error'].includes(f.phase))return;f.abort.abort();if(f.phase!=='saving'){f.phase='error';setDownload(null);}setNotice('Operación detenida. Una copia ya confirmada se conserva; no se iniciará música.');pulse();}
+ function cancelSong(){if(!current())return;if(singleAttempt.current){singleAttempt.current.abort();singleAttempt.current=null;setResolvingSingle(false);setNotice('Comprobación detenida.');return;}const f=flight.current;if(!f||f!==selected||['done','error'].includes(f.phase))return;downloadNotifications.dismiss('song',f);f.abort.abort();if(f.phase!=='saving'){f.phase='error';setDownload(null);}setNotice('Operación detenida. Una copia ya confirmada se conserva; no se iniciará música.');pulse();}
  const selected=flight.current,management=selected?.trackId?props.captureSongManagement?.(selected.trackId):null;
  const manage=async(kind:'add'|'playlist'|'play',id?:string)=>{
   if(!current()||organizing||!selected?.trackId||!management?.current())return;
@@ -301,6 +302,17 @@ export function MusicSearchController(props:Props){
    setNotice(kind==='play'?(result==='playing'?'Reproduciendo la canción.':result==='gesture-required'?'El navegador requiere pulsar Reproducir de nuevo.':'No se pudo iniciar el audio. Revisa el reproductor.'):(result?(kind==='add'?'Canción agregada a tu biblioteca.':'Canción añadida a la playlist.'):'No se pudo confirmar el cambio. Comprueba el estado antes de repetirlo.'));
   }finally{if(mounted.current)setOrganizing(false);}
  };
+ const notifiedSong=React.useRef<SongFlight|null>(null);
+ const notificationProgress=download?.total?download:selected?.queryId===state?.queryId?state?.downloadProgress:null;
+ React.useEffect(()=>{
+  if(!selected)return;
+  if(selected.phase==='query'||selected.phase==='download'||selected.phase==='saving')notifiedSong.current=selected;
+  if(notifiedSong.current!==selected)return;
+  const terminal=selected.phase==='done'||selected.phase==='error';
+  const percent=notificationProgress?.total&&notificationProgress.bytes>=0?Math.min(100,Math.floor(notificationProgress.bytes/notificationProgress.total*100)):null;
+  const body=terminal?(selected.phase==='done'?(selected.trackId?'Canción guardada y preparada.':'Operación detenida. Comprueba la canción en Pulso.'):'No se pudo completar la descarga. Revisa Pulso.'):selected.phase==='saving'?'Verificando y guardando canción…':percent===null?'Buscando una copia de la canción…':`Descargando canción · ${percent}%`;
+  downloadNotifications.notify('song',selected,selected.choice.displayTitle??selected.choice.title,body,terminal,()=>flightCurrent(selected));
+ },[selected,selected?.phase,notificationProgress?.bytes,notificationProgress?.total]);
  const songActions=resolvingSingle?<div ref={actionArea} className="music-search-selection song-load-lookup"><p role="status">Buscando la canción…</p><progress aria-label="Preparando canción"/><button type="button" onClick={cancelSong}>Cancelar carga</button></div>:selected&&<div ref={actionArea} className="music-search-selection">{!['done','error'].includes(selected.phase)&&state?.queryId===selected.queryId&&state?.providerNotice&&<BotProviderNotice text={state.providerNotice}/>}<SelectedSongActions key={selected.key} title={selected.choice.displayTitle??selected.choice.title} artist={selected.choice.artist}
   status={notice??(ownPending?'Obteniendo la canción…':null)} error={songError??(state?.error?searchErrorText(state.error):null)}
   pending={ownPending||saving||localPending||organizing} progress={ownPending||saving?(download?.total?download:state?.downloadProgress):null}

@@ -1,3 +1,4 @@
+import {downloadNotifications} from '../pwa/download-notifications';
 import {musicBrainzId} from '../library/catalog-id';
 import type {CatalogId} from '../library/catalog-id';
 import {notifyAlbumDownload,type AlbumCoordinator,type AlbumDownloadRun} from '../library/album-download';
@@ -119,8 +120,9 @@ export function AlbumPageController(props:Props){
   const unsubscribe=client?.subscribeSearch(()=>{let valid=false;try{valid=current();}catch{/* Revoked. */}if(!valid)abort.abort();});
   void acquireAlbum({detail:snapshot,attempt,client,provider,providers,revision,management:props.management,signal:abort.signal,current,rows:rows.current,remoteClock:coordinator.remoteClock,uncertainTracks:coordinator.uncertainTracks,update:value=>{
    if(coordinator.active!==run)return;rows.current=value.rows;coordinator.rows.set(snapshot.edition.id,{key:run.key,rows:value.rows.map(r=>({...r})),message:value.message});coordinator.notice={title:run.title,titles:snapshot.tracks.map(track=>track.title),progress:value};notifyAlbumDownload(coordinator);
+   downloadNotifications.notify('album',run,run.title,`${value.rows.filter(row=>row.confirmed).length} de ${value.rows.length} canciones guardadas`,false,current);
    if(mounted.current&&flight.current===identity)setProgress(value);
-  }}).finally(()=>{unsubscribe?.();if(coordinator.active===run){coordinator.active=undefined;coordinator.running=false;notifyAlbumDownload(coordinator);}if(flight.current===identity){op.current=null;flight.current=null;if(mounted.current){setBusy(false);inspectedEdition.current=null;bumpInspection();}}});
+  }}).finally(()=>{unsubscribe?.();if(coordinator.active===run){const confirmed=(coordinator.rows.get(snapshot.edition.id)?.rows??[]).filter(row=>row.confirmed).length;downloadNotifications.notify('album',run,run.title,confirmed===snapshot.tracks.length?'Álbum guardado.':`Descarga detenida: ${confirmed} de ${snapshot.tracks.length} canciones guardadas.`,true,()=>attempt.current()&&(!coordinator.active||coordinator.active===run)&&(!boundSession||boundSession()));coordinator.active=undefined;coordinator.running=false;notifyAlbumDownload(coordinator);}if(flight.current===identity){op.current=null;flight.current=null;if(mounted.current){setBusy(false);inspectedEdition.current=null;bumpInspection();}}});
  };
  React.useEffect(()=>{if(!op.current||op.current.signal.aborted||!flight.current)return;let valid=false;try{valid=flight.current.current();}catch{/* Fail closed without tying work to route visibility. */}if(!valid)stop();});
  const renderedOperation=op.current,renderedRun=props.coordinator.active;
