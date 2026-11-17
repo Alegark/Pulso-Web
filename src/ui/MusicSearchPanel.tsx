@@ -1,9 +1,12 @@
+import {formatStorageMB} from '../library/storage-format';
+import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import React from 'react';
 import './music-search.css';
 import {CatalogArtwork} from './CatalogArtwork';
+import {PlaybackIndicator} from './PlaybackIndicator';
 
 export interface MusicSearchSuggestionRow {
- id:string;kind:'track'|'album'|'artist';title:string;subtitle:string|null;source:'local'|'lrclib'|'itunes';artworkUrl?:string|null;trackId?:string;
+ id:string;kind:'track'|'album'|'artist';title:string;subtitle:string|null;source:'local'|'lrclib'|'itunes'|'musicbrainz';artworkUrl?:string|null;trackId?:string;
 }
 export interface MusicSearchProviderRow {id:string;username:string;label:string;supported:boolean}
 export interface MusicSearchResultRow {
@@ -14,10 +17,10 @@ export interface MusicSearchPanelProps {
  query:string;onQueryChange:(query:string)=>void;
  suggestions:readonly MusicSearchSuggestionRow[];suggestionsPending:boolean;
  suggestionsError?:string|null;suggestionsNotice?:string|null;onRetrySuggestions?:()=>void;
- resultsVisible:boolean;selectedSuggestionId:string|null;
+ resultsVisible:boolean;selectedSuggestionId:string|null;playingTrackIds?:ReadonlySet<string>;
  primaryProvider:MusicSearchProviderRow|null;
  hasSupportedProvider?:boolean;
- sessionReady:boolean;canSearch:boolean;searchPending:boolean;
+ sessionReady:boolean;canSearch:boolean;searchPending:boolean;searchPendingLabel?:string;
  /** Catalogue results only. This callback never submits a Telegram query. */
  onSearch:()=>void;
  onChooseSuggestion:(id:string,opener:HTMLButtonElement)=>void;onCancel:()=>void;
@@ -61,8 +64,9 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
   data-suggestion-id={row.id} data-catalog-kind={row.kind} disabled={props.searchPending}
   aria-pressed={props.selectedSuggestionId===row.id} onClick={event=>choose(row,event.currentTarget)}>
   <CatalogArtwork className={`catalog-art catalog-art--${row.kind}`} url={row.artworkUrl} trackId={row.trackId} fallback={row.kind==='artist'?Array.from(row.title.trim())[0]?.toLocaleUpperCase('es')??'♪':row.kind==='album'?'◉':'♪'}/>
-  <span className="catalog-row-copy"><strong><bdi dir="auto">{row.title}</bdi></strong>
+  <span className="catalog-row-copy"><strong title={row.title}><bdi dir="auto">{row.title}</bdi></strong>
   <span className="catalog-row-meta">{kindLabels[row.kind]}{row.subtitle&&<> · <bdi dir="auto">{row.subtitle}</bdi></>}</span></span><span className="catalog-chevron" aria-hidden="true">›</span>
+  {row.trackId&&props.playingTrackIds?.has(row.trackId)&&<PlaybackIndicator/>}
  </button>;
  return <section className="music-search" data-search-active={searching?'true':undefined} aria-labelledby={`${id}-heading`}>
   <p className="catalog-eyebrow">DESCUBRE</p><h2 ref={heading} tabIndex={-1} id={`${id}-heading`}>Buscar música</h2><p className="catalog-intro">Encuentra canciones, álbumes y artistas.</p>
@@ -71,7 +75,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    <div className="music-search-query">
     <div className="music-search-query-bar">
      <div className="catalog-search-field"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
-     <input ref={input} id={`${id}-query`} type="search" placeholder="¿Qué quieres escuchar?" autoComplete="off" maxLength={640} enterKeyHint="search"
+     <input ref={input} id={`${id}-query`} type="search" placeholder="¿Qué quieres escuchar?" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={640} enterKeyHint="search"
       value={props.query} aria-describedby={`${id}-query-help`}
       onFocus={()=>setEditing(true)}
       onChange={event=>{if(active())props.onQueryChange(event.currentTarget.value);}}
@@ -82,8 +86,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    </div>
    <p id={`${id}-query-help`} className="catalog-help">Busca por título o nombre de artista.</p>
   </form>
-  {props.songActions}
-  <div className="catalog-search-status" role="status">{props.suggestionsPending?'Buscando…':props.suggestionsNotice}</div>
+  <div className="catalog-search-status" role="status">{props.suggestionsPending?'Buscando…':props.suggestions.length?null:props.suggestionsNotice}</div>
   {props.suggestionsError&&<p role="alert">{props.suggestionsError}</p>}
   {props.onRetrySuggestions&&props.suggestionsError&&props.query.trim().length>=3&&<button type="button" disabled={props.suggestionsPending||props.searchPending}
    onClick={()=>{if(active()&&!props.suggestionsPending&&!props.searchPending)props.onRetrySuggestions?.();}}>{props.suggestionsError?'Reintentar sugerencias':'Actualizar sugerencias'}</button>}
@@ -93,8 +96,12 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    <div className="music-search-actions" role="group" aria-label="Tipo de resultado">
     {([['all','Todo'],['track','Canciones'],['album','Álbumes'],['artist','Artistas']] as const).map(([kind,label])=><button type="button" key={kind} aria-pressed={filter===kind} onClick={()=>setFilter(kind)}>{label}</button>)}
    </div>
-   {rows.length?<ul className="catalog-mixed-list">{rows.map(row=><li key={row.id}>{card(row)}</li>)}</ul>:<p className="catalog-empty">{props.suggestionsPending?'Buscando coincidencias…':'No hay coincidencias de este tipo. Prueba con otro nombre o filtro.'}</p>}
+   {rows.length?<ul className="catalog-mixed-list">{rows.map(row=><li key={row.id}>{card(row)}{row.id===props.selectedSuggestionId&&props.songActions}</li>)}</ul>:!props.suggestionsPending&&!props.suggestionsError&&(props.suggestions.length>0||!props.suggestionsNotice)&&<div className="catalog-empty">
+    <p>{props.suggestions.length?'No hay resultados con este filtro.':'No encontramos coincidencias. Prueba con otro título o artista.'}</p>
+    {props.suggestions.length>0&&filter!=='all'&&<button type="button" onClick={()=>setFilter('all')}>Ver todos los resultados</button>}
+   </div>}
   </section>}
+  {props.songActions&&!rows.some(row=>row.id===props.selectedSuggestionId)&&<div className="song-selection-fallback">{props.songActions}</div>}
   <section className="music-search-bot" aria-label="Consulta al bot">
    <details><summary>Fuentes para la canción elegida</summary>
    {provider?<p>Bot principal: <bdi dir="auto">@{provider.username.replace(/^@/,'')}</bdi>. {provider.supported?'Se probará primero. Si no consigue una copia compatible, se probará el siguiente bot disponible.':'Se usarán los siguientes bots compatibles de tu lista.'}</p>:<p>Añade tus proveedores en «Bots de música» para buscar las canciones en el orden que elijas.</p>}
@@ -104,11 +111,11 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    {!props.songActions&&<>{props.searchPending&&<button type="button" onClick={()=>{if(committed.current===props&&props.searchPending)(props.onCancelDownload??props.onCancel)();}}>Cancelar consulta</button>}
    {props.downloadProgress&&props.downloadProgress.total>0&&<progress aria-label="Progreso de la descarga" value={props.downloadProgress.bytes} max={props.downloadProgress.total}/>}
    {props.downloadStatus&&<p role="status">{props.downloadStatus}</p>}
-   <div role="status">{props.searchPending?'Consultando la canción elegida…':props.status}</div>
+   <div role="status">{props.searchPending?(props.searchPendingLabel??'Consultando la canción elegida…'):props.status}</div>
    {props.error&&<p role="alert">{props.error}</p>}
    {props.uncertain&&<p>Resultado incierto: no se ha confirmado la respuesta del bot. No se reintentará ni cambiará de bot automáticamente.</p>}
    </>}
-   {props.results.length>0&&!props.automaticSelection&&<><h3>Respuesta del bot</h3><p>Si hay varias opciones, elige la versión correcta: se descargará y reproducirá una única copia en Pulso. Límite inicial: 8 MiB; no hace falta exportar a Archivos.</p>
+   {props.results.length>0&&!props.automaticSelection&&<><h3>Respuesta del bot</h3><p>Si hay varias opciones, elige la versión correcta: se descargará y reproducirá una única copia en Pulso. Límite por canción: {formatStorageMB(AUDIO_FILE_MAX_BYTES)}; no hace falta exportar a Archivos.</p>
     <ul className="music-search-results">{props.results.map(row=><li key={row.id} data-result-id={row.id}>
      <strong><bdi dir="auto">{row.title}</bdi></strong>{row.subtitle&&<p><bdi dir="auto">{row.subtitle}</bdi></p>}
      <p>{row.kind==='audio'?'Referencia de audio; disponibilidad sin verificar.':row.kind==='option'?'Botón del bot: se pulsa sólo al elegir esta opción.':'Mensaje del bot.'}</p>
@@ -120,7 +127,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
   </section>
   <details className="catalog-sources"><summary>Opciones de búsqueda</summary>
    {props.onRetrySuggestions&&props.query.trim().length>=3&&<button type="button" disabled={props.suggestionsPending||props.searchPending} onClick={()=>{if(active()&&!props.suggestionsPending&&!props.searchPending)props.onRetrySuggestions?.();}}>Actualizar sugerencias</button>}
-   <p>Las sugerencias externas proceden de iTunes US y <a href="https://lrclib.net/docs" target="_blank" rel="noopener noreferrer">LRCLIB</a>. Las coincidencias repetidas se agrupan; las versiones distintas se conservan. Los resultados no confirman disponibilidad en Telegram ni álbumes completos.</p>
+   <p>Las sugerencias externas proceden de iTunes US, MusicBrainz como respaldo y <a href="https://lrclib.net/docs" target="_blank" rel="noopener noreferrer">LRCLIB</a>. Las coincidencias repetidas se agrupan; las versiones distintas se conservan. Los resultados no confirman disponibilidad en Telegram ni álbumes completos.</p>
   </details>
  </section>;
 }

@@ -1,3 +1,5 @@
+import {musicBrainzId} from './catalog-id';
+import type {CatalogId} from './catalog-id';
 import type {AlbumDetail,AlbumTrack} from './album-catalog';
 import type {SongChoice,SongPlaybackAttempt,SongManagement} from './selected-song';
 import {acquireFromOrderedBots,acquisitionFailureText,type OrderedProvider} from './ordered-bot-acquisition';
@@ -5,14 +7,15 @@ import {isBotSearchQuery,parseBotSearchTarget} from '../telegram/bot-search-prot
 import type {TelegramSessionClient} from '../telegram/session-client';
 
 export function albumTrackChoice(track:AlbumTrack,album:string):SongChoice {
- return {id:`itunes:${track.releaseId}:${track.disc}:${track.position}:${track.trackId}`,source:'itunes',title:track.title,artist:track.artist,searchArtist:track.primaryArtist??track.artist,album,duration:track.durationMs===null?null:track.durationMs/1000};
+ const mb=musicBrainzId(track.releaseId)&&musicBrainzId(track.trackId);
+ return {id:mb?`musicbrainz:${String(track.releaseId).slice(12)}:${track.disc}:${track.position}:${String(track.trackId).slice(12)}`:`itunes:${track.releaseId}:${track.disc}:${track.position}:${track.trackId}`,source:mb?'musicbrainz':'itunes',title:track.title,artist:track.artist,searchArtist:track.primaryArtist??track.artist,album,duration:track.durationMs===null?null:track.durationMs/1000};
 }
 export type AlbumRowState='unattempted'|'ready'|'reused'|'downloaded'|'failed'|'uncertain';
 export interface AlbumRow {state:AlbumRowState;trackId:string|null;confirmed:boolean;message:string}
 export interface AlbumProgress {rows:AlbumRow[];message:string}
 export interface AlbumAcquisition {
  detail:AlbumDetail;attempt:SongPlaybackAttempt;client:TelegramSessionClient|null;provider:string|null;providers?:readonly OrderedProvider[];revision:number|undefined;
- management:(id:string)=>SongManagement|null;signal:AbortSignal;current:()=>boolean;update:(value:AlbumProgress)=>void;rows:AlbumRow[];remoteClock?:{settledAt:number};uncertainTracks?:Set<number>;
+ management:(id:string)=>SongManagement|null;signal:AbortSignal;current:()=>boolean;update:(value:AlbumProgress)=>void;rows:AlbumRow[];remoteClock?:{settledAt:number};uncertainTracks?:Set<CatalogId>;
 }
 export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
  const rows=p.rows.map(row=>row.confirmed?{...row,state:'ready' as const,confirmed:false,message:'Pendiente de verificar de nuevo.'}:{...row});
