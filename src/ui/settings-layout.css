@@ -47,3 +47,15 @@
 .pulso-app .settings-navigation { flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-inline:contain; }
 .pulso-app .settings-navigation button { flex:1 0 auto;padding:.65rem .5rem;white-space:nowrap;overflow-wrap:normal;font-size:.85rem; }
 .pulso-app:has(.settings-view:not([hidden]))>.installed-app-notice { display:none; }
+.pulso-app .storage-groups {list-style:none;padding:0;margin:1rem 0;display:grid;gap:.35rem;}
+.pulso-app .storage-groups li {min-width:0;}
+.pulso-app .storage-groups button {display:flex;align-items:center;gap:.85rem;width:100%;padding:.65rem .25rem;text-align:left;background:transparent;border:0;color:var(--pulso-foreground);}
+.pulso-app .storage-group-cover {width:56px;height:56px;flex:none;overflow:hidden;border-radius:8px;background:var(--pulso-surface);}
+.pulso-app .storage-group-cover .collection-cover {width:100%;height:100%;}
+.pulso-app .storage-group-label {display:grid;gap:.2rem;min-width:0;flex:1;overflow-wrap:anywhere;}
+.pulso-app .storage-group-label strong {font-size:.95rem;}
+.pulso-app .storage-group-label>span,.pulso-app .storage-group-label small {font-size:.8rem;color:var(--pulso-muted);}
+.pulso-app .storage-selection {display:flex;gap:.5rem;flex-wrap:wrap;margin-block:1rem;}
+.pulso-app .storage-selection button {min-height:44px;font-size:.8rem;}
+.pulso-app .storage-downloads input[type=checkbox] {width:22px;height:22px;flex:none;accent-color:var(--pulso-accent);}
+.pulso-app .storage-downloads>li>div {flex:1;}
