@@ -374,7 +374,7 @@ function captureBotAudioImport(libraryMode?:'cache'){
    if(!current()||signal.aborted)return {state:'failed',trackId:null};
    const suffix=audio.mime==='audio/mpeg'?'.mp3':audio.mime==='audio/mp4'?'.m4a':'.wav';
    const file=new File([audio.blob],audio.target.title.replace(/[\/\\]/g,' ').slice(0,160)+suffix,{type:audio.mime});
-   const request:ImportRequest={version:2,type:'import',operationId,file,expected:{sha256:audio.sha256,title:audio.target.title,artist:audio.target.artist,...(audio.recordingTitle?{recordingTitle:audio.recordingTitle,album:audio.target.album!,durationSeconds:audio.target.durationSeconds!}:{})},...(libraryMode?{libraryMode}:{})};
+   const request:ImportRequest={version:2,type:'import',operationId,file,expected:{sha256:audio.sha256,title:audio.target.title,artist:audio.target.artist,...(audio.target.album&&audio.target.durationSeconds!==null&&audio.target.durationSeconds>0?{recordingTitle:audio.recordingTitle??audio.target.title,album:audio.target.album,durationSeconds:audio.target.durationSeconds}:{})},...(libraryMode?{libraryMode}:{})};
    const worker=new Worker(new URL('./imports/import.worker.ts',import.meta.url),{type:'module'});
    const settled=await invokeDomainWorker('import',worker,request,current,bytes=>{if(current()&&!signal.aborted)onProgress(bytes);},signal);outcome=settled.outcome;
    confirmed=settled.response?.type==='complete'&&outcome.status==='confirmed'&&outcome.writeState==='published';outcomeDiagnostic(diagnostic,outcome);

@@ -2287,3 +2287,12 @@ HTTPS confirmó 140/140 rutas estáticas por bytes/SHA; `/latest.json` dirige a 
 Se conserva el primer fallo HTTP 500 del upload de assets; no hizo PUT. El éxito del retry no identifica por sí solo cuál de sus correcciones resolvió ese error. No se repitieron suites ni build; resultados candidatos previos: 759 unidades, 28 servidor, 26 cuentas y 38 interfaz, lint/build/dry-run PASS. No se declara aceptación real: JWT válido para GET/PUT de perfil, Safari/iPhone físico, instalación/lanzamiento PWA y cierre durante importación ocupada/operación incierta siguen pendientes. Safari y PWA instalada conservan almacenamiento independiente; P0-W global sigue incompleto.
 
 Recibos saneados: `docs/evidence-account-context-web.json`; operativos privados `.local/pulso-account-context/publication/{deployment-retry-1,mcp-readback-retry-1,https-readback-retry-1}.json`. Los recibos del primer intento permanecen intactos.
+
+## Descarga musical: duración cero reproducida · 2026-11-17
+
+Llora Llora, de Milo j y AKRIILA, reprodujo D02 real por duración Telegram cero con título y crédito completo coincidentes. Dos pistas del álbum descargaron con el respaldo; ambas copias pasaron longitud y SHA en RAM. La reparación verifica la duración real antes de staging: 766 unitarias y matrices Chromium 9/9 y WebKit 4/4 PASS. Entrega y aceptación real reparada pendientes; no álbum completo ni P0 global. La preferencia de cuenta respondió 503 autenticada: pendiente en T21. Detalle en T11-T12, T18 y docs/ALBUM-DOWNLOAD-DURATION.md.
+
+
+## Publicación del candidato · 2026-11-17
+
+Publicado por MCP oficial Cloudflare en Workers Free / USD 0, deployment `fd1d19643b7a4f75bc9dfd06d7e99573`. Entry `/releases/4f6976956f305019.html`; Worker exacto 303826 bytes, SHA-256 `ba1385a54b291151f15b62ecd51c30fa9697c6fa00ac67b19fe4d1d742d41165`. Readback: 151 rutas estáticas bytes/SHA, latest y service worker correctos; siete bindings existentes por nombre/tipo preservados sin leer valores secretos; workers.dev activo y previews desactivadas. `account-config` devuelve enabled/google true y perfil anónimo 401. La aceptación real reparada de Llora Llora queda pendiente para root; no se afirma lote real de quince pistas, iPhone ni cierre de P0-W.

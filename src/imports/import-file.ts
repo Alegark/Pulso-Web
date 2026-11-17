@@ -1,4 +1,4 @@
-import {expectedAudioTagMismatch,type ExpectedAudioMetadata} from './expected-audio-metadata';
+import {expectedAudioTagMismatch,expectedAudioDurationMismatch,type ExpectedAudioMetadata} from './expected-audio-metadata';
 import {extractLocalAlbumMetadata,type Mp4AlbumTag} from './album-metadata';
 import {assertDatabaseUse} from '../storage/database';
 import {admittedTransaction,closeDatabase} from '../storage/database';
@@ -82,6 +82,7 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
   try{metadata=await parseBlob(await atBoundary('read','none',()=>metadataView(file,mime,true,omitted)),parserOptions);}
   catch(error){if(isMetadataLimit(error))fail('parse','internal','limit-exceeded','none');if(issuedFailure(error)||nativeDOMName(error))throw AppFailure.create(fromKnownError(error,{phase:'parse',backend:'none'}));throw AppFailure.create(fromKnownError(error,{phase:'parse',backend:'none'}));}
  }
+ if(options.expected&&expectedAudioDurationMismatch(options.expected,metadata.format.duration))fail('parse','integrity','metadata-duration-mismatch','none');
  const tagMismatch=options.expected?expectedAudioTagMismatch(metadata.common,options.expected,metadata.format.duration):null;
  if(tagMismatch)fail('parse','integrity',tagMismatch==='title'?'metadata-title-mismatch':'metadata-artist-mismatch','none');
  checkCancelled(signal); const duration=metadata.format.duration;
