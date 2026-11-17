@@ -2276,3 +2276,14 @@ Orden posterior del propietario: exigir cuenta Pulso antes de usar la aplicació
 ### Límite de publicación del incremento de cuentas · 2026-11-17
 
 El incremento local de cuentas sigue validado en su entorno documentado, pero la publicación del código se detuvo después de que el primer bucket de assets devolviera HTTP 500. Cloudflare recibió únicamente el nuevo binding secreto `PULSO_NEON_DATA_API_URL`; los seis bindings preexistentes fueron preservados. No se hizo PUT de módulo/assets ni readback HTTP de rutas, así que no se acredita que el candidato esté publicado. No repetir suites ni convertir esto en PASS. Pendiente resolver el transporte de assets y completar la verificación pública. La aceptación física/iPhone y el resto de límites de P0-W siguen abiertos; P0-W permanece incompleto.
+
+
+## Publicación concluida tras retry · 2026-11-17
+
+Se reintentó con el Worker Free de Cloudflare, sin coste y usando sólo el MCP OAuth oficial más el JWT temporal emitido por esa sesión para los uploads. El preflight confirmó los siete bindings y el estado esperado; se conservaron todos sus valores y no se leyó ningún secreto. Los nueve hashes requeridos por Cloudflare fueron transferidos; se comprobó el ETag y la versión justo antes del PUT. Deployment `afadc16fdbe14f38bac0b79ec62abd66`: módulo exacto de 303826 bytes, SHA-256 `ba1385a54b291151f15b62ecd51c30fa9697c6fa00ac67b19fe4d1d742d41165`. El readback MCP confirma versión activa, los siete nombres/tipos de binding, compatibilidad `2026-11-13`, Workers.dev activo y previews desactivadas. No hubo migración del Durable Object.
+
+HTTPS confirmó 140/140 rutas estáticas por bytes/SHA; `/latest.json` dirige a `/releases/b34ea1aee33c6357.html` (1570 bytes, SHA-256 `b34ea1aee33c635730d329f023a649a182b2edbf574236d4272b79ac9d80170a`) y el HTML coincide con el candidato. `/account-config.json` es dinámico: 200/no-store, `enabled=true`, `google=true`; `/api/account-profile` anónimo devuelve 401. Evidencias públicas no equivalen a navegación ni aceptación de una cuenta real.
+
+Se conserva el primer fallo HTTP 500 del upload de assets; no hizo PUT. El éxito del retry no identifica por sí solo cuál de sus correcciones resolvió ese error. No se repitieron suites ni build; resultados candidatos previos: 759 unidades, 28 servidor, 26 cuentas y 38 interfaz, lint/build/dry-run PASS. No se declara aceptación real: JWT válido para GET/PUT de perfil, Safari/iPhone físico, instalación/lanzamiento PWA y cierre durante importación ocupada/operación incierta siguen pendientes. Safari y PWA instalada conservan almacenamiento independiente; P0-W global sigue incompleto.
+
+Recibos saneados: `docs/evidence-account-context-web.json`; operativos privados `.local/pulso-account-context/publication/{deployment-retry-1,mcp-readback-retry-1,https-readback-retry-1}.json`. Los recibos del primer intento permanecen intactos.

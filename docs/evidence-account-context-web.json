@@ -1,5 +1,5 @@
 {
-  "status": "LOCAL PASS; publication stopped before Worker code update",
+  "status": "LOCAL PASS; Cloudflare publication PASS; real-account/platform acceptance pending",
   "date": "2026-11-17",
   "origin": "https://pulso-web.pruebassoftware.workers.dev",
   "entry": "/releases/b34ea1aee33c6357.html",
@@ -62,29 +62,93 @@
     "No busy import/uncertain operation logout acceptance in this native matrix"
   ],
   "publication": {
-    "status": "STOPPED; asset bucket 1 returned HTTP 500",
-    "provider": "official Cloudflare MCP OAuth client",
+    "status": "PUBLISHED; independent Cloudflare MCP and HTTPS readback PASS",
+    "provider": "official Cloudflare MCP OAuth client; temporary JWT from that MCP session used only for asset upload",
     "worker": "pulso-web",
-    "previousVersion": "366ff225-7228-4722-a44d-e3451c49fd53",
-    "versionAfterSecretConfiguration": "5538bd86-70fc-4d80-abfc-77a72f9406cf",
-    "preexistingBindingsPreserved": [
-      "ASSETS:assets",
-      "CATALOG:durable_object_namespace/CatalogCoordinator",
-      "TELEGRAM_API_IDENTITY:secret_text",
-      "PULSO_NEON_AUTH_URL:secret_text",
-      "PULSO_AUTH_COOKIE_SECRET:secret_text",
-      "PULSO_AUTH_GOOGLE_ENABLED:secret_text"
-    ],
-    "addedBinding": "PULSO_NEON_DATA_API_URL:secret_text",
-    "secretValuesRead": false,
-    "workerCodePut": false,
-    "assetsPut": false,
-    "durableObjectMigration": false,
-    "candidateEntry": "/releases/b34ea1aee33c6357.html",
-    "candidateEntryPubliclyVerified": false,
-    "readback": "Read-only metadata confirmed active version and binding names/types; module bytes and public routes not read back",
-    "failure": "Cloudflare direct asset upload using JWT issued by official MCP session returned HTTP 500 for first bucket",
-    "receipt": ".local/pulso-account-context/publication/deployment.json",
-    "pending": "Diagnose asset transfer failure, then run fresh preflight, deployment and independent module/route readback"
+    "origin": "https://pulso-web.pruebassoftware.workers.dev",
+    "plan": "Workers Free / USD 0",
+    "previousAttempt": {
+      "status": "HTTP 500 during first asset bucket; no Worker PUT",
+      "receipt": ".local/pulso-account-context/publication/deployment.json",
+      "readback": ".local/pulso-account-context/publication/failed-publication-readback.json",
+      "preserved": true
+    },
+    "retry": {
+      "receipt": ".local/pulso-account-context/publication/deployment-retry-1.json",
+      "deploymentId": "afadc16fdbe14f38bac0b79ec62abd66",
+      "uploadedRequestedHashes": 9,
+      "verifiedManifestFiles": 143,
+      "workerBytes": 303826,
+      "workerSHA256": "ba1385a54b291151f15b62ecd51c30fa9697c6fa00ac67b19fe4d1d742d41165",
+      "previousVersion": "5538bd86-70fc-4d80-abfc-77a72f9406cf",
+      "bindingsPreserved": [
+        "ASSETS:assets",
+        "CATALOG:durable_object_namespace/CatalogCoordinator",
+        "TELEGRAM_API_IDENTITY:secret_text",
+        "PULSO_NEON_AUTH_URL:secret_text",
+        "PULSO_AUTH_COOKIE_SECRET:secret_text",
+        "PULSO_AUTH_GOOGLE_ENABLED:secret_text",
+        "PULSO_NEON_DATA_API_URL:secret_text"
+      ],
+      "secretValuesRead": false,
+      "secretValuesRotated": false,
+      "durableObjectMigration": false,
+      "compatibilityDate": "2026-11-13",
+      "workersDev": true,
+      "previewsEnabled": false,
+      "causalAttribution": "Retry succeeded after script corrections; this does not isolate which correction resolved the original HTTP 500"
+    },
+    "mcpReadback": {
+      "receipt": ".local/pulso-account-context/publication/mcp-readback-retry-1.json",
+      "workerExactBytesSHA": true,
+      "activeDeployment": "afadc16fdbe14f38bac0b79ec62abd66",
+      "allSevenBindingsConfirmed": true,
+      "secretValuesRead": false
+    },
+    "httpsReadback": {
+      "receipt": ".local/pulso-account-context/publication/https-readback-retry-1.json",
+      "staticAssetRoutesPass": 140,
+      "staticAssetRoutesExpected": 140,
+      "bytesAndSHA256Pass": true,
+      "latestEntry": "/releases/b34ea1aee33c6357.html",
+      "entryBytes": 1570,
+      "entrySHA256": "b34ea1aee33c635730d329f023a649a182b2edbf574236d4272b79ac9d80170a",
+      "entryMatchesCandidate": true,
+      "accountConfig": {
+        "status": 200,
+        "cacheControl": "no-store",
+        "enabled": true,
+        "google": true
+      },
+      "anonymousAccountProfile": {
+        "status": 401
+      }
+    },
+    "candidateEntryPubliclyVerified": true,
+    "realAccountAcceptance": "PENDING",
+    "validJWTProfileReadWrite": "NOT TESTED",
+    "physicalSafariIPhone": "PENDING",
+    "installedPWA": "PENDING",
+    "safariAndPWAStorage": "SEPARATE",
+    "busyImportOrUncertainLogout": "PENDING",
+    "globalP0": "INCOMPLETE",
+    "suitesAndBuildRepeated": false,
+    "localPriorResults": {
+      "unit": "759/759",
+      "cloudflareServer": "28/28",
+      "accounts": "26/26",
+      "interface": "38/38",
+      "lint": "PASS",
+      "build": "PASS",
+      "dryRun": "PASS"
+    },
+    "limitations": [
+      "HTTP verifies route responses and bytes, not navigation, login, or real account acceptance",
+      "TESTONLY account and Telegram responses in local validation",
+      "WebKit style-src-attr historical events remain",
+      "Safari and installed PWA storage are separate",
+      "physical iPhone/Safari and installed-app acceptance remain pending",
+      "no global P0-W completion claim"
+    ]
   }
 }
