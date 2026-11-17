@@ -1,6 +1,6 @@
 # Cuentas de Pulso
 
-Estado: Neon MCP conectado y proyecto gratuito de Pulso creado con Managed Better Auth. La aplicación aún no tiene cuentas activadas en Cloudflare: faltan Google propio y correo de producción. Los formularios prediseñados se verifican localmente con API TESTONLY; no equivale a registro real publicado.
+Estado: Neon MCP conectado y proyecto gratuito de Pulso creado con Managed Better Auth. Google propio configurado y enlace de autorización comprobado con permisos básicos; faltan consentimiento y sesión reales y correo de producción. La aplicación aún no tiene cuentas activadas en Cloudflare. Los formularios prediseñados se verifican localmente con API TESTONLY; no equivale a registro real publicado.
 
 El propietario eligió correo y contraseña más Google, con Neon como base. El acceso de Pulso es opcional y distinto de la conexión personal de Telegram. Este incremento no sincroniza la biblioteca, favoritos, playlists, historial ni archivos entre dispositivos; tampoco mueve la autorización Telegram a un servidor. Iniciar o cerrar una cuenta de Pulso no borra ni cambia los archivos y la organización locales del navegador.
 
@@ -26,8 +26,8 @@ Estas variables no se incluyen en archivos públicos, Git, diagnósticos, regist
 
 1. Completado: conexión OAuth del MCP oficial de Neon y proyecto Pulso en organización Free. No se activaron pagos. Base propia y rama de producción con cómputo mínimo de 0,25 CU y máximo de 0,25 CU; suspensión por el valor gratuito de la cuenta. Identificadores y configuración de conexión quedan privados.
 2. Completado: Managed Better Auth en la base Pulso, nombre Pulso, origen HTTPS publicado permitido, localhost deshabilitado, correo/contraseña con verificación OTP obligatoria y revocación de sesiones al restablecer contraseña. El SMTP sigue siendo el compartido de Neon para desarrollo/pruebas; falta configurar correo de producción. Se retiró Google compartido de desarrollo mientras se espera el cliente propio. Un GET anónimo a Neon a través del router oficial devolvió 200, sesión nula y no-store; no creó usuarios ni envió correos.
-3. Crear un cliente web OAuth propio en Google Auth Platform. El callback de Google se obtiene del Auth Base URL real de Neon; no se inventa antes de provisionar la rama. Configurar nombre de Pulso, datos públicos de contacto y alcances mínimos de identidad. No solicitar acceso a Gmail, Drive ni otras APIs.
-4. Configurar Client ID y secret en Neon mediante su API/Console. No usar las credenciales compartidas de desarrollo para anunciar acceso público de Pulso con Google.
+3. Completado por el propietario: cliente web OAuth propio en Google Auth Platform, con origen de Pulso y callback obtenido del Auth Base URL real de Neon. Usar alcances mínimos de identidad, sin solicitar acceso a Gmail, Drive ni otras APIs. La verificación visual de la marca en Google se distingue de la configuración técnica del cliente.
+4. Completado el 2026-11-17: Client ID y secret propios configurados en Neon mediante MCP oficial. Lectura independiente confirmó proveedor estándar y cliente coincidente; no se usaron las credenciales compartidas de desarrollo. La generación real del enlace, mediante el toolkit de Pulso y la iniciación de Neon, devolvió redirección a Google con callback exacto y sólo `email`, `profile` y `openid`. No se abrió Google ni se otorgó consentimiento: el secreto no queda validado por un intercambio de código hasta completar un acceso real.
 5. Configurar los secretos del Worker, verificar sesión persistente, registro/verificación, recuperación, Google y cierre de sesión con cuentas de prueba autorizadas. Publicar por el MCP oficial de Cloudflare y actualizar la PR mediante el agente económico, según la autorización permanente del propietario.
 
 ## Interfaz y límites
@@ -47,3 +47,11 @@ Los fallos previos quedan en `.local/pulso-auth-ui/`: peer-deps incompatibles co
 Los datos de cuenta y tokens de las fixtures son inventados. No se probó entrega SMTP, Google real, registro real de Neon ni restauración de autorización real en Android/iPhone. No se añadió sincronización de bibliotecas, historial remoto ni separación musical por cuenta Pulso. El backend público continúa deshabilitado hasta configurar y aceptar las dependencias de producción.
 
 La revisión visual y sus límites están en [design/ACCOUNTS.md](../design/ACCOUNTS.md). La preparación está en Git para revisión; no equivale a cuentas habilitadas en el despliegue público.
+
+## Configuración de Google · 2026-11-17
+
+El propietario entregó su cliente web por archivo privado. Sus valores se enviaron directamente al MCP de Neon y no se copiaron a fuentes, Git, ODD ni Engram. El origen de Pulso y el callback coinciden con la configuración provisionada. El secreto Google reside en el proveedor administrado; no se entrega al navegador ni se necesita en el Worker.
+
+La comprobación real acotada sólo inició OAuth hasta obtener la redirección a Google, sin seguirla, crear usuarios, enviar correos ni iniciar sesión. La primera aserción del probe suponía erróneamente una URL directa de Google: Neon devuelve antes su ruta de iniciación. Se conservó ese resultado y se comprobó después su redirección 302. No es un fallo demostrado del producto ni una aceptación de login. Evidencia privada saneada: `.local/pulso-accounts/neon/google-verified.json` y `google-authorization-probe.json`.
+
+Cloudflare continúa con cuentas deshabilitadas. Siguen pendientes la aceptación real de Google/cookies/restauración/cierre, el correo de producción y las pruebas con dispositivos físicos. No se ejecutaron otra vez las suites de código por este cambio exclusivamente de configuración y documentación.
