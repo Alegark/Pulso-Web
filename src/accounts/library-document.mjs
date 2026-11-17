@@ -12,14 +12,15 @@ export function copyAccountCatalog(value){
  if(value===null)return null;
  const fields=['id','source','title','artist','album','duration'];if(!value||!fields.every(k=>Object.hasOwn(value,k))||Object.keys(value).some(k=>![...fields,'searchArtist'].includes(k)))throw Error('catalog');
  const itunes=value.source==='itunes'&&/^itunes:(?:[1-9][0-9]*:){3}[1-9][0-9]*$/.test(value.id),mb=value.source==='musicbrainz'&&/^musicbrainz:[a-f0-9-]{36}:[1-9][0-9]{0,2}:[1-9][0-9]{0,2}:[a-f0-9-]{36}$/.test(value.id),lyrics=value.source==='lrclib'&&/^lrclib:[1-9][0-9]{0,14}$/.test(value.id);
- if(!(itunes||mb||lyrics)||!text(value.title,300,true)||!text(value.artist,300,true)||!nullable(value.album)||value.duration!==null&&(!Number.isFinite(value.duration)||value.duration<=0||value.duration>86400)||value.searchArtist!==undefined&&!text(value.searchArtist,300,true))throw Error('catalog');
+ const spotify=value.source==='spotify'&&/^spotify:[A-Za-z0-9]{22}$/.test(value.id);
+ if(!(itunes||mb||lyrics||spotify)||!text(value.title,300,true)||!(spotify&&value.artist===null||text(value.artist,300,true))||!nullable(value.album)||value.duration!==null&&(!Number.isFinite(value.duration)||value.duration<=0||value.duration>86400)||value.searchArtist!==undefined&&!text(value.searchArtist,300,true))throw Error('catalog');
  return {id:value.id,source:value.source,title:value.title,artist:value.artist,album:value.album,duration:value.duration,...(value.searchArtist?{searchArtist:value.searchArtist}:{})};
 }
 export function validateAccountLibrary(value){
  if(!object(value,['version','tracks','playlists'])||value.version!==1||!Array.isArray(value.tracks)||value.tracks.length>LIBRARY_LIMITS.tracks||!Array.isArray(value.playlists)||value.playlists.length>LIBRARY_LIMITS.playlists)throw Error('library-format');
  const ids=new Set(),listIds=new Set();let entries=0;
  const tracks=value.tracks.map(t=>{
-  if(!object(t,['id','title','artist','album','duration','favorite','inLibrary','createdAt','localAlbum','catalog'])||!libraryUuid(t.id)||ids.has(t.id)||!text(t.title,300,true)||!nullable(t.artist)||!nullable(t.album)||!Number.isFinite(t.duration)||t.duration<=0||t.duration>86400||typeof t.favorite!=='boolean'||typeof t.inLibrary!=='boolean'||!text(t.createdAt,30,true)||!Number.isFinite(Date.parse(t.createdAt))||t.localAlbum!==null&&!copyLocalAlbumMetadata(t.localAlbum))throw Error('library-track');
+  if(!object(t,['id','title','artist','album','duration','favorite','inLibrary','createdAt','localAlbum','catalog'])||!libraryUuid(t.id)||ids.has(t.id)||!text(t.title,300,true)||!nullable(t.artist)||!nullable(t.album)||!Number.isFinite(t.duration)||t.duration<0||t.duration>86400||t.duration===0&&t.catalog!==null&&!(t.catalog?.source==='spotify'&&t.catalog.duration===null)||typeof t.favorite!=='boolean'||typeof t.inLibrary!=='boolean'||!text(t.createdAt,30,true)||!Number.isFinite(Date.parse(t.createdAt))||t.localAlbum!==null&&!copyLocalAlbumMetadata(t.localAlbum))throw Error('library-track');
   ids.add(t.id);return {id:t.id,title:t.title,artist:t.artist,album:t.album,duration:t.duration,favorite:t.favorite,inLibrary:t.inLibrary,createdAt:t.createdAt,localAlbum:t.localAlbum===null?null:copyLocalAlbumMetadata(t.localAlbum),catalog:copyAccountCatalog(t.catalog)};
  });
  const playlists=value.playlists.map(p=>{

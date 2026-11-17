@@ -1,3 +1,4 @@
+import {spotifyArtworkUrl} from '../../src/library/catalog-id.ts';
 // Public metadata/images only. Never accepts arbitrary hosts, credentials or audio.
 const JSON_MAX=1048576,IMAGE_MAX=2097152;
 export class RelayError extends Error{constructor(status,retryAfter=null){super('catalog');this.status=status;this.retryAfter=retryAfter;}}
@@ -5,6 +6,7 @@ export function upstream(path,query){
  const pairs=[...new URLSearchParams(query)];if(pairs.length>8||new Set(pairs.map(p=>p[0])).size!==pairs.length)throw new RelayError(400);
  const p=Object.fromEntries(pairs);
  if(path==='/catalog/artwork'){
+  if(pairs.length===1&&spotifyArtworkUrl(p.u))return {url:p.u,image:true};
   if(pairs.length!==1||!p.u||!/^https:\/\/is[1-5]-ssl\.mzstatic\.com\//.test(p.u)||p.u.length>2048||p.u.includes('\\'))throw new RelayError(400);
   const u=new URL(p.u);if(u.search||u.hash||!/[.](jpe?g|png|webp)$/i.test(u.pathname))throw new RelayError(400);
   return {url:u.href,image:true};

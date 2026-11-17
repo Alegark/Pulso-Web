@@ -1,3 +1,4 @@
+import {projectSpotifyReleases} from '../playlists/spotify-catalog';
 import {ACTIVE_LIBRARY_ACCOUNT} from '../accounts/library-local';
 /** Collection metadata CAS and explicit retirement of unreferenced copies.
  * The host supplies real reservations and fresh runtime-bound contexts. */
@@ -33,7 +34,7 @@ async function rows(tx:IDBTransaction, name:string):Promise<Row[]> {
  if(keys.length>20000||keys.length!==values.length)throw new Error('collection-limit');
  return keys.map((key,i)=>({key,value:values[i]}));
 }
-async function snapshot(tx:IDBTransaction,c:CollectionContext):Promise<Snapshot> {
+async function snapshot(tx:IDBTransaction,c:CollectionContext,includeCatalog:boolean):Promise<Snapshot> {
  check(c);const [tr,pl,as]=await Promise.all(['tracks','playlists','assets'].map(n=>rows(tx,n)));check(c);
  const tracks=tr.map(r=>validateTrack(r.value,r.key)); const ids=new Set(tracks.map(t=>t.id));
  const playlists=pl.map(({key,value})=>{
@@ -48,7 +49,11 @@ async function snapshot(tx:IDBTransaction,c:CollectionContext):Promise<Snapshot>
  const store=tx.objectStore('settings');const relevant=(await Promise.all(tracks.map(async t=>{const key=libraryMembershipKey(t.id);const [value,present]=await Promise.all([request(store.get(key)),request(store.getKey(key))]);return present===undefined?null:{key,value};}))).filter(r=>r!==null);
  for(const r of relevant){const key=r.key as [string,number,string];const m=copyLibraryMembership(r.value,key[2]);if(!m)throw new Error('collection-invalid');membership.set(m.trackId,m.added);}
  const rawQueue=await request(store.get('library-playback'));const queued=new Set<string>();if(rawQueue!==undefined){const q=normalizeSnapshot(rawQueue);if(!q||q.warnings.length||describeRemovalData(rawQueue)!==describeRemovalData(q.snapshot)||q.snapshot.entries.some(e=>!ids.has(e.trackId)))throw new Error('collection-invalid');for(const entry of q.snapshot.entries)queued.add(entry.trackId);}
- const accountId=await request<string|undefined>(store.get(ACTIVE_LIBRARY_ACCOUNT));const canonical=describeRemovalData([tr,pl,as,relevant,rawQueue,accountId]);return {accountId,tracks,playlists,assets,membership,queued,canonical};
+ const accountId=await request<string|undefined>(store.get(ACTIVE_LIBRARY_ACCOUNT));
+ const view=includeCatalog&&accountId?await projectSpotifyReleases(store,tracks,accountId):tracks;
+ const catalogEvidence=includeCatalog?view.flatMap(t=>t.catalogRelease?[[t.id,t.catalogRelease]]:[]):[];
+ const canonical=describeRemovalData([tr,pl,as,relevant,rawQueue,accountId,catalogEvidence]);
+ return {accountId,tracks:view,playlists,assets,membership,queued,canonical};
 }
 function affectedFor(s:Snapshot,selection:CollectionSelection):string[] {
  if(selection.kind==='playlist') {const p=s.playlists.find(p=>p.id===selection.id&&p.revision===selection.revision&&p.accountId===s.accountId);if(!p)throw new Error('collection-changed');return [...new Set(p.entries.map(e=>e.trackId))];}
@@ -61,10 +66,10 @@ function affectedFor(s:Snapshot,selection:CollectionSelection):string[] {
  const group=groupAlbums(s.tracks.filter(t=>s.membership.get(t.id)&&t.accountId===s.accountId)).find(g=>g.key===selection.key);
  if(!group||group.unknown)throw new Error('collection-changed');return [...new Set(group.trackIds)];
 }
-async function read(c:CollectionContext):Promise<Snapshot>{check(c);const db=await openExistingDatabase();try{check(c);const tx=admittedTransaction(db,['tracks','playlists','assets','settings']);const done=transactionDone(tx);try{const s=await snapshot(tx,c);await done;check(c);return s;}catch(e){try{tx.abort();}catch{}await done.catch(()=>{});throw e;}}finally{closeDatabase(db);}}
+async function read(c:CollectionContext,includeCatalog:boolean):Promise<Snapshot>{check(c);const db=await openExistingDatabase();try{check(c);const tx=admittedTransaction(db,['tracks','playlists','assets','settings']);const done=transactionDone(tx);try{const s=await snapshot(tx,c,includeCatalog);await done;check(c);return s;}catch(e){try{tx.abort();}catch{}await done.catch(()=>{});throw e;}}finally{closeDatabase(db);}}
 export async function previewCollectionRemoval(selection:CollectionSelection,c:CollectionContext):Promise<CollectionPreview>{
  if(selection.kind==='playlist'&&(!uuid(selection.id)||!Number.isSafeInteger(selection.revision)||selection.revision<1)||selection.kind==='album'&&(selection.scope!=='global-library'||typeof selection.key!=='string')||selection.kind==='cache'&&selection.scope!=='global-listening-cache'||!['playlist','album','cache'].includes(selection.kind))throw new Error('collection-invalid');
- const s=await read(c);const affected=affectedFor(s,selection);const affectedSet=new Set(affected);
+ const s=await read(c,selection.kind==='album');const affected=affectedFor(s,selection);const affectedSet=new Set(affected);
  const remainingLists=selection.kind==='playlist'?s.playlists.filter(p=>p.id!==selection.id):s.playlists;
  const protectedIds=new Set(remainingLists.flatMap(p=>p.entries.map(e=>e.trackId)));
  const candidateAssets=s.assets.filter(a=>s.tracks.some(t=>affectedSet.has(t.id)&&t.assetId===a.id));let eligible=0,estimatedBytes=0,shared=0;
@@ -84,7 +89,7 @@ export async function confirmCollectionRemoval(token:CollectionPreviewToken,cons
   check(c);const db=await openExistingDatabase();let tx:IDBTransaction|undefined;let done:Promise<void>|undefined;let dispatched=false;
   try{check(c);tx=admittedTransaction(db,['tracks','playlists','assets','settings'],'readwrite');done=transactionDone(tx);const native=tx;
    const abort=()=>{try{native.abort();}catch{}};c.signal.addEventListener('abort',abort,{once:true});
-   try{const s=await snapshot(tx,c);if(s.canonical!==d.snapshot.canonical)throw new Error('collection-changed');const ids=affectedFor(s,d.selection);if(describeRemovalData(ids)!==describeRemovalData(d.affected))throw new Error('collection-changed');check(c);
+   try{const s=await snapshot(tx,c,d.selection.kind==='album');if(s.canonical!==d.snapshot.canonical)throw new Error('collection-changed');const ids=affectedFor(s,d.selection);if(describeRemovalData(ids)!==describeRemovalData(d.affected))throw new Error('collection-changed');check(c);
     if(d.selection.kind==='playlist')tx.objectStore('playlists').delete(d.selection.id);
     else if(d.selection.kind==='album')for(const id of ids)tx.objectStore('settings').put(makeLibraryMembership(id,false),libraryMembershipKey(id));
     dispatched=true;await done;return {metadata:'committed',cleanup:'not-started',freedBytes:0,removed:0,skipped:0,skipReasons:[],reason:null} as CollectionOutcome;

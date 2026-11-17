@@ -1,3 +1,4 @@
+import {displayTrackAlbum} from './catalog-release';
 import type {Track, Playlist} from './library';
 export type AvailabilityState = 'available'|'missing'|'invalid'|'unknown'|'metadata-only';
 export interface AvailabilityRecord {generation:string;state:'available'|'missing'|'invalid'}
@@ -17,5 +18,5 @@ export interface ShellView {query:string;listId:string;groupMode:'tracks'|'artis
 export const emptyShellView=():ShellView=>({query:'',listId:'',groupMode:'tracks',groupKey:'',favorites:false,present:false});
 export const normalizeSearch=(s:string)=>s.normalize('NFD').replace(/\p{Diacritic}/gu,'').toLocaleLowerCase('es');
 export function matchesShellTrack(track:Track,view:ShellView,cache:ReadonlyMap<string,AvailabilityRecord>):boolean {
- return (!view.favorites||track.favorite)&&(!view.present||trackAvailability(track,cache)==='available')&&normalizeSearch(`${track.title} ${track.artist??''} ${track.album??''}`).includes(normalizeSearch(view.query));
+ return (!view.favorites||track.favorite)&&(!view.present||trackAvailability(track,cache)==='available')&&normalizeSearch(`${track.title} ${track.artist??''} ${displayTrackAlbum(track)??''}`).includes(normalizeSearch(view.query));
 }

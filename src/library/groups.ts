@@ -1,7 +1,8 @@
 import {resolveLocalAlbumMetadata} from './album-metadata';
+import {displayTrackAlbum,searchedITunesRelease,trackCatalogRelease} from './catalog-release';
 import type {Track} from './library';
 
-export type MetadataProvenance = 'manual' | 'tags';
+export type MetadataProvenance = 'manual' | 'tags' | 'catalog';
 
 /** A disposable local view, never a Track/Asset/QueueEntry or verified artist/album ID. */
 export interface LibraryGroup {
@@ -45,7 +46,27 @@ function albumIdentity(value: string | null): string | null {
 }
 
 function albumKeys(tracks: readonly Track[], sources: ReturnType<typeof resolveLocalAlbumMetadata>[]): string[] {
+ const releases=tracks.map(trackCatalogRelease);
+ const bridges=new Map<number,Set<string>>();
+ for(const release of releases){
+  if(release?.source!=='spotify'||!release.itunesReleaseId)continue;
+  const key=JSON.stringify(['album-catalog','spotify',release.releaseId]);
+  const editions=bridges.get(release.itunesReleaseId);
+  if(editions)editions.add(key);else bridges.set(release.itunesReleaseId,new Set([key]));
+ }
+ const crossed=tracks.map(track=>{
+  const id=searchedITunesRelease(track);
+  const editions=id===null?undefined:bridges.get(id);
+  return editions?.size===1?[...editions][0]:null;
+ });
  const bases = tracks.map((track, index) => {
+  const release=releases[index];
+  if(crossed[index])return crossed[index];
+  if(release?.source==='itunes'){
+   const editions=bridges.get(release.releaseId);
+   if(editions?.size===1)return [...editions][0];
+  }
+  if(release)return JSON.stringify(['album-catalog',release.source,release.releaseId]);
   const album = albumIdentity(track.album);
   const source = sources[index];
   const credit = source.albumArtist.state === 'known' ? source.albumArtist.value : track.artist;
@@ -62,7 +83,7 @@ function albumKeys(tracks: readonly Track[], sources: ReturnType<typeof resolveL
   values.add(flag.value);
  });
  return bases.map((base, index) => {
-  if (albumIdentity(tracks[index].album) === null) return base;
+  if (crossed[index]||releases[index]||albumIdentity(tracks[index].album) === null) return base;
   const flag = sources[index].compilation;
   const values = declarations.get(base);
   const compilation = flag.state === 'known' ? flag.value : values?.size === 1 ? [...values][0] : null;
@@ -76,6 +97,7 @@ function addUnique<T>(values: T[], value: T): void {
 
 function fieldEvidence(track: Track, field: 'artist' | 'album'): MetadataProvenance | null {
  if (Object.prototype.hasOwnProperty.call(track.manualOverrides, field)) return 'manual';
+ if(field==='album'&&trackCatalogRelease(track))return 'catalog';
  return identity(track[field]) === null ? null : 'tags';
 }
 
@@ -85,19 +107,20 @@ function groupTracks(tracks: readonly Track[], kind: LibraryGroup['kind']): Libr
  const keys = kind === 'album' ? albumKeys(tracks, sources) : [];
  for (const [index, track] of tracks.entries()) {
   const artist = identity(track.artist);
-  const album = identity(track.album);
+  const effectiveAlbum=displayTrackAlbum(track);
+  const album = identity(effectiveAlbum);
   const unknown = (kind === 'artist' ? artist : album) === null;
   // JSON tuples are unambiguous even with delimiters, quotes or literal bucket labels.
   // All missing albums share an explicit bucket, rather than implying an album entity.
   const source=sources[index];
-  const albumArtist=source.albumArtist.state==='known'?source.albumArtist.value:null;
+  const albumArtist=source.albumArtist.state==='known'?source.albumArtist.value:trackCatalogRelease(track)?.artist??null;
   const key = kind === 'artist' ? JSON.stringify(['artist', artist]) : keys[index];
   let group = groups.get(key);
   if (!group) {
    group = {
     key, kind, unknown, completeness: 'unknown',
     label: unknown ? (kind === 'artist' ? 'Artista desconocido' : 'Sin álbum (agrupación local)')
-     : (kind === 'artist' ? track.artist! : track.album!),
+     : (kind === 'artist' ? track.artist! : effectiveAlbum!),
     artist: kind === 'album' && !unknown ? albumArtist??(artist!==null?track.artist:null) : null,
     ...(kind==='album'&&!unknown&&source.albumArtist.state==='known'?{criterion:'albumArtist' as const,albumArtistSource:source.albumArtist}:{}),
     labels: [], artistLabels: [], trackIds: [], provenance: [], evidence: {artist: [], album: []},

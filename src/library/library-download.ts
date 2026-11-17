@@ -18,7 +18,10 @@ export async function downloadLibrarySelection(p:{tracks:readonly Track[];attemp
   let id=await p.attempt.lookup(choice,p.signal);if(!live())break;
   if(id){uncertainTracks.delete(track.id);row.state='reused';row.trackId=id;row.confirmed=true;row.message='Ya descargada en este dispositivo.';update('Copia local reutilizada.');continue;}
   if(uncertainTracks.has(track.id)){row.state='uncertain';row.message='Requiere revisión antes de repetir la entrega.';update(row.message);continue;}
-  const target=parseBotSearchTarget({title:choice.title,artist:choice.artist,album:choice.album,durationSeconds:choice.duration});if(!target){row.state='failed';row.message='Metadatos insuficientes para buscarla.';update(row.message);continue;}
+  // Spotify can omit credits or duration. Keep incomplete entries visible
+  // while requiring a usable credit for remote audio matching.
+  const target=track.catalogChoice?.source==='spotify'&&!choice.artist?null:
+   parseBotSearchTarget({title:choice.title,artist:choice.artist,album:choice.album,durationSeconds:choice.duration||null});if(!target){row.state='failed';row.message='Metadatos insuficientes para buscarla.';update(row.message);continue;}
   row.message='Buscando canción…';update(row.message);
   const result=await acquireFromOrderedBots({client:p.client,providers:p.providers,revision:p.revision,target,signal:p.signal,current:live,networkCurrent,remoteClock,progress:()=>{}});
   if(!live()||result.state==='uncertain'){uncertainTracks.add(track.id);row.state='uncertain';row.message='Entrega sin confirmar; revisa antes de repetir.';update(row.message);return;}
