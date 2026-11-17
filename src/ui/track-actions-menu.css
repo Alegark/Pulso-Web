@@ -38,3 +38,9 @@
  .track-actions-menu__header { padding:.75rem;gap:.5rem; }
  .track-actions-menu__art { display:none; }
 }
+.pulso-app .track-actions-menu__back { flex:none;margin:.25rem .75rem;padding:.5rem;background:transparent;border:0;text-align:start;min-block-size:44px;color:var(--pulso-muted);font-size:.85rem; }
+.track-actions-menu__content[data-subpage=true]>:not(details[open]) { display:none; }
+.pulso-app .track-actions-menu__content details[open] { background:transparent; }
+.pulso-app .track-actions-menu__content details[open]>summary { font-weight:650; }
+.pulso-app .track-actions-menu__content details[open]>summary::after { content:none; }
+.pulso-app .track-actions-menu__content>button:last-of-type { border-top:1px solid var(--pulso-border);border-radius:0; }

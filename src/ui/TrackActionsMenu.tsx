@@ -1,4 +1,4 @@
-import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
+import {useEffect,useLayoutEffect,useId,useRef,useState,type ReactNode} from 'react';
 import './track-actions-menu.css';
 
 interface TrackActionsMenuProps {
@@ -18,12 +18,13 @@ export function trackActionOpener(button:HTMLButtonElement):HTMLButtonElement {
 export function TrackActionsMenu({title,artist,artwork,children,active}:TrackActionsMenuProps){
  const id=useId(),dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null);
  const releaseScroll=useRef<(()=>void)|null>(null);
- const [open,setOpen]=useState(false);
+ const [open,setOpen]=useState(false),[subpage,setSubpage]=useState(false);
+ function back(restore=false){const summary=dialog.current?.querySelector<HTMLElement>('details[open]>summary');dialog.current?.querySelectorAll('details[open]').forEach(node=>node.removeAttribute('open'));setSubpage(false);if(restore)requestAnimationFrame(()=>summary?.focus());}
  function unlock(){releaseScroll.current?.();releaseScroll.current=null;}
  function close(){
   const node=dialog.current;
   if(node?.open)node.close();
-  unlock();setOpen(false);
+  unlock();setOpen(false);back();
   if(trigger.current?.isConnected)trigger.current.focus({preventScroll:true});
  }
  function show(){
@@ -35,6 +36,15 @@ export function TrackActionsMenu({title,artist,artwork,children,active}:TrackAct
   releaseScroll.current=()=>{document.body.style.overflow=previous;};
   setOpen(true);
  }
+ // Reordering a row can detach its dialog from the browser's top layer while
+ // leaving `open` set. Restore modality before paint, so the player cannot cover it.
+ useLayoutEffect(()=>{
+  const node=dialog.current;
+  if(!open||!active||!node?.open||node.matches(':modal'))return;
+  const focused=document.activeElement instanceof HTMLElement&&node.contains(document.activeElement)?document.activeElement:null;
+  node.close();node.showModal();
+  if(focused?.isConnected&&focused.getClientRects().length)focused.focus({preventScroll:true});
+ });
  useEffect(()=>{if(!active&&dialog.current?.open)close();},[active]);
  useEffect(()=>{
   const node=dialog.current,opener=trigger.current;
@@ -79,9 +89,12 @@ export function TrackActionsMenu({title,artist,artwork,children,active}:TrackAct
     <div className="track-actions-menu__copy"><h2 id={`${id}-title`}>{title}</h2><p>{artist}</p></div>
     <button type="button" className="track-actions-menu__close" aria-label="Cerrar opciones de canción" onClick={close} autoFocus><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
    </header>
-   <div className="track-actions-menu__content" onClickCapture={event=>{
+   {subpage&&<button className="track-actions-menu__back" type="button" onClick={()=>back(true)}>← Todas las opciones</button>}
+   <div className="track-actions-menu__content" data-subpage={subpage||undefined} onClickCapture={event=>{
     const target=event.target;
     if(!(target instanceof Element)||target.closest(':disabled,[aria-disabled="true"]'))return;
+    const summary=target.closest('summary');
+    if(summary){event.preventDefault();const details=summary.parentElement as HTMLDetailsElement;const next=!details.open;back();details.open=next;setSubpage(next);return;}
     if(target.closest('[data-menu-dismiss="true"]'))close();
    }}>{children}</div>
   </dialog>
