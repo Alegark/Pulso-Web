@@ -134,7 +134,20 @@ export function botAudioMismatchFields(row:Extract<BotSearchRow,{kind:'audio'}>,
  return fields;
 }
 
-/** Rank compatible recordings, then keep the bot's order for an equal score.
+// The downloader accepts only these containers and one file up to AUDIO_FILE_MAX_BYTES.
+// A row it would reject must never outrank one it can fetch: selection is a single attempt.
+const DOWNLOADABLE_MIME=new Set(['audio/mpeg','audio/mp4','audio/wav']);
+const downloadableRow=(row:BotSearchRow):boolean=>row.kind!=='audio'||row.bytes<=AUDIO_FILE_MAX_BYTES&&DOWNLOADABLE_MIME.has(row.mimeType);
+/** Coarse bitrate tier (average kbps = bytes*8/seconds). Tiers, not raw kbps, so VBR and tag
+ * overhead cannot reorder files of the same quality; equal tiers keep the bot's order. */
+const qualityTier=(row:BotSearchRow):number=>{
+ if(row.kind!=='audio'||row.durationSeconds<=0)return 0;
+ const kbps=row.bytes*8/row.durationSeconds/1000;
+ return kbps>=256?3:kbps>=160?2:kbps>=96?1:0;
+};
+
+/** Rank compatible recordings: downloadable first, then closest duration, then audio quality tier,
+ * then keep the bot's order.
  * Only presentation decoration is ignored; title, performer and version words
  * still have to match. Raw callback data never contributes to the score. */
 export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTarget):readonly BotSearchRow[] {
@@ -162,6 +175,10 @@ export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTa
   const clean=row.label.replace(/^\s*(?:#\d{1,3}\s+|\d{1,3}\s*[.)]\s*)/u,'').replace(/\s*[[(]\d{1,2}:[0-5]\d[)\]]\s*$/u,'');
   return matches(clean)?1900+correlation:0;
  };
- return rows.map((row,index)=>({row,index,score:score(row)})).filter(v=>v.score>0)
-  .sort((a,b)=>b.score-a.score||a.index-b.index).map(v=>v.row);
+ // Telegram reports whole seconds while the catalogue has milliseconds, so two encodes of one
+ // recording often differ by a fraction. Quality decides inside the same whole-second bucket;
+ // the exact difference only breaks ties after it.
+ const bucket=(row:BotSearchRow,value:number)=>row.kind==='audio'?Math.ceil((value-(row.correlation==='reply'?1:0))/100)*100:value;
+ return rows.map((row,index)=>{const value=score(row);return {row,index,score:value,coarse:bucket(row,value),usable:downloadableRow(row),tier:qualityTier(row)};}).filter(v=>v.score>0)
+  .sort((a,b)=>Number(b.usable)-Number(a.usable)||b.coarse-a.coarse||b.tier-a.tier||b.score-a.score||a.index-b.index).map(v=>v.row);
 }
