@@ -24,3 +24,13 @@ La interfaz de pruebas incluye cien descargas sintéticas sin audio y una prueba
 - Lint y diff-check PASS. No se modifican la lógica de eliminación, sus guardas o el estado funcional concurrente. No se publica este incremento en Cloudflare; quedan aceptación del propietario y comprobación física en teléfono.
 
 Recibos privados: `.local/test-evidence/settings-design-lR4i4R/report.json`, `.local/test-evidence/interface-main-fErLAb/report.json`, `.local/test-evidence/collection-current-wpcmLK/report.json`. Los reportes incluyen la limpieza; temporales eliminados también en las ejecuciones negativas. Los perfiles auténticos, Engram y la biblioteca real permanecen intactos.
+
+## Instalación y bienvenida móvil
+
+Por indicación del propietario, las tarjetas de instalación y el aviso de notificaciones se retiran de Configuración. En teléfonos, un banner superior persistente abre instrucciones de Safari/iPhone o Chrome/Android. También está disponible antes del acceso a la cuenta. El navegador conserva la decisión y confirmación de instalación; no se guarda una bandera que afirme falsamente que la app continúa instalada.
+
+Al abrir Pulso en modo instalado, o recibir la confirmación de instalación en Android, una burbuja ofrece activar las notificaciones compatibles. El permiso nativo sólo se solicita desde el botón del usuario. «Ahora no» conserva su respuesta sin repetir la invitación; los permisos denegados o capacidades ausentes no generan peticiones. Desktop no muestra estos avisos.
+
+`check-mobile-install.mjs`: 14/14 perfiles Chromium/WebKit PASS (desktop, iPhone/Android en navegador e instalados, denegación y aplazamiento), sin permiso automático. Incluye cierre/Escape, instrucciones a320px/texto200%, evento de instalación y persistencia de respuesta tras recarga. APIs/permisos simulados; no acredita instalación o notificaciones en teléfonos físicos. Se usa el teardown verificado de `.local/tmp`, sin audio ni perfiles reales.
+
+Regresión de Configuración tras este cambio: 8/8 PASS en Chromium/WebKit; lint y diff-check PASS. Recibos privados: `.local/test-evidence/mobile-install-vDEPDd/report.json` y `.local/test-evidence/settings-design-vWGahF/report.json`. Ambos confirman eliminación de sus temporales. Sin publicación en Cloudflare.
