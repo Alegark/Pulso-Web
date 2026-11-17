@@ -31,7 +31,7 @@
 .music-search-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .music-search-actions button { border-radius: 999px; }
 .music-search-actions [aria-pressed="true"] { background: var(--pulso-foreground); color: var(--pulso-canvas); }
-.music-search-catalog [aria-pressed="true"][data-suggestion-id] { outline: 2px solid var(--pulso-accent); outline-offset: -2px; }
+.music-search-catalog [aria-pressed="true"][data-suggestion-id] { color:var(--pulso-accent); }
 .catalog-discovery { padding: 1.25rem; background: var(--pulso-surface); border: 1px solid var(--pulso-border); border-radius: 1rem; }
 .catalog-discovery h3 { margin: 0; }.catalog-discovery p { color: var(--pulso-muted); }
 .catalog-discovery div { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,8rem),1fr)); gap: .6rem; }

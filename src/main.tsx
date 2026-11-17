@@ -947,6 +947,7 @@ function App(){
  const collectionPlaybackViewKey=JSON.stringify([viewScope,selected?.revision,visible.map(({key,track})=>[key,track.id])]);
  const latestCollectionPlaybackView=React.useRef(collectionPlaybackViewKey);latestCollectionPlaybackView.current=collectionPlaybackViewKey;
  const collectionQueueMatches=visible.length>0&&player.entries.length===visible.length&&player.entries.every((entry,index)=>entry.trackId===visible[index].track.id);
+ const [collectionPreparing,setCollectionPreparing]=React.useState<{view:string;trackId:string}|null>(null);
  async function playCollection(startKey?:string){
   if(!replacementCurrent()||!owner||busy||copyRemovalBlocked()||!sourceReview.canPrepare()||!visible.length)return;
   const startIndex=startKey===undefined?null:visible.findIndex(row=>row.key===startKey);
@@ -962,9 +963,11 @@ function App(){
   cancelSelectedSongIntent();const playbackIntent=selectedSongIntent;
   const live=()=>playbackIntent===selectedSongIntent&&view()&&raw()&&review()&&latestCollectionPlaybackView.current===key;
   const ids=visible.map(({track})=>track.id),epoch=player.queueEpoch;
-  await viewQueue(ids,undefined,[],live);
+  const preparing={view:key,trackId:ids[startIndex??0]};setCollectionPreparing(preparing);
+  try{await viewQueue(ids,undefined,[],live);
   if(!live()||document.visibilityState==='hidden'||busy||copyRemovalBlocked()||queueForeignBlocked()||!sourceReview.canPrepare()||player.queueEpoch!==epoch+1||!player.current||player.entries.length!==ids.length||!player.entries.every((entry,index)=>entry.trackId===ids[index]))return;
   transferPlayIntent=null;if(startIndex!==null&&startIndex!==player.index)player.select(startIndex,true);else void player.play();
+  }finally{setCollectionPreparing(value=>value===preparing?null:value);}
  }
  const pageRows=visible.slice(pagination.start,pagination.end);
  const filteredPlaylist=!!query||!!groupKey||favorites||present||groupMode!=='tracks';
@@ -1108,7 +1111,7 @@ function App(){
  {page!=='buscar'&&selected&&filteredPlaylist&&<p>Para reordenar la playlist completa, quita los filtros de búsqueda, favoritos, copias y agrupación.</p>}
  </div></details>
  {!visible.length&&<div className="collection-empty"><p>Esta colección todavía no tiene canciones.</p><button type="button" onClick={()=>navigate('buscar')}>Buscar canciones</button></div>}
- {pagination.pages>1&&<LibraryPagination {...pagination}/>}<ol className="tracks" start={pagination.start+1}>{pageRows.map(({track,key,playlistIndex})=>{const info=albumMetadata.get(track.id)!;return <li key={key}><CatalogArtwork key={control.proof+track.id} trackId={track.id} className="collection-track-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/><button className="collection-track-main" aria-label={`Escuchar ${track.title}`} aria-current={player.current?.trackId===track.id?'true':undefined} disabled={!owner||busy||databaseState!=='ready'||copyRemovalBlocked()||!sourceReview.canPrepare()} onClick={()=>void playCollection(key)}><strong>{track.title}</strong><span>{track.artist??'Artista desconocido'}</span>{owner&&player.state==='playing'&&player.current?.trackId===track.id&&<PlaybackIndicator/>}</button><TrackActionsMenu title={track.title} artist={track.artist??'Artista desconocido'} active={page==='biblioteca'&&!settingsOpen&&libraryDetail&&!playerOpen} artwork={<CatalogArtwork trackId={track.id} className="track-actions-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>}>
+ {pagination.pages>1&&<LibraryPagination {...pagination}/>}<ol className="tracks" start={pagination.start+1}>{pageRows.map(({track,key,playlistIndex})=>{const info=albumMetadata.get(track.id)!;return <li key={key}><CatalogArtwork key={control.proof+track.id} trackId={track.id} className="collection-track-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/><button className="collection-track-main" aria-label={`Escuchar ${track.title}`} aria-current={player.current?.trackId===track.id?'true':undefined} disabled={!owner||busy||databaseState!=='ready'||copyRemovalBlocked()||!sourceReview.canPrepare()} onClick={()=>void playCollection(key)}><strong>{track.title}</strong><span>{track.artist??'Artista desconocido'}</span>{owner&&player.state==='playing'&&player.current?.trackId===track.id&&<PlaybackIndicator/>}</button>{((collectionPreparing?.view===collectionPlaybackViewKey&&collectionPreparing.trackId===track.id)||(player.current?.trackId===track.id&&(player.state==='loading'||player.state==='buffering')))&&<span className="collection-track-loading" role="status"><span>Preparando canción…</span><progress aria-label={`Carga de ${track.title}`}/></span>}<TrackActionsMenu title={track.title} artist={track.artist??'Artista desconocido'} active={page==='biblioteca'&&!settingsOpen&&libraryDetail&&!playerOpen} artwork={<CatalogArtwork trackId={track.id} className="track-actions-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>}>
  <button disabled={!canOrganize} aria-pressed={track.favorite} ref={button=>{if(button)favoriteButtons.current.set(key,button);else favoriteButtons.current.delete(key);}} onClick={event=>void toggleFavorite(track,key,event.currentTarget)}>{track.favorite?'Quitar favorito':'Favorito'}</button>
  <button disabled={!canAppend||track.assetId===null} aria-label={`Añadir a continuación ${track.title}`} onClick={event=>addSelection([{key,track}],'next',event)}>Reproducir a continuación</button>
  <button disabled={!canAppend||track.assetId===null} aria-label={`Añadir al final ${track.title}`} onClick={event=>addSelection([{key,track}],'end',event)}>Añadir al final de la cola</button>

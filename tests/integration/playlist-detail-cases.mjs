@@ -88,6 +88,9 @@ export async function runPlaylistDetail({browser,origin,engine,check,report,run}
    await rows.nth(1).click();await page.waitForFunction(old=>navigator.mediaSession.metadata?.artwork[0]?.src&&navigator.mediaSession.metadata.artwork[0].src!==old,first.src);
    assert.equal(await page.evaluate(()=>navigator.mediaSession.metadata.title),await rows.nth(1).locator('strong').innerText());
    await page.screenshot({path:`${run}/${engine}-selected-song-no-border.png`});
+   await page.evaluate(()=>window.__audio[0].dispatchEvent(new Event('waiting')));
+   await rows.nth(1).locator('..').getByRole('progressbar').waitFor();assert.equal(await detail.locator('.collection-track-loading').count(),1);
+   await page.evaluate(()=>window.__audio[0].dispatchEvent(new Event('playing')));await detail.locator('.collection-track-loading').waitFor({state:'hidden'});
    await back();await openList('Para después');
   });
   await check(`${engine}: playlist rename persists and empty/favorites covers are honest`,async()=>{

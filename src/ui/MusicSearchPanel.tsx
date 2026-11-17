@@ -86,7 +86,6 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    </div>
    <p id={`${id}-query-help`} className="catalog-help">Busca por título o nombre de artista.</p>
   </form>
-  {props.songActions}
   <div className="catalog-search-status" role="status">{props.suggestionsPending?'Buscando…':props.suggestions.length?null:props.suggestionsNotice}</div>
   {props.suggestionsError&&<p role="alert">{props.suggestionsError}</p>}
   {props.onRetrySuggestions&&props.suggestionsError&&props.query.trim().length>=3&&<button type="button" disabled={props.suggestionsPending||props.searchPending}
@@ -97,11 +96,12 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    <div className="music-search-actions" role="group" aria-label="Tipo de resultado">
     {([['all','Todo'],['track','Canciones'],['album','Álbumes'],['artist','Artistas']] as const).map(([kind,label])=><button type="button" key={kind} aria-pressed={filter===kind} onClick={()=>setFilter(kind)}>{label}</button>)}
    </div>
-   {rows.length?<ul className="catalog-mixed-list">{rows.map(row=><li key={row.id}>{card(row)}</li>)}</ul>:!props.suggestionsPending&&!props.suggestionsError&&(props.suggestions.length>0||!props.suggestionsNotice)&&<div className="catalog-empty">
+   {rows.length?<ul className="catalog-mixed-list">{rows.map(row=><li key={row.id}>{card(row)}{row.id===props.selectedSuggestionId&&props.songActions}</li>)}</ul>:!props.suggestionsPending&&!props.suggestionsError&&(props.suggestions.length>0||!props.suggestionsNotice)&&<div className="catalog-empty">
     <p>{props.suggestions.length?'No hay resultados con este filtro.':'No encontramos coincidencias. Prueba con otro título o artista.'}</p>
     {props.suggestions.length>0&&filter!=='all'&&<button type="button" onClick={()=>setFilter('all')}>Ver todos los resultados</button>}
    </div>}
   </section>}
+  {props.songActions&&!rows.some(row=>row.id===props.selectedSuggestionId)&&<div className="song-selection-fallback">{props.songActions}</div>}
   <section className="music-search-bot" aria-label="Consulta al bot">
    <details><summary>Fuentes para la canción elegida</summary>
    {provider?<p>Bot principal: <bdi dir="auto">@{provider.username.replace(/^@/,'')}</bdi>. {provider.supported?'Se probará primero. Si no consigue una copia compatible, se probará el siguiente bot disponible.':'Se usarán los siguientes bots compatibles de tu lista.'}</p>:<p>Añade tus proveedores en «Bots de música» para buscar las canciones en el orden que elijas.</p>}

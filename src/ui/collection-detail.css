@@ -74,3 +74,6 @@
 .pulso-app .library-detail .collection-track-main[aria-current="true"]:not(:focus-visible) { outline:none; }
 .pulso-app .library-detail .collection-track-main:has(.playback-indicator) { padding-inline-end:1.75rem; }
 .pulso-app .library-detail .collection-track-main>.playback-indicator { position:absolute;inset-inline-end:.35rem;inset-block-start:50%;transform:translateY(-50%);margin:0;display:inline-flex; }
+.collection-track-loading { grid-column:2;grid-row:2;min-inline-size:0;color:var(--pulso-accent);font-size:.8rem; }
+.collection-track-loading progress { display:block;inline-size:100%;block-size:4px;margin-block:.3rem;accent-color:var(--pulso-accent); }
+.pulso-app .library-detail .tracks>li:has(.collection-track-loading)>.track-actions-trigger { grid-column:3;grid-row:1; }
