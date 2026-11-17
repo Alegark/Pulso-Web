@@ -2,12 +2,12 @@ import {installRequiredAccountFixture} from './required-account-fixture.mjs';
 import assert from 'node:assert/strict';
 import {webkit} from 'playwright-core';
 
-export async function runPlaylistDetail({browser,origin,engine,check,report,run}){
+export async function runPlaylistDetail({browser,origin,engine,check,report,run,temporary=run}){
  let context;
  try{
   // WebKit's ephemeral test context rejects Blob records in IndexedDB here.
   // A fresh persistent test profile exercises normal storage, without using a real profile.
-  context=engine==='webkit'?await webkit.launchPersistentContext(`${run}/webkit-playlist-profile`,{headless:true,viewport:{width:390,height:844},serviceWorkers:'block'}):await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});context.setDefaultTimeout(8000);
+  context=engine==='webkit'?await webkit.launchPersistentContext(`${temporary}/webkit-playlist-profile`,{headless:true,viewport:{width:390,height:844},serviceWorkers:'block'}):await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});context.setDefaultTimeout(8000);
   report.playlistContexts??=[];report.playlistContexts.push({engine,persistentTestProfile:engine==='webkit',realProfile:false});
   await context.route('**/*',route=>{const u=new URL(route.request().url());if(u.origin===origin||['blob:','data:'].includes(u.protocol))return route.continue();if(['https://itunes.apple.com','https://lrclib.net'].includes(u.origin))return route.fulfill({status:200,headers:{'access-control-allow-origin':'*','content-type':'application/json'},body:JSON.stringify(u.origin==='https://lrclib.net'?[]:{resultCount:0,results:[]})});report.external.push({engine,origin:u.origin});return route.abort();});
   await installRequiredAccountFixture(context,origin);

@@ -1,3 +1,4 @@
+import {createTestWorkspace} from './test-workspace.mjs';
 import {installRequiredAccountFixture} from './required-account-fixture.mjs';
 import {runCorrections} from './interface-corrections-cases.mjs';
 import {runPlaylistDetail} from './playlist-detail-cases.mjs';
@@ -14,14 +15,14 @@ import assert from 'node:assert/strict';
 
 // A coordinator-provided immutable inventory is mandatory; never test a mutable tree.
 if(process.env.INTERFACE_GO!=='1'||!process.env.INTERFACE_FREEZE) throw Error('Requires INTERFACE_GO=1 and INTERFACE_FREEZE');
-const base=resolve('.local/interface-browser-validation'), frozen=resolve(process.env.INTERFACE_FREEZE);
-const stamp=new Date().toISOString().replace(/[:.]/g,'-'), run=resolve(base,stamp), root=resolve(run,'snapshot'), out=resolve(run,'bundle');
+const frozen=resolve(process.env.INTERFACE_FREEZE);
 const manifest=JSON.parse(await readFile(resolve(frozen,'freeze.json'))), hash=b=>createHash('sha256').update(b).digest('hex');
 async function verify(){for(const [p,x] of Object.entries(manifest.sources)){const b=await readFile(resolve(frozen,'frozen-root',p));assert.equal(b.length,x.bytes,p);assert.equal(hash(b),x.sha256,p);}return Object.keys(manifest.sources).length;}
-await mkdir(root,{recursive:true});
+const workspace=await createTestWorkspace('interface-main'),run=workspace.evidence,root=resolve(workspace.dir,'snapshot'),out=resolve(workspace.dir,'bundle');
 const report={status:'INCOMPLETE',cases:[],errors:[],csp:[],external:[],metadataRequests:[],cleanup:false};let server;
 const check=async(name,fn)=>{try{await fn();report.cases.push({name,status:'PASS'});console.log('PASS '+name);}catch(e){report.cases.push({name,status:'FAIL',error:String(e.stack||e)});console.log('FAIL '+name+' '+String(e).slice(0,350));}};
 try{
+ await mkdir(root,{recursive:true});
  report.beforeHashes=await verify();
  for(const p of Object.keys(manifest.sources)){await mkdir(dirname(resolve(root,p)),{recursive:true});await cp(resolve(frozen,'frozen-root',p),resolve(root,p));}
  const fixtureDir=resolve(root,'tests/integration');await mkdir(fixtureDir,{recursive:true});
@@ -30,6 +31,7 @@ try{
  await symlink(resolve('node_modules'),resolve(root,'node_modules'),'dir');
  await build({root,configFile:false,plugins:[tailwindcss()],logLevel:'error',build:{outDir:out,rolldownOptions:{input:{main:resolve(root,'index.html'),fixture:resolve(fixtureDir,'collection-removal-final-main-fixture.html')}}}});
  await build({root,configFile:false,logLevel:'error',define:{SHELL_FILES:'[]'},build:{emptyOutDir:false,outDir:out,lib:{entry:resolve(root,'src/service-worker/sw.ts'),formats:['es'],fileName:()=> 'sw.js'}}});
+ if(process.env.PULSO_TEST_FAIL_AFTER_BUILD==='1')throw Error('Injected teardown verification failure after build');
  const py="import sys; from http.server import ThreadingHTTPServer; from functools import partial; from pathlib import Path; from scripts.serve_review import Handler; s=ThreadingHTTPServer(('127.0.0.1',0),partial(Handler,directory=Path(sys.argv[1]))); print(s.server_port,flush=True); s.serve_forever()";
  server=spawn('python3',['-u','-c',py,out],{stdio:['ignore','pipe','pipe']});const [port]=await once(server.stdout,'data');const origin=`http://127.0.0.1:${String(port).trim()}`;
  for(const [engine,launcher] of [['chromium',chromium],['webkit',webkit]]){
@@ -63,9 +65,9 @@ try{
    await page.setViewportSize({width:390,height:664});await page.screenshot({path:resolve(run,`${engine}-mobile.png`),fullPage:true});await page.setViewportSize({width:1366,height:768});await page.screenshot({path:resolve(run,`${engine}-desktop.png`),fullPage:true});
    }
    if(process.env.PLAYLIST_ONLY!=='1')await runCorrections({browser,origin,engine,check,report,run});
-   if(process.env.PLAYLIST_DETAIL==='1')await runPlaylistDetail({browser,origin,engine,check,report,run});
+   if(process.env.PLAYLIST_DETAIL==='1')await runPlaylistDetail({browser,origin,engine,check,report,run,temporary:resolve(workspace.dir)});
    report[engine]={version:browser.version()};
   }catch(e){report.cases.push({name:`${engine}: setup`,status:'FAIL',error:String(e.stack||e)});}finally{await context?.close();await browser?.close();}
  }
  report.status=report.cases.some(c=>c.status==='FAIL')||report.errors.length||report.external.length?'FAIL':'PASS';
-}catch(e){report.status='FAIL';report.error=String(e.stack||e);}finally{try{report.afterHashes=await verify();}catch(e){report.status='FAIL';report.hashError=String(e);}if(server){server.kill();await once(server,'exit').catch(()=>{});}report.cleanup=true;await writeFile(resolve(run,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({run,...report},null,2));if(report.status!=='PASS')process.exitCode=1;}
+}catch(e){report.status='FAIL';report.error=String(e.stack||e);}finally{try{report.afterHashes=await verify();}catch(e){report.status='FAIL';report.hashError=String(e);}let serverStopped=true;try{if(server&&server.exitCode===null){const exited=once(server,'exit');server.kill();await exited;}}catch(e){serverStopped=false;report.status='FAIL';report.serverCleanupError=String(e);}if(serverStopped){try{report.workspaceCleanup=await workspace.cleanup();report.cleanup=true;}catch(e){report.status='FAIL';report.cleanupError=String(e);}}else report.retainedTemporaryPath=workspace.dir;await writeFile(resolve(run,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({run,...report},null,2));if(report.status!=='PASS')process.exitCode=1;}
