@@ -471,3 +471,21 @@ Negativos preservados: MCPinitializeTimeout inicial sin tests; barrera de fixtur
 La acción de álbum conserva el lote al ir a Inicio/Biblioteca o desmontar detalle. La tarea pertenece al coordinador del documento, con estado/progreso global, remount y Stop explícito; pausa de música anterior permitida y cero Play adicional. Las transacciones, locks, validaciones de cuenta/revisión/owner/DB y revocación mantienen sus guardas existentes. No se persiste una cola entre cierre/recarga ni se garantiza segundo plano del SO.
 
 Final local: casos nativos seleccionados 15/15 con APIs de navegador reales y único SDK TESTONLY; interfaz general/playlist 36/36, 724 unidades, 14 servidor; lint/build/dry-run PASS. Publicado/readback Cloudflare Workers Free USD0: deployment `d710fb1fc4484f52b2caa599c6aefc3e`, 89 rutas bytes/SHA, bindings conservados, previews off. Navegación pública y hardware físico pendientes. Ver `docs/evidence-album-background-web.json`.
+
+
+## Bots elegidos predeterminados · 2026-11-17
+
+Petición expresa del propietario: nuevas conexiones de Telegram preparan @KDMusic_Bot como principal y @DeezerMusicBot como respaldo, editables y eliminables. Se sustituye únicamente la política histórica de no predeterminados. Una selección guardada —incluida vacía— no se repone. Bóveda distingue ausencia de selección frente a una elección explícita, bajo la autorización y revisión existentes.
+
+Tras autenticar, antes de publicar connected, el SDK prepara perfiles con validador normal: plazo total8s, sin iniciar bots, búsquedas, historial, callbacks ni descarga. Sólo dos perfiles válidos se guardan juntos mediante CAS; error no guarda selección parcial. Conflicto concurrente recupera la elección ganadora y cambio de lease impide escritura/publicación vieja. Sin nuevas tablas, secretos, cambios de cuenta o audio.
+
+Validación: lint y797/797unitarias PASS;12casos nativos Chromium/WebKit con SDKadaptador/driver/bóveda reales y transporte/auth/criptoTESTONLY PASS. Incluye inicialización, edición, quitar todos, recarga real del marcador, CAS y lease reemplazado; sólo contacts.resolveUsername observado. Regresiones QR7/7 y reenvío6/6 PASS. Build/publicación en preparación; ninguna aceptación de cuenta Telegram real ni iPhone/P0global declarada.
+
+
+## Publicación verificada · bots predeterminados · 2026-11-17
+
+Publicado por MCP oficial de Cloudflare en Workers Free / USD 0. Deployment `a2d30a171699485293d80b116d0a1843`. El manifiesto congelado tenía 165 archivos; el servicio confirmó 162/162 rutas estáticas por bytes/SHA, con `.assetsignore` y `_headers` excluidos y `account-config.json` comprobado como ruta dinámica. `/`, `/latest.json`, `/sw.js` y `/releases/150f856bf04bae5b.html` están alineados con el candidato. La configuración dinámica responde `enabled=true`, `google=true`; biblioteca y perfil anónimos responden 401 y PUT cross-origin de biblioteca 403.
+
+Readback MCP: Worker de 318422 bytes y SHA-256 `e73c6acf441d48a39dc92ed76153d49281a39f404e2cebf1cf0fac5e8121ca6f`; los siete bindings preservados, Workers.dev activo, previews apagadas, compatibilidad `2026-11-13`, uso `standard`. No se leyeron valores secretos ni se hicieron login, escrituras Neon o llamadas a Telegram. Evidencia operativa saneada: `.local/test-evidence/default-bots-release-ow87Qp/publication/`.
+
+La función sólo prepara KD→Deezer tras la primera autorización sin selección guardada; elecciones propias y lista vacía explícita prevalecen. Comprueba perfiles y guarda de forma atómica, sin inicio, búsqueda, historial, callbacks o descargas. Validación local previa registrada en este task y en `docs/evidence-default-bots-web.json`; sin repetir suites/build. No se afirma uso real de Telegram ni aceptación en iPhone; P0-W continúa incompleto.

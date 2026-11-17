@@ -2318,3 +2318,17 @@ T22 conserva la validación local comunicada previamente. El Worker verificado q
 ### Biblioteca de cuenta · publicación reparada · 2026-11-17
 
 Se publicó por MCP Cloudflare oficial el manifiesto congelado de 169 archivos (no 183; versiones intermedias nunca publicadas excluidas). Causa técnica identificada: contenido binario enviado sin codificar mientras se especificaba `base64=true`; el uploader corregido envió bytes codificados. El despliegue completó y el readback HTTPS pasó 166/166 rutas estáticas más raíz/latest/SW/entry; configuración dinámica enabled/google true, APIs anónimas 401 y PUT cross-origin 403. Deployment `5d598c13aa2240f7bece7537080fddbd`, módulo exacto 318422 bytes/SHA-256 `e73c6acf441d48a39dc92ed76153d49281a39f404e2cebf1cf0fac5e8121ca6f`, siete bindings preservados, workers.dev activo, previews apagadas. HTTP 500 previos y el sitio base equivocado de 155 archivos quedan como negativos históricos; no se atribuyen todos los errores a la discrepancia de formato. Sin JWT real, escritura Neon, aceptación física ni cierre de P0-W. Recibos: `.local/test-evidence/account-library-upload-repair-kHtygr/publication/`; limpieza del candidato y snapshot previo: 112.584.314 bytes, espacio libre +122.634.240 bytes, sin enlaces seguidos ni procesos activos, recibo `.local/test-evidence/account-library-upload-repair-kHtygr/evidence/cleanup.json`.
+
+
+## Bots elegidos listos en primeras conexiones · 2026-11-17
+
+Por petición expresa, KD→Deezer se preparan tras autenticar Telegram sólo si no hay selección guardada. Se conservan elecciones propias, reordenación y lista vacía explícita; comprobación de perfiles con plazo8s, CAS y lease vigentes, sin búsquedas/mensajes/descargas. Validación797unitarias,12casos nativos Chromium/WebKit,13workerVM adaptado al bootstrap actual,QR7/reenvío6,lint/build/dryrun PASS. Fuente806inputs congelados; publicación en preparación. No aceptación Telegram real/iPhone/P0global. Detalle T8 y docs/BOT-SUGGESTIONS.md.
+
+
+## Publicación verificada · bots predeterminados · 2026-11-17
+
+Publicado por MCP oficial de Cloudflare en Workers Free / USD 0. Deployment `a2d30a171699485293d80b116d0a1843`. El manifiesto congelado tenía 165 archivos; el servicio confirmó 162/162 rutas estáticas por bytes/SHA, con `.assetsignore` y `_headers` excluidos y `account-config.json` comprobado como ruta dinámica. `/`, `/latest.json`, `/sw.js` y `/releases/150f856bf04bae5b.html` están alineados con el candidato. La configuración dinámica responde `enabled=true`, `google=true`; biblioteca y perfil anónimos responden 401 y PUT cross-origin de biblioteca 403.
+
+Readback MCP: Worker de 318422 bytes y SHA-256 `e73c6acf441d48a39dc92ed76153d49281a39f404e2cebf1cf0fac5e8121ca6f`; los siete bindings preservados, Workers.dev activo, previews apagadas, compatibilidad `2026-11-13`, uso `standard`. No se leyeron valores secretos ni se hicieron login, escrituras Neon o llamadas a Telegram. Evidencia operativa saneada: `.local/test-evidence/default-bots-release-ow87Qp/publication/`.
+
+La función sólo prepara KD→Deezer tras la primera autorización sin selección guardada; elecciones propias y lista vacía explícita prevalecen. Comprueba perfiles y guarda de forma atómica, sin inicio, búsqueda, historial, callbacks o descargas. Validación local previa registrada en este task y en `docs/evidence-default-bots-web.json`; sin repetir suites/build. No se afirma uso real de Telegram ni aceptación en iPhone; P0-W continúa incompleto.
