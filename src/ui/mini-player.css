@@ -77,3 +77,5 @@
   .pulso-app .mini-player__range input[type="range"],
   .pulso-app .mini-player__toggle { min-block-size: 44px; }
 }
+
+.mini-catalog-art { display:grid; place-items:center; width:100%; height:100%; }

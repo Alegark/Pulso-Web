@@ -21,6 +21,7 @@
       "/api/account-auth/*",
       "/api/account-profile",
       "/api/spotify-playlist/*",
+      "/api/spotify-track/*",
       "/telegram-config.json"
     ]
   },

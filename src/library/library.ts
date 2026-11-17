@@ -11,7 +11,7 @@ export function validAudioFingerprint(value:unknown):value is AudioFingerprint {
  if(!value||typeof value!=='object')return false;const f=value as AudioFingerprint;
  return f.algorithm==='sha256'&&typeof f.sha256==='string'&&/^[a-f0-9]{64}$/.test(f.sha256)&&Number.isSafeInteger(f.bytes)&&f.bytes>=1&&f.bytes<=100*1024*1024;
 }
-export interface Track {catalogChoice?:import('./selected-song').SongChoice;accountId?:string;localAlbum?:LocalAlbumMetadataV1;id:string;assetId:string|null;audioFingerprint?:AudioFingerprint|null;organizationRef?:OrganizationRef;title:string;artist:string|null;album:string|null;duration:number;favorite:boolean;revision:number;createdAt:string;manualOverrides:Partial<{title:string;artist:string|null;album:string|null}>}
+export interface Track {catalogRelease?:import('./catalog-release').CatalogRelease;catalogChoice?:import('./selected-song').SongChoice;accountId?:string;localAlbum?:LocalAlbumMetadataV1;id:string;assetId:string|null;audioFingerprint?:AudioFingerprint|null;organizationRef?:OrganizationRef;title:string;artist:string|null;album:string|null;duration:number;favorite:boolean;revision:number;createdAt:string;manualOverrides:Partial<{title:string;artist:string|null;album:string|null}>}
 export interface Playlist {accountId?:string;organizationRef?:OrganizationRef;id:string;name:string;entries:{id:string;trackId:string}[];revision:number}
 interface AssetFields {id:string;namespace:'local';storageKey:string;bytes:number;sha256:string;mime:string;chunks:number;state:'complete';revision:number;chunkSize:number;retention:'kept'}
 export type LocalAsset=AssetFields & ({backend:'idb'}|{backend:'opfs'});

@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {parseSpotifyPlaylist,spotifyPlaylist} from '../../deployment/cloudflare/spotify-playlist.mjs';
+import {parseSpotifyPlaylist,spotifyPlaylist,spotifyTrackRelease} from '../../deployment/cloudflare/spotify-playlist.mjs';
 const id='a'.repeat(22),uri=`spotify:track:${id}`,row={uri,title:'Song',subtitle:'Artist',duration:120000,audioPreview:{url:'https://forbidden.invalid/audio'}};
 const html=entity=>`<script id="__NEXT_DATA__" type="application/json">${JSON.stringify({props:{pageProps:{state:{data:{entity}}}}})}</script>`;
 const fixture=(rows=[row],extra={})=>html({name:'Fixture',trackList:rows,...extra});
@@ -14,9 +14,12 @@ test('failure diagnostics expose only fixed stage and upstream status, never res
 test('Workers runtime accepts request options and rejects redirects without following them',async()=>{
  const {Miniflare}=await import('miniflare');
  const {readFile}=await import('node:fs/promises');
+ const {stripTypeScriptTypes}=await import('node:module');
  const source=await readFile(new URL('../../deployment/cloudflare/spotify-playlist.mjs',import.meta.url),'utf8');
+ const moduleName='deployment/cloudflare/spotify-playlist.mjs',matcherName='src/library/catalog-id.ts';
+ const matcher=stripTypeScriptTypes(await readFile(new URL('../../'+matcherName,import.meta.url),'utf8'));
  const contents=source+`\nexport default {async fetch(request){let calls=0;const response=await spotifyPlaylist(request,async(url,options)=>{calls++;new Request(url,options);return request.headers.get('X-Test-Redirect')?new Response(null,{status:302,headers:{Location:'https://must-not-follow.invalid/'}}):new Response(${JSON.stringify(fixture())},{headers:{'content-type':'text/html'}});});return Response.json({calls,status:response.status,data:await response.json()});}}`;
- const mf=new Miniflare({workers:[{config:{name:'spotify-runtime-test',compatibilityDate:'2026-11-13',manifest:{mainModule:'worker.js',modules:{'worker.js':{type:'esm',contents}}}}}]});
+ const mf=new Miniflare({workers:[{config:{name:'spotify-runtime-test',compatibilityDate:'2026-11-13',manifest:{mainModule:moduleName,modules:{[moduleName]:{type:'esm',contents},[matcherName]:{type:'esm',contents:matcher}}}}}]});
  try{
   const url=`https://pulso.test/api/spotify-playlist/${id}`;
   const success=await(await mf.dispatchFetch(url)).json();assert.equal(success.calls,1);assert.equal(success.status,200);assert.equal(success.data.tracks.length,1);
@@ -30,4 +33,25 @@ test('a missing credit stays empty and an unusable title is omitted',()=>{
  assert.equal(data.tracks.length,1);
  assert.equal(data.tracks[0].artists,'');
  assert.equal(data.tracks[0].durationMs,null);
+});
+
+test('exact Spotify track/album identity and bounded CDN artwork without credentials',async()=>{
+ const album='b'.repeat(22),endpoint=new Request('https://pulso.test/api/spotify-track/'+id,{headers:{Authorization:'private'}});
+ const track=`<meta content="https://open.spotify.com/track/${id}" property="og:url"><meta name="music:album" content="https://open.spotify.com/album/${album}"><meta name="music:album:track" content="3">`;
+ const image=`https://image-cdn-fa.spotifycdn.com/image/${'a'.repeat(40)}`;
+ const raw={type:'album',id:album,uri:'spotify:album:'+album,title:'Álbum',subtitle:'Artista',trackList:[{uri}],visualIdentity:{image:[{url:'https://evil.test/image/x',maxWidth:640},{url:image,maxWidth:300}]}};
+ let paths=[];
+ const relay=(doc=raw,metadata=track)=>spotifyTrackRelease(endpoint,async(url,options)=>{
+  paths.push(url);assert.equal(options.credentials,'omit');assert.deepEqual(options.headers,{Accept:'text/html'});
+  return new Response(url.includes('/embed/')?html(doc):metadata,{headers:{'content-type':'text/html'}});
+ });
+ const response=await relay();
+ assert.equal(response.status,200);
+ assert.deepEqual(await response.json(),{source:'spotify',releaseId:album,trackId:id,position:3,title:'Álbum',artist:'Artista',artworkUrl:image});
+ assert.deepEqual(paths,[`https://open.spotify.com/track/${id}`,`https://open.spotify.com/embed/album/${album}`]);
+ paths=[];
+ assert.equal((await relay(raw,track.replace('og:url','og:wrong'))).status,502);
+ assert.equal(paths.length,1);
+ assert.equal((await relay({...raw,trackList:[]})).status,502);
+ assert.equal((await relay({...raw,uri:'spotify:album:'+'c'.repeat(22)})).status,502);
 });

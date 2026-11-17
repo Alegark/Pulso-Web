@@ -10,3 +10,8 @@ export function musicBrainzArtworkUrl(value:unknown):string|null{
  if(typeof location==='undefined'||typeof value!=='string'||value.length>300)return null;
  try{const u=new URL(value,location.origin);return u.origin===location.origin&&u.pathname==='/catalog/musicbrainz/artwork'&&[...u.searchParams].length===1&&MB_UUID.test(u.searchParams.get('id')??'')&&!u.hash&&!u.username&&!u.password?u.href:null;}catch{return null;}
 }
+
+const SPOTIFY_IMAGE=/^https:\/\/(?:i\.scdn\.co|image-cdn-fa\.spotifycdn\.com)\/image\/[a-f0-9]{40}$/;
+export function spotifyArtworkUrl(value:unknown):string|null{
+ return typeof value==='string'&&SPOTIFY_IMAGE.test(value)?value:null;
+}

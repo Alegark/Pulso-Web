@@ -75,3 +75,19 @@ export async function seedPhysicalPurge(){
  const db=await new Promise<IDBDatabase>((resolve,reject)=>{const q=indexedDB.open('pulso-web-local-v1');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
  try{await new Promise<void>((resolve,reject)=>{const tx=db.transaction('chunks','readwrite');tx.objectStore('chunks').delete(IDBKeyRange.bound([asset.storageKey,0],[asset.storageKey,Number.MAX_SAFE_INTEGER]));tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);});}finally{db.close();}
 }
+
+
+// Existing completed setup fixture for catalogue-only cases. The browser test
+// suppresses reconnection, so even the synthetic SDK is idle.
+export async function seedArtistCatalogueSetup(){
+ const {sessionLease,saveTelegramSession}=await import('../../../src/telegram/saved-session.ts');
+ if(!await saveTelegramSession(await sessionLease(),'MUSIC_FLOW_SYNTHETIC_AUTH_ONLY'))throw Error('test setup');
+ localStorage.setItem('pulso:setup:v1:11111111-1111-4111-8111-111111111111','complete');
+}
+
+export async function importArtistFixture(){
+ const bytes=await(await fetch('/__musicflow/second.mp3')).arrayBuffer();
+ const attempt=await importFileDetailed(new File([bytes],'second.mp3',{type:'audio/mpeg'}),new AbortController().signal,()=>{},{backend:'idb'});
+ if(attempt.kind!=='confirmed'||attempt.result.track.artist!=='MUSIC_FLOW Artist')throw Error('artist fixture import');
+ return attempt.result.track.id;
+}

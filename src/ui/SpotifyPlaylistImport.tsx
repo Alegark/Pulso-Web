@@ -48,6 +48,7 @@ export function SpotifyPlaylistImport({canImport,onImport,onOpen}:{
    <p role="status" aria-live="polite">{status}</p>
    {result&&<div className="spotify-import__result">
     <h4>{result.playlist.name}</h4>
+    <p>Pulso busca los álbumes y las portadas en segundo plano. Puedes seguir el progreso en Biblioteca.</p>
     <p>{result.playlist.entries.length} canciones · {result.reused} {result.reused===1?'ficha reutilizada':'fichas reutilizadas'} · {result.available} {result.available===1?'disponible':'disponibles'} en este dispositivo.</p>
     {result.available<result.playlist.entries.length&&<p>Las canciones sin copia se pueden buscar desde Biblioteca con un bot de Telegram si tienen metadatos suficientes.</p>}
     {(result.repeated>0||result.omitted>0)&&<p>{result.repeated} {result.repeated===1?'entrada repetida':'entradas repetidas'} · {result.omitted} {result.omitted===1?'entrada omitida':'entradas omitidas'}.</p>}

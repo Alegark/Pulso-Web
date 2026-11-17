@@ -21,6 +21,7 @@ export async function runArtistGroups(env) {
     if(state.mode==='error')return route.fulfill({status:502,headers:{'access-control-allow-origin':env.origin},body:''});
     if(state.mode==='empty')results=[artist];
     else if(state.mode==='invalid')results=[{...artist,artistId:id+10},ownAlbum()];
+    else if(state.discography)results=[artist,{...ownAlbum(45,'Undated release'),releaseDate:undefined},ownAlbum(),{...ownAlbum(44,'Newest single'),releaseDate:'2026-10-01T00:00:00Z'}];
     else results=[artist,...(state.long?Array.from({length:40},(_,i)=>ownAlbum(i===39?42:100+i,i===39?'Exact chosen album':'Catalogue album '+i)):[ownAlbum(),ownAlbum(43,'Associated release',3)])];
    }else if(entity==='song'){
     const album=ownAlbum(id,state.long?'Exact chosen album':'MUSIC_FLOW Album');
@@ -37,6 +38,56 @@ export async function runArtistGroups(env) {
  async function openArtist(id=2){await artistButton(id).click();await heading().waitFor();}
  const waitUntil=async(fn)=>{const until=Date.now()+20000;while(!fn()){assert(Date.now()<until,'Catalogue route barrier timed out');await new Promise(resolve=>setTimeout(resolve,20));}};
  const noHorizontalOverflow=()=>page().evaluate(()=>document.documentElement.scrollWidth<=innerWidth);
+
+ await group('59 artist membership is explicit and catalogue navigation is read only',async()=>{
+  await fresh({control:true,seed:true,artistCatalogueSetup:true});const api=await routes({discography:true}),rpc=report.rpc.length;
+  const library=page().getByRole('region',{name:'Colección',exact:true});
+  const libraryArtists=library.getByRole('button',{name:'Artistas',exact:true});
+  const savedCard=library.getByRole('button',{name:artistName+' Artista',exact:true});
+  const empty=library.getByText('Guarda artistas desde Buscar para verlos aquí.',{exact:true});
+  const save=button('Guardar artista');
+  const selectedArtist=panel().locator('[data-suggestion-id="itunes:artist:2"]').first();
+  const reload=async()=>{await page().reload();await nav('Biblioteca').waitFor();await idle();};
+  const snapshot=async()=>{const {tracks,assets,playlists,jobs}=await env.state();return {tracks,assets,playlists,jobs};};
+  const openFromSearch=async()=>{await nav('Buscar').click();await input().fill(artistName);await selectedArtist.click();await save.waitFor();};
+  await nav('Biblioteca').click();await libraryArtists.click();await empty.waitFor();
+  const before=await snapshot(),plays=await page().evaluate(()=>MUSIC_FLOW.playCalls);
+  assert(before.assets.length>0&&before.tracks.some(t=>t.artist===artistName)&&before.playlists.length>0);
+  await openFromSearch();
+  await page().locator('.artist-album-grid li').nth(2).waitFor();
+  assert.deepEqual(await page().locator('.artist-album-grid li strong').allTextContents(),['Newest single','MUSIC_FLOW Album','Undated release']);
+  await button('Volver a búsqueda').click();
+  await nav('Biblioteca').click();await empty.waitFor();
+  await openFromSearch();await save.click();await button('Quitar de mis artistas').waitFor();
+  await nav('Biblioteca').click();await savedCard.waitFor();
+  assert.equal(await savedCard.count(),1);
+  await savedCard.click();
+  const release=library.locator('.artist-album-grid button').filter({hasText:'MUSIC_FLOW Album'});
+  await release.click();
+  await library.locator('.album-page:visible .album-tracks').getByText('MUSIC_FLOW Song (Live version)',{exact:true}).waitFor();
+  assert.equal(await library.getByRole('button',{name:'Añadir álbum',exact:true}).count(),0);
+  await button('Volver al artista').click();
+  assert.equal(await release.evaluate(el=>el===document.activeElement),true);
+  await button('Volver a Biblioteca').click();
+  assert.equal(await savedCard.evaluate(el=>el===document.activeElement),true);
+  assert.deepEqual(await snapshot(),before);
+  assert.equal(await page().evaluate(()=>MUSIC_FLOW.playCalls),plays);
+  assert.equal(report.rpc.length,rpc);
+  const artistLookups=api.requests.filter(r=>r.entity==='album'&&r.term===null);
+  assert(artistLookups.length>0&&artistLookups.every(r=>r.id===2));
+  await reload();await nav('Biblioteca').click();await libraryArtists.click();await savedCard.click();
+  await button('Quitar de mis artistas').click();await empty.waitFor();
+  assert.equal(await libraryArtists.evaluate(el=>el===document.activeElement),true);
+  assert.deepEqual(await snapshot(),before);
+  await reload();await nav('Biblioteca').click();await libraryArtists.click();await empty.waitFor();
+  const imported=await page().evaluate(async()=>{const module=await import('/__musicflow/importer/seed.js');return module.importArtistFixture();});
+  await reload();await nav('Biblioteca').click();await libraryArtists.click();await empty.waitFor();
+  assert((await snapshot()).tracks.some(t=>t.id===imported&&t.artist===artistName));
+  await openFromSearch();await button('Guardar artista').click();
+  await button('Quitar de mis artistas').waitFor();
+  await nav('Biblioteca').click();await savedCard.waitFor();
+  return {artistId:2,onlyExplicit:true,releaseOrder:'newest first and undated last',focusRestored:true,saveReload:true,removeReload:true,importKeepsRemoved:true,resave:true,storageUnchanged:true,telegram:0,play:0};
+ });
 
  await group('22 artist search is explicit and only selecting an artist opens its page',async()=>{
   await fresh({control:true});const api=await routes(),rpc=report.rpc.length;
