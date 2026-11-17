@@ -1,4 +1,4 @@
-export interface AccountUser { readonly id:string; readonly name:string; readonly email:string; readonly verified:boolean }
+export interface AccountUser { readonly id:string; readonly name:string; readonly email:string; readonly verified:boolean; readonly expiresAt?:number }
 export interface AccountProvider {
  session():Promise<AccountUser|null>;
  signIn(email:string,password:string):Promise<void>;
@@ -10,7 +10,7 @@ export interface AccountProvider {
  verify(email:string,code:string):Promise<void>;
  resend(email:string):Promise<void>;
 }
-export type AccountStatus='initial'|'checking'|'disabled'|'signed-out'|'signed-in'|'unavailable';
+export type AccountStatus='initial'|'checking'|'disabled'|'signed-out'|'signed-in'|'offline'|'unavailable';
 export interface AccountState {readonly status:AccountStatus;readonly pending:boolean;readonly google:boolean;readonly user:AccountUser|null;readonly error:string|null}
 export class AccountFailure extends Error {constructor(readonly code:string){super(code);}}
 export function accountError(error:unknown):string {
@@ -28,14 +28,19 @@ export function accountError(error:unknown):string {
  if(code==='DISABLED')return 'El acceso a cuentas todavía no está habilitado.';
  return 'No pudimos completar la conexión. Comprueba tu conexión e inténtalo de nuevo.';
 }
-export interface AccountHost {config():Promise<{enabled:boolean;google:boolean}>;provider():Promise<AccountProvider>}
+export interface AccountHost {config():Promise<{enabled:boolean;google:boolean}>;provider():Promise<AccountProvider>;offlineSession?():AccountUser|null;confirmed?(user:AccountUser|null):void}
 /** Only public profile data lives here. Passwords, codes and tokens are never
  * persisted, logged or passed to the music/Telegram controllers. */
 export function createAccountController(host:AccountHost){
  let state:AccountState={status:'initial',pending:false,google:false,user:null,error:null};
- let generation=0,provider:AccountProvider|null=null,loading:Promise<void>|null=null;
+ let generation=0,provider:AccountProvider|null=null,loading:Promise<void>|null=null,refreshRequested=false;
  const listeners=new Set<()=>void>();
- const publish=(next:AccountState)=>{state=next;for(const fn of listeners)fn();};
+ const publish=(next:AccountState)=>{state=next;for(const fn of listeners){try{fn();}catch{/* Observation cannot grant a session. */}}};
+ const confirmed=(user:AccountUser|null)=>{try{host.confirmed?.(user);}catch{/* Optional local hint, never authority for the server. */}};
+ function settled(attempt:number){
+  if(attempt!==generation&&state.pending)publish({...state,pending:false});
+  if(refreshRequested){refreshRequested=false;queueMicrotask(()=>{void load();});}
+ }
  async function load(){
   if(state.pending)return;
   if(loading)return loading;
@@ -44,21 +49,23 @@ export function createAccountController(host:AccountHost){
    const config=await host.config();if(attempt!==generation)return;
    if(!config.enabled){publish({status:'disabled',pending:false,google:false,user:null,error:null});return;}
    provider??=await host.provider();const user=await provider.session();if(attempt!==generation)return;
-   publish({status:user?'signed-in':'signed-out',pending:false,google:config.google,user,error:null});
-  }catch(error){if(attempt===generation)publish({...state,status:'unavailable',pending:false,error:accountError(error)});}
-  finally{loading=null;}})();await loading;
+   confirmed(user);publish({status:user?'signed-in':'signed-out',pending:false,google:config.google,user,error:null});
+  }catch(error){if(attempt===generation){let remembered:AccountUser|null=null;try{remembered=host.offlineSession?.()??null;}catch{/* Missing local hint. */}publish({...state,status:remembered?'offline':'unavailable',pending:false,user:remembered??state.user,error:remembered?null:accountError(error)});}}
+  finally{loading=null;settled(attempt);}})();await loading;
  }
  async function perform(action:(p:AccountProvider)=>Promise<void>,refresh=false):Promise<boolean>{
   if(!provider||state.pending||!['signed-in','signed-out'].includes(state.status))return false;
   const attempt=++generation;publish({...state,pending:true,error:null});
-  try{await action(provider);const user=refresh?await provider.session():state.user;if(attempt!==generation)return false;
-   publish({...state,status:user?'signed-in':'signed-out',user,pending:false});return true;
+  try{await action(provider);if(attempt!==generation)return false;const user=refresh?await provider.session():state.user;if(attempt!==generation)return false;
+   if(refresh)confirmed(user);publish({...state,status:user?'signed-in':'signed-out',user,pending:false});return true;
   }catch(error){if(attempt===generation)publish({...state,pending:false,error:accountError(error)});return false;}
+  finally{settled(attempt);}
  }
  return {
   getSnapshot:()=>state,
   subscribe(fn:()=>void){listeners.add(fn);return()=>{listeners.delete(fn);};},
   load,
+  invalidate(){++generation;refreshRequested=state.pending;publish({...state,user:null,status:'checking'});if(!state.pending)void load();},
   signIn:(email:string,password:string)=>perform(p=>p.signIn(email,password),true),
   signUp:(name:string,email:string,password:string)=>perform(p=>p.signUp(name,email,password),true),
   google:()=>state.google?perform(p=>p.google()):Promise.resolve(false),

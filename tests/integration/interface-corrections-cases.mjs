@@ -1,3 +1,4 @@
+import {installRequiredAccountFixture} from './required-account-fixture.mjs';
 import assert from 'node:assert/strict';
 
 // Isolated synthetic IDB and audio. A closed local proxy is set at browser launch;
@@ -9,6 +10,7 @@ export async function runCorrections({browser,origin,engine,check,report,run}) {
    context=await browser.newContext({viewport:{width:390,height:664},serviceWorkers:'block'});
    context.setDefaultTimeout(8000);
    await context.route('**/*',r=>{const u=new URL(r.request().url());if(u.origin===origin||['blob:','data:'].includes(u.protocol))return r.continue();if((u.origin==='https://itunes.apple.com'&&['/search','/lookup'].includes(u.pathname))||(u.origin==='https://lrclib.net'&&u.pathname==='/api/v2/search')){report.correctionsMetadata=(report.correctionsMetadata??0)+1;return r.fulfill({status:200,headers:{'access-control-allow-origin':'*','content-type':'application/json'},body:JSON.stringify(u.origin==='https://lrclib.net'?[]:{resultCount:0,results:[]})});}report.external.push({engine,origin:u.origin});return r.abort();});
+   await installRequiredAccountFixture(context,origin);
    await context.addInitScript(()=>{try{delete Navigator.prototype.serviceWorker}catch{};window.__audio=[];const A=window.Audio;window.Audio=class extends A{constructor(...a){super(...a);window.__audio.push(this)} play(){if(window.__denyNextPlay){window.__denyNextPlay=false;return Promise.reject(new DOMException('Synthetic policy denial','NotAllowedError'));}return super.play()}};});
    const page=await context.newPage();page.on('pageerror',e=>report.errors.push({engine,error:String(e)}));
    try{

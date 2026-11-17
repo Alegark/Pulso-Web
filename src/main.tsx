@@ -1,4 +1,8 @@
 import {AccountAccess} from './ui/AccountAccess';
+import {AccountRequired} from './ui/AccountRequired';
+import {InstalledAppNotice} from './ui/InstalledAppNotice';
+import {reuseInstalledWindow} from './pwa/launch-reuse';
+import {accountController} from './accounts/neon-provider';
 import {AlbumDownloadNotice} from './ui/AlbumDownloadNotice';
 import {AppInstallCard} from './ui/AppInstallCard';
 import {formatStorageMB,formatStorageProgress} from './library/storage-format';
@@ -115,7 +119,9 @@ const capability=(read:()=>unknown)=>{try{return read()?'available':'unavailable
 let diagnosticCapabilities:Capabilities=Object.freeze({indexedDbApi:capability(()=>typeof indexedDB!=='undefined'),webLocksApi:capability(()=>navigator.locks),broadcastChannelApi:capability(()=>typeof BroadcastChannel!=='undefined'),opfsApi:capability(()=>typeof navigator.storage?.getDirectory==='function'),serviceWorkerApi:capability(()=>navigator.serviceWorker),storageEstimateApi:capability(()=>typeof navigator.storage?.estimate==='function'),storageOperation:'not-observed',observedBackend:'unknown',observedTransport:'unknown'});
 
 let updateNavigationLocked=false;
-const audio=new Audio();audio.preload='metadata';const player=new Player(audio,()=>control.owner&&!updateNavigationLocked,phase=>{
+let accountEpoch=0;
+const accountAvailable=()=>accountController.getSnapshot().user!==null;
+const audio=new Audio();audio.preload='metadata';const player=new Player(audio,()=>accountAvailable()&&control.owner&&!updateNavigationLocked,phase=>{
  const handle=beginDiagnostic('play');return code=>{const failure=result(phase,code==='autoplay-denied'?'autoplay-blocked':code==='media-decode'?'integrity':code==='media-unsupported'?'unsupported-format':'internal',code);diagnostics.complete(handle,failure);diagnostics.finish(handle);};
 });
 let scopeId=0;
@@ -124,6 +130,7 @@ let suspendedSnapshot:Snapshot|undefined;
 let transferPlayIntent:{generation:number;scheduled?:boolean}|null=null;
 let startupQueueAttempt:object|null=null;
 const control=new Ownership(()=>{owner=control.owner;if(control.state==='sin-control'&&status==='Abriendo biblioteca…')status='Otra pestaña tiene el control. Solicítalo o comprueba si está disponible. Para pilotos, muestras o versiones antiguas, cierra esa entrada.';emit();},async()=>{
+ if(!accountAvailable()){control.activity.close();return;}
  startupQueueAttempt=null;deferredQueueRestore=null;
  ++scopeId;diagnostics.resetScope();copyRemovalPending=true;copyRemovalStartup=null;metadataRescanBlocked=true;control.activity.block('metadata-rescan',true);
  if(databaseState!=='ready'){if(databaseReloadRequired())control.activity.invalidate();return;}
@@ -198,7 +205,7 @@ let copyRemovalStartup:{key:string;snapshot:CopyRemovalStartup}|null=null;
 let removalRecoveryEpoch=0;
 const removalEligibleTracks=new Set<string>();
 const removalScopeKey=()=>`${scopeId}:${control.proof}:${databaseGeneration}`;
-function captureRemovalRaw(){const scope=scopeId,proof=control.proof,admission=databaseGeneration,activity=control.activity.scope();return()=>scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&activity()&&control.owner&&databaseState==='ready';}
+function captureRemovalRaw(){const auth=accountEpoch,scope=scopeId,proof=control.proof,admission=databaseGeneration,activity=control.activity.scope();return()=>accountAvailable()&&auth===accountEpoch&&scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&activity()&&control.owner&&databaseState==='ready';}
 function setCopyRemovalBlocking(key:string,blocked:boolean,inactive:boolean){if(key!==removalScopeKey())return;copyRemovalPending=blocked;control.activity.block('copy-removal',blocked&&inactive);emit();}
 async function readRemovalStartup(current:()=>boolean){
  const key=removalScopeKey(),abort=new AbortController(),snapshot=await scanCopyRemovalStartup({signal:abort.signal,current:()=>key===removalScopeKey()&&current()});
@@ -222,7 +229,7 @@ function observeQueueAdmission(){
   for(const record of queueSaveTransactions)if(!record.current())try{record.tx.abort();}catch{/* confirmed commit may already have won */}
  }finally{observingInsertionAdmission=false;}
 }
-function captureInsertionCurrent(){observeQueueAdmission();const epoch=insertionAdmissionEpoch,review=sourceReview.captureCurrent(),scope=scopeId,proof=control.proof,admission=databaseGeneration,activity=control.activity.scope();return()=>{observeQueueAdmission();return epoch===insertionAdmissionEpoch&&scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&activity()&&insertionBaseReady()&&review();};}
+function captureInsertionCurrent(){observeQueueAdmission();const auth=accountEpoch,epoch=insertionAdmissionEpoch,review=sourceReview.captureCurrent(),scope=scopeId,proof=control.proof,admission=databaseGeneration,activity=control.activity.scope();return()=>{observeQueueAdmission();return accountAvailable()&&auth===accountEpoch&&epoch===insertionAdmissionEpoch&&scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&activity()&&insertionBaseReady()&&review();};}
 function captureForeignMutationCurrent(){observeQueueAdmission();const epoch=foreignMutationEpoch,raw=captureRemovalRaw(),review=sourceReview.captureCurrent();return()=>{observeQueueAdmission();return epoch===foreignMutationEpoch&&raw()&&review()&&!busy&&!collectionBlocked()&&!queueForeignBlocked();};}
 function captureReplacementCurrent(){observeQueueAdmission();const epoch=foreignMutationEpoch,current=captureInsertionCurrent();return()=>{observeQueueAdmission();return epoch===foreignMutationEpoch&&current();};}
 const queueInsertions=createQueueInsertionController({
@@ -732,9 +739,27 @@ registerDatabaseRealmHost({
  onLifecycle:applyDatabaseLifecycle,
 });
 attachDatabaseTransportLifecycle(applyDatabaseLifecycle);
-void control.acquire();
-if(!control.supported){status='Este navegador no dispone de Web Locks. Reproducción y mutaciones bloqueadas.';void refresh();}
+let activeAccount:string|null=null,accountQueue:Snapshot|undefined;
+function accountBoundary(){
+ const next=accountController.getSnapshot().user?.id??null;if(next===activeAccount)return;
+ const previous=activeAccount;activeAccount=next;
+ if(previous){
+  accountEpoch++;accountQueue=snapshot();transferPlayIntent=null;cancelSelectedSongIntent();queueInsertions.cancelAll('user');control.cancelTransfer();audio.pause();player.suspend();clearMediaSession();
+  if(control.owner&&control.activity.idle&&!releaseBlocked()){
+   const saved=accountQueue;
+   void control.cede(async()=>{await prepareRelease();if(saved)await writeRecord('settings','library-playback',saved);accountQueue=undefined;},releaseBlocked).then(released=>{if(released&&accountAvailable()&&control.state==='sin-control')void control.acquire();}).catch(()=>{control.activity.close();});
+  }else control.activity.close();
+ }
+ if(next){
+  if(control.state==='con-control'){control.activity.reopen();installMediaSession();if(accountQueue?.entries.length){deferredQueueRestore={saved:accountQueue,warnings:[],current:captureRemovalRaw()};accountQueue=undefined;resumeStartupQueue();}void refresh(true,false);}
+  else void control.acquire();
+  if(!control.supported){status='Este navegador no dispone de Web Locks. Reproducción y mutaciones bloqueadas.';void refresh();}
+ }
+ emit();
+}
+accountController.subscribe(accountBoundary);accountBoundary();void accountController.load();reuseInstalledWindow(window);
 function App(){
+ const account=React.useSyncExternalStore(accountController.subscribe,accountController.getSnapshot);
  const [,render]=React.useReducer(n=>n+1,0);React.useEffect(()=>{listeners.add(render);return()=>{listeners.delete(render);};},[]);
  const mutationCurrent=captureForeignMutationCurrent(),replacementCurrent=captureReplacementCurrent(),insertionCurrent=captureInsertionCurrent();
  const viewAct=(...args:Parameters<typeof act>)=>mutationCurrent()?act(...args):Promise.resolve();
@@ -846,7 +871,7 @@ function App(){
  function navigate(next:typeof page){setSettingsOpen(false);++navigationIntent.current;const current=shellResponse();moveFocus.current=null;favoriteFocus.current=null;returnContext.current=null;setPlayerOpen(false);routeScroll.current[page]=window.scrollY;setPage(next);requestAnimationFrame(()=>{if(current())window.scrollTo(0,routeScroll.current[next]);});return current;}
  function openPlayer(opener:HTMLButtonElement){++navigationIntent.current;const current=shellResponse();moveFocus.current=null;favoriteFocus.current=null;returnContext.current={page,scroll:window.scrollY,opener};setPlayerOpen(true);requestAnimationFrame(()=>{if(!current())return;playerHeading.current?.focus({preventScroll:true});const surface=playerHeading.current?.closest<HTMLElement>('.player-surface');if(surface)surface.scrollTop=0;});}
  function closePlayer(){++navigationIntent.current;const current=shellResponse();const context=returnContext.current;returnContext.current=null;setPlayerOpen(false);if(!context)return;setPage(context.page);requestAnimationFrame(()=>{if(!current())return;window.scrollTo(0,context.scroll);(context.opener.isConnected?context.opener:context.page==='inicio'?document.getElementById('home-heading'):routeHeading.current)?.focus({preventScroll:true});});}
- const playScope=scopeId,playProof=control.proof,playGeneration=databaseGeneration;const playCurrent=()=>playScope===scopeId&&playProof===control.proof&&playGeneration===databaseGeneration;
+ const playAuth=accountEpoch,playScope=scopeId,playProof=control.proof,playGeneration=databaseGeneration;const playCurrent=()=>accountAvailable()&&playAuth===accountEpoch&&playScope===scopeId&&playProof===control.proof&&playGeneration===databaseGeneration;
  const play=()=>{if(!playCurrent()||collectionBlocked())return;if(!owner){void useThisTab(true);return;}transferPlayIntent=null;if(!busy&&player.entries.length){cancelSelectedSongIntent();void player.play();}};const pause=()=>{if(!playCurrent())return;transferPlayIntent=null;if(owner&&!busy&&player.current){cancelSelectedSongIntent();player.pause();}};
  React.useLayoutEffect(()=>{
   const bars=[document.querySelector<HTMLElement>('.shell-nav'),document.querySelector<HTMLElement>('.mini-player')];
@@ -1020,8 +1045,10 @@ function App(){
  const duration=Number.isFinite(audio.duration)?audio.duration:0;
  // The queue has no clock-dependent content; keep its element stable between progress frames.
  const playerQueue=<div className="player-queue">{queueInsertions.pendingCount>0&&<div><p role="status">{queueInsertions.pendingCount} adiciones pendientes; la reproducción sigue disponible.</p><button onClick={()=>queueInsertions.cancelAll('user')}>Detener adiciones pendientes</button></div>}{queueInsertionUncertain&&<p role="alert">No se ha confirmado el cierre de algunos recursos. Espera antes de iniciar otra operación; conserva tus archivos originales.</p>}<button disabled={!owner||busy||copyRemovalBlocked()||queueInsertionUncertain||!player.entries.length} onClick={()=>{if(replacementCurrent())void clearQueue();}}>Vaciar cola</button><ol>{player.entries.map((e,i)=><li key={e.id}><button aria-current={i===player.index?'true':undefined} disabled={!owner||busy||collectionBlocked()} onClick={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();player.select(i,true);}}}>{e.title}</button><button aria-label={`Subir en cola ${e.title}`} disabled={!owner||busy||collectionBlocked()||i===0} onClick={()=>{if(playCurrent()&&!collectionBlocked())player.moveEntry(e.id,-1);}}>Subir</button><button aria-label={`Bajar en cola ${e.title}`} disabled={!owner||busy||collectionBlocked()||i===player.entries.length-1} onClick={()=>{if(playCurrent()&&!collectionBlocked())player.moveEntry(e.id,1);}}>Bajar</button><button aria-label={`Quitar de cola ${e.title}`} disabled={!owner||busy||collectionBlocked()||i===player.index} onClick={()=>{if(playCurrent()&&!collectionBlocked())player.removeFuture(e.id);}}>Quitar</button></li>)}</ol></div>;
+ if(!account.user)return <AccountRequired/>;
  return <main className="pulso-app" data-player-open={playerOpen?'true':undefined}><header className="pulso-header"><p className="pulso-wordmark" aria-label="Pulso Web">pulso</p><h1 className="pulso-visually-hidden">Tu música, en este navegador</h1><nav className="shell-nav" aria-label="Principal">{(['inicio','buscar','biblioteca']as const).map(p=><button key={p} aria-current={page===p?'page':undefined} onClick={()=>{if(p==='biblioteca'){setLibraryDetail(false);setViews(old=>({...old,biblioteca:emptyShellView()}));}navigate(p);}}><svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{p==='inicio'?<path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/>:p==='buscar'?<><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>:<><path d="M4 4v16M9 4v16M14 5l5-1 2 15-5 1z"/></>}</svg><span>{p==='inicio'?'Inicio':p==='buscar'?'Buscar':'Biblioteca'}</span></button>)}</nav><button className="desktop-search-link" type="button" onClick={()=>{const current=navigate('buscar');requestAnimationFrame(()=>{if(current())musicSearchTarget?.querySelector<HTMLInputElement>('input[type=search]')?.focus();});}}><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span>¿Qué quieres escuchar?</span></button><AccountAccess/><button ref={settingsOpener} type="button" aria-expanded={settingsOpen} onClick={()=>{setSettingsOpen(true);requestAnimationFrame(()=>{settingsHeading.current?.focus();settingsHeading.current?.scrollIntoView({block:'start'});});}}>Configuración</button></header><aside className="desktop-library" aria-label="Accesos a tu biblioteca"><p>Tu biblioteca</p><button type="button" onClick={()=>{setViews(old=>({...old,biblioteca:{...emptyShellView(),favorites:true}}));setLibraryDetail(true);navigate('biblioteca');}}><span className="desktop-library__cover"><CollectionCover favorite trackIds={[]}/></span><span><strong>Favoritos</strong><small>Playlist automática</small></span></button>{homeLists.map(list=><button type="button" key={list.id} onClick={()=>{setViews(old=>({...old,biblioteca:{...emptyShellView(),listId:list.id}}));setLibraryDetail(true);navigate('biblioteca');}}><span className="desktop-library__cover"><CollectionCover trackIds={list.entries.map(entry=>entry.trackId)} enabled={!settingsOpen}/></span><span><strong>{list.name}</strong><small>{list.entries.length} canciones</small></span></button>)}</aside>{updateReady&&<p role="status">Hay una versión nueva preparada. Se actualizará automáticamente al terminar de escuchar y guardar los cambios.</p>}
 <AlbumDownloadNotice/>
+ <InstalledAppNotice/>
  <div ref={setMusicSearchTarget} hidden={page!=='buscar'||settingsOpen} aria-label="Buscador musical"/>
 
 
@@ -1032,7 +1059,7 @@ function App(){
   <button type="button" onClick={()=>{setSettingsOpen(false);requestAnimationFrame(()=>settingsOpener.current?.focus());}}>Cerrar configuración</button>
 <p className="settings-intro">Tu cuenta, tu música y este navegador.</p><section className="settings-group settings-app-update" aria-labelledby="app-update-heading"><h3 id="app-update-heading">Actualización de la app</h3><div className="settings-group__body"><p role="status">{manualReloadPending?'Esperando a que terminen las operaciones para recargar…':updateState==='checking'?'Comprobando versión…':updateState==='current'?'Actualizada':updateState==='available'?'Nueva versión disponible':'No se pudo comprobar si hay actualizaciones.'}</p><button type="button" disabled={manualReloadPending||updateNavigationLocked} onClick={()=>{player.pause();automaticUpdates?.reload();}}>Recargar app</button><p>Recarga Pulso y conserva tus datos. Si hay música sonando, se pausará.</p></div></section><AppInstallCard/><div className="settings-groups">
 <details className="settings-group"><summary><strong>Cuenta y fuentes</strong><span>Telegram y proveedores de música</span></summary><div className="settings-group__body"><section aria-label="Música de Telegram"><details className="settings-help"><summary>Cómo buscar y escuchar</summary><p>En Buscar puedes consultar sugerencias musicales y las opciones del bot que elijas. Conecta tu cuenta de Telegram y configura tus bots para consultarlos. Al elegir una canción se comprueba tu copia local; si falta, se obtiene del bot para descargarla y escucharla. Límite por canción: {formatStorageMB(AUDIO_FILE_MAX_BYTES)}.</p></details><p role="status">{status}</p></section>
- <TelegramPanel activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureSongCopyInspection={captureSongCopyInspection} searchTarget={musicSearchTarget} searchVisible={page==='buscar'&&!settingsOpen} localTracks={tracks} libraryTrackIds={addedTrackIds} songPlaylists={playlists} playerTrackId={player.current?.trackId??null} playerPlaying={owner&&player.state==='playing'} captureSongManagement={captureSongManagement} captureDownloadSave={captureBotAudioSave}/></div></details>
+ <TelegramPanel accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureSongCopyInspection={captureSongCopyInspection} searchTarget={musicSearchTarget} searchVisible={page==='buscar'&&!settingsOpen} localTracks={tracks} libraryTrackIds={addedTrackIds} songPlaylists={playlists} playerTrackId={player.current?.trackId??null} playerPlaying={owner&&player.state==='playing'} captureSongManagement={captureSongManagement} captureDownloadSave={captureBotAudioSave}/></div></details>
 <details className="settings-group"><summary><strong>Almacenamiento</strong><span>Descargas y caché de escucha</span></summary><div className="settings-group__body">  <section aria-label="Almacenamiento"><h3>Almacenamiento</h3>
    <p>{formatStorageMB(storageSummary.knownAudioBytes)} de audio declarado en {storedAssets.length} archivos completos. Cada copia física se cuenta una vez, aunque aparezca en varias fichas o playlists.</p>
    <div className="storage-summary" aria-label="Resumen del almacenamiento"><svg className="storage-summary__segments" viewBox="0 0 100 1" preserveAspectRatio="none" role="img" aria-label={`Audio guardado ${formatStorageMB(storageSummary.savedAudioBytes)}; caché de escucha ${formatStorageMB(storageSummary.cachedAudioBytes)}. Categorías de audio conocidas, sin doble conteo.`}><rect className="storage-summary__saved" x={0} y={0} height={1} width={storageSummary.knownAudioBytes?storageSummary.savedAudioBytes/storageSummary.knownAudioBytes*100:0}/><rect className="storage-summary__cache" x={storageSummary.knownAudioBytes?storageSummary.savedAudioBytes/storageSummary.knownAudioBytes*100:0} y={0} height={1} width={storageSummary.knownAudioBytes?storageSummary.cachedAudioBytes/storageSummary.knownAudioBytes*100:0}/></svg><ul className="storage-summary__legend"><li><span className="storage-summary__swatch storage-summary__saved"/>Descargas y otras copias conservadas <strong>{formatStorageMB(storageSummary.savedAudioBytes)}</strong></li><li><span className="storage-summary__swatch storage-summary__cache"/>Caché de escucha elegible <strong>{formatStorageMB(storageSummary.cachedAudioBytes)}</strong></li></ul></div>

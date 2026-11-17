@@ -18,7 +18,7 @@
       "file": "components/auth/forgot-password.tsx",
       "source": "examples/start-shadcn-example/src/components/auth/forgot-password.tsx",
       "upstreamSHA256": "76ceeaac58abb6a083a9e56360f54dc0991c7c4a8addc18d3e867d8c4c0deeeb",
-      "adaptedSHA256": "0c1f412bebce1b3ecec8b5f3a164f30f24b1042587f2c71473e434bc393f3b14"
+      "adaptedSHA256": "71937e0180ede5b3188a99cd665e62b2580cacac5831a529cc13158a77d33b13"
     },
     {
       "file": "components/auth/last-login-method/last-used-badge.tsx",
@@ -72,7 +72,7 @@
       "file": "components/auth/reset-password.tsx",
       "source": "examples/start-shadcn-example/src/components/auth/reset-password.tsx",
       "upstreamSHA256": "ceeca7bb65720651363ca20e754a5f9cfb9d18ff7bf8d155e6c27d065b4c92ce",
-      "adaptedSHA256": "e7614f366b596f0ffcf32984e18903823053792bf8fa470fc4284d46765d8b99"
+      "adaptedSHA256": "bda9b49b5903cbd0079a800b339c0bc8f6338c6ac261d09f05faace777f959d5"
     },
     {
       "file": "components/auth/sign-in.tsx",

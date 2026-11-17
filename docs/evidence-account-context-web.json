@@ -1,0 +1,90 @@
+{
+  "status": "LOCAL PASS; publication stopped before Worker code update",
+  "date": "2026-11-17",
+  "origin": "https://pulso-web.pruebassoftware.workers.dev",
+  "entry": "/releases/b34ea1aee33c6357.html",
+  "ownerAcceptance": {
+    "baselineAccounts": "Owner reports all account tests passed; device unspecified",
+    "newIncrement": "Not yet accepted with a real account"
+  },
+  "local": {
+    "unit": {
+      "pass": 759,
+      "fail": 0
+    },
+    "cloudflareServer": {
+      "pass": 28,
+      "fail": 0
+    },
+    "accountNative": {
+      "pass": 26,
+      "fail": 0,
+      "report": {
+        "path": ".local/pulso-account-context/browser/2026-11-17T04-20-11-822Z/report.json",
+        "bytes": 12295,
+        "sha256": "129058bfce8743719b123c90d43c7c3cd9cdc5b23502f6f8ae17fefa3eac840b"
+      },
+      "pageErrors": 0,
+      "externalRequests": 0,
+      "cspEvents": 27
+    },
+    "interfaceNative": {
+      "pass": 38,
+      "fail": 0,
+      "report": {
+        "path": ".local/interface-browser-validation/2026-11-17T04-22-31-565Z/report.json",
+        "bytes": 17230,
+        "sha256": "6c9c82f7867aa7c29ac8b03db23ba14abcceb79aa3cf5a6adc78ac3b8315ee33"
+      },
+      "inputsBefore": 320,
+      "inputsAfter": 320,
+      "pageErrors": 0,
+      "externalRequests": 0,
+      "cspEvents": 116
+    },
+    "lint": "PASS",
+    "cloudflareBuild": "PASS",
+    "workerDryRun": "PASS"
+  },
+  "fixtures": "Actual production client and local HTTP cookies, TESTONLY account/Telegram responses, own WAV bytes; no real user, email, phone or Telegram account accessed",
+  "neon": {
+    "schema": "Provisioned with forced RLS, own-account policy and restricted grants",
+    "anonymous": 401,
+    "forgedToken": 401,
+    "validJwtReadWrite": "NOT TESTED",
+    "realPhoneStored": false
+  },
+  "platformLimits": [
+    "WebKit desktop is not iPhone acceptance",
+    "Safari and installed PWA storage remain separate",
+    "Installation detection and launch reuse need real platform acceptance",
+    "WebKit style-src-attr events retained; no global zero-CSP claim",
+    "No busy import/uncertain operation logout acceptance in this native matrix"
+  ],
+  "publication": {
+    "status": "STOPPED; asset bucket 1 returned HTTP 500",
+    "provider": "official Cloudflare MCP OAuth client",
+    "worker": "pulso-web",
+    "previousVersion": "366ff225-7228-4722-a44d-e3451c49fd53",
+    "versionAfterSecretConfiguration": "5538bd86-70fc-4d80-abfc-77a72f9406cf",
+    "preexistingBindingsPreserved": [
+      "ASSETS:assets",
+      "CATALOG:durable_object_namespace/CatalogCoordinator",
+      "TELEGRAM_API_IDENTITY:secret_text",
+      "PULSO_NEON_AUTH_URL:secret_text",
+      "PULSO_AUTH_COOKIE_SECRET:secret_text",
+      "PULSO_AUTH_GOOGLE_ENABLED:secret_text"
+    ],
+    "addedBinding": "PULSO_NEON_DATA_API_URL:secret_text",
+    "secretValuesRead": false,
+    "workerCodePut": false,
+    "assetsPut": false,
+    "durableObjectMigration": false,
+    "candidateEntry": "/releases/b34ea1aee33c6357.html",
+    "candidateEntryPubliclyVerified": false,
+    "readback": "Read-only metadata confirmed active version and binding names/types; module bytes and public routes not read back",
+    "failure": "Cloudflare direct asset upload using JWT issued by official MCP session returned HTTP 500 for first bucket",
+    "receipt": ".local/pulso-account-context/publication/deployment.json",
+    "pending": "Diagnose asset transfer failure, then run fresh preflight, deployment and independent module/route readback"
+  }
+}

@@ -5,6 +5,7 @@ const methods=new Map([
  ['get-session','GET'],['token','GET'],['sign-in/email','POST'],['sign-up/email','POST'],
  ['sign-in/social','POST'],['sign-out','POST'],['request-password-reset','POST'],
  ['reset-password','POST'],['email-otp/verify-email','POST'],['email-otp/send-verification-otp','POST'],
+ ['email-otp/request-password-reset','POST'],['email-otp/reset-password','POST'],
 ]);
 const policy="default-src 'none'; frame-ancestors 'none'; base-uri 'none'";
 const safeHeaders={'Cache-Control':'no-store','Pragma':'no-cache','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':policy};
@@ -27,6 +28,8 @@ function payload(path,v,origin){
   case 'sign-in/social':if(v.provider!=='google')throw Error('provider');return {provider:'google',callbackURL:callback,errorCallbackURL:callback};
   case 'sign-out':return {};
   case 'request-password-reset':return {email:email(),redirectTo:origin+'/?pulso-account=reset'};
+  case 'email-otp/request-password-reset':return {email:email()};
+  case 'email-otp/reset-password':if(typeof v.otp!=='string'||!/^\d{6}$/.test(v.otp)||!password(v.password))throw Error('reset');return {email:email(),otp:v.otp,password:v.password};
   case 'reset-password':if(typeof v.token!=='string'||!v.token||v.token.length>512||!password(v.newPassword))throw Error('reset');return {token:v.token,newPassword:v.newPassword};
   case 'email-otp/verify-email':if(typeof v.otp!=='string'||!/^\d{6}$/.test(v.otp))throw Error('otp');return {email:email(),otp:v.otp};
   case 'email-otp/send-verification-otp':if(v.type!=='email-verification')throw Error('otp');return {email:email(),type:'email-verification'};

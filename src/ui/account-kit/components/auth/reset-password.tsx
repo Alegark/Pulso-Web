@@ -8,6 +8,9 @@ import {
   validateStringLength
 } from "@better-auth-ui/core"
 import { useAuth, useResetPassword } from "@better-auth-ui/react"
+import {useResetPasswordOtp} from '@better-auth-ui/react/plugins/email-otp'
+import type {EmailOtpAuthClient} from '@better-auth-ui/core/plugins/email-otp'
+import {OtpField} from './otp-field'
 import { Eye, EyeOff } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "../../notices"
@@ -33,6 +36,7 @@ import { PasswordStrengthMeter } from "./password-strength-meter"
 export type ResetPasswordProps = {
   className?: string
   token: string
+  email?: string
 }
 
 /**
@@ -42,7 +46,7 @@ export type ResetPasswordProps = {
  *
  * @returns The password reset form UI ready to be mounted in the app layout.
  */
-export function ResetPassword({ className, token }: ResetPasswordProps) {
+export function ResetPassword({ className, token, email }: ResetPasswordProps) {
   const {
     authClient,
     basePaths,
@@ -52,13 +56,13 @@ export function ResetPassword({ className, token }: ResetPasswordProps) {
     redirectTo,
     viewPaths,
     Link
-  } = useAuth()
+  } = useAuth<EmailOtpAuthClient>()
   const signInURL = getAuthLinkURL(
     `${basePaths.auth}/${viewPaths.auth.signIn}`,
     redirectTo
   )
 
-  const { mutateAsync: resetPassword, isPending } = useResetPassword(
+  const { mutateAsync: resetPassword, isPending:linkPending } = useResetPassword(
     authClient,
     {
       onError: (error) => {
@@ -74,6 +78,9 @@ export function ResetPassword({ className, token }: ResetPasswordProps) {
       }
     }
   )
+  const [otp,setOtp]=useState('')
+  const otpReset=useResetPasswordOtp(authClient,{onSuccess:()=>{setOtp('');toast.success(localization.auth.passwordResetSuccess);navigate({to:signInURL});}})
+  const isPending=linkPending||otpReset.isPending
 
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
@@ -82,24 +89,25 @@ export function ResetPassword({ className, token }: ResetPasswordProps) {
 
   useEffect(() => {
 
-    if (!token) {
+    if (!token&&!email) {
       toast.error(localization.auth.invalidResetPasswordToken)
       navigate({ to: signInURL })
     }
-  }, [localization.auth.invalidResetPasswordToken, navigate, signInURL, token])
+  }, [email,localization.auth.invalidResetPasswordToken, navigate, signInURL, token])
 
   const form = useAuthForm({
     defaultValues: { confirmPassword: "", password: "" },
     onSubmit: async ({ value }) => {
 
-      if (!token) {
+      if (!token&&!email) {
         toast.error(localization.auth.invalidResetPasswordToken)
         navigate({ to: signInURL })
         return
       }
 
       try {
-        await resetPassword({ token, newPassword: value.password })
+        if(email){if(!/^\d{6}$/.test(otp))return;await otpReset.mutateAsync({email,otp,password:value.password})}
+        else await resetPassword({ token, newPassword: value.password })
       } catch {
         // The mutation reports the error through its configured handler.
       }
@@ -118,6 +126,7 @@ export function ResetPassword({ className, token }: ResetPasswordProps) {
         <form.AppForm>
           <form.AuthFormRoot>
             <FieldGroup>
+              {email&&<><p>Si existe una cuenta con ese correo, recibirás un código. Escríbelo aquí para cambiar la contraseña sin abrir otra ventana.</p><OtpField label="Código de recuperación" length={6} value={otp} onChange={setOtp} disabled={isPending}/></>}
               <form.AppField
                 name="password"
                 validators={{
@@ -293,7 +302,7 @@ export function ResetPassword({ className, token }: ResetPasswordProps) {
               )}
 
               <div className="flex flex-col gap-3">
-                <form.AuthFormSubmitButton disabled={isPending}>
+                <form.AuthFormSubmitButton disabled={isPending||!!email&&!/^\d{6}$/.test(otp)}>
                   {localization.auth.resetPassword}
                 </form.AuthFormSubmitButton>
               </div>

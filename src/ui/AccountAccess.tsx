@@ -5,9 +5,9 @@ import type {AccountView} from './AccountKit';
 import './account-access.css';
 const AccountKit=lazy(()=>import('./AccountKit'));
 
-/** Optional Pulso identity. It neither grants nor revokes the device's Telegram
- * authority and it never moves, relabels or deletes local music. */
-export function AccountAccess(){
+/** Pulso account access. Closing the session fences music operations without
+ * moving, relabelling or deleting local files or Telegram credentials. */
+export function AccountAccess({required=false}:{required?:boolean}={}){
  const state=useSyncExternalStore(accountController.subscribe,accountController.getSnapshot);
  const dialog=useRef<HTMLDialogElement>(null),heading=useRef<HTMLHeadingElement>(null),opener=useRef<HTMLElement|null>(null);
  const busyRef=useRef(false);
@@ -16,7 +16,7 @@ export function AccountAccess(){
  const locked=state.pending||state.status==='checking'||busy;
  const onBusy=useCallback((next:boolean)=>{busyRef.current=next;setBusy(next);},[]);
  const onSession=useCallback(()=>{setResetToken('');void accountController.load().finally(()=>{busyRef.current=false;setBusy(false);});},[]);
- function close(){if(state.pending||busyRef.current)return;dialog.current?.close();setOpen(false);setMessage('');setResetToken('');setClient(null);const target=opener.current;opener.current=null;requestAnimationFrame(()=>{if(target?.isConnected)target.focus();});}
+ function close(){if(state.pending||busyRef.current||required&&!state.user)return;dialog.current?.close();setOpen(false);setMessage('');setResetToken('');setClient(null);const target=opener.current;opener.current=null;requestAnimationFrame(()=>{if(target?.isConnected)target.focus();});}
  function show(target:HTMLElement|null,selected:AccountView='sign-in'){
   opener.current=target;setView(selected);setMessage('');setOpen(true);dialog.current?.showModal();requestAnimationFrame(()=>heading.current?.focus());void accountController.load();
  }
@@ -36,6 +36,7 @@ export function AccountAccess(){
   url.searchParams.delete('pulso-account');url.searchParams.delete('error');history.replaceState(history.state,'',url.pathname+url.search+url.hash);
  },[]);
  useEffect(()=>{void accountController.load();},[]);
+ useEffect(()=>{if(required&&!state.user&&!dialog.current?.open)show(null);},[required,state.user]);
  useEffect(()=>{
   if(!open||!['signed-in','signed-out'].includes(state.status))return;
   let current=true;void getAccountAuthClient().then(value=>{if(current)setClient(()=>value);});
@@ -44,13 +45,13 @@ export function AccountAccess(){
  return <>
   <button type="button" className="account-access-button" onClick={event=>show(event.currentTarget)} aria-haspopup="dialog">{state.user?'Mi cuenta':'Iniciar sesión'}</button>
   <dialog ref={dialog} className="account-dialog" aria-labelledby="account-access-heading" onCancel={event=>{event.preventDefault();close();}}>
-   <div className="account-dialog__toolbar"><span className="account-dialog__brand">pulso<span aria-hidden="true">●</span></span><button type="button" aria-label="Cerrar cuenta de Pulso" disabled={locked} onClick={close}>Cerrar</button></div>
+   <div className="account-dialog__toolbar"><span className="account-dialog__brand">pulso<span aria-hidden="true">●</span></span>{(!required||state.user)&&<button type="button" aria-label="Cerrar cuenta de Pulso" disabled={locked} onClick={close}>Cerrar</button>}</div>
    <h2 id="account-access-heading" className={state.user?'':'account-dialog__sr-heading'} ref={heading} tabIndex={-1}>{state.user?'Tu cuenta de Pulso':'Tu acceso a Pulso'}</h2>
    {open&&<>
     {state.status==='checking'&&<p role="status">Comprobando tu sesión…</p>}
-    {state.status==='disabled'&&<p role="status">Estamos preparando el acceso a cuentas. Puedes seguir escuchando tu música en este navegador.</p>}
+    {state.status==='disabled'&&<p role="status">El acceso a cuentas todavía no está habilitado. Inténtalo más tarde.</p>}
     {state.status==='unavailable'&&<><p role="alert">{state.error}</p><button type="button" onClick={()=>void accountController.load()}>Reintentar conexión de cuenta</button></>}
-    {state.user?<div className="account-dialog__profile"><p><strong>{state.user.name}</strong><br/>{state.user.email}</p><p>{state.user.verified?'Correo verificado':'Correo pendiente de verificar'}</p><button type="button" disabled={locked} onClick={()=>void accountController.signOut()}>Cerrar sesión de Pulso</button></div>:client&&state.status!=='disabled'&&state.status!=='unavailable'&&<Suspense fallback={<p role="status">Preparando el acceso…</p>}><AccountKit client={client} view={view} resetToken={resetToken} google={state.google} onBusy={onBusy} onSession={onSession} onView={setView}/></Suspense>}
+    {state.user?<div className="account-dialog__profile"><p><strong>{state.user.name}</strong><br/>{state.user.email}</p><p>{state.user.verified?'Correo verificado':'Correo pendiente de verificar'}</p>{state.status==='offline'&&<p>Sin conexión. Puedes escuchar las copias de este navegador; los cambios de cuenta esperan a que vuelvas a conectarte.</p>}<button type="button" disabled={locked||state.status==='offline'} onClick={()=>void accountController.signOut()}>Cerrar sesión de Pulso</button></div>:client&&state.status!=='disabled'&&state.status!=='unavailable'&&<Suspense fallback={<p role="status">Preparando el acceso…</p>}><AccountKit client={client} view={view} resetToken={resetToken} google={state.google} onBusy={onBusy} onSession={onSession} onView={setView}/></Suspense>}
     {state.error&&state.status!=='unavailable'&&<p className="account-dialog__error" role="alert">{state.error}</p>}
     {message&&<p role="status">{message}</p>}
     <p className="account-dialog__local">Tu música y la conexión con Telegram siguen guardadas en este navegador. Este acceso no sincroniza todavía tu biblioteca entre dispositivos.</p>

@@ -2,11 +2,12 @@
 import { flowMemory } from "../../flow-memory"
 "use client"
 
-import { getViewURL, validateEmailAddress } from "@better-auth-ui/core"
+import { validateEmailAddress } from "@better-auth-ui/core"
+import {useRequestPasswordResetOtp} from '@better-auth-ui/react/plugins/email-otp'
+import type {EmailOtpAuthClient} from '@better-auth-ui/core/plugins/email-otp'
 import {
   useAuth,
-  useFetchOptions,
-  useRequestPasswordReset
+  useFetchOptions
 } from "@better-auth-ui/react"
 import { useId } from "react"
 
@@ -41,26 +42,25 @@ export function ForgotPassword({ className }: ForgotPasswordProps) {
   const emailErrorId = useId()
   const {
     authClient,
-    baseURL,
     basePaths,
     localization,
     navigate,
     plugins,
     viewPaths,
     Link
-  } = useAuth()
+  } = useAuth<EmailOtpAuthClient>()
 
   const { fetchOptions, resetFetchOptions } = useFetchOptions()
 
   const { mutateAsync: requestPasswordReset, isPending } =
-    useRequestPasswordReset(authClient, {
+    useRequestPasswordResetOtp(authClient, {
       meta: { errorPresentation: "inline" },
       onError: () => {
         resetFetchOptions()
       },
       onSuccess: (_data, { email }) => {
         flowMemory.setItem(RESET_LINK_SENT_STORAGE_KEY, email)
-        navigate({ to: `${basePaths.auth}/${viewPaths.auth.resetLinkSent}` })
+        navigate({ to: `${basePaths.auth}/reset-password-otp` })
       }
     })
 
@@ -69,11 +69,6 @@ export function ForgotPassword({ className }: ForgotPasswordProps) {
     onSubmit: async ({ value }) =>
       await requestPasswordReset({
         email: value.email,
-        redirectTo: getViewURL(
-          baseURL,
-          basePaths.auth,
-          viewPaths.auth.resetPassword
-        ),
         fetchOptions
       })
   })
@@ -143,7 +138,7 @@ export function ForgotPassword({ className }: ForgotPasswordProps) {
                   isPending={isPending}
                   disabled={isPending}
                 >
-                  {localization.auth.sendResetLink}
+                  Enviar código
                 </form.AuthFormSubmitButton>
               </div>
               <form.AuthFormServerError />
