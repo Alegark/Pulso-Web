@@ -34,7 +34,7 @@
 .pulso-app .album-page .album-actions>button { border-radius:999px;padding-inline:1.25rem; }
 .pulso-app .album-page .album-art { box-shadow:0 .75rem 2rem #07112020; }
 .pulso-app .album-page .album-tracks>li { border-radius:.6rem; }
-.pulso-app .album-page .album-tracks>li:has(.playback-indicator) { background:var(--pulso-soft); }
+.pulso-app .album-page .album-tracks>li:has(.playback-indicator) .album-track-copy strong { color:var(--pulso-accent); }
 .pulso-app .album-page .album-track-copy { flex:1; }
 .pulso-app .album-page .album-track-copy strong { overflow-wrap:anywhere; }
 .pulso-app .album-page .album-track-badges,.pulso-app .album-page .album-track-message { padding-inline-end:.5rem;overflow-wrap:anywhere; }

@@ -74,6 +74,22 @@ export async function runPlaylistDetail({browser,origin,engine,check,report,run}
    await page.locator('.mini-player__expand').click();await page.locator('.player-surface').getByRole('button',{name:'Cola',exact:true}).click();assert.equal(await page.locator('.player-queue ol>li').count(),3);await page.getByRole('button',{name:'Cerrar reproductor',exact:true}).click();
    await back();await page.locator('.library-grid button').filter({hasText:'Para después'}).click();
   });
+  await check(`${engine}: selected song has no border and media artwork survives player collapse`,async()=>{
+   await back();await openList();
+   const rows=detail.locator('.collection-track-main');await rows.nth(0).click();
+   await rows.nth(0).and(page.locator('[aria-current="true"]')).waitFor();
+   await page.waitForFunction(()=>navigator.mediaSession?.metadata?.artwork.length===1);
+   const first=await page.evaluate(()=>({title:navigator.mediaSession.metadata.title,src:navigator.mediaSession.metadata.artwork[0].src}));
+   assert.equal(await rows.nth(0).evaluate(e=>getComputedStyle(e).outlineStyle),'none');
+   assert.equal(await rows.nth(0).locator('strong').evaluate(e=>getComputedStyle(e).color),await rows.nth(0).locator('.playback-indicator').evaluate(e=>getComputedStyle(e).color));
+   assert.ok(await page.evaluate(async src=>{const img=new Image();img.src=src;await img.decode();return img.naturalWidth>0;},first.src));
+   await page.locator('.mini-player__expand').click();await page.getByRole('button',{name:'Cerrar reproductor',exact:true}).click();
+   assert.equal(await page.evaluate(()=>navigator.mediaSession.metadata.artwork[0].src),first.src);
+   await rows.nth(1).click();await page.waitForFunction(old=>navigator.mediaSession.metadata?.artwork[0]?.src&&navigator.mediaSession.metadata.artwork[0].src!==old,first.src);
+   assert.equal(await page.evaluate(()=>navigator.mediaSession.metadata.title),await rows.nth(1).locator('strong').innerText());
+   await page.screenshot({path:`${run}/${engine}-selected-song-no-border.png`});
+   await back();await openList('Para después');
+  });
   await check(`${engine}: playlist rename persists and empty/favorites covers are honest`,async()=>{
    await detail.locator('.collection-tools>summary').click();await detail.getByText('Editar playlist',{exact:true}).click();await detail.getByLabel('Nombre de playlist').fill('Para otro momento');await detail.getByRole('button',{name:'Renombrar',exact:true}).click();await detail.getByRole('heading',{name:'Para otro momento',exact:true}).waitFor();await page.reload();await openList('Para otro momento');await back();
    await page.locator('.create-playlist>summary').click();await page.getByLabel('Nueva playlist').fill('Vacía');await page.getByRole('button',{name:'Crear playlist',exact:true}).click();await page.locator('.library-grid button').filter({hasText:'Vacía'}).click();assert.equal(await detail.getByRole('button',{name:'Reproducir playlist'}).isDisabled(),true);await detail.getByText('Esta colección todavía no tiene canciones.',{exact:true}).waitFor();assert.equal(await detail.locator('.collection-header__art img').count(),0);

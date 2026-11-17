@@ -34,7 +34,7 @@
 .pulso-app .library-detail .collection-track-main { display:block;text-align:start;min-inline-size:0;inline-size:100%;padding:0;border:0;background:transparent; }
 .collection-track-main strong,.collection-track-main>span { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .collection-track-main strong { font-size:1rem;font-weight:500;line-height:1.4; }.collection-track-main>span { color:var(--pulso-muted);font-size:.85rem;margin-block-start:.15rem; }
-.collection-track-main[aria-current="true"] strong { color:var(--pulso-accent); }
+.pulso-app .library-detail .collection-track-main[aria-current="true"] strong,.pulso-app .library-detail .collection-track-main>.playback-indicator { color:var(--pulso-accent); }
 .pulso-app .library-detail .track-options { grid-column:1/-1;min-inline-size:0;margin:0; }
 .track-options:not([open]) { block-size:0; }
 .track-options>summary { position:absolute;inset-inline-end:0;inset-block-start:.55rem;display:grid;place-items:center;inline-size:44px;block-size:48px;min-block-size:44px;list-style:none;font-size:1.6rem;color:var(--pulso-muted);cursor:pointer; }
@@ -52,7 +52,7 @@
 
 /* A collection is scrollable content: its cover follows width, not Safari chrome height. */
 .pulso-app .library-detail .tracks>li { border-radius:.6rem; }
-.pulso-app .library-detail .tracks>li:has(.collection-track-main[aria-current="true"]) { background:var(--pulso-soft); }
+
 .pulso-app .library-detail .collection-track-main { min-block-size:48px; }
 .collection-tools>summary,.track-options>summary { touch-action:manipulation;user-select:none;-webkit-user-select:none;border-radius:.5rem; }
 .collection-tools[open]>summary,.track-options[open]>summary { color:var(--pulso-accent); }

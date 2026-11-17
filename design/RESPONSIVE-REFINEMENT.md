@@ -46,3 +46,14 @@ En la integración de 40 grupos, una ejecución terminó 39/40: WebKit agotó 8 
 WebKit Linux, dimensiones móviles y capturas no acreditan Safari físico, teclado de iPhone, barras reales, VoiceOver ni PWA instalada. Queda aceptación del propietario en su iPhone13. La revisión de Cloudflare pudo ver el acceso público; los apartados musicales se probaron con la app local integrada y datos sintéticos, sin entrar a la cuenta real del propietario.
 
 ODD/Engram: lecturas inicial y final oficiales FullContentVerified:true (16 tareas verificadas en la final). Se mantiene el HOLD de escrituras de este hilo; registro privado para coordinación, sin sobrescribir tareas funcionales. No se declara P0-W completo.
+
+## Seguimiento · canción actual y carátula del sistema
+
+| Antes | Después | Motivo |
+| --- | --- | --- |
+| Regla global `aria-current` con outline; fondo de fila y colores poco visibles. | Canción actual con título e indicador en azul de la app, sin borde ni fondo persistente; outline reservado a foco de teclado. | Distinguir reproducción sin encerrar la canción. Se aplica a colecciones locales y álbum del catálogo. |
+| Media Session recibía sólo título y artista. La carátula se cargaba únicamente con el reproductor abierto. | También recibe álbum y carátula de la canción actual; se carga con la reproducción y permanece al plegar el reproductor. | Los controles del sistema requieren `MediaMetadata.artwork`, según [MDN](https://developer.mozilla.org/en-US/docs/Web/API/MediaMetadata/artwork). |
+
+Se reutiliza la misma resolución de portada validada (local/manual primero y proveedor existente como alternativa), sin duplicar solicitudes ni inventar carátulas. El componente mantiene viva la URL mientras se usa, la retira al limpiar/cambiar la imagen y rechaza resultados de una canción o ámbito anterior. Vaciar/liberar Media Session limpia su referencia. No se modifica el motor de audio.
+
+Validación: 20/20 grupos Chromium/WebKit PASS, incluida carátula decodificable, conservación al plegar, reemplazo al cambiar canción, título coloreado y ausencia de outline al tocar. Recibo `.local/interface-browser-validation/2026-11-17T05-43-52-212Z/report.json`; 274 fuentes verificadas, cero errores JS/conexiones externas no previstas y limpieza confirmada. Lint y 9 pruebas del proveedor de carátulas PASS. Los intentos previos del nuevo test detectaron una lectura anterior al commit de selección y una segunda canción inexistente en la playlist de preparación; se corrigió el arnés para esperar selección y abrir la playlist de varias canciones. Safari físico y su pantalla de bloqueo no son reproducibles en esta VM; las comprobaciones locales verifican el contenido de Media Session y el ciclo de vida de la imagen, no la presentación del sistema operativo. Sin publicación Cloudflare en este seguimiento.

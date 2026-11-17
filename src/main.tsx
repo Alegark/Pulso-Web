@@ -646,9 +646,15 @@ function savePosition(){
  void saveLatestQueue();
 }
 let mediaSessionIdentity:string|null=null;
+let mediaSessionArtwork:{trackId:string;image:MediaImage}|null=null;
+function updateMediaSessionArtwork(trackId:string,image:MediaImage|null,previousUrl?:string){
+ if(image){if(!owner||player.current?.trackId!==trackId)return;mediaSessionArtwork={trackId,image};}
+ else if(mediaSessionArtwork?.image.src===previousUrl)mediaSessionArtwork=null;
+ syncMediaSession();
+}
 function syncMediaSession(){
  if(!('mediaSession'in navigator)||!owner)return;
- const metadata=player.current?{title:player.current.title,artist:tracks.find(t=>t.id===player.current?.trackId)?.artist??'Artista desconocido'}:null,key=JSON.stringify(metadata);
+ const metadata=player.current?{title:player.current.title,artist:tracks.find(t=>t.id===player.current?.trackId)?.artist??'Artista desconocido',album:tracks.find(t=>t.id===player.current?.trackId)?.album??'',artwork:mediaSessionArtwork?.trackId===player.current.trackId?[mediaSessionArtwork.image]:[]}:null,key=JSON.stringify(metadata);
  if(key!==mediaSessionIdentity){navigator.mediaSession.metadata=metadata?new MediaMetadata(metadata):null;mediaSessionIdentity=key;}
  const state=player.state==='playing'?'playing':'paused';if(navigator.mediaSession.playbackState!==state)navigator.mediaSession.playbackState=state;
 }
@@ -657,7 +663,7 @@ player.subscribe(change=>{
  if(owner&&!configuring&&!insertionCommitInProgress&&player.current&&(player.state!=='playing'||Date.now()-lastSave>2000)){lastSave=Date.now();savePosition();}
  if(change==='state')emit();
 });
-function clearMediaSession(){mediaSessionIdentity=null;if('mediaSession'in navigator){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState='none';for(const action of ['play','pause','nexttrack','previoustrack','seekto']as const)try{navigator.mediaSession.setActionHandler(action,null);}catch{/* optional */}}}
+function clearMediaSession(){mediaSessionIdentity=null;mediaSessionArtwork=null;if('mediaSession'in navigator){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState='none';for(const action of ['play','pause','nexttrack','previoustrack','seekto']as const)try{navigator.mediaSession.setActionHandler(action,null);}catch{/* optional */}}}
 function installMediaSession(){if(!('mediaSession'in navigator))return;const scope=scopeId;
  for(const [action,handler]of Object.entries({play:()=>void player.play(),pause:()=>player.pause(),nexttrack:()=>player.next(),previoustrack:()=>player.previous(),seekto:(d:MediaSessionActionDetails)=>{if(d.seekTime!==undefined)player.seek(d.seekTime);}}))try{navigator.mediaSession.setActionHandler(action as MediaSessionAction,(d)=>{if(scope===scopeId&&control.owner&&!busy&&(action==='pause'||!collectionBlocked())){cancelSelectedSongIntent();handler(d);}});}catch{/* optional */}
 }
@@ -1119,7 +1125,7 @@ function App(){
  <PlaybackProgress subscribe={player.subscribe} enabled={playerOpen}>{()=> <PlayerSurface open={playerOpen} onClose={closePlayer}>
   <NowPlayingView open={playerOpen} headingRef={playerHeading} title={player.current?.title??'Sin selección'}
    artist={playerDisplayArtist??'Artista desconocido'} album={currentTrack?.album}
-   artwork={currentTrack?<PlayerArtwork activity={control.activity} trackId={currentTrack.id} title={currentTrack.title} artist={playerDisplayArtist} album={currentTrack.album} durationSeconds={currentTrack.duration} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} enabled={playerOpen} current={playerLifetime} refreshToken={artworkRefreshToken}/>:<div className="artwork-placeholder" aria-hidden="true">♪</div>}
+   artwork={currentTrack?<PlayerArtwork activity={control.activity} trackId={currentTrack.id} title={currentTrack.title} artist={playerDisplayArtist} album={currentTrack.album} durationSeconds={currentTrack.duration} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} enabled={owner} current={()=>owner&&playerReadScope()&&player.current?.trackId===currentTrack.id} onArtwork={(image,previousUrl)=>updateMediaSessionArtwork(currentTrack.id,image,previousUrl)} refreshToken={artworkRefreshToken}/>:<div className="artwork-placeholder" aria-hidden="true">♪</div>}
    lyricsPreview={<PlayerLyricsPreview result={playerLyrics.result} timeSeconds={audio.currentTime} loading={playerLyrics.loading} canSeek={owner&&!busy&&!collectionBlocked()&&duration>0} durationSeconds={duration} onSeek={seconds=>{if(playerLifetime()&&playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();void player.play(seconds);}}}/>}
    lyrics={<><PlayerLyricsReader result={playerLyrics.result} loading={playerLyrics.loading} error={playerLyrics.error} timeSeconds={audio.currentTime} canSeek={owner&&!busy&&!collectionBlocked()&&duration>0} durationSeconds={duration} onRetry={playerLyrics.reload} onSeek={seconds=>{if(playerLifetime()&&playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();void player.play(seconds);}}}/>
     {player.current&&<details className="player-lyrics-options"><summary>Opciones de letras</summary><LyricsPanel activity={control.activity} key={`lyrics:${control.proof}:${player.current.trackId}`} trackId={player.current.trackId} title={player.current.title} timeSeconds={audio.currentTime} canEdit={canOrganize} captureWriteCurrent={captureLyricsWriteCurrent} onStatus={text=>{status=text;emit();if(text==='Letras guardadas.'||text==='Elección «Sin letras» guardada por ti.'||text==='Elección «Sin letras» guardada.')playerLyrics.reload();}}/></details>}
