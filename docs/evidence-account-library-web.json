@@ -1,0 +1,201 @@
+{
+  "date": "2026-11-17",
+  "status": "LOCAL_PASS; CLOUDFLARE_PUBLICATION_PARTIAL — exact candidate site is not live",
+  "scope": "Account library metadata only; no audio, Telegram credentials or private chat in Neon",
+  "validation": {
+    "candidateUnits": {
+      "pass": 785,
+      "fail": 0
+    },
+    "server": {
+      "pass": 32,
+      "fail": 0
+    },
+    "focused": {
+      "pass": 13,
+      "fail": 0
+    },
+    "lint": "PASS",
+    "build": "PASS",
+    "workerDryRun": "PASS",
+    "nativeMetadata": {
+      "path": ".local/test-evidence/account-library-h0dA5h/report.json",
+      "status": "PASS",
+      "cases": 10,
+      "bytes": 1640,
+      "sha256": "831e34265e8ccc29dce1ea888439da531e050c29d2b254790fed63366fe775d6",
+      "cleanup": {
+        "removed": true,
+        "freeBefore": 4645650432,
+        "freeAfter": 4645617664
+      },
+      "workspaceCleanup": null,
+      "errors": 0,
+      "external": 0
+    },
+    "mainTwoDevices": {
+      "path": ".local/test-evidence/account-library-main-f0AFV4/report.json",
+      "status": "PASS",
+      "cases": 6,
+      "bytes": 1284,
+      "sha256": "191af3ed499ba35d0101eb4f97e75ce20ce1514093972106752178dec29db0a1",
+      "cleanup": {
+        "removed": true,
+        "freeBefore": 4723490816,
+        "freeAfter": 4722307072
+      },
+      "workspaceCleanup": null,
+      "errors": 0,
+      "external": 0
+    },
+    "regression": {
+      "path": ".local/test-evidence/interface-main-o7KFjO/report.json",
+      "status": "PASS",
+      "cases": 42,
+      "bytes": 17218,
+      "sha256": "03f0c924bfaf96cca80bf9a0d168ac5d61b4f192b66ff27f5e19cd52426bc38e",
+      "cleanup": true,
+      "workspaceCleanup": {
+        "removed": true,
+        "freeBefore": 4746293248,
+        "freeAfter": 4730662912
+      },
+      "errors": 0,
+      "external": 0
+    }
+  },
+  "backend": {
+    "tables": [
+      "pulso_account_preferences",
+      "pulso_account_library"
+    ],
+    "rowLevelSecurity": "forced; verified JWT subject via closed security-definer UID wrapper",
+    "anonymousRole": "no table privileges",
+    "noJwtSqlProbe": {
+      "subject": null,
+      "visibleRows": 0,
+      "canDelete": false
+    },
+    "realAuthenticatedDataApi": "not tested",
+    "schemaCacheRefreshed": true
+  },
+  "candidate": {
+    "entry": "/releases/be63dffc6815eb76.html",
+    "ownedFiles": 31,
+    "workerBytes": 318422,
+    "workerSHA256": "e73c6acf441d48a39dc92ed76153d49281a39f404e2cebf1cf0fac5e8121ca6f",
+    "manifestFiles": 183
+  },
+  "limits": [
+    "Native and main tests use TESTONLY accounts and API fixtures, not real Neon users",
+    "No actual Telegram redownload after cloud restoration or new real session accessed",
+    "No iPhone physical acceptance or OS background guarantee",
+    "Artists and albums are derived from saved song metadata; this does not introduce artist following",
+    "Audio remains local to each browser or installed PWA; downloads are explicit",
+    "Physical cleanup is not triggered by cloud sync; explicit local storage actions keep their protections"
+  ],
+  "negativesPreserved": [
+    "Initial fixture API interception bypass and Vite watcher ENOSPC; repeated 39MB log compacted to digest/cause",
+    "New-device missing IndexedDB creation fixed in prepareAccountLibrary",
+    "Wrong TESTONLY account ID fixed in main harness",
+    "Download action initially nested in collapsed options; moved to visible collection controls",
+    "General search fixture awaited album while artist request still pending; now waits for full mixed results before navigation, with same assertions"
+  ],
+  "cleanup": {
+    "nativeAndMainTemporaryWorkspaces": "removed in finally for PASS and FAIL",
+    "earlierOwnExportRemovedBytes": 120063104,
+    "earlierCleanupFreeBefore": 4607328256,
+    "earlierCleanupFreeAfter": 4736229376,
+    "retained": "three earlier native reports and digests; actual user library/session untouched",
+    "deliveryCandidate": "temporarily retained because publication uses it; remove after delivery"
+  },
+  "memory": "sync retry and independent readonly17/17 full content/bytes/SHA PASS; initial initialize timeout preserved",
+  "publication": {
+    "date": "2026-11-17",
+    "status": "PARTIAL: verified Worker module active; candidate static assets not published",
+    "provider": "Official Cloudflare MCP OAuth; temporary asset-session JWT used only in memory for upload",
+    "plan": "Workers Free / USD 0",
+    "worker": {
+      "name": "pulso-web",
+      "origin": "https://pulso-web.pruebassoftware.workers.dev",
+      "bytes": 318422,
+      "sha256": "e73c6acf441d48a39dc92ed76153d49281a39f404e2cebf1cf0fac5e8121ca6f",
+      "activeVersion": "d295a485-1f59-446f-94dc-4baf209bb758",
+      "deploymentId": "07fe1f7b-24d1-4cc2-964d-41bdf0a72378",
+      "mcpReadbackExact": true,
+      "compatibilityDate": "2026-11-13",
+      "usageModel": "standard",
+      "workersDev": true,
+      "previewsEnabled": false,
+      "bindingsPreserved": [
+        "ASSETS:assets",
+        "CATALOG:durable_object_namespace/CatalogCoordinator",
+        "PULSO_AUTH_COOKIE_SECRET:secret_text",
+        "PULSO_AUTH_GOOGLE_ENABLED:secret_text",
+        "PULSO_NEON_AUTH_URL:secret_text",
+        "PULSO_NEON_DATA_API_URL:secret_text",
+        "TELEGRAM_API_IDENTITY:secret_text"
+      ],
+      "secretValuesRead": false,
+      "secretValuesRotated": false,
+      "durableObjectMigration": false
+    },
+    "assetPublication": {
+      "authoritativeSource": "Frozen candidate .local/cloudflare-setup/site and site-manifest.json",
+      "manifestFiles": 183,
+      "manifestBytes": 43504563,
+      "excluded": [
+        ".assetsignore",
+        "_headers"
+      ],
+      "dynamicRoute": "/account-config.json: HTTP 200, enabled=true, google=true; not a static hash route",
+      "attempt1": "Initial upload used the base workspace 155-file site by path mistake; a Worker PUT succeeded with that older asset set. This was detected by HTTP readback and is not represented as the candidate site.",
+      "attempt2": {
+        "preflight": "fresh; exact seven bindings; active version preserved",
+        "assetBuckets": 3,
+        "requestedFiles": 27,
+        "firstBucketHttpStatus": 500,
+        "workerPutAfterFailure": false
+      },
+      "attempt3": {
+        "preflight": "fresh after attempt2; exact seven bindings; active version preserved",
+        "assetBuckets": 3,
+        "requestedFiles": 27,
+        "firstBucketHttpStatus": 500,
+        "workerPutAfterFailure": false
+      },
+      "cause": "Not inferred; uploads stopped after the single bounded retry",
+      "httpReadback": {
+        "candidateStaticRoutesChecked": 180,
+        "mismatches": 40,
+        "notFound404": 31,
+        "differentBytesOrSha": 9,
+        "rootLatestSwEntryConsistent": false,
+        "apiAccountLibraryAnonymous": 401,
+        "apiAccountLibraryCrossOriginPut": 403,
+        "apiAccountProfileAnonymous": 401
+      }
+    },
+    "cleanup": {
+      "destination": ".local/tmp/account-library-delivery-475T3C",
+      "removed": true,
+      "regularBytes": 77271708,
+      "freeDelta": 82718720,
+      "receipt": ".local/test-evidence/account-library-delivery-475T3C/evidence/cleanup.json"
+    },
+    "receipts": [
+      ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/deployment-attempt-1.json",
+      ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/deployment-attempt-2.json",
+      ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/deployment-attempt-3.json",
+      ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/mcp-readback.json",
+      ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/https-readback.json"
+    ],
+    "limits": [
+      "No JWT-authenticated library read/write acceptance",
+      "No real account or Telegram session accessed",
+      "No Neon writes during publication",
+      "No iPhone or installed-PWA acceptance",
+      "P0-W remains incomplete"
+    ]
+  }
+}

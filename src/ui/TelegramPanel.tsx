@@ -1,3 +1,4 @@
+import {LibraryDownloadController} from './LibraryDownloadController';
 import {formatStorageMB} from '../library/storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {registerUpdateBlocker} from '../service-worker/update-blockers';
@@ -90,6 +91,7 @@ export function TelegramPanel({accountId,activity,canConnect,scopeKey,captureCur
  {preference.notice&&<p role="status">{preference.notice}</p>}
  {state.error&&<p role="alert">{sessionErrorText[state.error]}{retrying?` Podrás volver a intentarlo en ${Math.ceil((state.retryAt!-now)/1000)} segundos.`:''}</p>}
  {!['disconnected','error'].includes(state.phase)&&<><button onClick={()=>{resumeTried.current=actionClient;if(!localStop?.())return;setCountry('');setPhone('');setCode('');setPassword('');}}>Detener conexión local</button><p>Detener esta pestaña conserva la sesión guardada. Para eliminarla, usa «Cerrar sesión en Telegram» o «Eliminar sesión guardada».</p></>}
+ <LibraryDownloadController tracks={localTracks} client={client.current} bots={bots} connected={state.phase==='connected'} capture={captureSongDownload} capturePlay={captureSongPlayback}/>
  {searchTarget&&createPortal(<MusicSearchController key={scopeKey} visible={searchVisible} scopeKey={scopeKey} client={client.current} phase={state.phase} bots={bots} searchState={searchState} canConnect={canConnect} tracks={localTracks} libraryTrackIds={libraryTrackIds} playlists={songPlaylists} playerTrackId={playerTrackId} playerPlaying={playerPlaying} captureSongManagement={captureSongManagement} captureDownloadSave={captureDownloadSave} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureSongCopyInspection={captureSongCopyInspection}/>,searchTarget)}
  </section>;
 }
