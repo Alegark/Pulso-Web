@@ -1,6 +1,6 @@
 {
   "date": "2026-11-17",
-  "status": "LOCAL_PASS; CLOUDFLARE_PUBLICATION_PARTIAL — exact candidate site is not live",
+  "status": "LOCAL_PASS; CLOUDFLARE_PUBLICATION_PASS; AUTHENTICATED_ACCEPTANCE_PENDING",
   "scope": "Account library metadata only; no audio, Telegram credentials or private chat in Neon",
   "validation": {
     "candidateUnits": {
@@ -112,7 +112,7 @@
   "memory": "sync retry and independent readonly17/17 full content/bytes/SHA PASS; initial initialize timeout preserved",
   "publication": {
     "date": "2026-11-17",
-    "status": "PARTIAL: verified Worker module active; candidate static assets not published",
+    "status": "PASS: exact frozen candidate site deployed and independently read back",
     "provider": "Official Cloudflare MCP OAuth; temporary asset-session JWT used only in memory for upload",
     "plan": "Workers Free / USD 0",
     "worker": {
@@ -120,8 +120,8 @@
       "origin": "https://pulso-web.pruebassoftware.workers.dev",
       "bytes": 318422,
       "sha256": "e73c6acf441d48a39dc92ed76153d49281a39f404e2cebf1cf0fac5e8121ca6f",
-      "activeVersion": "d295a485-1f59-446f-94dc-4baf209bb758",
-      "deploymentId": "07fe1f7b-24d1-4cc2-964d-41bdf0a72378",
+      "activeVersion": "5d598c13-aa22-40f7-bece-7537080fddbd",
+      "deploymentId": "5d598c13aa2240f7bece7537080fddbd",
       "mcpReadbackExact": true,
       "compatibilityDate": "2026-11-13",
       "usageModel": "standard",
@@ -138,34 +138,36 @@
       ],
       "secretValuesRead": false,
       "secretValuesRotated": false,
-      "durableObjectMigration": false
+      "durableObjectMigration": false,
+      "deploymentPercentage": 100
     },
     "assetPublication": {
-      "authoritativeSource": "Frozen candidate .local/cloudflare-setup/site and site-manifest.json",
-      "manifestFiles": 183,
-      "manifestBytes": 43504563,
+      "authoritativeSource": ".local/tmp/account-library-upload-repair-kHtygr/candidate/.local/cloudflare-setup/site and site-manifest.json",
+      "manifestFiles": 169,
+      "assetsUploadedByHash": 13,
+      "staticRoutesVerified": 166,
+      "readbackResponseBytes": 38732108,
       "excluded": [
         ".assetsignore",
         "_headers"
       ],
+      "entry": "/releases/be63dffc6815eb76.html",
       "dynamicRoute": "/account-config.json: HTTP 200, enabled=true, google=true; not a static hash route",
-      "attempt1": "Initial upload used the base workspace 155-file site by path mistake; a Worker PUT succeeded with that older asset set. This was detected by HTTP readback and is not represented as the candidate site.",
-      "attempt2": {
-        "preflight": "fresh; exact seven bindings; active version preserved",
-        "assetBuckets": 3,
-        "requestedFiles": 27,
-        "firstBucketHttpStatus": 500,
-        "workerPutAfterFailure": false
-      },
-      "attempt3": {
-        "preflight": "fresh after attempt2; exact seven bindings; active version preserved",
-        "assetBuckets": 3,
-        "requestedFiles": 27,
-        "firstBucketHttpStatus": 500,
-        "workerPutAfterFailure": false
-      },
-      "cause": "Not inferred; uploads stopped after the single bounded retry",
-      "httpReadback": {
+      "encodingFix": "Uploader now sends bytes.toString(base64) as multipart content because the official workers/assets/upload contract requires base64=true.",
+      "httpsReadback": "PASS: all 166 expected static routes, root, latest.json, service worker and entry match bytes/SHA-256",
+      "apiReadback": {
+        "accountLibraryAnonymous": 401,
+        "accountLibraryCrossOriginPut": 403,
+        "accountProfileAnonymous": 401
+      }
+    },
+    "history": {
+      "previousIncorrectBase": "First Worker PUT used the base workspace site with 155 files; this was detected in the prior HTTPS readback and is retained as a historical negative.",
+      "previousCandidateManifestFiles": 183,
+      "intermediateVersions": "Excluded from the authoritative repaired manifest because they were never published.",
+      "previousHttp500Attempts": 2,
+      "cause": "Raw bytes were sent while base64=true was specified; the corrected uploader conforms to the documented format. This does not establish the format mismatch as the sole cause of every prior HTTP 500.",
+      "previousHttpsReadback": {
         "candidateStaticRoutesChecked": 180,
         "mismatches": 40,
         "notFound404": 31,
@@ -174,21 +176,33 @@
         "apiAccountLibraryAnonymous": 401,
         "apiAccountLibraryCrossOriginPut": 403,
         "apiAccountProfileAnonymous": 401
-      }
+      },
+      "previousReceipts": [
+        ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/deployment-attempt-1.json",
+        ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/deployment-attempt-2.json",
+        ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/deployment-attempt-3.json",
+        ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/mcp-readback.json",
+        ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/https-readback.json"
+      ]
     },
     "cleanup": {
-      "destination": ".local/tmp/account-library-delivery-475T3C",
-      "removed": true,
-      "regularBytes": 77271708,
-      "freeDelta": 82718720,
-      "receipt": ".local/test-evidence/account-library-delivery-475T3C/evidence/cleanup.json"
+      "destination": ".local/tmp/account-library-upload-repair-kHtygr",
+      "status": "PASS: removed after deployment and MCP/HTTPS readbacks",
+      "regularBytesRemoved": 112584314,
+      "symlinksRemovedWithoutFollowing": 9,
+      "crossDeviceEntries": 0,
+      "activeProcessReferencesBeforeCleanup": 0,
+      "freeBefore": 4668690432,
+      "freeAfter": 4791324672,
+      "freeDelta": 122634240,
+      "receipt": ".local/test-evidence/account-library-upload-repair-kHtygr/evidence/cleanup.json"
     },
     "receipts": [
-      ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/deployment-attempt-1.json",
-      ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/deployment-attempt-2.json",
-      ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/deployment-attempt-3.json",
-      ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/mcp-readback.json",
-      ".local/test-evidence/account-library-delivery-475T3C/evidence/publication/https-readback.json"
+      ".local/test-evidence/account-library-upload-repair-kHtygr/verified-ready.json",
+      ".local/test-evidence/account-library-upload-repair-kHtygr/multipart-verified.json",
+      ".local/test-evidence/account-library-upload-repair-kHtygr/publication/deployment-repaired.json",
+      ".local/test-evidence/account-library-upload-repair-kHtygr/publication/mcp-readback.json",
+      ".local/test-evidence/account-library-upload-repair-kHtygr/publication/https-readback.json"
     ],
     "limits": [
       "No JWT-authenticated library read/write acceptance",
