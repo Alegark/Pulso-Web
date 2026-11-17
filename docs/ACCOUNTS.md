@@ -1,6 +1,6 @@
 # Cuentas de Pulso
 
-Estado: Neon MCP conectado y proyecto gratuito de Pulso creado con Managed Better Auth. Google propio configurado y enlace de autorización comprobado con permisos básicos; faltan consentimiento y sesión reales. Gmail SMTP propio configurado: una prueba real desde Neon pasó y el propietario confirmó llegada a Recibidos. La aplicación aún no tiene cuentas activadas en Cloudflare. Los formularios prediseñados se verifican localmente con API TESTONLY; no equivale a registro real publicado.
+Estado (2026-11-17): prueba pública de cuentas habilitada en Cloudflare Workers Free, USD 0, con Managed Better Auth de Neon. Correo/contraseña, verificación OTP por correo y Google están disponibles para que el propietario pruebe. `/account-config.json` anuncia `enabled:true` y `google:true`; sesión anónima devuelve 200, nula y `no-store`. El probe Google genera el enlace y redirige a Google con callback configurado y sólo `email`, `profile` y `openid`; no se abrió Google ni se otorgó consentimiento. Aceptación de acceso real, registro/OTP, recuperación y restauración/cierre sigue PENDIENTE. Esto no es aceptación de producción ni prueba de login exitoso.
 
 El propietario eligió correo y contraseña más Google, con Neon como base. El acceso de Pulso es opcional y distinto de la conexión personal de Telegram. Este incremento no sincroniza la biblioteca, favoritos, playlists, historial ni archivos entre dispositivos; tampoco mueve la autorización Telegram a un servidor. Iniciar o cerrar una cuenta de Pulso no borra ni cambia los archivos y la organización locales del navegador.
 
@@ -28,7 +28,7 @@ Estas variables no se incluyen en archivos públicos, Git, diagnósticos, regist
 2. Completado: Managed Better Auth en la base Pulso, nombre Pulso, origen HTTPS publicado permitido, localhost deshabilitado, correo/contraseña con verificación OTP obligatoria y revocación de sesiones al restablecer contraseña. El SMTP inicialmente compartido se sustituyó el 2026-11-17 por Gmail propio; prueba real y llegada a Recibidos confirmadas. Google compartido de desarrollo fue retirado y reemplazado por el cliente propio del punto 4. Un GET anónimo a Neon a través del router oficial devolvió 200, sesión nula y no-store; esa comprobación no creó usuarios ni envió correos.
 3. Completado por el propietario: cliente web OAuth propio en Google Auth Platform, con origen de Pulso y callback obtenido del Auth Base URL real de Neon. Usar alcances mínimos de identidad, sin solicitar acceso a Gmail, Drive ni otras APIs. La verificación visual de la marca en Google se distingue de la configuración técnica del cliente.
 4. Completado el 2026-11-17: Client ID y secret propios configurados en Neon mediante MCP oficial. Lectura independiente confirmó proveedor estándar y cliente coincidente; no se usaron las credenciales compartidas de desarrollo. La generación real del enlace, mediante el toolkit de Pulso y la iniciación de Neon, devolvió redirección a Google con callback exacto y sólo `email`, `profile` y `openid`. No se abrió Google ni se otorgó consentimiento: el secreto no queda validado por un intercambio de código hasta completar un acceso real.
-5. Configurar los secretos del Worker, verificar sesión persistente, registro/verificación, recuperación, Google y cierre de sesión con cuentas de prueba autorizadas. Publicar por el MCP oficial de Cloudflare y actualizar la PR mediante el agente económico, según la autorización permanente del propietario.
+5. Completado para habilitar la prueba pública: los tres secretos de cuenta se configuraron atómicamente mediante el MCP oficial Cloudflare; `TELEGRAM_API_IDENTITY` se preservó. La prueba HTTP verificó sesión anónima y enlace Google hasta su redirección 302, sin abrir Google.
 
 ## Interfaz y límites
 
@@ -44,9 +44,9 @@ La selección nativa final de cuentas pasó 18/18 casos en Chromium154 y WebKit2
 
 Los fallos previos quedan en `.local/pulso-auth-ui/`: peer-deps incompatibles corregidos sin forzar npm, textos de selectores antiguos, error de formulario ocultado tras limpiar la contraseña (corregido), y una ejecución con las 18 acciones pasando pero un error WebKit durante una navegación. La ejecución final de cuentas pasó sin errores JS ni peticiones externas observadas y con limpieza completa. Un selector de reenvío distinguía erróneamente mayúsculas y se corrigió conservando el recibo negativo.
 
-Los datos de cuenta y tokens de las fixtures son inventados. No se probó entrega SMTP, Google real, registro real de Neon ni restauración de autorización real en Android/iPhone. No se añadió sincronización de bibliotecas, historial remoto ni separación musical por cuenta Pulso. El backend público continúa deshabilitado hasta configurar y aceptar las dependencias de producción.
+Los datos de cuenta y tokens de las fixtures son inventados. La prueba pública no creó usuarios ni envió correos. Aún no se han aceptado acceso real, Google con consentimiento, registro/OTP, recuperación, cierre/restauración de sesión ni dispositivos físicos. No se añadió sincronización de bibliotecas, historial remoto ni separación musical por cuenta Pulso.
 
-La revisión visual y sus límites están en [design/ACCOUNTS.md](../design/ACCOUNTS.md). La preparación está en Git para revisión; no equivale a cuentas habilitadas en el despliegue público.
+La revisión visual y sus límites están en [design/ACCOUNTS.md](../design/ACCOUNTS.md). La habilitación pública de prueba está documentada en [evidence-accounts-activation-web.json](evidence-accounts-activation-web.json); no equivale a cuentas reales aceptadas.
 
 ## Configuración de Google · 2026-11-17
 
@@ -54,7 +54,7 @@ El propietario entregó su cliente web por archivo privado. Sus valores se envia
 
 La comprobación real acotada sólo inició OAuth hasta obtener la redirección a Google, sin seguirla, crear usuarios, enviar correos ni iniciar sesión. La primera aserción del probe suponía erróneamente una URL directa de Google: Neon devuelve antes su ruta de iniciación. Se conservó ese resultado y se comprobó después su redirección 302. No es un fallo demostrado del producto ni una aceptación de login. Evidencia privada saneada: `.local/pulso-accounts/neon/google-verified.json` y `google-authorization-probe.json`.
 
-Cloudflare continúa con cuentas deshabilitadas. Siguen pendientes la aceptación real de Google/cookies/restauración/cierre y las pruebas con dispositivos físicos. El correo se comprobó después, como se indica a continuación. No se ejecutaron otra vez las suites de código por este cambio exclusivamente de configuración y documentación.
+En ese momento Cloudflare seguía con cuentas deshabilitadas. La activación posterior y su evidencia se registran al final de este documento. Siguen pendientes la aceptación real de Google/cookies/restauración/cierre y las pruebas con dispositivos físicos. El correo se comprobó después, como se indica a continuación.
 
 ## Gmail propio y entrega comprobada · 2026-11-17
 
@@ -62,4 +62,12 @@ El propietario eligió su Gmail como remitente y entregó una contraseña de apl
 
 Una conexión directa de esta máquina a SMTP fue rechazada antes de autenticar; ese resultado no demostraba fallo de la contraseña ni del servicio desde Neon. Después de la autorización explícita del propietario, se envió exactamente un correo de prueba mediante el proveedor guardado de Neon. La API devolvió éxito y el propietario confirmó que llegó a Recibidos. No se creó ningún usuario ni se enviaron mensajes a terceros. Evidencia privada saneada: `.local/pulso-accounts/neon/smtp-verified.json` y `gmail-test-email.json`; negativo de conexión separado en `gmail-auth-only.json`.
 
-La prueba acredita esa entrega concreta; no acredita todavía registro/OTP/recuperación con un usuario real, límites sostenidos de envío o llegada a cualquier destinatario. El remitente utiliza el buzón elegido por el propietario; no se contrató dominio ni servicio de pago. Cuentas públicas todavía deshabilitadas y login Google real pendiente. No cambios runtime ni repetición de suites por esta configuración.
+La prueba acredita esa entrega concreta; no acredita todavía registro/OTP/recuperación con un usuario real, límites sostenidos de envío o llegada a cualquier destinatario. El remitente utiliza el buzón elegido por el propietario; no se contrató dominio ni servicio de pago. Login Google real sigue pendiente. No se repitieron suites de código por esa configuración.
+
+## Activación de prueba pública · 2026-11-17
+
+Se habilitaron formularios de correo/contraseña y Google en el Worker `pulso-web`, mediante el endpoint bulk de secretos del MCP oficial Cloudflare. La escritura cambió atómicamente sólo `PULSO_NEON_AUTH_URL`, `PULSO_AUTH_COOKIE_SECRET` (aleatorio, generado en memoria) y `PULSO_AUTH_GOOGLE_ENABLED`; `TELEGRAM_API_IDENTITY` se preservó. El readback confirma los tres nombres nuevos, los seis bindings esperados, Workers.dev activo y previews apagadas. La versión publicada al 100% tiene el mismo módulo por longitud y SHA-256 antes/después; no se hizo build, upload de assets, migración ni cambio de código.
+
+Prueba HTTP pública: `/account-config.json` devuelve 200/no-store con `enabled:true, google:true`; `get-session` anónimo devuelve 200/no-store y sesión nula sin cookies; POST `sign-in/social` de mismo origen devuelve 200 y el enlace Neon inicia Google con 302, cliente presente, callback del host Auth configurado y scopes únicamente `email`, `openid`, `profile`. No se visitó Google, guardó state/cookies/tokens, otorgó consentimiento, creó usuario ni envió correo. Los 136 recursos estáticos conservan bytes/SHA; raíz, latest, release y Service Worker conservan sus hashes previos. Evidencia pública saneada: [evidence-accounts-activation-web.json](evidence-accounts-activation-web.json).
+
+Esto habilita una prueba del propietario; no declara producción aceptada ni login Google exitoso. Pendientes: consentimiento y acceso Google reales, registro con correo/OTP, recuperación, sesión persistente y cierre/restauración. No se comprobaron cuentas reales ni dispositivos físicos. El cambio fue sólo de configuración y documentación; no se ejecutaron suites de código.

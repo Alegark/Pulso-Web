@@ -1,6 +1,6 @@
 # T21 · Registro y cuentas de Pulso
 
-Estado: EN CURSO. Autorización del propietario: agregar cuentas e inicio de sesión con correo/contraseña y Google, usando Neon; tiene cuenta pero aún no proyecto. Presupuesto USD 0, sin pagos. Cuenta de Pulso independiente de Telegram. Las canciones y la organización permanecen locales; no se añade sincronización ni historial remoto por inferencia.
+Estado: PRUEBA PÚBLICA HABILITADA; ACEPTACIÓN REAL PENDIENTE. El propietario autorizó correo/contraseña y Google con Neon, USD 0. La configuración de Cloudflare anuncia ambos métodos y la prueba técnica de inicio OAuth termina en una redirección 302 a Google, sin visitarlo. Pendientes: consentimiento y acceso real Google, registro/OTP, recuperación y sesión/cierre/restauración aceptados por el propietario. Cuenta de Pulso independiente de Telegram. Canciones y organización permanecen locales; sin sincronización ni historial remoto.
 
 ## Implementación candidata
 
@@ -18,7 +18,7 @@ Recibos privados en `.local/pulso-accounts/`. Hasta el primer ciclo: 734/734 uni
 
 El acceso de Neon no está conectado en las herramientas disponibles. La búsqueda de plugins encontró la integración oficial de Neon no instalada y se sugirió al propietario. Hay una solicitud segura de clave API alternativa pendiente, sin clave recibida. No se creó proyecto, usuario real ni cliente Google. La identidad y la configuración deben verificarse con el acceso que autorice el propietario antes de activar el producto.
 
-Pendientes: cerrar pruebas nativas combinadas y documentar límites, conectar Neon gratuito, crear/configurar proyecto/Auth, cliente Google propio, verificación/recovery con entrega de correo autorizada, prueba real de sesión y publicación/Git por agente económico. No simular esos pasos ni habilitar el botón Google con credenciales compartidas de desarrollo. iPhone/P0 global siguen pendientes.
+Pendientes históricos de preparación se cerraron al conectar Neon gratuito, configurar Auth/Google propio y comprobar SMTP. La prueba pública se habilitó luego mediante MCP oficial Cloudflare. No se usaron credenciales Google compartidas. Quedan pendientes el consentimiento/login real Google, registro con OTP, recuperación, sesión persistente y cierre/restauración; también iPhone/P0 global.
 
 Documentación: `docs/ACCOUNTS.md`. Engram exclusivo Pulso-Web: lectura inicial de 15 documentos verificada contra bytes/SHA actuales; esta nueva tarea aumenta el conjunto a 16 y requiere sync seguido de lectura independiente antes del cierre.
 
@@ -61,4 +61,12 @@ Propietario eligió Gmail como remitente y entregó una contraseña de aplicaci�
 
 La conexión SMTP directa de esta máquina fue rechazada antes de autenticar; no permite atribuir un fallo a la credencial o a Neon. Con autorización explícita posterior se envió exactamente una prueba al propio Gmail mediante la configuración guardada de Neon: success true y llegada a Recibidos confirmada por el propietario. No usuarios creados ni mensajes a terceros. Recibos privados saneados: `.local/pulso-accounts/neon/smtp-verified.json`, `gmail-test-email.json` y negativo `gmail-auth-only.json`.
 
-Entrega individual confirmada no equivale a registro/OTP/recuperación reales, acceso Google o cookies/restauración aceptados, límites sostenidos ni dispositivos físicos. No dominio comprado, pagos, cambios runtime o publicación. Cloudflare continúa con cuentas deshabilitadas. Próximo paso: aceptación real de cuentas y activación/publicación aplicable, preservando Telegram y música. Actualización documental a la PR existente por agente económico; los cambios musicales ajenos quedan excluidos. Sync y nueva lectura independiente obligatorios después de este apéndice.
+Entrega individual confirmada no equivale a registro/OTP/recuperación reales, acceso Google o cookies/restauración aceptados, límites sostenidos ni dispositivos físicos. No dominio comprado ni pagos. La actualización posterior habilita la prueba pública, pero no cambia estos límites.
+
+## Activación de prueba pública · 2026-11-17
+
+Mediante una escritura bulk del MCP oficial Cloudflare se agregaron los tres secretos de Neon/cuentas autorizados; el secreto Telegram preexistente quedó intacto. Preflight inmediatamente anterior confirmó versión, módulo, compatibilidad, bindings, subdomain y lista de secretos. Readback posterior: 100% de tráfico en una nueva versión, mismo módulo por SHA/bytes, bindings ASSETS/CATALOG/TELEGRAM y los tres secretos nuevos; workers.dev habilitado, previews apagadas.
+
+Evidencia HTTP: configuración pública 200/no-store con cuentas y Google habilitados; sesión anónima 200/null/no-store y sin `Set-Cookie`; formulario Google mismo origen produce enlace Neon y una continuación de esa URL exacta devuelve 302 a `accounts.google.com`, con cliente presente, callback al host Auth esperado y scopes `email`, `openid`, `profile`. No se visitó Google, no se guardó state/cookie/token, no hubo consentimiento, usuario ni correo. Los 136 recursos públicos conservan bytes/SHA; raíz/latest/release/SW igual que antes. Fuente sin cambios; no build/redeploy de código ni assets. Detalle saneado: `docs/evidence-accounts-activation-web.json`.
+
+Resultado: botón **Iniciar sesión** listo para la prueba pública. Esta activación no equivale a producción aceptada, login Google exitoso, registro/OTP/recovery real ni aceptación de sesión/cierre/restauración. No se tocaron datos/usuarios/cuentas Telegram ni música. Próximo paso: que el propietario otorgue consentimiento Google y pruebe los recorridos reales; aceptación física y P0-W permanecen pendientes.
