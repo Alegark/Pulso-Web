@@ -1,6 +1,6 @@
 # T23 · Exportar listados públicos de playlists Spotify
 
-Fecha: 2026-11-17. Estado: revisión root aprobada y publicación efectuada; cierre funcional bloqueado por fetch de Spotify desde Cloudflare (502/network). Git/PR en cierre. No cierra P0-W ni aceptación física.
+Fecha: 2026-11-17. Estado: revisión root aprobada y publicación efectuada; cierre funcional bloqueado por fetch de Spotify desde Cloudflare (502/network). Git entregado en rama `feat/spotify-playlist-export` y PR #3. No cierra P0-W ni aceptación física.
 
 ## Objetivo y autorización
 
@@ -49,3 +49,5 @@ Freeze y publicación por MCP oficial Cloudflare directo: catálogo unión de 19
 Versión final 40 `9d8c0310-aed0-4b4a-b3b6-6738d37bcd60`, deployment `a5ffe3f6-35e8-46ee-a0e4-8791d6479615` al 100%. Worker exacto 322535 bytes/SHA `21e6da9d5cd7db6642a227f10cc87bfae94eba0b18d7de9c4c54f181d368624a` por readback MCP. HTTPS estático 192/192 rutas PASS (excluidos .assetsignore/_headers/account-config dinámica); root/latest/entry/SW GET+HEAD alineados, CSP presente, cuentas enabled/google true, perfil/biblioteca anónimos401. Endpoint Spotify público502/network, por lo que CSV/TXT públicos no verificados y entrega funcional NO completa. No se añaden proxies, cookies, login Spotify ni endpoints privados para sortear esta limitación.
 
 Evidencia mínima: `.local/test-evidence/spotify-delivery/{freeze,site-manifest,mcp-readback,https-readback,upload}.json`; lectura VM `.local/test-evidence/spotify-export-public-dduga3/report.json`. Pendiente resolver el fetch público dentro del diseño autorizado; después repetir lectura/serialización pública. iPhone físico, cuentas/Telegram reales y P0-W global siguen pendientes. Limpieza y Git se documentan en el recibo final de esta entrega.
+
+Git: PR https://github.com/Alegark/Pulso-Web/pull/3 contra `fix/pulso-updates-safari-lyrics`; implementación commit `86f04ef`. Snapshot/builds/payloads propios eliminados tras readback: 81800937 bytes; libre antes 4906528768, después 4993286144 bytes. Integración eliminó además 27634009 bytes mediante finally. Evidencia retenida: reportes/manifiestos/hashes/logs pequeños, necesarios para fallo y próximo publicador; ninguna dependencia compartida ni dato real eliminado.
