@@ -9,14 +9,36 @@ export interface LibrarySyncHost {
 }
 export class LibrarySyncConflict extends Error{}
 export const librarySyncMessage={idle:'Biblioteca guardada en este dispositivo.',syncing:'Sincronizando biblioteca…',saved:'Biblioteca sincronizada con tu cuenta.',pending:'Cambios guardados en este dispositivo. Se sincronizarán al recuperar la conexión.',conflict:'La biblioteca cambió en otro dispositivo. Pulsa Sincronizar para combinar los cambios.',unavailable:'No pudimos sincronizar. Tus datos locales se conservan.',tooLarge:'La biblioteca supera el límite de sincronización. Quita elementos de la biblioteca o de tus listas para volver a sincronizar.',invalid:'Algunos datos de la biblioteca no se pueden sincronizar. Tus cambios siguen guardados en este dispositivo.'};
+const pollMs=20*60_000,debounceMs=700;
+const offline=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
+const visible=()=>typeof document==='undefined'||document.visibilityState==='visible';
+
 export function createLibrarySync(host:LibrarySyncHost){
- let account:string|null=null,epoch=0,run:Promise<void>|null=null,abort:AbortController|null=null,timer:ReturnType<typeof setTimeout>|null=null;
+ let account:string|null=null,epoch=0,run:Promise<void>|null=null,abort:AbortController|null=null;
+ let timer:ReturnType<typeof setTimeout>|null=null,poll:ReturnType<typeof setInterval>|null=null;
+ let queued=false,failures=0,retryAt=0;
  let status:keyof typeof librarySyncMessage='idle';const listeners=new Set<()=>void>();
  const publish=(s:keyof typeof librarySyncMessage)=>{status=s;for(const fn of listeners)fn();};
- function schedule(){if(timer)clearTimeout(timer);timer=setTimeout(()=>{timer=null;void sync();},700);}
+ const rejected=()=>status==='tooLarge'||status==='invalid';
+ function clearTimer(){if(timer!==null)clearTimeout(timer);timer=null;}
+ function schedule(delay=debounceMs){
+  clearTimer();
+  if(!account||run||rejected()||!visible()||offline())return;
+  timer=setTimeout(()=>{
+   timer=null;
+   if(!visible()||offline())return;
+   if(host.ready())void sync();
+   else schedule(5000);
+  },Math.max(delay,retryAt-Date.now()));
+ }
  async function sync(){
-  if(run||!account||status==='tooLarge'||status==='invalid'||!host.ready())return;const id=account,generation=epoch;abort=new AbortController();const signal=abort.signal;
-  const current=()=>id===account&&generation===epoch&&!signal.aborted&&host.ready();publish('syncing');
+  if(run)return run;
+  if(!account||rejected()||!host.ready()||Date.now()<retryAt)return;
+  if(offline()){publish('pending');return;}
+  clearTimer();queued=false;
+  const id=account,generation=epoch;abort=new AbortController();const signal=abort.signal;
+  const sameAccount=()=>generation===epoch&&!signal.aborted;
+  const current=()=>sameAccount()&&host.ready();publish('syncing');
   run=(async()=>{try{
    const {document:local,base}=await host.read(id,current);if(!current())return;
    const remote=await host.remote(id,signal);if(!current())return;if(remote.accountId!==id)throw Error('account');
@@ -24,14 +46,35 @@ export function createLibrarySync(host:LibrarySyncHost){
    const next=JSON.stringify(merged)===JSON.stringify(remote.document)?remote:await host.save(id,remote.revision,merged,signal);
    if(!current())return;if(next.accountId!==id||JSON.stringify(next.document)!==JSON.stringify(merged))throw Error('response');
    await host.apply(id,local,next.document,current);if(!current())return;
-   publish('saved');host.changed();
-  }catch(error){if(id===account&&generation===epoch&&!signal.aborted)publish(error instanceof LibraryDocumentError?error.code==='LIBRARY_TOO_LARGE'?'tooLarge':'invalid':error instanceof LibrarySyncConflict?'conflict':typeof navigator!=='undefined'&&navigator.onLine===false?'pending':'unavailable');}
-  finally{run=null;if(id!==account&&account)schedule();}})();return run;
+   failures=0;retryAt=0;publish('saved');host.changed();
+  }catch(error){
+   if(!sameAccount())return;
+   if(error instanceof LibraryDocumentError){
+    publish(error.code==='LIBRARY_TOO_LARGE'?'tooLarge':'invalid');
+   }else if(offline()){
+    retryAt=0;publish('pending');
+   }else{
+    retryAt=Date.now()+Math.min(60_000*2**failures,pollMs);
+    failures=Math.min(failures+1,5);
+    publish(error instanceof LibrarySyncConflict?'conflict':'unavailable');
+   }
+  }})().finally(()=>{
+   run=null;
+   if(queued&&rejected())publish('idle');
+   if(status==='syncing'){queued=true;publish('idle');}
+   if(queued||retryAt!==0)schedule();
+  });
+  return run;
  }
  return {getSnapshot:()=>status,subscribe(fn:()=>void){listeners.add(fn);return()=>{listeners.delete(fn);};},
-  account(id:string|null){if(id===account)return;account=id;epoch++;abort?.abort();if(timer)clearTimeout(timer);timer=null;publish('idle');if(id)schedule();},
-  changed(){if(!account)return;if(status==='tooLarge'||status==='invalid')publish('idle');schedule();},sync,
-  dispose(){account=null;epoch++;abort?.abort();if(timer)clearTimeout(timer);timer=null;listeners.clear();},
+  account(id:string|null){
+   if(id===account)return;
+   account=id;epoch++;abort?.abort();failures=0;retryAt=0;queued=id!==null;publish('idle');schedule();
+  },
+  changed(){if(!account)return;queued=true;if(rejected())publish('idle');schedule();},
+  startPolling(){if(poll===null)poll=setInterval(()=>{if(visible())void sync();},pollMs);},
+  sync,
+  dispose(){account=null;epoch++;abort?.abort();clearTimer();if(poll!==null)clearInterval(poll);poll=null;listeners.clear();},
  };
 }
 export async function accountLibraryRequest(id:string,signal:AbortSignal,update?:{revision:number|null;document:AccountLibraryDocument},fetcher:typeof fetch=fetch):Promise<AccountLibraryRemote>{

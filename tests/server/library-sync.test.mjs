@@ -21,3 +21,42 @@ test('library rejections keep local changes and pause retries until the library 
   }finally{sync.dispose();}
  }
 });
+const flush=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
+
+test('visible fallback waits 20 minutes and transient retries back off',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout','setInterval']});
+ let calls=0,available=true;
+ const sync=createLibrarySync(host({remote:async()=>{
+  calls++;
+  if(!available)throw Error('temporary');
+  return remote();
+ }}));
+ try{
+  sync.startPolling();
+  sync.account(id);await sync.sync();assert.equal(calls,1);
+  t.mock.timers.tick(60_000);await flush();assert.equal(calls,1);
+  t.mock.timers.tick(19*60_000);await flush();assert.equal(calls,2);
+  available=false;await sync.sync();assert.equal(calls,3);
+  await sync.sync();assert.equal(calls,3);
+  t.mock.timers.tick(59_999);await flush();assert.equal(calls,3);
+  t.mock.timers.tick(1);await flush();assert.equal(calls,4);
+  t.mock.timers.tick(60_000);await flush();assert.equal(calls,4);
+  available=true;t.mock.timers.tick(60_000);await flush();assert.equal(calls,5);
+  assert.equal(sync.getSnapshot(),'saved');
+ }finally{sync.dispose();}
+});
+
+test('local edits arriving during a sync are picked up by a follow-up',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout']});
+ let calls=0,finish;
+ const sync=createLibrarySync(host({remote:async()=>{
+  if(++calls===1)await new Promise(resolve=>{finish=resolve;});
+  return remote();
+ }}));
+ try{
+  sync.account(id);const first=sync.sync();await flush();
+  sync.changed();t.mock.timers.tick(700);await flush();assert.equal(calls,1);
+  finish();await first;
+  t.mock.timers.tick(700);await flush();assert.equal(calls,2);
+ }finally{sync.dispose();}
+});
