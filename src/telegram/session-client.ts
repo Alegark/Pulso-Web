@@ -1,3 +1,4 @@
+import {botDownloadTransferMs,BOT_DOWNLOAD_MAX_BYTES} from './bot-download-bytes';
 import {clearSavedTelegramSession} from './saved-session';
 import {BOT_SEARCH_BOUNDS,parseBotSearchCommand,type BotSearchCommand,type BotSearchRow,type BotSearchTarget,type BotSearchError,type BotSearchDelivery,type BotDownloadedAudio} from './bot-search-protocol';
 import type {QrLoginChallenge} from './qr-login-protocol';
@@ -63,7 +64,8 @@ export class TelegramSessionClient {
   const token=this.activity.begin();if(!token)return Promise.resolve(null);
   this.searchEpoch++;this.commandEpoch++;
   let resolveDownload!:(audio:BotDownloadedAudio|null)=>void;const done=new Promise<BotDownloadedAudio|null>(r=>resolveDownload=r);
-  const p:SearchPlan={worker,command,token,current:()=>root()&&token.current()&&this.worker===worker&&this.session===session&&this.botBinding?.accountRef===binding.accountRef&&this.botBinding?.accountEpoch===binding.accountEpoch&&(this.state.phase==='disconnecting'||this.bots.revision===revision),timer:setTimeout(()=>{if(this.searchPlan===p)this.cancelSearch(p,true);},BOT_SEARCH_BOUNDS.downloadMs),until:Date.now()+BOT_SEARCH_BOUNDS.downloadMs,cancelCommand:null,cancelAck:false,done:false,cancelled:false,resolveDownload};
+  const timeout=BOT_SEARCH_BOUNDS.downloadResolveMs+botDownloadTransferMs(BOT_DOWNLOAD_MAX_BYTES)+BOT_SEARCH_BOUNDS.settlementMs;
+  const p:SearchPlan={worker,command,token,current:()=>root()&&token.current()&&this.worker===worker&&this.session===session&&this.botBinding?.accountRef===binding.accountRef&&this.botBinding?.accountEpoch===binding.accountEpoch&&(this.state.phase==='disconnecting'||this.bots.revision===revision),timer:setTimeout(()=>{if(this.searchPlan===p)this.cancelSearch(p,true);},timeout),until:Date.now()+timeout,cancelCommand:null,cancelAck:false,done:false,cancelled:false,resolveDownload};
   this.searchPlan=p;this.search={...this.search,error:null,delivery:'not-dispatched',expiresAt:null,providerNotice:null,downloadProgress:{bytes:0,total:0}};if(this.searchExpiry!==null)clearTimeout(this.searchExpiry);this.searchExpiry=null;
   this.publishSearch();this.publishBots();this.publishSources();
   if(!p.current()){this.stop('cancelled');return done;}try{worker.postMessage(command);}catch{this.stop('protocol');return done;}

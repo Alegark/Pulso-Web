@@ -4,7 +4,9 @@ import {sha256} from '@noble/hashes/sha2.js';
 /** Worker-only byte assembler. The caller owns authorization, DC selection, RPC
  * settlement, and revalidation; this helper does not make a download safe alone. */
 export const BOT_DOWNLOAD_MAX_BYTES=AUDIO_FILE_MAX_BYTES;
-export const BOT_DOWNLOAD_CHUNK_BYTES=64*1024;
+// Whole aligned blocks, including the final request, never cross a 1 MiB window.
+export const BOT_DOWNLOAD_CHUNK_BYTES=512*1024;
+export const botDownloadTransferMs=(bytes:number)=>15000+3000*Math.ceil(bytes/BOT_DOWNLOAD_CHUNK_BYTES);
 export type BotDownloadMime='audio/mpeg'|'audio/mp4'|'audio/wav';
 export type BotDownloadBytesError='size'|'mime'|'short'|'header'|'cancelled';
 export class BotDownloadBytesFailure extends Error {
@@ -26,7 +28,7 @@ export async function assembleBotDownloadBytes(descriptor:{readonly bytes:number
  const {bytes,mime}=descriptor;
  if(!Number.isSafeInteger(bytes)||bytes<=0||bytes>BOT_DOWNLOAD_MAX_BYTES)throw new BotDownloadBytesFailure('size');
  if(mime!=='audio/mpeg'&&mime!=='audio/mp4'&&mime!=='audio/wav')throw new BotDownloadBytesFailure('mime');
- const parts:Uint8Array<ArrayBuffer>[]=[],hash=sha256.create();
+ const parts:Blob[]=[],hash=sha256.create();
  let offset=0,detectedMime:BotDownloadMime|null=null;
  while(offset<bytes){
   if(!current())throw new BotDownloadBytesFailure('cancelled');
@@ -34,7 +36,9 @@ export async function assembleBotDownloadBytes(descriptor:{readonly bytes:number
   if(!current())throw new BotDownloadBytesFailure('cancelled');
   if(!(chunk instanceof Uint8Array)||chunk.byteLength!==expected)throw new BotDownloadBytesFailure('short');
   if(offset===0){detectedMime=headerMime(chunk);if(!detectedMime)throw new BotDownloadBytesFailure('header');}
-  const copy=new Uint8Array(chunk);parts.push(copy);hash.update(copy);offset+=copy.byteLength;
+  // Snapshot each part once in its Blob so SDK buffers can be released as we go.
+  parts.push(new Blob([chunk.buffer instanceof ArrayBuffer?chunk as Uint8Array<ArrayBuffer>:new Uint8Array(chunk)]));
+  hash.update(chunk);offset+=chunk.byteLength;
  }
  if(!detectedMime)throw new BotDownloadBytesFailure('header');
  return Object.freeze({blob:new Blob(parts,{type:detectedMime}),bytes,mime:detectedMime,sha256:Array.from(hash.digest(),x=>x.toString(16).padStart(2,'0')).join('')});

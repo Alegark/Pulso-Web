@@ -62,7 +62,7 @@ test('unthreaded exact private audio can complete the chosen-song operation with
   return v;
  });
  const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);s.driver.close();
- assert.equal(BOT_SEARCH_BOUNDS.downloadMs,120000);
+ assert.equal(BOT_SEARCH_BOUNDS.downloadResolveMs,120000);
 });
 test('equal exact unthreaded audio candidates use the first compatible recording automatically',async()=>{
  const s=await setup(true,(r,v,clicked)=>clicked&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([{...msg(doc()),id:13,fromId:undefined,replyTo:undefined},{...msg(doc()),id:14,fromId:undefined,replyTo:undefined}]):v);
@@ -90,7 +90,7 @@ test('validated document readiness is visible while the first file RPC is still 
  release({_:'upload.file',bytes,mtime:0});assert.equal((await result)?.type,'bot-search.downloaded');assert.equal(await s.driver.whenSettled(),true);
  }finally{s.driver.close();}
 });
-test('download deadline is 120 seconds and keeps the RPC lane until settlement',async()=>{
+test('a small file has an 18-second transfer deadline and keeps the RPC lane until settlement',async()=>{
  let now=0,id=0;const timers=new Map<number,{at:number;fn:()=>void}>();
  const clock={now:()=>now,setTimeout(fn:()=>void,ms:number){const key=++id;timers.set(key,{at:now+ms,fn});return key;},clearTimeout(key:number){timers.delete(key);}} as unknown as BotProvidersClock;
  const advance=(ms:number)=>{const end=now+ms;for(;;){const due=[...timers].filter(([,t])=>t.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;};
@@ -98,10 +98,29 @@ test('download deadline is 120 seconds and keeps the RPC lane until settlement',
  const s=await setup(false,(r,v)=>r._==='upload.getFile'?pending:v,clock);let resolved=false;const result=s.download().then(value=>{resolved=true;return value;});
  while(!s.calls.some(x=>x.r._==='upload.getFile'))await new Promise(r=>setImmediate(r));
  advance(15000);await new Promise(r=>setImmediate(r));assert.equal(resolved,false);
- advance(105000);const timed=await result;assert.equal(timed?.type,'bot-search.error');if(timed?.type==='bot-search.error')assert.equal(timed.error,'timeout');
+ advance(3000);const timed=await result;assert.equal(timed?.type,'bot-search.error');if(timed?.type==='bot-search.error')assert.equal(timed.error,'timeout');
  let settled=false;void s.driver.whenSettled().then(()=>{settled=true;});await new Promise(r=>setImmediate(r));assert.equal(settled,false);
  finish({_:'upload.file',bytes,mtime:0});assert.equal(await s.driver.whenSettled(),true);s.driver.close();
 });
+test('callback and aligned media transfer have independent deadlines',async()=>{
+ let now=0;const requests:{offset:number;limit:number}[]=[];
+ const clock:BotProvidersClock={now:()=>now,setTimeout,clearTimeout};
+ const size=1024*1024+1,large=doc(size);
+ const s=await setup(true,(r,v,clicked)=>{
+  if(r._==='messages.getBotCallbackAnswer')now+=119000;
+  if(clicked&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1)return history([msg(large)]);
+  if(r._!=='upload.getFile')return v;
+  requests.push({offset:r.offset,limit:r.limit});now+=3000;
+  const part=new Uint8Array(Math.min(r.limit,size-r.offset));if(r.offset===0)part.set(bytes);
+  return {...v,bytes:part};
+ },clock);
+ try{
+  const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');
+  assert.deepEqual(requests,[{offset:0,limit:524288},{offset:524288,limit:524288},{offset:1048576,limit:524288}]);
+  if(r?.type==='bot-search.downloaded')assert.equal(r.audio.blob.size,size);
+ }finally{s.driver.close();}
+});
+
 
 
 test('callback metadata and exact rereads have separate reply budgets before verified bytes',async()=>{
