@@ -82,7 +82,7 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
   if(id<=outgoing||!incomingBot(m,botId))continue;
   const reply=searchOwn(m,'replyTo');let correlation:'reply'|'recent'='recent';
   if(reply!==undefined){const peer=searchOwn(reply,'replyToPeerId');if(searchOwn(reply,'_')!=='messageReplyHeader'||searchOwn(reply,'replyToMsgId')!==outgoing&&!additionalReplies.includes(searchOwn(reply,'replyToMsgId') as number)||peer!==undefined&&!samePeer(peer,botId))continue;correlation='reply';}
-  const fingerprint=botSearchMessageFingerprint(m);const start=rows.length,markup=searchOwn(m,'replyMarkup');
+  const start=rows.length,markup=searchOwn(m,'replyMarkup');
   if(searchOwn(markup,'_')==='replyInlineMarkup'){
    const keyboard=dataArray(searchOwn(markup,'rows'),B.keyboardRows);if(!keyboard)bad('limit','limit-keyboard-rows');
    for(const r of keyboard){if(searchOwn(r,'_')!=='keyboardInlineButtonRow')bad();const buttons=dataArray(searchOwn(r,'buttons'),20);if(!buttons)bad('limit','limit-keyboard-buttons');
@@ -106,8 +106,9 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
    }
   }
   const text=botSearchText(searchOwn(m,'message'),1000);if(text)add(id,{kind:'message',correlation,text});
+  if(rows.length===start){unrecognized=true;continue;}
+  const fingerprint=botSearchMessageFingerprint(m);
   for(const row of rows.slice(start)){const previous=refs.get(row.rowRef)!;const audioFingerprint=row.kind==='audio'?botSearchAudioFingerprint(m):null;refs.set(row.rowRef,Object.freeze({...previous,fingerprint,...(audioFingerprint?{audioFingerprint}:{}),row}));}
-  if(rows.length===start)unrecognized=true;
  }
  // Decode and inspect every bounded candidate BEFORE truncating so concurrency
  // and duplicate exact matches cannot be hidden by display limits. Keep a matching

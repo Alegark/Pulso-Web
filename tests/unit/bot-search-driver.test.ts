@@ -47,9 +47,11 @@ test('progress text waits for an edited musical menu on the same message',async(
  const {c,p}=s.command();await tick();assert.equal(polls,1);let done=false;void p.then(()=>{done=true;});await tick();assert.equal(done,false);
  s.time.advance(1000);const result=await s.check(p,c);assert.equal(result.type,'bot-search.result');assert.ok(result.rows.some((row:{kind:string})=>row.kind==='option'));assert.equal(s.calls.filter(x=>x.request._==='messages.sendMessage').length,1);s.driver.close();
 });
-test('ignores a photo without useful rows while waiting for the musical menu',async()=>{
- let polls=0;const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():r.limit===1?history():history([++polls===1?msg(12,{message:'',replyMarkup:undefined,media:{_:'messageMediaPhoto'}}):msg(13)]));
- try{const {c,p}=s.command();await tick();s.time.advance(1000);assert.equal((await s.check(p,c)).type,'bot-search.result');assert.equal(polls,2);}finally{s.driver.close();}
+test('ignores photos and stickers without useful rows while waiting for the musical menu',async()=>{
+ for(const media of [{_:'messageMediaPhoto'},{_:'messageMediaDocument',document:{_:'document',mimeType:'image/webp',attributes:[{_:'documentAttributeSticker'}]}}]){
+  let polls=0;const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():r.limit===1?history():history([++polls===1?msg(12,{message:'',replyMarkup:undefined,media}):msg(13)]));
+  try{const {c,p}=s.command();await tick();s.time.advance(1000);assert.equal((await s.check(p,c)).type,'bot-search.result');assert.equal(polls,2);}finally{s.driver.close();}
+ }
 });
 test('lost send ACK is uncertain, never empty/retried/fallback; malformed ACK also uncertain',async()=>{
  for(const sendResult of [Promise.reject({text:'NETWORK_ERROR'}),Promise.resolve({_: 'updatesTooLong'})]){void sendResult.catch(()=>{});const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?sendResult:history());const {c,p}=s.command();const r=await s.check(p,c);assert.equal(r.error,'uncertain');assert.equal(r.delivery,'uncertain');assert.equal(s.calls.filter(x=>x.request._==='messages.sendMessage').length,1);assert.equal(s.calls.length,3);s.driver.close();}
