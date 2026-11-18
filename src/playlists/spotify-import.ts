@@ -1,6 +1,7 @@
 import {ACTIVE_LIBRARY_ACCOUNT} from '../accounts/library-local';
 import {libraryUuid, LIBRARY_LIMITS} from '../accounts/library-document.mjs';
 import {type Playlist, type Track} from '../library/library';
+import {libraryMembershipKey,makeLibraryMembership} from '../library/library-membership';
 import {musicCatalogKey} from '../library/music-search-catalog';
 import type {SongChoice} from '../library/selected-song';
 import {WRITER_LOCK} from '../storage/asset-reader';
@@ -111,7 +112,10 @@ export async function importSpotifyPlaylist(data:SpotifyPlaylist,accountId:strin
     if(owned.length+newTracks.length>LIBRARY_LIMITS.tracks||!existing&&(ownedLists.length>=LIBRARY_LIMITS.playlists||
      ownedLists.reduce((sum,list)=>sum+list.entries.length,entries.length)>LIBRARY_LIMITS.entries))throw Error('La biblioteca alcanzó el límite de canciones o playlists.');
     check();
-    for(const track of newTracks)tracks.add(track,track.id);
+    for(const track of newTracks){
+     tracks.add(track,track.id);
+     settings.add(makeLibraryMembership(track.id,false),libraryMembershipKey(track.id));
+    }
     if(!existing)playlists.add(playlist,playlist.id);
     await done;
     return {playlist,reused,repeated,omitted,limited:data.limited,complete:data.complete};

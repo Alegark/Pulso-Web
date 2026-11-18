@@ -2353,3 +2353,11 @@ T23 conserva el enlace público a la edición de cada canción y usa la búsqued
 ### T10/T23 · Artistas y metadatos Spotify publicados · 2026-11-17
 
 La versión 43 de Cloudflare Workers Free sirve `/releases/d9397c75f05bb80e.html`, deployment `0ddde33d-35c4-4934-889b-2ce9b2aa27a7`. Se verificaron 202/202 rutas, Worker exacto y ambas acciones en el módulo de entrada. Spotify público respondió con 41 pistas y cero omitidas, más una edición vinculada por ID y su portada JPEG HTTP 200. El guardado/retiro de Artistas y la recuperación de álbumes/portadas se verificaron en navegadores locales según T10/T23. El acceso público anónimo requiere cuenta Pulso. Siguen pendientes el recorrido público autenticado y el iPhone físico. Detalle y limpieza en T23.
+
+## Spotify · separar playlist y pertenencia a Álbumes · 2026-11-18
+
+T23 registra las nuevas referencias Spotify sin añadirlas a Biblioteca general. Las fichas locales anteriores que carecen de pertenencia escrita se corrigen al abrir la cuenta, sin reimportar ni modificar la playlist. Álbumes excluye «Sin álbum» y conserva singles guardados. Chromium/WebKit 6/6 verificaron migración, guardado explícito persistente, 41 entradas públicas ordenadas sin tarjetas nuevas y retirada de álbum con copia y playlist conservadas. Chromium volvió a reproducir la copia. Lint y 799 unitarias PASS. La verificación pública de esta corrección y el iPhone físico quedan pendientes. P0-W permanece abierto.
+
+### T23 · Corrección de Álbumes publicada · 2026-11-18
+
+Cloudflare versión 45, deployment `71cb4c65-6f3b-418b-9f5c-b48c8f5ab2a2` y entrada `/releases/734a7031cc9996ea.html`. HTTPS 226/226 rutas estáticas. El Worker y la configuración coinciden con v44. La lectura pública Spotify devuelve 41 pistas, cero omitidas y total desconocido. El comportamiento de pertenencia de pistas y retirada sin perder copias compartidas quedó verificado en Chromium y WebKit locales. La aceptación autenticada pública y física en iPhone siguen pendientes. Evidencia y limpieza en T23.
