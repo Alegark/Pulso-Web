@@ -29,7 +29,8 @@ export function TelegramPanel({requiredSetup=false,onSetupReady,savedArtists,sav
  const [searchState,setSearchState]=React.useState<BotSearchSnapshot|null>(null);
  const [sources,setSources]=React.useState<SourcesSnapshot|null>(null);
  const [bots,setBots]=React.useState<BotsSnapshot|null>(null);
- const [savedSession,setSavedSession]=React.useState<'checking'|'present'|'absent'|'unknown'>('checking');
+ const [vault,setVault]=React.useState<{accountId?:string;state:'present'|'absent'|'unknown'}|null>(null);
+ const savedSession=vault&&vault.accountId===accountId?vault.state:'checking';
  const resumeTried=React.useRef<TelegramSessionClient|null>(null);
  const [state,setState]=React.useState<SessionState>(initialSessionState);const [phone,setPhone]=React.useState('');const [country,setCountry]=React.useState('');const [code,setCode]=React.useState('');const [password,setPassword]=React.useState('');const [consent,setConsent]=React.useState(false);
  const [now,setNow]=React.useState(Date.now);const client=React.useRef<TelegramSessionClient|null>(null);const heading=React.useRef<HTMLHeadingElement>(null);const input=React.useRef<HTMLInputElement>(null);const current=React.useRef(captureCurrent);current.current=captureCurrent;
@@ -47,9 +48,9 @@ export function TelegramPanel({requiredSetup=false,onSetupReady,savedArtists,sav
  React.useEffect(()=>{client.current?.revalidate();});
  React.useEffect(()=>{
   if(!['disconnected','error','connected'].includes(state.phase))return;
-  let live=true;setSavedSession('checking');void hasSavedTelegramSession().then(present=>{if(live)setSavedSession(present?'present':'absent');}).catch(()=>{if(live)setSavedSession('unknown');});
+  let live=true;void hasSavedTelegramSession().then(present=>{if(live)setVault({accountId,state:present?'present':'absent'});}).catch(()=>{if(live)setVault({accountId,state:'unknown'});});
   return()=>{live=false;};
- },[scopeKey,state.phase]);
+ },[accountId,scopeKey,state.phase]);
  React.useEffect(()=>{
   const service=client.current;if(!service||resumeTried.current===service||savedSession!=='present'||state.phase!=='disconnected'||!canConnect||navigator.onLine===false||!current.current()())return;
   resumeTried.current=service;service.restore();
