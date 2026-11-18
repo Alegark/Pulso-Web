@@ -1,3 +1,4 @@
+import {classifyTelegramFailure} from './rpc-failure';
 /** Worker-owned authentication. No session export, generic RPC or local-library authority. */
 import {parseAccountBinding,type AccountBinding,type SourceRow} from './sources-protocol';
 import {parseSaved} from './sources-bridge-protocol';
@@ -44,15 +45,9 @@ export function parseSessionReply(value:unknown,session:string,request:string):S
 }
 /** SDK error names are examined defensively and never emitted verbatim. */
 export function sessionFailure(error:unknown):{error:SessionError;retryAt:number|null;passwordNeeded:boolean} {
- let text='',seconds=0;
- try{const e=error as {errorMessage?:unknown;text?:unknown;message?:unknown;seconds?:unknown};for(const v of [e.errorMessage,e.text,e.message])if(typeof v==='string')text+=' '+v.slice(0,512);if(typeof e.seconds==='number'&&Number.isFinite(e.seconds))seconds=e.seconds;}catch{/* Hostile accessors cannot break cleanup. */}
- if(text.includes('SESSION_PASSWORD_NEEDED'))return {error:'internal',retryAt:null,passwordNeeded:true};
- if(/FLOOD_WAIT|FLOOD_PREMIUM_WAIT|Too Many Requests/i.test(text)){
-  const match=/FLOOD_(?:PREMIUM_)?WAIT_(\d+)/.exec(text);if(match)seconds=Number(match[1]);
-  return {error:'rate-limit',retryAt:seconds>0&&seconds<=86400?Date.now()+Math.ceil(seconds*1000):null,passwordNeeded:false};
- }
- const pairs:readonly [RegExp,SessionError][]=[[/qr-expired/,'qr-expired'],[/session-storage/,'session-storage'],[/session-expired|AUTH_KEY_UNREGISTERED|SESSION_REVOKED|SESSION_EXPIRED/,'session-expired'],[/PHONE_NUMBER_INVALID/,'phone-invalid'],[/PHONE_CODE_INVALID|PHONE_CODE_EMPTY/,'code-invalid'],[/PHONE_CODE_EXPIRED|PHONE_CODE_HASH/,'code-expired'],[/PASSWORD_HASH_INVALID/,'password-invalid'],[/API_ID_INVALID/,'api-invalid'],[/API_ID_PUBLISHED_FLOOD/,'api-restricted'],[/configuration/,'configuration'],[/SIGN_UP_REQUIRED|AUTH_RESTART|EMAIL_|Payment|payment|unsupported|PHONE_NUMBER_BANNED/,'unsupported'],[/Abort|cancelled/,'cancelled']];
- return {error:pairs.find(([pattern])=>pattern.test(text))?.[1]??'network',retryAt:null,passwordNeeded:false};
+ const {error:kind,retryAt}=classifyTelegramFailure(error);
+ const errorCode=kind==='password-needed'?'internal':kind==='access'||kind==='invalid-peer'?'network':kind;
+ return {error:errorCode,retryAt,passwordNeeded:kind==='password-needed'};
 }
 export const sessionErrorText:Record<SessionError,string>={
  configuration:'No se pudo cargar o validar la configuración de Telegram de esta instalación.',

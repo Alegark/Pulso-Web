@@ -1,3 +1,4 @@
+import {classifyTelegramFailure} from './rpc-failure';
 import {BaseTelegramClient} from '@mtcute/core/client.js';
 import {WebPlatform,WebSocketTransport,MemoryStorage} from '@mtcute/web';
 import {LogManager} from '@mtcute/core/utils.js';
@@ -7,7 +8,7 @@ import type {User} from '@mtcute/core';
 import Long from 'long';
 import {createBotSearchSdkDriver,type BotSearchDriver} from './bot-search-driver';
 import {createSourcesDriver,type SourcesDriver} from './sources-driver';
-import {botProvidersFailure,createBotProvidersDriver,type BotProvidersDriver} from './bot-providers-driver';
+import {createBotProvidersDriver,type BotProvidersDriver} from './bot-providers-driver';
 import type {AccountBinding} from './sources-protocol';
 import {isUuid} from './sources-protocol';
 import type {TelegramApiIdentity} from './api-identity';
@@ -18,7 +19,6 @@ import type {QrLoginChallenge} from './qr-login-protocol';
 import {openCrypto} from './crypto-provider';
 import {sessionLease,saveTelegramSession,loadTelegramSession,telegramSessionLeaseCurrent,clearTelegramSessionLease,loadTelegramBotSelection,saveTelegramBots,type SavedBot} from './saved-session';
 let nextAccountEpoch=0;
-function revoked(error:unknown):boolean{try{if(!error||typeof error!=='object')return false;return ['text','errorMessage','message'].some(key=>{const d=Object.getOwnPropertyDescriptor(error,key);return d&&'value'in d&&typeof d.value==='string'&&/^(?:AUTH_KEY_UNREGISTERED|SESSION_REVOKED|SESSION_EXPIRED)$/.test(d.value);});}catch{return false;}}
 /** Worker-private account wait: no account identity, peers or raw SDK errors. */
 export interface TelegramAccountCooldown {readonly retryAt:number|null;readonly retryBlocked:boolean}
 export interface TemporaryTelegramDriver {
@@ -51,7 +51,11 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  const call=client.call.bind(client);client.call=async(message,params)=>{
   if(!message._.startsWith('auth.')&&message._!=='account.getPassword')admitAccountRead();
   try{return await call(message,{floodSleepThreshold:0,maxRetryCount:0,timeout:30000,...params});}
-  catch(error){observeAccountWait(error);if(revoked(error)&&persisted&&lease)await clearTelegramSessionLease(lease);throw error;}
+  catch(error){
+   const failure=classifyTelegramFailure(error);observeAccountWait(failure);
+   if(failure.error==='session-expired'&&persisted&&lease){await clearTelegramSessionLease(lease);persisted=false;}
+   throw error;
+  }
  };
  let closed=false,phone='',challenge='',closing:Promise<void>|undefined,lease='',persisted=false;
  let codeResend:CodeResend|null=null,resending=false;
@@ -75,9 +79,8 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
   if(accountCooldown&&!accountCooldown.retryBlocked&&accountCooldown.retryAt!==null&&Date.now()>=accountCooldown.retryAt)accountCooldown=null;
   return accountCooldown;
  };
- const observeAccountWait=(error:unknown)=>{
-  if(closed||signal.aborted)return;
-  const f=botProvidersFailure(error,Date.now());if(f.error!=='rate-limit')return;
+ const observeAccountWait=(f:ReturnType<typeof classifyTelegramFailure>)=>{
+  if(closed||signal.aborted||f.error!=='rate-limit')return;
   const previous=getAccountCooldown();
   const retryBlocked=!!previous?.retryBlocked||f.retryBlocked;
   accountCooldown=Object.freeze({retryAt:retryBlocked?null:Math.max(previous?.retryAt??0,f.retryAt??0),retryBlocked});
@@ -112,7 +115,7 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  try{await client.prepare();current(signal);}catch(error){await close().catch(()=>{});throw error;}
  return Object.freeze({
   async forgetSavedAuthorization(abort:AbortSignal){current(abort);await clearTelegramSessionLease(lease);persisted=false;current(abort);},
-  async restore(abort:AbortSignal){current(abort);const saved=await loadTelegramSession();current(abort);if(!saved)return false;lease=saved.lease;persisted=true;try{await client.importSession(saved.value);current(abort);const user=await getMe(client);current(abort);if(!await telegramSessionLeaseCurrent(saved.lease))throw Error('session-expired');current(abort);const selection=await loadTelegramBotSelection(saved.lease);savedBots=selection.bots;confirmedBotRevision=selection.revision;current(abort);authorized(user);return true;}catch(error){if(revoked(error)){await clearTelegramSessionLease(saved.lease);throw Error('session-expired');}throw error;}},
+  async restore(abort:AbortSignal){current(abort);const saved=await loadTelegramSession();current(abort);if(!saved)return false;lease=saved.lease;persisted=true;try{await client.importSession(saved.value);current(abort);const user=await getMe(client);current(abort);if(!await telegramSessionLeaseCurrent(saved.lease))throw Error('session-expired');current(abort);const selection=await loadTelegramBotSelection(saved.lease);savedBots=selection.bots;confirmedBotRevision=selection.revision;current(abort);authorized(user);return true;}catch(error){if(classifyTelegramFailure(error).error==='session-expired'){if(persisted){await clearTelegramSessionLease(saved.lease);persisted=false;}throw Error('session-expired');}throw error;}},
   async begin(number:string,abort:AbortSignal){current(abort);lease=await sessionLease();current(abort);phone=number;const value=await sendCode(client,{phone,abortSignal:abort});current(abort);if(value.type==='user'){await persist(abort);authorized(value);return null;}return rememberCode(value);},
   getCodeResend,
   async beginQr(abort:AbortSignal){current(abort);lease=await sessionLease();current(abort);return qr.begin(abort);},

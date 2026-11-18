@@ -34,6 +34,13 @@ try{
   assert.equal(f.clears,cleared+1);assert.equal(f.calls.at(-1).r._,'auth.logOut');
   assert.equal(x.d.getAccountBinding(),null);cases.push('Remote logout bypasses '+wait);
  }
+ for(const revoked of ['USER_DEACTIVATED','USER_DEACTIVATED_BAN']){
+  x=await open();f.outputs.push({_:'auth.loginTokenSuccess'});await x.d.beginQr(x.controller.signal);
+  const sessionId=crypto.randomUUID(),sources=x.d.createSources(sessionId),cleared=f.clears;
+  f.outputs.push(()=>{throw {text:revoked};});
+  const error=await sources.handle({protocol:'pulso-sources',version:1,sessionId,...x.d.getAccountBinding(),type:'sources.page',folder:'main',cursor:null,listEpoch:1,operationId:crypto.randomUUID(),requestId:crypto.randomUUID()},{signal:x.controller.signal,current:()=>true});
+  assert.equal(error.error,'session-expired');assert.equal(f.clears,cleared+1);assert.equal(x.d.getAccountBinding(),null);cases.push('Provider revocation clears the vault: '+revoked);
+ }
  for(const q of f.calls){assert.equal(q.o.maxRetryCount,0);assert.equal(q.o.floodSleepThreshold,0);assert.ok(['auth.exportLoginToken','auth.importLoginToken','messages.getDialogs','auth.logOut'].includes(q.r._));}
  await writeFile(resolve(artifacts,'adapter.json'),JSON.stringify({status:'PASS',cases,realTelegram:false,syntheticSessionOnly:true,noPhoneOrSMSCalls:true},null,2));console.log(JSON.stringify({status:'PASS',groups:cases.length,cases}));
 }finally{for(const d of drivers)await d.close();globalThis.fetch=oldFetch;delete globalThis.__qrTest;}

@@ -29,6 +29,11 @@ test('errors are closed and rate limits preserve a bounded retry time',()=>{
  const s=sessionFailure({text:'FLOOD_WAIT_60'});assert.equal(s.error,'rate-limit');assert.ok(s.retryAt!>Date.now());assert.equal(sessionFailure({message:'API_ID_INVALID'}).error,'api-invalid');assert.equal(sessionFailure({message:'API_ID_PUBLISHED_FLOOD'}).error,'api-restricted');assert.equal(sessionFailure({message:'configuration'}).error,'configuration');
  assert.equal(JSON.stringify(sessionFailure({message:`unknown private data ${phone}`})).includes(phone),false);
 });
+test('known zero-second auth flood has a finite wait and deactivated accounts expire',()=>{
+ const now=Date.now(),result=sessionFailure({text:'FLOOD_WAIT_0'});
+ assert.equal(result.error,'rate-limit');assert.ok(result.retryAt!==null&&result.retryAt>=now+1000);
+ assert.equal(sessionFailure({text:'USER_DEACTIVATED_BAN'}).error,'session-expired');
+});
 test('no worker before valid admitted phone and concurrent begin is ignored',()=>{const s=setup();assert.equal(s.workers.length,0);s.client.begin('invalid');assert.equal(s.workers.length,0);s.client.begin(phone);s.client.begin(phone);assert.equal(s.workers.length,1);assert.equal(s.activity.count,1);assert.equal(s.workers[0].messages.length,1);s.client.dispose();assert.equal(s.activity.count,0);});
 test('phone-code-password flow is correlated; state contains no credentials (synthetic replies)',()=>{
  const s=setup();s.client.begin(phone);const w=s.workers[0];w.reply('code');assert.equal(s.activity.count,0);s.client.submit('code','12345');w.reply('password');s.client.submit('password','synthetic-private-password');w.reply('connected');assert.equal(s.client.snapshot().phase,'connected');assert.equal(s.activity.count,0);const text=JSON.stringify(s.states);assert.equal(text.includes(phone),false);assert.equal(text.includes('12345'),false);assert.equal(text.includes('synthetic-private-password'),false);s.client.dispose();
