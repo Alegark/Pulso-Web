@@ -65,8 +65,8 @@ async function unavailable(s:Snapshot,code:ArtworkFailure):Promise<ArtworkRead>{
  }catch{return {state:'unavailable',revision,failureCode:'conflict'};}
 }
 function validRecord(a:Artwork,s:Snapshot):boolean{
- // An explicit cover or hide choice survives reimporting the same audio into a new asset.
- return a?.version===1&&a.trackId===s.track.id&&(a.assetId===s.asset.id||a.manual===true&&isUuid(a.assetId))&&a.audioSha256===s.asset.sha256&&
+ // Old records can point to a retired generation of the same audio.
+ return a?.version===1&&a.trackId===s.track.id&&(a.assetId===s.asset.id||isUuid(a.assetId))&&a.audioSha256===s.asset.sha256&&
  Number.isSafeInteger(a.revision)&&a.revision>0&&a.revision<Number.MAX_SAFE_INTEGER&&typeof a.manual==='boolean'&&a.manual===(a.provenance==='manual')&&
  ['manual','embedded-id3','embedded-mp4','embedded-riff-id3'].includes(a.provenance)&&typeof a.updatedAt==='string'&&Number.isFinite(Date.parse(a.updatedAt))&&
  ['ready','absent','not-inspected','invalid','omitted'].includes(a.state);

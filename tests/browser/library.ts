@@ -114,6 +114,7 @@ await check('quitar y volver a importar borra portadas y letras incrustadas y co
   const artwork=await storeEmbeddedArtwork(track.id,asset.sha256,embedCover);
   assert(artwork.state==='ready'&&artwork.blob.size>0&&!artwork.manual,'portada incrustada inicial');
   await storeEmbeddedLyrics(track.id,asset.sha256,embedLyrics);
+  const originalLyrics=await readRecord('settings',LYRICS_PREFIX+track.id);
   assert((await readLyrics(track.id)).state==='ready','letra incrustada inicial');
   const alias={...track,id:'ffffffff-ffff-4fff-8fff-ffffffffffff'};
   await writeRecord('tracks',alias.id,alias);
@@ -136,6 +137,11 @@ await check('quitar y volver a importar borra portadas y letras incrustadas y co
   const retained=await readArtwork(alias.id);
   assert(retained.state==='absent'&&retained.manual&&retained.revision===manual.revision,'portada oculta manual perdida');
   assert((await readLyrics(alias.id)).revision===lyric.revision,'letra manual reemplazada');
+  // Older detaches left these records pointing at the deleted asset ID.
+  await writeRecord('settings',`artwork:v1:${track.id}`,artwork);
+  await writeRecord('settings',LYRICS_PREFIX+track.id,originalLyrics);
+  const oldArtwork=await readArtwork(track.id),oldLyrics=await readLyrics(track.id);
+  assert(oldArtwork.state==='ready'&&oldLyrics.state==='ready','metadatos de retirada anterior inaccesibles con los mismos bytes');
  }finally{revoke();}
 });
 await check('inventario y retirada conservan referencias de alias, entradas repetidas y fichas desvinculadas',async()=>{
