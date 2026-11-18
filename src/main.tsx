@@ -526,7 +526,7 @@ const librarySync=createLibrarySync({read:readAccountLibrary,apply:applyAccountL
 librarySync.subscribe(()=>emit());
 addEventListener('online',()=>void librarySync.sync());
 addEventListener('focus',()=>void librarySync.sync());
-setInterval(()=>{if(document.visibilityState==='visible')void librarySync.sync();},60000);
+librarySync.startPolling();
 async function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failurePhase?:'refresh'){
  const accountId=accountController.getSnapshot().user?.id??null,auth=accountEpoch;const scope=scopeId,proof=control.proof,activityScope=control.activity.scope(),diagnostic=parent===undefined?beginDiagnostic('refresh-library'):parent;
  const current=()=>auth===accountEpoch&&accountId===(accountController.getSnapshot().user?.id??null)&&scope===scopeId&&proof===control.proof&&activityScope();

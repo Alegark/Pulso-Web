@@ -9,3 +9,7 @@ export function emptyLibrary():AccountLibraryDocument;
 export function validateAccountLibrary(value:unknown):AccountLibraryDocument;
 export function copyAccountCatalog(value:unknown):SongChoice|null;
 export function mergeAccountLibraries(base:AccountLibraryDocument,local:AccountLibraryDocument,remote:AccountLibraryDocument):AccountLibraryDocument;
+export class LibraryDocumentError extends Error {
+ constructor(message:string,code?:'LIBRARY_INVALID'|'LIBRARY_TOO_LARGE');
+ readonly code:'LIBRARY_INVALID'|'LIBRARY_TOO_LARGE';
+}
