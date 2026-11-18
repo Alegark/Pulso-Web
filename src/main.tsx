@@ -191,7 +191,7 @@ let importProblems:ImportIssue[]=[];
 // Routing identities stay private and never enter a diagnostic payload. A successful
 // refresh alone cannot dismiss a worker response whose result was not validated.
 const unverifiedImportResponses=new Set<string>();
-const availability=new Map<string,{generation:string;state:'available'|'missing'|'invalid'}>();
+let availability=new Map<string,{generation:string;state:'available'|'missing'|'invalid'}>();
 let storageEstimate:{usage?:number;quota?:number}|null=null;
 let storedAssets:LocalAsset[]=[];
 let artworkRefreshToken=0;
@@ -544,13 +544,23 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
  const nextTracks=accountId?await tracksWithSpotifyReleases(accountTracks,accountId).catch(()=>accountTracks):accountTracks;
  const nextAddedTrackIds=await readLibraryTrackIds(nextTracks.map(t=>t.id),current);const nextPlaylists=(await all<Playlist>('playlists')).filter(p=>!accountId||p.accountId===accountId);const nextOperations=(await importOperations()).filter(job=>!accountId||job.accountId===accountId);const nextProblems=await importIssues();
  const assets=new Map((await all<LocalAsset>('assets')).map(asset=>[asset.id,asset]));
- const nextAvailability=new Map(availability);
- for(const track of nextTracks){const asset=track.assetId===null?undefined:assets.get(track.assetId);const generation=validAsset(asset)?`${asset.backend}:${asset.storageKey}:${asset.revision}`:asset===undefined?'missing':'invalid';
- if(force||availability.get(track.id)?.generation!==generation){
- if(track.assetId===null)nextAvailability.set(track.id,{generation,state:'missing'});
- else{const checked=await verifiedAssetDetailed(track.assetId);if(!current())return;if(checked.state==='unknown')throw AppFailure.create(checked.failure);
- nextAvailability.set(track.id,{generation,state:checked.state==='valid'?'available':checked.state==='missing'?'missing':'invalid'});}
- }}
+ const nextAvailability:typeof availability=new Map();
+ const checks=new Map<string,Promise<Awaited<ReturnType<typeof verifiedAssetDetailed>>>>();
+ let unknown=0,firstFailure:Result|undefined;
+ for(let offset=0;offset<nextTracks.length;offset+=8){
+  if(!current())return;
+  await Promise.all(nextTracks.slice(offset,offset+8).map(async track=>{
+   if(track.assetId===null)return;
+   const asset=assets.get(track.assetId),generation=validAsset(asset)?`${asset.backend}:${asset.storageKey}:${asset.revision}`:asset===undefined?'missing':'invalid';
+   const cached=availability.get(track.id);
+   if(!force&&cached?.generation===generation){nextAvailability.set(track.id,cached);return;}
+   let check=checks.get(track.assetId);
+   if(!check){check=verifiedAssetDetailed(track.assetId);checks.set(track.assetId,check);}
+   const checked=await check;
+   if(checked.state==='unknown'){++unknown;firstFailure??=localFailure(AppFailure.create(checked.failure),'read');return;}
+   nextAvailability.set(track.id,{generation,state:checked.state==='valid'?'available':checked.state==='missing'?'missing':'invalid'});
+  }));
+ }
  const artistRevision=savedArtistRevision;
  const nextSavedArtists=accountId?await readSavedArtists(accountId).catch(()=>null):[];
  let estimate;try{estimate=await navigator.storage.estimate();}catch{estimate=null;}
@@ -558,13 +568,14 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
  if(nextSavedArtists&&artistRevision===savedArtistRevision)savedArtists=nextSavedArtists;
  diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'succeeded'});
  storedAssets=[...assets.values()].filter(validAsset);tracks=nextTracks;addedTrackIds=nextAddedTrackIds;playlists=nextPlaylists;operations=nextOperations;importProblems=nextProblems;storageEstimate=estimate;
- availability.clear();nextAvailability.forEach((value,key)=>availability.set(key,value));
+ availability=nextAvailability;
+ if(firstFailure){diagnostics.complete(diagnostic,failurePhase?{...firstFailure,phase:failurePhase}:firstFailure,parent===undefined?'primary':'refresh');status=`No se pudo comprobar la copia local de ${unknown} canciones. Vuelve a comprobar el almacenamiento.`;}
  if(force)artworkRefreshToken++;
  control.activity.block('import-state',false);control.activity.block('opening',false);
  removalEligibleTracks.clear();for(const track of nextTracks){const asset=track.assetId?assets.get(track.assetId):null;if(validAsset(asset)&&asset.bytes<=AUDIO_FILE_MAX_BYTES&&nextAvailability.get(track.id)?.state==='available')removalEligibleTracks.add(track.id);}
  if(updateQueueTitles&&!copyRemovalPending&&!queueForeignBlocked())for(const entry of player.entries){const track=tracks.find(t=>t.id===entry.trackId);if(track)entry.title=track.title;}emit();
  const signature=JSON.stringify([accountId,nextTracks.map(t=>[t.id,t.revision,nextAddedTrackIds.has(t.id)]),nextPlaylists]);if(signature!==lastLibrarySyncSignature){lastLibrarySyncSignature=signature;if(!fromSync)librarySync.changed();}
- }catch(error){if(current()){diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'failed'});const failure=localFailure(error,'read');diagnostics.complete(diagnostic,failurePhase?{...failure,phase:failurePhase}:failure,parent===undefined?'primary':'refresh');}throw error;}finally{if(parent===undefined)diagnostics.finish(diagnostic);}
+ }catch(error){if(current()){diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'failed'});const failure=localFailure(error,'read');diagnostics.complete(diagnostic,failurePhase?{...failure,phase:failurePhase}:failure,parent===undefined?'primary':'refresh');status='No se pudo actualizar la biblioteca. '+failureText(failure);emit();throw error;}}finally{if(parent===undefined)diagnostics.finish(diagnostic);}
  });
  refreshTail=work.catch(()=>{});
  return work;
@@ -805,7 +816,7 @@ attachDatabaseTransportLifecycle(applyDatabaseLifecycle);
 let activeAccount:string|null=null,accountQueue:Snapshot|undefined,accountQueueOwner:string|null=null;
 function accountBoundary(){
  const next=accountController.getSnapshot().user?.id??null;if(next===activeAccount)return;
- const previous=activeAccount;activeAccount=next;if(previous)status='';librarySync.account(next);preparedLibraryAccount=null;lastLibrarySyncSignature='';savedArtists=[];savedArtistRevision++;tracks=[];playlists=[];addedTrackIds=new Set();
+ const previous=activeAccount;activeAccount=next;if(previous)status='';librarySync.account(next);preparedLibraryAccount=null;lastLibrarySyncSignature='';savedArtists=[];savedArtistRevision++;tracks=[];playlists=[];addedTrackIds=new Set();availability=new Map();
  if(previous){
   accountEpoch++;accountQueue=snapshot();accountQueueOwner=previous;transferPlayIntent=null;cancelSelectedSongIntent();queueInsertions.cancelAll('user');control.cancelTransfer();audio.pause();player.suspend();player.setQueue([]);clearMediaSession();
   if(control.owner&&control.activity.idle&&!releaseBlocked()){
@@ -814,9 +825,9 @@ function accountBoundary(){
   }else control.activity.close();
  }
  if(next){
-  if(control.state==='con-control'){control.activity.reopen();installMediaSession();if(accountQueueOwner===next&&accountQueue?.entries.length){deferredQueueRestore={saved:accountQueue,warnings:[],current:captureRemovalRaw()};accountQueue=undefined;resumeStartupQueue();}void refresh(true,false);}
+  if(control.state==='con-control'){control.activity.reopen();installMediaSession();if(accountQueueOwner===next&&accountQueue?.entries.length){deferredQueueRestore={saved:accountQueue,warnings:[],current:captureRemovalRaw()};accountQueue=undefined;resumeStartupQueue();}void refresh(true,false).catch(()=>{});}
   else void control.acquire();
-  if(!control.supported){status='Este navegador no dispone de Web Locks. Reproducción y mutaciones bloqueadas.';void refresh();}
+  if(!control.supported){status='Este navegador no dispone de Web Locks. Reproducción y mutaciones bloqueadas.';void refresh().catch(()=>{});}
  }
  emit();
 }
