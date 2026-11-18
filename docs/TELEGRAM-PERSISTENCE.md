@@ -31,7 +31,7 @@ La recuperación automática se intenta una sola vez por cliente. Un fallo de re
 ## Cierre y olvido
 
 - **Detener conexión local** destruye el cliente de esta pestaña y conserva la autorización guardada. No se reconecta inmediatamente por un efecto de interfaz.
-- **Cerrar sesión en Telegram** elimina la autorización guardada propia antes de esperar el cierre remoto. Si la revocación remota no se confirma, el aviso lo indica. La biblioteca y los audios se conservan.
+- **Cerrar sesión en Telegram** elimina la autorización guardada propia antes de esperar el cierre remoto. El comando se envía incluso con una consulta activa. Si el cliente debe detener el worker antes de confirmar el borrado, la página intenta eliminar el registro en el mismo vault y espera ese resultado antes de admitir otra conexión. Los avisos distinguen revocación remota sin confirmar y borrado local sin confirmar. La biblioteca y los audios se conservan.
 - **Eliminar sesión guardada** funciona desde el estado desconectado o con error, sin cargar SDK/WASM/configuración API ni contactar con Telegram. Repara también un registro local ilegible; no revoca por sí solo una autorización remota.
 
 Las escrituras usan transacciones nativas y una generación. Un login nuevo invalida las escrituras del anterior; olvidar cambia la generación y borra el secreto en la misma transacción. Una autorización antigua no puede volver a aparecer por un commit tardío. Errores de almacenamiento se muestran como tales, sin afirmar que se guardó o eliminó la sesión. El almacenamiento del navegador es accesible al código autorizado del mismo origen: no se afirma protección frente a XSS o una extensión con acceso al perfil.

@@ -5,7 +5,7 @@ import {record,uuid} from './auth-protocol';
 import {parseBotRows,type BotProviderRow} from './bot-providers-protocol';
 import {parseQrLoginChallenge,type QrLoginChallenge} from './qr-login-protocol';
 export const sessionPhases=['disconnected','restoring','sending-code','code','qr','password','authorizing','connected','disconnecting','error'] as const;
-export const sessionErrors=['configuration','api-invalid','api-restricted','phone-invalid','code-invalid','code-expired','qr-expired','password-invalid','rate-limit','network','unsupported','cancelled','timeout','protocol','logout-unconfirmed','session-storage','session-expired','internal'] as const;
+export const sessionErrors=['configuration','api-invalid','api-restricted','phone-invalid','code-invalid','code-expired','qr-expired','password-invalid','rate-limit','network','unsupported','cancelled','timeout','protocol','logout-unconfirmed','logout-storage-unconfirmed','session-storage','session-expired','internal'] as const;
 export type SessionPhase=typeof sessionPhases[number];
 export type SessionError=typeof sessionErrors[number];
 export type Delivery='app'|'sms'|'call'|'email';
@@ -70,6 +70,7 @@ export const sessionErrorText:Record<SessionError,string>={
  timeout:'La operación no terminó a tiempo. Se detuvo la conexión local; revisa Dispositivos en Telegram si la autorización pudo completarse.',
  protocol:'No se pudo validar la respuesta de la conexión. Se cerró el acceso local.',
  'logout-unconfirmed':'Se cerró el acceso local, pero no se confirmó la revocación remota. Revisa Telegram → Ajustes → Dispositivos.',
+ 'logout-storage-unconfirmed':'No se confirmó el cierre ni la eliminación de la sesión guardada. Elimina la sesión guardada en Pulso y revisa Telegram → Ajustes → Dispositivos.',
  'session-storage':'No se pudo leer, guardar o eliminar la sesión de Telegram en este navegador. Comprueba el almacenamiento antes de volver a intentarlo.',
  'session-expired':'Telegram revocó o caducó la sesión guardada. Inicia sesión de nuevo.',
  internal:'No se pudo completar este paso de acceso.',

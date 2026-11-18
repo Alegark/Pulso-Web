@@ -16,7 +16,7 @@ class WorkerFixture implements SessionWorker {
  postMessage(c:SessionCommand){this.messages.push(c);}terminate(){++this.terminations;}
  reply(phase:SessionReply['phase'],error:SessionReply['error']=null,retryAt:number|null=null){const c=this.messages.at(-1)!;this.onmessage?.({data:{version:2,session:c.session,request:c.request,phase,error,retryAt,delivery:phase==='code'?'app':null,binding:phase==='connected'?{accountRef:crypto.randomUUID(),accountEpoch:1}:null,saved:phase==='connected'?{peerRef:crypto.randomUUID(),kind:'saved',name:'Mensajes guardados'}:null}} as MessageEvent);}
 }
-function setup(timeout=1000){const activity=new Activity();activity.open();let admitted=true;const workers:WorkerFixture[]=[],states:SessionState[]=[];const client=new TelegramSessionClient(activity,()=>{const scope=activity.scope();return()=>scope()&&admitted&&activity.admitted;},s=>states.push(s),()=>{const w=new WorkerFixture();workers.push(w);return w;},timeout);return {activity,client,workers,states,deny:()=>{admitted=false;}};}
+function setup(timeout=1000,clearVault=async()=>{}){const activity=new Activity();activity.open();let admitted=true;const workers:WorkerFixture[]=[],states:SessionState[]=[];const client=new TelegramSessionClient(activity,()=>{const scope=activity.scope();return()=>scope()&&admitted&&activity.admitted;},s=>states.push(s),()=>{const w=new WorkerFixture();workers.push(w);return w;},timeout,undefined,undefined,undefined,undefined,undefined,undefined,clearVault);return {activity,client,workers,states,deny:()=>{admitted=false;}};}
 test('closed DTOs reject extras, accessors, malformed phones and nonterminal replies',()=>{
  const c={version:2,session:crypto.randomUUID(),request:crypto.randomUUID(),type:'begin',value:phone};assert.ok(parseSessionCommand(c));assert.equal(parseSessionCommand({...c,sessionString:'never-accepted'}),null);assert.equal(parseSessionCommand({...c,value:'123'}),null);
  assert.equal(parseSessionCommand(Object.defineProperty({...c},'value',{get(){throw Error('hostile');},enumerable:true})),null);
@@ -40,7 +40,7 @@ test('timeout terminates only this worker and ends its token',async()=>{const s=
 test('malformed and foreign replies fail closed before any connected state',()=>{for(const kind of ['extra','foreign']){const s=setup();s.client.begin(phone);const w=s.workers[0],c=w.messages[0];w.onmessage?.({data:{version:2,session:c.session,request:kind==='foreign'?crypto.randomUUID():c.request,phase:'connected',error:null,retryAt:null,delivery:null,...(kind==='extra'?{rawUser:'not-accepted'}:{})}} as MessageEvent);assert.equal(s.client.snapshot().error,'protocol');assert.equal(s.activity.count,0);s.client.dispose();}});
 test('rate limit prevents a new worker before retryAt',()=>{const s=setup();s.client.begin(phone);s.workers[0].reply('error','rate-limit',Date.now()+60000);s.client.begin(phone);assert.equal(s.workers.length,1);assert.equal(s.client.snapshot().error,'rate-limit');s.client.dispose();});
 test('logout confirmation releases the worker; denial is not remote success',()=>{const s=setup();s.client.begin(phone);const w=s.workers[0];w.reply('connected');s.client.logout();assert.equal(s.client.snapshot().phase,'disconnecting');w.reply('error','logout-unconfirmed');assert.equal(s.client.snapshot().error,'logout-unconfirmed');assert.equal(w.terminations,1);assert.equal(s.activity.count,0);s.client.dispose();});
-test('worker failure during logout cannot be reported as confirmed revocation',()=>{const s=setup();s.client.begin(phone);const w=s.workers[0];w.reply('connected');s.client.logout();w.onerror?.({preventDefault(){}} as ErrorEvent);assert.equal(s.client.snapshot().error,'logout-unconfirmed');assert.equal(s.activity.count,0);assert.equal(w.terminations,1);s.client.dispose();});
+test('worker failure during logout cannot be reported as confirmed revocation',async()=>{const s=setup();s.client.begin(phone);const w=s.workers[0];w.reply('connected');s.client.logout();w.onerror?.({preventDefault(){}} as ErrorEvent);await new Promise(r=>setImmediate(r));assert.equal(s.client.snapshot().error,'logout-unconfirmed');assert.equal(s.activity.count,0);assert.equal(w.terminations,1);s.client.dispose();});
 test('revalidate and disposal deny later writes and are idempotent',()=>{const s=setup();s.client.begin(phone);s.deny();s.client.revalidate();assert.equal(s.workers[0].terminations,1);s.client.submit('code','12345');s.client.begin(phone);assert.equal(s.workers.length,1);s.client.dispose();s.client.dispose();s.client.begin(phone);assert.equal(s.workers.length,1);assert.equal(s.activity.count,0);});
 
 test('restore and forget accept no credential payload and require current admission',()=>{
@@ -69,4 +69,12 @@ test('resend is manual, deadline-gated, singleflight and bound to the existing w
 });
 test('missing offer, flood wait and lost admission never dispatch resend',()=>{
  for(const mode of ['missing','flood','denied'] as const){const s=setup();s.client.begin(phone);const w=s.workers[0],c=w.messages[0];w.onmessage?.({data:{version:2,session:c.session,request:c.request,phase:'code',error:mode==='flood'?'rate-limit':null,retryAt:mode==='flood'?Date.now()+60000:null,delivery:'app',binding:null,saved:null,...(mode==='missing'?{}:{codeResend:{delivery:'sms',availableAt:0}})}} as MessageEvent);if(mode==='denied')s.deny();s.client.resend();assert.equal(w.messages.length,1);s.client.dispose();}
+});
+
+test('failed logout post and failed page vault deletion report a distinct error',async()=>{
+ let attempts=0;const s=setup(1000,async()=>{attempts++;throw Error('fixture storage failed');});
+ try{s.client.begin(phone);const w=s.workers[0];w.reply('connected');w.postMessage=()=>{throw Error('fixture worker closed');};
+ s.client.logout();s.client.restore();assert.equal(s.workers.length,1);
+ await new Promise(r=>setImmediate(r));assert.equal(attempts,1);assert.equal(s.client.snapshot().error,'logout-storage-unconfirmed');
+ }finally{s.client.dispose();}
 });
