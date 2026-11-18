@@ -1101,7 +1101,7 @@ function App(){
  React.useEffect(()=>{setViews(old=>{let changed=false;const next={...old};for(const route of ['buscar','biblioteca']as const){if(old[route].listId&&!playlists.some(l=>l.id===old[route].listId)){next[route]={...old[route],listId:''};changed=true;}}return changed?next:old;});},[playlists]);
  const selected=playlists.find(l=>l.id===listId);
  const libraryTracks=React.useMemo(()=>tracks.filter(t=>addedTrackIds.has(t.id)),[tracks,addedTrackIds]);
- const libraryAlbums=React.useMemo(()=>groupAlbums(libraryTracks),[libraryTracks]);
+ const libraryAlbums=React.useMemo(()=>groupAlbums(libraryTracks).filter(group=>!group.unknown),[libraryTracks]);
  const recent=React.useMemo(()=>recentTracks(libraryTracks),[libraryTracks]);const homeLists=React.useMemo(()=>homePlaylists(playlists),[playlists]);
  const catalogCovers=React.useMemo(()=>{
   const covers=new Map<string,string>();
@@ -1383,6 +1383,9 @@ function App(){
  <button disabled={!canOrganize} aria-pressed={track.favorite} ref={button=>{if(button)favoriteButtons.current.set(key,button);else favoriteButtons.current.delete(key);}} onClick={event=>void toggleFavorite(track,key,event.currentTarget)}>{track.favorite?'Quitar favorito':'Favorito'}</button>
  <button disabled={!canAppend||trackAvailability(track,availability)!=='available'} aria-label={`Añadir a continuación ${track.title}`} onClick={event=>addSelection([{key,track}],'next',event)}>Reproducir a continuación</button>
  <button disabled={!canAppend||trackAvailability(track,availability)!=='available'} aria-label={`Añadir al final ${track.title}`} onClick={event=>addSelection([{key,track}],'end',event)}>Añadir al final de la cola</button>
+ {selected&&<button disabled={!canOrganize||addedTrackIds.has(track.id)} onClick={()=>void viewAct(current=>addTrackToLibrary(track.id,current))}>
+  {addedTrackIds.has(track.id)?'En Biblioteca':'Añadir a Biblioteca'}
+ </button>}
  <TrackPlaylistAction playlists={playlists} trackId={track.id} enabled={canOrganize} onAdd={list=>void viewAct(current=>changePlaylist(list.id,list.revision,{type:'add',trackId:track.id},current))}/>
  {page!=='buscar'&&selected&&<><details className="track-actions-order"><summary>Ordenar en esta playlist</summary>{([-1,1]as const).map(delta=><button key={delta} ref={button=>{const id=`${delta}:${key}`;if(button)moveButtons.current.set(id,button);else moveButtons.current.delete(id);}} disabled={!canOrganize||filteredPlaylist||!moveAdjacent(key,delta)} aria-disabled={delta===-1?playlistIndex===0:playlistIndex===selected.entries.length-1} aria-label={`${delta===-1?'Subir':'Bajar'} ${track.title}`} onClick={event=>void moveEntry(key,delta,event.currentTarget)}>{delta===-1?'Subir canción':'Bajar canción'}</button>)}</details><button disabled={!canOrganize} onClick={()=>void viewAct(current=>changePlaylist(selected.id,selected.revision,{type:'remove',entryId:key},current))}>Quitar de playlist</button></>}
  <button data-menu-dismiss="true" disabled={!canOrganize||!removalEligibleTracks.has(track.id)} aria-label={`Revisar retirada de ${track.title}`} onClick={event=>openRemoval(track,trackActionOpener(event.currentTarget))}>Gestionar copia local</button>
