@@ -1,4 +1,4 @@
-import {createTestWorkspace} from './test-workspace.mjs';
+import {createTestWorkspace,linkSnapshotDependencies} from './test-workspace.mjs';
 import {installRequiredAccountFixture} from './required-account-fixture.mjs';
 import {runCorrections} from './interface-corrections-cases.mjs';
 import {runPlaylistDetail} from './playlist-detail-cases.mjs';
@@ -6,7 +6,7 @@ import {build} from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import {runAccountContinuity} from './account-continuity-cases.mjs';
 import {chromium,webkit} from 'playwright-core';
-import {readFile,writeFile,mkdir,cp,symlink} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,cp} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
@@ -28,7 +28,7 @@ try{
  const fixtureDir=resolve(root,'tests/integration');await mkdir(fixtureDir,{recursive:true});
  await cp(resolve('tests/integration/interface-main-fixture.ts'),resolve(fixtureDir,'collection-removal-final-main-fixture.ts'));
  await cp(resolve('tests/integration/interface-main-fixture.html'),resolve(fixtureDir,'collection-removal-final-main-fixture.html'));
- await symlink(resolve('node_modules'),resolve(root,'node_modules'),'dir');
+ await linkSnapshotDependencies(root);
  await build({root,configFile:false,plugins:[tailwindcss()],logLevel:'error',build:{outDir:out,rolldownOptions:{input:{main:resolve(root,'index.html'),fixture:resolve(fixtureDir,'collection-removal-final-main-fixture.html')}}}});
  await build({root,configFile:false,logLevel:'error',define:{SHELL_FILES:'[]'},build:{emptyOutDir:false,outDir:out,lib:{entry:resolve(root,'src/service-worker/sw.ts'),formats:['es'],fileName:()=> 'sw.js'}}});
  if(process.env.PULSO_TEST_FAIL_AFTER_BUILD==='1')throw Error('Injected teardown verification failure after build');

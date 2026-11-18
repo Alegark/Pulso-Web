@@ -16,7 +16,7 @@ async function setup(option=false,mutate?:(r:any,defaultValue:any,callbackDone:b
  const offer=await pool.handle({...env(),type:'bots.validate',input:'ivkmbot'},ctx);assert.equal(offer?.type,'bots.validated');const ref=offer!.type==='bots.validated'?offer.offer.providerRef:'';
  await pool.handle({...env(),type:'bots.setOrder',expectedRevision:0,providerRefs:[ref]},ctx);
  const calls:any[]=[],progress:any[]=[];
- const driver=createBotSearchSdkDriver(binding,sessionId,{providers:pool,current(s){if(s.aborted)throw Error('cancelled');},getAccountCooldown:()=>null,invalidateSession(){invalidations++;},call:async(r:any,o:any)=>{
+ const driver=createBotSearchSdkDriver(binding,sessionId,{providers:pool,current(s:AbortSignal){if(s.aborted)throw Error('cancelled');},getAccountCooldown:()=>null,invalidateSession(){invalidations++;},call:async(r:any,o:any)=>{
   calls.push({r,o});let v:any;
   switch(r._){case 'contacts.resolveUsername':v=identity();break;case 'messages.sendMessage':v={_:'updateShortSentMessage',out:true,id:10};break;case 'messages.getHistory':v=r.limit===1?history():history([msg(option&&!callbackDone?undefined:doc())]);break;case 'messages.getMessages':v=history([msg(option&&!callbackDone?undefined:doc())]);break;case 'messages.getBotCallbackAnswer':assert.deepEqual(r.data,new Uint8Array([8,9]));callbackDone=true;v={_:'messages.botCallbackAnswer',cacheTime:0};break;case 'upload.getFile':assert.equal(o.dcId,2);assert.equal(o.kind,'download');v={_:'upload.file',bytes:bytes.slice(),mtime:0};break;default:throw Error('unexpected');}
   return mutate?await mutate(r,v,callbackDone):v;
@@ -56,14 +56,16 @@ test('callback window keeps concurrency and exact peer/reply validation',()=>{
 });
 
 test('unchanged audio attached to the selected keyboard is not a new callback result',()=>{
- const original={...msg(doc()),replyMarkup:msg().replyMarkup};const fingerprint=botSearchDocumentIdentity(original);
+ const menu=msg();assert.ok('replyMarkup' in menu);
+ const original={...msg(doc()),replyMarkup:menu.replyMarkup};const fingerprint=botSearchDocumentIdentity(original);
  assert.equal(projectBotCallbackPage(history([original]),101,12,10,12,fingerprint,target).rows.length,0);
  const changed={...original,media:{_:'messageMediaDocument',document:{...doc(),id:new Long(55,4)}}};
  assert.equal(projectBotCallbackPage(history([changed]),101,12,10,12,fingerprint,target).rows.filter(r=>r.kind==='audio').length,1);
 });
 
 test('caption, keyboard, audio tags and renewed locator do not make the old document new',()=>{
- const original={...msg(doc()),replyMarkup:msg().replyMarkup};const before=botSearchDocumentIdentity(original);
+ const menu=msg();assert.ok('replyMarkup' in menu);
+ const original={...msg(doc()),replyMarkup:menu.replyMarkup};const before=botSearchDocumentIdentity(original);
  for(const candidate of [
   {...original,message:'Updated caption'},
   {...original,replyMarkup:undefined},

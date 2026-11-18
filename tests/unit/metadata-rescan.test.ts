@@ -18,6 +18,6 @@ test('worker protocol: exact bounded manifest, progress and source-only candidat
  assert.equal(copyMetadataRescanRequest({...header,type:'inspect',asset:{...asset,extra:1}}),null);
  assert(copyMetadataRescanReply({...header,type:'progress',bytes:1,total:8388608}));
  for(const p of [{bytes:0,total:1},{bytes:2,total:1},{bytes:1,total:8388609},{bytes:NaN,total:1}])assert.equal(copyMetadataRescanReply({...header,type:'progress',...p}),null);
- const m=unknownLocalAlbum('absent');const reply=copyMetadataRescanReply({...header,type:'candidate',asset,localAlbum:m});assert(reply?.type==='candidate');m.source.track.reason='invalid';assert.equal(reply.localAlbum.source.track.state==='unknown'&&reply.localAlbum.source.track.reason,'absent');
+ const m=unknownLocalAlbum('absent');const reply=copyMetadataRescanReply({...header,type:'candidate',asset,localAlbum:m});assert(reply?.type==='candidate');assert.equal(m.source.track.state,'unknown');m.source.track.reason='invalid';assert.equal(reply.localAlbum.source.track.state==='unknown'&&reply.localAlbum.source.track.reason,'absent');
  for(const bad of [{...header,type:'candidate',asset,localAlbum:{...m,manual:{}}},{...header,type:'candidate',asset,localAlbum:m,raw:new Uint8Array(1)},{...header,type:'failure',failure:{version:1,phase:'parse',code:'cancelled',family:'quota',backend:'none'}}])assert.equal(copyMetadataRescanReply(bad),null);
 });

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {formatBotSearchQuery,parseBotSearchCommand,parseBotSearchReply,parseBotDownloadedAudio,type BotSearchCommand} from '../../src/telegram/bot-search-protocol';
+import {formatBotSearchQuery,parseBotSearchCommand,parseBotSearchReply,parseBotDownloadedAudio,type BotSearchCommand,type BotSearchEnvelope} from '../../src/telegram/bot-search-protocol';
 import {AUDIO_FILE_MAX_BYTES} from '../../src/storage/audio-limits';
-const e=()=>({protocol:'pulso-bot-search',version:1,sessionId:randomUUID(),accountRef:randomUUID(),accountEpoch:1,providerRevision:1,queryId:randomUUID(),requestId:randomUUID()});
+const e=():BotSearchEnvelope=>({protocol:'pulso-bot-search',version:1,sessionId:randomUUID(),accountRef:randomUUID(),accountEpoch:1,providerRevision:1,queryId:randomUUID(),requestId:randomUUID()});
 const c=()=>({...e(),type:'bot-search.search',providerRef:randomUUID(),query:'A song',consent:true});
 test('download progress and downloaded audio admit the exact file limit and reject one byte more',()=>{
- const envelope=e() as never;
+ const envelope=e();
  const progress={...envelope,type:'bot-search.download-progress',bytes:AUDIO_FILE_MAX_BYTES,total:AUDIO_FILE_MAX_BYTES};
  assert.ok(parseBotSearchReply(progress,envelope));assert.equal(parseBotSearchReply({...progress,total:AUDIO_FILE_MAX_BYTES+1},envelope),null);
  const blob=new Blob([new Uint8Array(AUDIO_FILE_MAX_BYTES)],{type:'audio/wav'});
@@ -29,7 +29,7 @@ test('structured target is copied, closed and bounded; formatter preserves versi
  const slash=parseBotSearchCommand({...raw,target:{title:'/start',artist:null,album:null,durationSeconds:null}})! as typeof command;assert.equal(formatBotSearchQuery(slash),null);
 });
 test('reply parser matches every envelope field and rejects raw fields, empty result and mismatched rate ledger',()=>{
- const envelope=e() as never;const result={...envelope,type:'bot-search.result',delivery:'acknowledged',expiresAt:1000,expectedTarget:null,rows:[{kind:'option',rowRef:randomUUID(),correlation:'recent',label:'<img src=x onerror=evil()>Song'}]};
+ const envelope=e();const result={...envelope,type:'bot-search.result',delivery:'acknowledged',expiresAt:1000,expectedTarget:null,rows:[{kind:'option',rowRef:randomUUID(),correlation:'recent',label:'<img src=x onerror=evil()>Song'}]};
  assert.ok(parseBotSearchReply(result,envelope));
  for(const extra of [{accountRef:randomUUID()},{accountEpoch:2},{providerRevision:2},{queryId:randomUUID()},{requestId:randomUUID()},{rawMessageId:14},{rows:[]},{expectedTarget:undefined},{expiresAt:Infinity},{rows:[{...result.rows[0],callbackData:[1]}]}])assert.equal(parseBotSearchReply({...result,...extra},envelope),null);
  const err={...envelope,type:'bot-search.error',error:'rate-limit',delivery:'uncertain',retryAt:null,retryBlocked:true};assert.ok(parseBotSearchReply(err,envelope));assert.equal(parseBotSearchReply({...err,retryBlocked:false},envelope),null);assert.equal(parseBotSearchReply({...err,error:'timeout'},envelope),null);

@@ -42,7 +42,7 @@ const tick=()=>new Promise(r=>setImmediate(r));
 
 test('outcome remains visible but close and inspect cannot release during refresh',async()=>{
  const wait=deferred();const h=harness({refresh:()=>wait.promise});await h.controller.start(track);const c=consent(h);const work=c.callbacks.confirm(c.value);await tick();
- const view=h.controller.getView();assert.equal(view.state,'result');assert.equal(view.outcome.state,'removed');assert.equal(view.working,true);
+ const view=h.controller.getView();assert.equal(view.state,'result');assert.equal(view.outcome?.state,'removed');assert.equal(view.working,true);
  const cb=h.controller.callbacks(view);assert.equal(cb.close(),false);await cb.inspect();assert.equal(h.inspections,0);assert.equal(h.releases,0);assert.equal(h.activity.count,1);assert.equal(h.blocked,true);
  wait.resolve();await work;assert.equal(h.controller.getView().working,false);assert.equal(cb.close(),false,'old view remains invalid after settlement');assert.equal(h.controller.callbacks(h.controller.getView()).close(),true);assert.equal(h.releases,1);assert.equal(h.activity.count,0);assert.equal(h.blocked,false);await h.controller.dispose();
 });

@@ -6,6 +6,7 @@
   --pulso-accent: #235ad7;
   --pulso-on-accent: #ffffff;
   --pulso-border: #d9e0ea;
+  --pulso-control-border: #687991;
   --pulso-soft: #e8efff;
   --pulso-radius: 1rem;
   --surface: var(--pulso-surface);
@@ -21,6 +22,7 @@ html[data-theme="dark"] {
   --pulso-accent: #a8c5ff;
   --pulso-on-accent: #10244c;
   --pulso-border: #3b495e;
+  --pulso-control-border: #8697ae;
   --pulso-soft: #293d60;
 }
 
@@ -33,6 +35,7 @@ html[data-theme="dark"] {
     --pulso-accent: #a8c5ff;
     --pulso-on-accent: #10244c;
     --pulso-border: #3b495e;
+    --pulso-control-border: #8697ae;
     --pulso-soft: #293d60;
   }
 }

@@ -71,7 +71,7 @@ test('one intent is idempotent; changed payload is rejected and whole 53-occurre
 });
 test('unselected empty queue remains paused until a later explicit Play',async()=>{
  const f=fixture({reuse:true,empty:true}),h=f.enqueue(intent(10));await f.releaseRead();await settled(h);
- assert.equal(f.player.current,undefined);assert.equal(f.player.state,'paused');assert.equal(f.audio.src,'');assert.deepEqual(f.audio.calls,[]);
+ assert.equal(Boolean(f.player.current),false);assert.equal(f.player.state,'paused');assert.equal(f.audio.src,'');assert.equal(f.audio.calls.length,0);
  await f.player.play();assert.equal(f.player.current?.id,id(1010));assert.ok(f.audio.calls.includes('play'));
 });
 test('logical failure retains Activity and prevents a second producer until native settlement',async()=>{

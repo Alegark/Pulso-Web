@@ -1,6 +1,5 @@
 /* Shared presentation of the functional screens; colours come from design-tokens. */
 .pulso-app *,.pulso-app *::before,.pulso-app *::after { box-sizing:border-box; }
-.pulso-app { padding-block-end:2rem; }
 .pulso-app .music-icon { display:block;inline-size:22px;block-size:22px;flex:none; }
 .pulso-app .desktop-search-link,.desktop-library { display:none; }
 .pulso-app .home-quick { grid-template-columns:repeat(2,minmax(0,1fr)); }

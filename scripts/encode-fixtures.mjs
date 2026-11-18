@@ -1,7 +1,8 @@
+import {ffmpegExecutable} from './ffmpeg-path.mjs';
 import {execFileSync} from 'node:child_process';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-const ffmpeg='node_modules/@ffmpeg-installer/linux-x64/ffmpeg';
+const ffmpeg=ffmpegExecutable();
 const fixtures=[];
 for(const [letter,ext,codec,mime] of [['A','mp3','libmp3lame','audio/mpeg'],['B','m4a','aac','audio/mp4'],['C','mp3','libmp3lame','audio/mpeg']]) {
  execFileSync(ffmpeg,['-y','-i',`public/fixtures/${letter}.wav`,'-codec:a',codec,...(codec==='aac'?['-profile:a','aac_low']:[]),`public/fixtures/${letter}.${ext}`],{stdio:'ignore'});

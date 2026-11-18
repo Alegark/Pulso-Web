@@ -9,7 +9,7 @@ const fixture=()=>JSON.parse(JSON.stringify({id:release,title:'Disco',date:'2026
 test('backup detail verifies discs, repeated recordings and full credits with independent IDs',()=>{
  const result=parseMusicBrainzDetail(fixture(),`musicbrainz:${release}`);assert.ok(result.ok);assert.equal(result.value.tracks.length,2);assert.deepEqual(result.value.tracks.map(t=>t.disc),[1,2]);assert.equal(result.value.tracks[0].artist,'Artista & Invitado');
  const choice=albumTrackChoice(result.value.tracks[0],'Disco');assert.equal(choice.source,'musicbrainz');assert.ok(songChoiceKey(choice));assert.match(choice.id,/^musicbrainz:/);assert.equal(songChoiceKey({...choice,source:'itunes'}),null);
- const changed=structuredClone(choice);changed.artist='Artista';assert.notEqual(songChoiceKey(changed),songChoiceKey(choice));
+ const changed={...choice,artist:'Artista'};assert.notEqual(songChoiceKey(changed),songChoiceKey(choice));
 });
 test('missing tracks, duplicate positions, wrong release, video and malformed credits are rejected',()=>{
  let x=fixture();x.media[0].tracks=[];assert.equal(parseMusicBrainzDetail(x,`musicbrainz:${release}`).ok,false);
