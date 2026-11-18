@@ -513,7 +513,7 @@ function captureSongManagement(trackId:string):SongManagement|null {
  };
 }
 let preparedLibraryAccount:string|null=null;
-let syncRefresh=false,lastLibrarySyncSignature='';
+let refreshTail=Promise.resolve(),lastLibrarySyncSignature='';
 let savedArtists:CatalogArtist[]=[],savedArtistRevision=0;
 async function saveCatalogArtist(artist:CatalogArtist,save:boolean,current:()=>boolean):Promise<boolean>{
  const accountId=accountController.getSnapshot().user?.id;
@@ -528,15 +528,17 @@ async function saveCatalogArtist(artist:CatalogArtist,save:boolean,current:()=>b
   return true;
  }catch{return false;}finally{token.end();}
 }
-const librarySync=createLibrarySync({read:readAccountLibrary,apply:applyAccountLibrary,remote:accountLibraryRequest,save:(id,revision,document,signal)=>accountLibraryRequest(id,signal,{revision,document}),ready:()=>accountAvailable()&&owner&&!busy&&databaseState==='ready'&&!copyRemovalBlocked()&&!queueForeignBlocked()&&songAdmissionIdle(),changed:()=>{syncRefresh=true;void refresh(false,false).finally(()=>{syncRefresh=false;});}});
+const librarySync=createLibrarySync({read:readAccountLibrary,apply:applyAccountLibrary,remote:accountLibraryRequest,save:(id,revision,document,signal)=>accountLibraryRequest(id,signal,{revision,document}),ready:()=>accountAvailable()&&owner&&!busy&&databaseState==='ready'&&!copyRemovalBlocked()&&!queueForeignBlocked()&&songAdmissionIdle(),changed:()=>{void refresh(false,false,undefined,undefined,true).catch(()=>{});}});
 librarySync.subscribe(()=>emit());
 addEventListener('online',()=>void librarySync.sync());
 addEventListener('focus',()=>void librarySync.sync());
 librarySync.startPolling();
-async function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failurePhase?:'refresh'){
+function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failurePhase?:'refresh',fromSync=false){
  const accountId=accountController.getSnapshot().user?.id??null,auth=accountEpoch;const scope=scopeId,proof=control.proof,activityScope=control.activity.scope(),diagnostic=parent===undefined?beginDiagnostic('refresh-library'):parent;
  const current=()=>auth===accountEpoch&&accountId===(accountController.getSnapshot().user?.id??null)&&scope===scopeId&&proof===control.proof&&activityScope();
+ const work=refreshTail.then(async()=>{
  try{
+ if(!current())return;
  if(accountId&&preparedLibraryAccount!==accountId){await prepareAccountLibrary(accountId,current);if(!current())return;preparedLibraryAccount=accountId;}
  const accountTracks=(await all<Track>('tracks')).filter(t=>!accountId||t.accountId===accountId).sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id));
  const nextTracks=accountId?await tracksWithSpotifyReleases(accountTracks,accountId).catch(()=>accountTracks):accountTracks;
@@ -561,8 +563,11 @@ async function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,fa
  control.activity.block('import-state',false);control.activity.block('opening',false);
  removalEligibleTracks.clear();for(const track of nextTracks){const asset=track.assetId?assets.get(track.assetId):null;if(validAsset(asset)&&asset.bytes<=AUDIO_FILE_MAX_BYTES&&nextAvailability.get(track.id)?.state==='available')removalEligibleTracks.add(track.id);}
  if(updateQueueTitles&&!copyRemovalPending&&!queueForeignBlocked())for(const entry of player.entries){const track=tracks.find(t=>t.id===entry.trackId);if(track)entry.title=track.title;}emit();
- const signature=JSON.stringify([accountId,nextTracks.map(t=>[t.id,t.revision,nextAddedTrackIds.has(t.id)]),nextPlaylists]);if(signature!==lastLibrarySyncSignature){lastLibrarySyncSignature=signature;if(!syncRefresh)librarySync.changed();}
+ const signature=JSON.stringify([accountId,nextTracks.map(t=>[t.id,t.revision,nextAddedTrackIds.has(t.id)]),nextPlaylists]);if(signature!==lastLibrarySyncSignature){lastLibrarySyncSignature=signature;if(!fromSync)librarySync.changed();}
  }catch(error){if(current()){diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'failed'});const failure=localFailure(error,'read');diagnostics.complete(diagnostic,failurePhase?{...failure,phase:failurePhase}:failure,parent===undefined?'primary':'refresh');}throw error;}finally{if(parent===undefined)diagnostics.finish(diagnostic);}
+ });
+ refreshTail=work.catch(()=>{});
+ return work;
 }
 async function recoverWork(job:ImportOperation,action:'resume'|'discard'){
  if(!owner||busy||databaseState!=='ready'||copyRemovalPending)return;

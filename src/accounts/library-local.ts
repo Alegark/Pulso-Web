@@ -45,9 +45,10 @@ export async function readAccountLibrary(accountId:string,current:()=>boolean):P
 }
 /** Never changes assets/chunks/leases/queue or claims that a cloud row is downloaded.
  * Merge edits committed during the HTTP request before updating the checkpoint. */
-export async function applyAccountLibrary(accountId:string,sent:AccountLibraryDocument,cloud:AccountLibraryDocument,current:()=>boolean):Promise<void>{
+export async function applyAccountLibrary(accountId:string,sent:AccountLibraryDocument,cloud:AccountLibraryDocument,current:()=>boolean):Promise<boolean>{
  cloud=validateAccountLibrary(cloud);
- await write(current,async tx=>{
+ return write(current,async tx=>{
+  let changed=false;
   const active=await request(tx.objectStore('settings').get(ACTIVE_LIBRARY_ACCOUNT));if(active!==accountId)throw Error('account-changed');
   const latest=await snapshot(tx,accountId),merged=mergeAccountLibraries(sent,latest,cloud);
   const rows=await request<Track[]>(tx.objectStore('tracks').getAll()),lists=await request<Playlist[]>(tx.objectStore('playlists').getAll()),trackById=new Map(rows.map(t=>[t.id,t])),listById=new Map(lists.map(p=>[p.id,p]));
@@ -57,15 +58,20 @@ export async function applyAccountLibrary(accountId:string,sent:AccountLibraryDo
    next.manualOverrides={...next.manualOverrides};for(const field of ['title','artist','album'] as const)if(Object.hasOwn(next.manualOverrides,field)){if(field==='title')next.manualOverrides.title=dto.title;else next.manualOverrides[field]=dto[field];}
    if(!dto.localAlbum)delete next.localAlbum;if(dto.catalog)next.catalogChoice=dto.catalog;else delete next.catalogChoice;
    // Avoid revision churn when only synchronizing an unchanged document.
-   if(!old||JSON.stringify({...next,revision:old.revision})!==JSON.stringify(old))tx.objectStore('tracks').put(next,next.id);
-   const key=libraryMembershipKey(dto.id),membership=await request(tx.objectStore('settings').get(key));if(membership===undefined&&dto.inLibrary===false||membership!==undefined&&copyLibraryMembership(membership,dto.id)?.added!==dto.inLibrary)tx.objectStore('settings').put(makeLibraryMembership(dto.id,dto.inLibrary),key);
+   if(!old||JSON.stringify({...next,revision:old.revision})!==JSON.stringify(old)){tx.objectStore('tracks').put(next,next.id);changed=true;}
+   const key=libraryMembershipKey(dto.id),membership=await request(tx.objectStore('settings').get(key));if(membership===undefined&&dto.inLibrary===false||membership!==undefined&&copyLibraryMembership(membership,dto.id)?.added!==dto.inLibrary){tx.objectStore('settings').put(makeLibraryMembership(dto.id,dto.inLibrary),key);changed=true;}
   }
   // Removing account organization never physically deletes music. Demote the
   // local record to listening cache; ordinary cache cleanup decides eligibility.
-  for(const old of rows)if(old.accountId===accountId&&!ids.has(old.id)){if(old.favorite)tx.objectStore('tracks').put({...old,favorite:false,revision:old.revision+1},old.id);tx.objectStore('settings').put(makeLibraryMembership(old.id,false),libraryMembershipKey(old.id));}
-  for(const p of merged.playlists){const old=listById.get(p.id);if(old&&old.accountId!==accountId)throw Error('identity-collision');if(!old||old.name!==p.name||JSON.stringify(old.entries)!==JSON.stringify(p.entries))tx.objectStore('playlists').put({...p,accountId,revision:(old?.revision??0)+1},p.id);}
-  for(const old of lists)if(old.accountId===accountId&&!listIds.has(old.id))tx.objectStore('playlists').delete(old.id);
+  for(const old of rows)if(old.accountId===accountId&&!ids.has(old.id)){
+   if(old.favorite){tx.objectStore('tracks').put({...old,favorite:false,revision:old.revision+1},old.id);changed=true;}
+   const key=libraryMembershipKey(old.id),member=await request(tx.objectStore('settings').get(key));
+   if(copyLibraryMembership(member,old.id)?.added!==false){tx.objectStore('settings').put(makeLibraryMembership(old.id,false),key);changed=true;}
+  }
+  for(const p of merged.playlists){const old=listById.get(p.id);if(old&&old.accountId!==accountId)throw Error('identity-collision');if(!old||old.name!==p.name||JSON.stringify(old.entries)!==JSON.stringify(p.entries)){tx.objectStore('playlists').put({...p,accountId,revision:(old?.revision??0)+1},p.id);changed=true;}}
+  for(const old of lists)if(old.accountId===accountId&&!listIds.has(old.id)){tx.objectStore('playlists').delete(old.id);changed=true;}
   tx.objectStore('settings').put(cloud,baseKey(accountId));
+  return changed;
  });
 }
 /** The user requested this exact restored row. Parsed tags/duration have already
