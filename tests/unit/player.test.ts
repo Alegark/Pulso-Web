@@ -121,3 +121,10 @@ test('native seek rejection is reported without an unhandled lyric playback reje
  const {audio,player}=setup();player.select(0);Object.defineProperty(audio,'currentTime',{get:()=>0,set:()=>{throw new DOMException('Own test','InvalidStateError')}});
  await player.play(1);assert.equal(audio.plays,0);assert.equal(player.state,'error');assert.equal(player.lastFailure,'unknown');
 });
+
+test('Play recarga el medio fallido y restaura su posición sin cambiar la entrada',async()=>{
+ const {audio,player}=setup();player.select(1);audio.currentTime=2.5;const generation=player.generation;
+ audio.dispatchEvent(new Event('error'));audio.dispatchEvent(new Event('pause'));await player.play();
+ assert.equal(player.generation,generation+1);assert.equal(player.current.id,'q1');assert.equal(audio.plays,1);
+ audio.dispatchEvent(new Event('loadedmetadata'));assert.equal(audio.currentTime,2.5);
+});

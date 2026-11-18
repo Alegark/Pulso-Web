@@ -102,7 +102,7 @@ export class Player {
       this.listeners.push([type, guarded]); this.audio.addEventListener(type, guarded);
     };
     on('playing', () => { this.error='';this.lastFailure=null;this.state = 'playing'; this.emit(); });
-    on('pause', () => { if (this.state !== 'ended') this.state = 'paused'; this.emit(); });
+    on('pause', () => { if (this.state !== 'ended' && this.state !== 'error') this.state = 'paused'; this.emit(); });
     on('waiting', () => { this.state = 'buffering'; this.emit(); });
     on('timeupdate', () => this.emit('progress'));
     on('loadedmetadata', () => { if (restorePosition > 0) { this.seek(restorePosition); restorePosition = 0; } if (this.state === 'loading') this.state = 'paused'; this.emit(); });
@@ -121,13 +121,18 @@ export class Player {
     if (fromSeconds !== undefined) {
       // A lyric is an explicit play-at gesture; never run the replay-at-zero path.
       if (!this.current || !Number.isFinite(fromSeconds) || fromSeconds < 0 || !Number.isFinite(this.audio.duration) || this.audio.duration <= 0 || fromSeconds >= this.audio.duration) return;
-    } else {
+    }
+    if (this.current && this.state === 'error' && this.lastFailure?.startsWith('media-')) {
+      this.select(this.index, true, fromSeconds ?? this.audio.currentTime);
+      return;
+    }
+    if (fromSeconds === undefined) {
       if (!this.current) { this.select(0, true); return; }
       if (this.audio.ended || this.state === 'ended') { this.audio.currentTime = 0; this.select(this.index); }
     }
     const generation = this.generation,src=this.audio.src,failed=this.observe('play');
     try { if (fromSeconds !== undefined) { this.audio.currentTime = fromSeconds; this.endedConsumed = false; } await this.audio.play(); if (generation !== this.generation && !this.allowed) this.audio.pause(); }
-    catch (error) { if (this.allowed && generation === this.generation && this.audio.src===src) { let denied=false;try{denied=error instanceof Error&&error.name==='NotAllowedError';}catch{/* unknown */}failed(denied?'autoplay-denied':'unknown');this.lastFailure=denied?'autoplay-denied':'unknown';this.state = 'error'; this.error = denied ? 'Toca Reproducir para continuar; el navegador requiere una interacción.' : 'El navegador no pudo abrir este audio. Prueba otra pista o vuelve a preparar la cola.'; this.emit(); } }
+    catch (error) { if (this.allowed && generation === this.generation && this.audio.src===src && !this.lastFailure?.startsWith('media-')) { let denied=false;try{denied=error instanceof Error&&error.name==='NotAllowedError';}catch{/* unknown */}failed(denied?'autoplay-denied':'unknown');this.lastFailure=denied?'autoplay-denied':'unknown';this.state = 'error'; this.error = denied ? 'Toca Reproducir para continuar; el navegador requiere una interacción.' : 'El navegador no pudo abrir este audio. Prueba otra pista o vuelve a preparar la cola.'; this.emit(); } }
   }
   pause() { if(this.inserting)return; this.audio.pause(); this.state = 'paused'; this.emit(); }
   following() {
