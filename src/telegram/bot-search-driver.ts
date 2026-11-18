@@ -196,7 +196,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      if(ctx.publish&&live(ctx,capture)){try{ctx.publish(Object.freeze({...e,type:'bot-search.sending',delivery:'uncertain'}));}catch{/* UI observers cannot change authority. */}}
      const ack=botSearchAck(await rpc(ms=>dependency.sendQuery(approved.peer,query!,randomId,abort.signal,ms)),approved.botId,randomId);
      if(!ack||ack<=baseline)throw fail('uncertain');f.delivery='acknowledged';check();
-     let lastCandidates:ReturnType<typeof projectBotSearchPage>|null=null;
+     let lastCandidates:ReturnType<typeof projectBotSearchPage>|null=null,sawBotReply=false;
      const searchResult=(page:ReturnType<typeof projectBotSearchPage>):BotSearchReply=>{
       retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={providerRef:c.providerRef,queryId:c.queryId,revision:c.providerRevision,baseline,outgoing:ack,target:c.target??null};check();
       return Object.freeze({...e,type:'bot-search.result',delivery:'acknowledged',rows:page.rows,expiresAt:retainedUntil,expectedTarget:c.target??null});
@@ -208,11 +208,12 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        lastCandidates=page;
        if(page.rows.some(row=>row.kind==='option')||!c.target?.artist||matchingSongRows(page.rows,c.target).length)return searchResult(page);
       }
-      if(page.unrecognized)throw fail('unsupported');
+      sawBotReply ||= page.unrecognized||page.rows.length>0;
+      if(reads+1===B.reads||deadline-time.now()<=B.pollMs)break;
       await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},Math.min(B.pollMs,Math.max(0,deadline-time.now())));});check();
      }
      if(lastCandidates)return searchResult(lastCandidates);
-     throw fail('timeout');
+     throw fail(sawBotReply?'unsupported':'timeout');
     }catch(error){
      // Internally constructed causes are data-only; SDK errors were normalized in rpc.
      const known=error&&typeof error==='object'&&Object.getPrototypeOf(error)===Object.prototype&&Object.getOwnPropertyDescriptor(error,'error')?.value;

@@ -47,6 +47,10 @@ test('progress text waits for an edited musical menu on the same message',async(
  const {c,p}=s.command();await tick();assert.equal(polls,1);let done=false;void p.then(()=>{done=true;});await tick();assert.equal(done,false);
  s.time.advance(1000);const result=await s.check(p,c);assert.equal(result.type,'bot-search.result');assert.ok(result.rows.some((row:{kind:string})=>row.kind==='option'));assert.equal(s.calls.filter(x=>x.request._==='messages.sendMessage').length,1);s.driver.close();
 });
+test('ignores a photo without useful rows while waiting for the musical menu',async()=>{
+ let polls=0;const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():r.limit===1?history():history([++polls===1?msg(12,{message:'',replyMarkup:undefined,media:{_:'messageMediaPhoto'}}):msg(13)]));
+ try{const {c,p}=s.command();await tick();s.time.advance(1000);assert.equal((await s.check(p,c)).type,'bot-search.result');assert.equal(polls,2);}finally{s.driver.close();}
+});
 test('lost send ACK is uncertain, never empty/retried/fallback; malformed ACK also uncertain',async()=>{
  for(const sendResult of [Promise.reject({text:'NETWORK_ERROR'}),Promise.resolve({_: 'updatesTooLong'})]){void sendResult.catch(()=>{});const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?sendResult:history());const {c,p}=s.command();const r=await s.check(p,c);assert.equal(r.error,'uncertain');assert.equal(r.delivery,'uncertain');assert.equal(s.calls.filter(x=>x.request._==='messages.sendMessage').length,1);assert.equal(s.calls.length,3);s.driver.close();}
 });
@@ -81,7 +85,7 @@ test('concurrent external outgoing makes response uncertain even with a valid bo
 });
 test('raw projection budget applies to each reply; no send after oversized identity, no truncated success',async()=>{
  const s=await setup(async()=>({...identity(),incidental:'x'.repeat(40000)}));const x=s.command();assert.equal((await s.check(x.p,x.c)).error,'limit-raw-bytes');assert.equal(s.calls.length,1);s.driver.close();
- const t=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(12,{message:'',replyMarkup:undefined,media:{_: 'unknownMedia'}})]));const y=t.command();assert.equal((await t.check(y.p,y.c)).error,'unsupported');assert.equal(t.calls.length,4);t.driver.close();
+ const t=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(12,{message:'',replyMarkup:undefined,media:{_: 'unknownMedia'}})]));const y=t.command();await tick();for(let n=0;n<14;n++){t.time.advance(1000);await tick();}assert.equal((await t.check(y.p,y.c)).error,'unsupported');assert.equal(t.calls.length,18);t.driver.close();
 });
 test('request/query IDs finite; replay rejected; static accessors do no IO, quiesce invalidates',async()=>{
  const s=await setup();const x=s.command();await x.p;assert.equal((await s.driver.handle(x.c,s.ctx) as any).error,'expired');const y=s.command({queryId:x.c.queryId});assert.equal((await s.check(y.p,y.c)).error,'expired');const calls=s.calls.length;
