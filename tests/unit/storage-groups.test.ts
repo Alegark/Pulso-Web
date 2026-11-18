@@ -19,3 +19,16 @@ test('same album title with different credits is not merged',()=>{
  const one=t('one','x','Album'),two={...t('two','y','Album'),artist:'Different'};
  const groups=groupStorageDownloads([one,two],[],[a('x'),a('y')]);assert.equal(groups.length,2);assert(groups.every(g=>g.bytes===100));
 });
+test('other downloads preserve track and asset order without searching assets per track',()=>{
+ const assets=Array.from({length:80},(_,i)=>a(`asset-${i}`));
+ const tracks=[t('loose-late','asset-73'),t('no-manifest','missing'),t('in-list','asset-7'),t('loose-early','asset-0'),t('alias-late','asset-73')];
+ const lists=[p('listed',['in-list'])];
+ const loose=assets.filter(a=>a.id!=='asset-7');
+ let reads=0;
+ const measured=assets.map(a=>({...a,get id(){reads++;return a.id;}}));
+ const other=groupStorageDownloads(tracks,lists,measured).find(g=>g.kind==='other');
+ assert.deepEqual(other?.assetIds,loose.map(a=>a.id));
+ assert.deepEqual(other?.trackIds,tracks.filter(t=>loose.some(a=>a.id===t.assetId)).map(t=>t.id));
+ assert.equal(other?.bytes,loose.length*100);
+ assert.ok(reads<=assets.length*4,`asset id read ${reads} times`);
+});

@@ -18,6 +18,17 @@ test('missing tracks, duplicate positions, wrong release, video and malformed cr
  const video=fixture();Object.assign(video.media[0].tracks[0].recording,{video:true});assert.equal(parseMusicBrainzDetail(video,`musicbrainz:${release}`).ok,false);
  const bad=fixture();bad.media[0].tracks[0]['artist-credit']=[];assert.equal(parseMusicBrainzDetail(bad,`musicbrainz:${release}`).ok,false);
 });
+test('track search uses the track credit on compilations and retains a featured release artist',()=>{
+ const data=fixture(),compilation=[{name:'Various Artists'}];
+ data['artist-credit']=compilation;
+ const result=parseMusicBrainzDetail(data,`musicbrainz:${release}`);assert.ok(result.ok);
+ assert.equal(result.value.edition.artist,'Various Artists');
+ assert.equal(result.value.tracks[0].primaryArtist,undefined);
+ assert.equal(albumTrackChoice(result.value.tracks[0],'Disco').searchArtist,'Artista & Invitado');
+ data['artist-credit']=[{...credit[0],joinphrase:''}];
+ const featuring=parseMusicBrainzDetail(data,`musicbrainz:${release}`);assert.ok(featuring.ok);
+ assert.equal(featuring.value.tracks[0].primaryArtist,'Artista');
+});
 test('candidate lists validate IDs and do not emit duplicate inferred Apple albums',()=>{
  const albums=parseMusicBrainzEditions({releases:[fixture()]});assert.ok(albums.ok);const artists=parseMusicBrainzArtists({artists:[{id:artist,name:'Artista'}]});assert.ok(artists.ok);
  const choices=musicSearchCatalog('Disco Artista',[],[],albums.value,[],[{id:99,title:'Disco',artist:'Artista & Invitado'}]);assert.equal(choices.filter(c=>c.kind==='album').length,1);assert.equal(choices[0].source,'musicbrainz');

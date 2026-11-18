@@ -1,4 +1,5 @@
-import {ACTIVE_LIBRARY_ACCOUNT,activeLibraryAccount} from '../accounts/library-local';
+import {ACTIVE_LIBRARY_ACCOUNT} from '../accounts/library-local';
+import {libraryUuid} from '../accounts/library-document.mjs';
 import {libraryMembershipKey,makeLibraryMembership,copyLibraryMembership,type LibraryMembership} from './library-membership';
 import {copyLocalAlbumMetadata} from './album-metadata';
 import {admittedTransaction,closeDatabase} from '../storage/database';
@@ -84,7 +85,7 @@ export interface OrganizationPreview {
 export type OrganizationApplyResult = {state: 'committed'|'already-committed'; operationId: string};
 export type OrganizationApplyInspection = {state: 'committed'|'not-committed'|'uncertain'; operationId: string; reason?: 'original-library-unavailable'};
 type Row = {key: IDBValidKey; value: unknown};
-interface Snapshot {tracks: Row[]; playlists: Row[]; assets: Row[]; own: Row[]; memberships:Row[]}
+interface Snapshot {accountId?:string; tracks: Row[]; playlists: Row[]; assets: Row[]; own: Row[]; memberships:Row[]}
 interface Receipt {version: 1; operationId: string; exportId: string; digest: string}
 interface Plan {preview: OrganizationPreview; base: Snapshot; tracks: Track[]; playlists: Playlist[];memberships:LibraryMembership[]; digest: string; libraryId: string}
 const plans = new Map<string, Plan>();
@@ -109,17 +110,18 @@ function bounded(value: unknown, budget: SnapshotBudget, depth = 0): void {
  } else fail('local-corrupt');
  if (budget.left < 0) throw domainError('limits',undefined,'read','idb');
 }
-function rows(store: IDBObjectStore, max: number, budget: SnapshotBudget, range?: IDBKeyRange): Promise<Row[]> {
+function rows(store: IDBObjectStore, max: number, budget: SnapshotBudget, range?: IDBKeyRange, include?: (cursor:IDBCursorWithValue)=>boolean): Promise<Row[]> {
  return new Promise((resolve,reject) => {
   const result: Row[] = [], req = store.openCursor(range);
   req.onerror = () => reject(observedError(req.error,'read'));
   req.onsuccess = () => {
    const c = req.result;
    if (!c) {resolve(result); return;}
-   if (result.length >= max) {reject(domainError('limits',undefined,'read','idb')); return;}
    try {
+    if (include && !include(c)) {c.continue(); return;}
+    if (result.length >= max) {reject(domainError('limits',undefined,'read','idb')); return;}
     const row = {key:c.primaryKey,value:c.value};
-    // Charge BEFORE retaining each row, across all four concurrent cursors.
+    // Charge BEFORE retaining each row, across the snapshot cursors.
     bounded(row,budget); result.push(row); c.continue();
    } catch(e) {reject(observedError(e,'read'));}
   };
@@ -127,13 +129,19 @@ function rows(store: IDBObjectStore, max: number, budget: SnapshotBudget, range?
 }
 async function snapshot(tx: IDBTransaction): Promise<Snapshot> {
  const budget: SnapshotBudget = {left:24*1024*1024,nodes:500000};
- const [tracks,playlists,assets,own,memberships] = await Promise.all([
-  rows(tx.objectStore('tracks'),ORGANIZATION_LIMITS.tracks,budget), rows(tx.objectStore('playlists'),ORGANIZATION_LIMITS.playlists,budget),
-  rows(tx.objectStore('assets'),MAX_ASSETS,budget), rows(tx.objectStore('settings'),MAX_RECORDS,budget,IDBKeyRange.bound(PREFIX,PREFIX+'\uffff')),
-  rows(tx.objectStore('settings'),ORGANIZATION_LIMITS.tracks,budget,IDBKeyRange.bound(['library-membership',1],['library-membership',2],false,true)),
+ const settings=tx.objectStore('settings'),active=await request<unknown>(settings.get(ACTIVE_LIBRARY_ACCOUNT));
+ const accountId=libraryUuid(active)?active:undefined;
+ const owned=accountId?(c:IDBCursorWithValue)=>c.value?.accountId===accountId:undefined;
+ const [tracks,playlists,assets,own] = await Promise.all([
+  rows(tx.objectStore('tracks'),ORGANIZATION_LIMITS.tracks,budget,undefined,owned),
+  rows(tx.objectStore('playlists'),ORGANIZATION_LIMITS.playlists,budget,undefined,owned),
+  rows(tx.objectStore('assets'),MAX_ASSETS,budget), rows(settings,MAX_RECORDS,budget,IDBKeyRange.bound(PREFIX,PREFIX+'\uffff')),
  ]);
- const accountId=await request(tx.objectStore('settings').get(ACTIVE_LIBRARY_ACCOUNT));
- return {tracks:accountId?tracks.filter(r=>(r.value as Track).accountId===accountId):tracks,playlists:accountId?playlists.filter(r=>(r.value as Playlist).accountId===accountId):playlists,assets,own,memberships};
+ const trackKeys=new Set(tracks.map(r=>r.key));
+ const memberships=await rows(settings,ORGANIZATION_LIMITS.tracks,budget,
+  IDBKeyRange.bound(['library-membership',1],['library-membership',2],false,true),
+  accountId?c=>Array.isArray(c.key)&&trackKeys.has(c.key[2]):undefined);
+ return {accountId,tracks,playlists,assets,own,memberships};
 }
 function own(s: Snapshot, key: string): unknown {return s.own.find(r=>r.key===key)?.value;}
 function identity(s: Snapshot): string {const id = own(s,LIBRARY); if (!uuid(id)) fail('local-corrupt'); return id;}
@@ -156,7 +164,7 @@ function membershipMap(s:Snapshot):Map<string,LibraryMembership>{
 }
 function dto(s: Snapshot, warnings: string[]): OrganizationExport {
  const libraryId = identity(s), assets = new Map(s.assets.map(r=>[r.key,r.value])), memberships=membershipMap(s);
- const version=s.tracks.some(r=>memberships.get(String(r.key))?.added===false)?3:2;
+ const version=s.tracks.some(r=>(r.value as Track)?.duration===0||memberships.get(String(r.key))?.added===false)?3:2;
  for (const row of s.own) {
   if (row.key === LIBRARY) continue;
   if (typeof row.key !== 'string') fail('local-corrupt');
@@ -209,11 +217,18 @@ async function ensureIdentity(): Promise<void> {
   } finally {closeDatabase(db);}
  });
 }
-async function readSnapshot(): Promise<Snapshot> {
+async function readSnapshot(includeKeys=false) {
  const db = await io('open',()=>openDatabase());
  try {
   const tx = transaction(db,['tracks','playlists','assets','settings']), done = doneTransaction(tx);
-  try {const s = await io('read',()=>snapshot(tx)); await done; return s;}
+  try {
+   const [base,trackIds,playlistIds]=await io('read',()=>Promise.all([
+    snapshot(tx),
+    includeKeys?request<IDBValidKey[]>(tx.objectStore('tracks').getAllKeys()):[],
+    includeKeys?request<IDBValidKey[]>(tx.objectStore('playlists').getAllKeys()):[],
+   ]));
+   await done;return {base,trackIds:new Set(trackIds),playlistIds:new Set(playlistIds)};
+  }
   catch(e) {try {tx.abort();} catch {/* settled */} await done.catch(()=>{}); throw e;}
  } finally {closeDatabase(db);}
 }
@@ -230,7 +245,7 @@ async function boundary<T>(observe:ObserveFeature|undefined,fn:(attempt:Attempt)
  }
 }
 export function exportOrganization(observe?:ObserveFeature): Promise<Blob> {return boundary(observe,async()=> {
- await ensureIdentity(); const s = await readSnapshot();
+ await ensureIdentity(); const {base:s} = await readSnapshot();
  const memberships=membershipMap(s),referenced=new Set(s.playlists.flatMap(r=>(r.value as Playlist).entries.map(e=>e.trackId)));
  const exported={...s,tracks:s.tracks.filter(r=>memberships.get(String(r.key))?.added!==false||referenced.has(String(r.key))||(r.value as Track).favorite)};
  return new Blob([formatCall(()=>serializeOrganization(dto(exported,[])),true)],{type:'application/json;charset=utf-8'});
@@ -252,9 +267,10 @@ export function previewOrganization(file: Blob, choices: Readonly<Record<string,
  const bytes=await io('read',()=>file.arrayBuffer(),'none');
  let text: string;
  try {text = new TextDecoder('utf-8',{fatal:true}).decode(bytes);} catch {throw domainError('format',undefined,'parse');}
- const backup = formatCall(()=>parseOrganization(text));const accountId=await activeLibraryAccount();
+ const backup = formatCall(()=>parseOrganization(text));
  const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(serializeOrganization(backup)))),b=>b.toString(16).padStart(2,'0')).join('');
- await ensureIdentity(); const base = await readSnapshot(), warnings: string[] = [], local = dto(base,warnings), libraryId = identity(base);
+ await ensureIdentity(); const {base,trackIds,playlistIds} = await readSnapshot(true);
+ const {accountId}=base, warnings: string[] = [], local = dto(base,warnings), libraryId = identity(base);
  const exportKey = PREFIX+'export:'+backup.exportId, previous = own(base,exportKey);
  if ([...plans.values()].some(p=>p.preview.exportId===backup.exportId && p.digest!==digest)) fail('export-reused');
  if (previous !== undefined && previous !== digest) fail('export-reused');
@@ -262,8 +278,8 @@ export function previewOrganization(file: Blob, choices: Readonly<Record<string,
  const trackByRef = new Map(local.tracks.map((t,i)=>[refKey(t.ref),{dto:t,raw:base.tracks[i].value as Track}]));
  const playlistByRef = new Map(local.playlists.map((p,i)=>[refKey(p.ref),{dto:p,raw:base.playlists[i].value as Playlist}]));
  const tracks = base.tracks.map(r=>r.value as Track), playlists = base.playlists.map(r=>r.value as Playlist);
- const trackIds = new Set(tracks.map(t=>t.id)), playlistIds = new Set(playlists.map(p=>p.id)), remap = new Map<string,string>();
- const memberships=membershipMap(base);
+ const remap = new Map<string,string>();
+ const memberships=membershipMap(base),originalMemberships=new Map(base.memberships.map(r=>[Array.isArray(r.key)?r.key[2]:undefined,r.value]));
  let blocked = false, newTracks = 0, newPlaylists = 0;
  for (const t of backup.tracks) {
   const rk = refKey(t.ref), found = trackByRef.get(rk), key = 'track:'+rk;
@@ -319,7 +335,7 @@ export function previewOrganization(file: Blob, choices: Readonly<Record<string,
  const originalTracks = new Map(base.tracks.map(r=>[r.key,r.value])), originalPlaylists = new Map(base.playlists.map(r=>[r.key,r.value]));
  // Prepare the exact write set outside IDB; apply does only CAS and queued IDB writes.
  plans.set(preview.planId,{preview:structuredClone(preview),base,
-  memberships:[...memberships.values()].filter(value=>!equal(base.memberships.find(r=>Array.isArray(r.key)&&r.key[2]===value.trackId)?.value,value)),
+  memberships:[...memberships.values()].filter(value=>!equal(originalMemberships.get(value.trackId),value)),
   tracks:tracks.filter(t=>!equal(originalTracks.get(t.id),t)),playlists:playlists.filter(p=>!equal(originalPlaylists.get(p.id),p)),digest,libraryId});
  return preview;
 },'validate');}
@@ -414,8 +430,9 @@ export function applyOrganization(planId: string, signal?: AbortSignal,observe?:
     if (!equal(current,plan.base)) throw domainError('stale-preview',undefined,'validate','idb');
     if (signal?.aborted) fail('cancelled');
     await io('write',()=>{
-    for (const t of plan.tracks) tx!.objectStore('tracks').put(t,t.id);
-    for (const p of plan.playlists) tx!.objectStore('playlists').put(p,p.id);
+    const tracks=tx!.objectStore('tracks'),playlists=tx!.objectStore('playlists');
+    for (const t of plan.tracks) tracks[t.revision===1?'add':'put'](t,t.id);
+    for (const p of plan.playlists) playlists[p.revision===1?'add':'put'](p,p.id);
     const store=tx!.objectStore('settings');
     for(const member of plan.memberships)store.put(member,libraryMembershipKey(member.trackId));
     store.put(plan.digest,PREFIX+'export:'+plan.preview.exportId);

@@ -19,6 +19,7 @@ export interface RemovalOutcome {
  readonly tracking:RemovalTracking|null;readonly state:RemovalJournalState|'unknown';readonly journalRevision:number|null;
  readonly publication:'linked'|'unpublished'|'unknown';readonly physical:'present'|'absent'|'unknown';readonly recoveryRequired:boolean;
  readonly preparation:'not-dispatched'|'aborted'|'uncertain'|'recorded';
+ readonly freedArtworkBytes?:number;
  readonly primary:FailureV1|null;readonly secondary:readonly {phase:'reconcile'|'cleanup'|'refresh';failure:FailureV1}[];
 }
 declare const candidateBrand:unique symbol,planBrand:unique symbol,continuationBrand:unique symbol;
