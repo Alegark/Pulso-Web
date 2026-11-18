@@ -10,13 +10,14 @@ const isolated = {
   lrclib: '.local/lrclib-r57/build',
 };
 const dedicatedDir = Object.hasOwn(isolated, single) ? isolated[single] : undefined;
-const outDir = process.env.PULSO_BROWSER_BUILD_DIR || dedicatedDir || '.local/browser-tests';
+const customDir = process.env.PULSO_BROWSER_BUILD_DIR;
+const outDir = customDir || dedicatedDir || '.local/browser-tests';
 await build({
   configFile: false,
   ...(dedicatedDir ? {publicDir: false} : {}),
   build: {
     outDir,
-    emptyOutDir: true,
+    emptyOutDir: !customDir,
     rolldownOptions: {input: (selected.length ? selected : pages).map(name => `tests/browser/${name}.html`)},
   },
 });
