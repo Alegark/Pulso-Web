@@ -74,10 +74,16 @@ export async function loadTelegramBots(lease:string):Promise<SavedBot[]> {
 }
 export async function loadTelegramBotSelection(lease:string):Promise<{bots:SavedBot[];revision:number;initialized:boolean}> {
  if(!epochValue(lease))throw failure();
- const selection=await transaction<{bots:SavedBot[];revision:number;initialized:boolean}|null>(false,'readonly',(store,set)=>{read(store,EPOCH,epoch=>read(store,SECRET,secret=>read(store,BOTS,value=>read(store,BOTS_REV,storedRevision=>{
+ const selection=await transaction<{bots:SavedBot[];revision:number;initialized:boolean}|null>(false,'readwrite',(store,set)=>{read(store,EPOCH,epoch=>read(store,SECRET,secret=>read(store,BOTS,value=>read(store,BOTS_REV,storedRevision=>{
   if(epoch!==lease||typeof secret!=='string'||!secret)throw failure();
   const bots=value===undefined?[]:parseSavedBots(value),revision=storedRevision===undefined?0:storedRevision;
-  if(!bots||typeof revision!=='number'||!Number.isSafeInteger(revision)||revision<0)throw failure();set({bots,revision,initialized:value!==undefined||revision!==0});
+  const validRevision=typeof revision==='number'&&Number.isSafeInteger(revision)&&revision>=0&&revision<Number.MAX_SAFE_INTEGER;
+  if(!bots||!validRevision){
+   const next=validRevision?revision+1:1;
+   // Commit an explicit empty preference without changing the authorization or its lease.
+   store.put({version:1,bots:[]},BOTS);store.put(next,BOTS_REV);set({bots:[],revision:next,initialized:true});return;
+  }
+  set({bots,revision,initialized:value!==undefined||revision!==0});
  }))));},null);
  if(!selection)throw failure();return selection;
 }

@@ -18,7 +18,7 @@ La página consulta únicamente si existe el registro, sin leer su valor ni crea
 
 ## Bots y orden conservados
 
-Se guardan hasta cinco perfiles ya confirmados, en el orden elegido, junto a sus identificadores de identidad y acceso privados. Este registro no contiene chats, mensajes, callbacks, resultados ni audio; nunca se envía al hilo principal ni a un servidor. Comparte la generación exacta de la autorización: login nuevo, olvido o cierre de sesión eliminan también la selección. Las cuentas nuevas empiezan sin bots seleccionados.
+Se guardan hasta cinco perfiles ya confirmados, en el orden elegido, junto a sus identificadores de identidad y acceso privados. Este registro no contiene chats, mensajes, callbacks, resultados ni audio; nunca se envía al hilo principal ni a un servidor. Comparte la generación exacta de la autorización: login nuevo, olvido o cierre de sesión eliminan también la selección. Las cuentas nuevas empiezan sin bots seleccionados. Si la selección guardada es inválida, se sustituye por una selección vacía explícita en una transacción que conserva la autorización.
 
 Restaurar el pool no consulta perfiles ni envía mensajes. Antes de usar un bot, el adaptador vuelve a resolver su identidad y la compara con la aprobada. No se reutilizan los `providerRef` ni las capturas anteriores. El orden sólo se confirma tras el commit del almacenamiento. Una revisión durable y la comparación de la selección anterior impiden que otro worker sobrescriba un cambio más nuevo, incluso si el orden volvió a ser el mismo. Un conflicto o fallo de escritura cierra esas capacidades; no se anuncia una confirmación que no ocurrió. Las escrituras pendientes forman parte del asentamiento del cliente.
 
