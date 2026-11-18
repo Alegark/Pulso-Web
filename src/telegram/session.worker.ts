@@ -151,8 +151,11 @@ self.onmessage=event=>{
     if(Date.now()<offered.availableAt){reply(command,'rate-limit',offered.availableAt);return;}
     codeDelivery=await client.resendCode(abort.signal);if(abort.signal.aborted)return;
     phase='code';reply(command);return;
-   }else if(command.type==='code')await client!.code(phone,command.value,abort.signal);
-   else if(command.type==='password')await client!.password(command.value,abort.signal);
+   }else if(command.type==='code'||command.type==='password'){
+    refreshCooldown();if(!remoteAllowed()){reply(command,'rate-limit',retryAt);return;}
+    if(command.type==='code')await client!.code(phone,command.value,abort.signal);
+    else await client!.password(command.value,abort.signal);
+   }
    if(!parseAccountBinding(client!.getAccountBinding())){phase='error';reply(command,'protocol');closeLocal();return;}
    sources=client!.createSources(session);if(!parseSaved(sources.getSaved())){phase='error';reply(command,'protocol');closeLocal();return;}
    await client!.prepareBotProviders?.(session,abort.signal);if(abort.signal.aborted)return;

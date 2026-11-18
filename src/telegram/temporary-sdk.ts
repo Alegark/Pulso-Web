@@ -49,7 +49,7 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  const client=new BaseTelegramClient({apiId:identity.apiId,apiHash:identity.apiHash,storage:new MemoryStorage(),platform,crypto,transport:new WebSocketTransport(),updates:false,disableUpdates:true,storageOptions:{peers:{updatesWriteInterval:0}},logLevel:LogManager.OFF,initConnectionOptions:{appVersion:'Pulso Web 0.1',deviceModel:'Pulso Web',systemVersion:'Web',langCode:'es',systemLangCode:'es'}});
  // Disable automatic RPC retries/flood sleeps. DC migration remains SDK-managed.
  const call=client.call.bind(client);client.call=async(message,params)=>{
-  admitAccountRead();
+  if(!message._.startsWith('auth.')&&message._!=='account.getPassword')admitAccountRead();
   try{return await call(message,{floodSleepThreshold:0,maxRetryCount:0,timeout:30000,...params});}
   catch(error){observeAccountWait(error);if(revoked(error)&&persisted&&lease)await clearTelegramSessionLease(lease);throw error;}
  };
