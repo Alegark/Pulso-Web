@@ -1,5 +1,5 @@
 import {accountAuth} from './accounts.mjs';
-import {validateAccountLibrary,libraryUuid,LIBRARY_LIMITS,emptyLibrary} from '../../src/accounts/library-document.mjs';
+import {validateAccountLibrary,libraryUuid,LIBRARY_LIMITS,LibraryDocumentError,emptyLibrary} from '../../src/accounts/library-document.mjs';
 import {readJson,dataApiEndpoint} from './account-profile.mjs';
 const headers={'Cache-Control':'no-store','Content-Type':'application/json','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
 export function createAccountLibraryRouter({auth=accountAuth,fetcher=fetch,timeoutMs=15000}={}){
@@ -15,7 +15,7 @@ export function createAccountLibraryRouter({auth=accountAuth,fetcher=fetch,timeo
     if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')??''))return respond({},415);
     try{input=await readJson(request,LIBRARY_LIMITS.bytes+1024,abort.signal);
      if(!input||Object.keys(input).length!==3||!libraryUuid(input.accountId)||input.revision!==null&&(!Number.isSafeInteger(input.revision)||input.revision<1||input.revision>=2147483647))throw Error('input');input.document=validateAccountLibrary(input.document);
-    }catch{return respond({code:'LIBRARY_INVALID'},400);}
+    }catch(error){return respond({code:error instanceof LibraryDocumentError?error.code:error?.message==='limit'?'LIBRARY_TOO_LARGE':'LIBRARY_INVALID'},400);}
    }
    const h=new Headers({Origin:url.origin});const cookie=request.headers.get('Cookie');if(cookie)h.set('Cookie',cookie);
    const authorization=await auth(new Request(url.origin+'/api/account-auth/token',{headers:h,signal:abort.signal}),env);
@@ -32,6 +32,12 @@ export function createAccountLibraryRouter({auth=accountAuth,fetcher=fetch,timeo
    }
    if(abort.signal.aborted)throw Error('expired');
    const result=await fetcher(target,{method,body,headers:requestHeaders,signal:abort.signal,redirect:'error'});
+   if(input&&result.status===400){
+    const pg=await readJson(result,16384,abort.signal).catch(()=>null);
+    if(pg?.code==='23514')return respond({code:'LIBRARY_TOO_LARGE'},400);
+    if(['22P02','22P05','22021'].includes(pg?.code))return respond({code:'LIBRARY_INVALID'},400);
+    return respond({code:'LIBRARY_UNAVAILABLE'},503);
+   }
    if(!result.ok){void result.body?.cancel().catch(()=>{});return respond({code:result.status===401?'SIGN_IN_REQUIRED':'LIBRARY_UNAVAILABLE'},result.status===401?401:503);}
    const rows=await readJson(result,LIBRARY_LIMITS.bytes+16384,abort.signal);if(!Array.isArray(rows)||rows.length>1)throw Error('response');
    if(input&&!rows.length)return respond({code:'LIBRARY_CHANGED'},409);

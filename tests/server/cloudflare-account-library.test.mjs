@@ -21,3 +21,38 @@ test('conflict cannot overwrite another device and foreign-row responses are rej
 test('delayed authentication cannot write after deadline and body reads are bounded',async()=>{
  let release,calls=0;const route=createAccountLibraryRouter({timeoutMs:5,auth:()=>new Promise(r=>{release=r;}),fetcher:async()=>{calls++;return Response.json([]);}});assert.equal((await route(req({accountId:id,revision:null,document}),env)).status,503);release(Response.json({token}));await new Promise(r=>setTimeout(r,10));assert.equal(calls,0);
 });
+test('library rejects jsonb overflow even when the compact document fits',async()=>{
+ const max=2*1024*1024;
+ const tracks=Array.from({length:5000},(_,i)=>({...document.tracks[0],id:`00000000-0000-4000-8000-${String(i).padStart(12,'0')}`,title:'x'.repeat(270)}));
+ const count=Math.floor((max-100)/(Buffer.byteLength(JSON.stringify(tracks[0]))+1));
+ const large={...document,tracks:tracks.slice(0,count)};
+ assert.ok(Buffer.byteLength(JSON.stringify(large))<max);
+ assert.ok(Buffer.byteLength(JSON.stringify(large))+(19*count)>max);
+ let writes=0;
+ const route=createAccountLibraryRouter({auth,fetcher:async()=>{writes++;return Response.json([]);}});
+ const response=await route(req({accountId:id,revision:null,document:large}),env);
+ assert.equal(response.status,400);
+ assert.deepEqual(await response.json(),{code:'LIBRARY_TOO_LARGE'});
+ assert.equal(writes,0);
+});
+test('library rejects lone UTF-16 surrogates and accepts paired characters',async()=>{
+ let writes=0;
+ const route=createAccountLibraryRouter({auth,fetcher:async()=>{writes++;return Response.json([]);}});
+ const withTitle=title=>req({accountId:id,revision:null,document:{...document,tracks:[{...document.tracks[0],title}]}});
+ for(const title of ['\ud800','\udfff']){
+  const response=await route(withTitle(title),env);
+  assert.equal(response.status,400);
+  assert.deepEqual(await response.json(),{code:'LIBRARY_INVALID'});
+ }
+ assert.equal(writes,0);
+ assert.equal((await route(withTitle('Canción 🎵'),env)).status,409);
+ assert.equal(writes,1);
+});
+test('library distinguishes known Postgres document rejections from service errors',async()=>{
+ for(const [pg,code,status] of [['23514','LIBRARY_TOO_LARGE',400],['22P05','LIBRARY_INVALID',400],['unknown','LIBRARY_UNAVAILABLE',503]]){
+  const route=createAccountLibraryRouter({auth,fetcher:async()=>Response.json({code:pg,message:'private upstream details'},{status:400})});
+  const response=await route(req({accountId:id,revision:null,document}),env);
+  assert.equal(response.status,status);
+  assert.deepEqual(await response.json(),{code});
+ }
+});
