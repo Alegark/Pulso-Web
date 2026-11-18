@@ -210,14 +210,17 @@ async function media(event: FetchEvent): Promise<Response> {
   const client=await actualClient(event.clientId);if(!client)return fail(403);
   let db:IDBDatabase|undefined;let streamOwns=false;let released=false;let readerRelease=()=>{};
   let streamController:ReadableStreamDefaultController<Uint8Array>|null=null;
-  const release=()=>{if(released)return;released=true;req.signal.removeEventListener('abort',abort);readerRelease();if(db)closeDatabase(db);active.delete(item);};
+  const readerAbort=new AbortController();
+  const release=()=>{if(released)return;released=true;readerAbort.abort();req.signal.removeEventListener('abort',abort);readerRelease();if(db)closeDatabase(db);active.delete(item);};
   const invalidate=()=>{if(streamController)try{streamController.error(new Error('storage-unavailable'));}catch{/* terminal */}release();};
   const abort=()=>invalidate();
   const item:ActiveRead={client,invalidate};active.add(item);
   req.signal.addEventListener('abort',abort,{once:true});
   const current=()=>{check();if(released||req.signal.aborted)throw new Error('storage-unavailable');};
   try{
-  current();db=await openDatabase();current();
+  current();const connection=await openDatabase();
+  if(released){closeDatabase(connection);return fail(503);}
+  db=connection;current();
   const ticket = await readRecordFrom<Ticket>(db,'tickets',token);
   if (!ticket || ticket.namespace !== 'local' || (!event.clientId || event.clientId !== ticket.owner)) return fail(403);
   current();const owner = await self.clients.get(ticket.owner);
@@ -239,7 +242,7 @@ async function media(event: FetchEvent): Promise<Response> {
     if(range.partial)headers.set('Content-Range',`bytes ${range.start}-${range.end-1}/${asset.bytes}`);
     if(req.method==='HEAD')return new Response(null,{status:200,headers});
     let reader:Awaited<ReturnType<typeof openAssetReader>>;
-    try{reader=await openAssetReader(asset,true,{signal:req.signal,database:db});}catch(error){const verification=verificationFailure(error,asset.backend);return fail(verification.state==='missing'||verification.state==='corrupt'?409:503);}
+    try{reader=await openAssetReader(asset,true,{signal:readerAbort.signal,database:db});}catch(error){const verification=verificationFailure(error,asset.backend);return fail(verification.state==='missing'||verification.state==='corrupt'?409:503);}
     readerRelease=()=>reader.release();
     try{current();if(pinned){const actual=copySourceAsset(await readRecordFrom<unknown>(db,'assets',pinned.id));current();if(!actual||!sameSourceAsset(actual,pinned))return fail(409);}}catch(error){reader.release();throw error;}
     const key=verificationKey(asset),verified=verifiedAssets.has(key);
