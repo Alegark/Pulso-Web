@@ -110,7 +110,7 @@ test('root scope/proof/Activity/DB ABA guards never resurrect captures; scope re
 
 const reserve=(t:ReturnType<typeof setup>,id='Z')=>{
  const result=t.registry.reserve(t.registry.capture(),asset(id));
- assert.equal(result.kind,'reserved');if(result.kind!=='reserved')throw new Error(result.reason);return result.reservation;
+ assert.equal(result.kind,'reserved');return result.reservation;
 };
 test('R86 captures, closed targets and competing reservations fail closed',()=>{
  const t=setup(),other=setup(),capture=t.registry.capture();

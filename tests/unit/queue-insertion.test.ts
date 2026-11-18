@@ -114,7 +114,7 @@ test('insert before current in natural order derives current index by ID, explic
 test('vacancy insertion stays unselected and paused without source/load; first explicit Play selects zero',async()=>{
  const {audio,player}=setup([]);audio.calls=[];let emits=0;player.subscribe(()=>emits++);
  assert.equal(player.insertQueue(request(player,'next',[e('X')]),()=>true).kind,'inserted');
- assert.equal(emits,1);assert.equal(player.index,-1);assert.equal(player.current,undefined);assert.equal(player.state,'paused');assert.equal(audio.src,'');assert.deepEqual(audio.calls,[]);
+ assert.equal(emits,1);assert.equal(player.index,-1);assert.equal(Boolean(player.current),false);assert.equal(player.state,'paused');assert.equal(audio.src,'');assert.equal(audio.calls.length,0);
  assert.equal(player.insertQueue(request(player,'next',[e('Y')]),()=>true).kind,'inserted');assert.deepEqual(ids(player.entries),['Y','X']);
  await player.play();assert.equal(player.current.id,'Y');assert.equal(audio.src,e('Y').src);assert.equal(audio.calls.filter(c=>c==='play').length,1);
 });

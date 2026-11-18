@@ -5,10 +5,13 @@ import {tmpdir} from 'node:os';
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {noticeArtifacts,reviewedPackages,verifyBundledModule,projectRoot} from '../../scripts/third-party-notices.mjs';
-const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+type Notice = {file:string;sha256:string};
+type ReviewedPackage = {name:string;version:string;noticeFiles:Notice[];additionalNoticeFiles?:Notice[]};
+const inventory:ReviewedPackage[]=reviewedPackages;
+const hash=(bytes:Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
 test('all reviewed notices retain every original byte, copyright and conditions',()=>{
- const {text,manifest}=noticeArtifacts(),expectedCount=reviewedPackages.reduce((n,p)=>n+p.noticeFiles.length+(p.additionalNoticeFiles?.length??0),0),seen=new Set();assert.equal(manifest.packages.length,expectedCount);assert.equal(hash(text),manifest.sha256);
- for(const row of manifest.packages){const expected=reviewedPackages.find(p=>p.name===row.name&&p.version===row.version);const notice=[...expected.noticeFiles,...expected.additionalNoticeFiles??[]].find(n=>n.file.split('/').at(-1)===row.originalFile&&n.sha256===row.sha256);assert.ok(notice);const key=`${row.name}@${row.version}:${notice.file}`;assert.equal(seen.has(key),false);seen.add(key);const original=readFileSync(resolve(projectRoot,notice.file));const slice=text.subarray(row.offset,row.offset+row.bytes);assert.deepEqual(slice,original);assert.equal(hash(slice),row.sha256);}assert.equal(seen.size,expectedCount);
+ const {text,manifest}=noticeArtifacts(),expectedCount=inventory.reduce((n,p)=>n+p.noticeFiles.length+(p.additionalNoticeFiles?.length??0),0),seen=new Set();assert.equal(manifest.packages.length,expectedCount);assert.equal(hash(text),manifest.sha256);
+ for(const row of manifest.packages){const expected=inventory.find(p=>p.name===row.name&&p.version===row.version);assert.ok(expected);const notice=[...expected.noticeFiles,...expected.additionalNoticeFiles??[]].find(n=>n.file.split('/').at(-1)===row.originalFile&&n.sha256===row.sha256);assert.ok(notice);const key=`${row.name}@${row.version}:${notice.file}`;assert.equal(seen.has(key),false);seen.add(key);const original=readFileSync(resolve(projectRoot,notice.file));const slice=text.subarray(row.offset,row.offset+row.bytes);assert.deepEqual(slice,original);assert.equal(hash(slice),row.sha256);}assert.equal(seen.size,expectedCount);
  assert.match(text.toString(),/Permission is hereby granted/);assert.match(text.toString(),/Redistribution and use in source and binary forms/);
  assert.equal(manifest.packages.some(p=>p.name.includes('ffmpeg')),false);
  for(const name of ['@mtcute/core','@mtcute/web','@mtcute/wasm','long'])assert.ok(manifest.packages.some(p=>p.name===name));
@@ -17,7 +20,7 @@ test('all reviewed notices retain every original byte, copyright and conditions'
 test('module inventory guard permits the reviewed SDK and still rejects unreviewed packages',()=>{
  verifyBundledModule(resolve(projectRoot,'node_modules/react/index.js'));verifyBundledModule('\0'+resolve(projectRoot,'node_modules/react/jsx-runtime.js')+'?commonjs-proxy');
  verifyBundledModule(resolve(projectRoot,'node_modules/@mtcute/web/index.js'));
- assert.throws(()=>verifyBundledModule(resolve(projectRoot,'node_modules/@mtcute/web/index.js'),{packages:reviewedPackages.filter(p=>p.name!=='@mtcute/web')}),/License review required before bundling/);
+ assert.throws(()=>verifyBundledModule(resolve(projectRoot,'node_modules/@mtcute/web/index.js'),{packages:inventory.filter(p=>p.name!=='@mtcute/web')}),/License review required before bundling/);
  const ffmpeg=resolve(projectRoot,'node_modules/@ffmpeg-installer/linux-x64');
  if(existsSync(resolve(ffmpeg,'package.json')))assert.throws(()=>verifyBundledModule(resolve(ffmpeg,'index.js')),/License review required before bundling/);
 });
