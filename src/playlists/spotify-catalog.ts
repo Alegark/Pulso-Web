@@ -1,3 +1,4 @@
+import {RateLimited} from '../http/rate-limit.mjs';
 import {ACTIVE_LIBRARY_ACCOUNT} from '../accounts/library-local';
 import {catalogSongsFromBatch} from '../library/album-catalog';
 import {searchArtwork} from '../library/catalog-artwork';
@@ -141,10 +142,11 @@ export async function readSpotifyRelease(id:string,signal:AbortSignal):Promise<S
  if(!/^[A-Za-z0-9]{22}$/.test(id))return null;
  try{
   const response=await fetch('/api/spotify-track/'+id,{signal,credentials:'omit',cache:'no-store'});
+  if(response.status===429)throw new RateLimited(response);
   if(!response.ok)return null;
   const release=copyCatalogRelease(await response.json());
   return release?.source==='spotify'&&release.trackId===id?release:null;
- }catch{return null;}
+ }catch(error){if(error instanceof RateLimited)throw error;return null;}
 }
 
 export interface SpotifyCatalogProgress {total:number;checked:number;linked:number;covers:number}

@@ -38,7 +38,7 @@ async function createProvider():Promise<AccountProvider>{
 let knownUser:string|null|undefined,synchronization:ReturnType<typeof coordinateAccountSessions>|null=null;
 const cache=offlineAccountCache({getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value),removeItem:key=>localStorage.removeItem(key)});
 export const accountController=createAccountController({
- async config(){const r=await fetch('/account-config.json',{cache:'no-store',credentials:'same-origin',redirect:'error',signal:AbortSignal.timeout(5000)});if(!r.ok)throw new AccountFailure('NETWORK');const raw=await r.text();if(raw.length>512)throw new AccountFailure('INVALID_RESPONSE');const v=JSON.parse(raw);if(v.version!==1||typeof v.enabled!=='boolean'||typeof v.google!=='boolean')throw new AccountFailure('INVALID_RESPONSE');return v;},
+ async config(){const r=await fetch('/account-config.json',{cache:'no-store',credentials:'same-origin',redirect:'error',signal:AbortSignal.timeout(5000)});if(!r.ok)throw new AccountFailure('NETWORK');const raw=await r.text();if(raw.length>512)throw new AccountFailure('INVALID_RESPONSE');const v=JSON.parse(raw);if(v.version!==1||typeof v.enabled!=='boolean'||typeof v.google!=='boolean'||v.turnstileSiteKey!==undefined&&(typeof v.turnstileSiteKey!=='string'||!v.turnstileSiteKey||v.turnstileSiteKey.length>128))throw new AccountFailure('INVALID_RESPONSE');return v;},
  provider:createProvider,
  offlineSession:()=>typeof navigator!=='undefined'&&navigator.onLine===false?cache.read():null,
  confirmed(user){cache.save(user);const next=user?.id??null;if(knownUser!==undefined&&knownUser!==next)synchronization?.notify();knownUser=next;},

@@ -6,9 +6,11 @@ import {accountLibrary} from './account-library.mjs';
 import {createMusicBrainzRelay} from './musicbrainz-relay.mjs';
 import {CatalogRelay,RelayError} from './relay.mjs';
 import {decodeTelegramApiIdentity} from '../../src/telegram/api-identity.ts';
-import {shellAssetRequest} from './navigation.mjs';
+import {isAppDocument,shellAssetRequest} from './navigation.mjs';
+import {turnstileOrigin,turnstileSiteKey} from './turnstile.mjs';
 const base="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 const documentPolicy=base.replace("connect-src 'self';","connect-src 'self' https://lrclib.net https://itunes.apple.com https://is1-ssl.mzstatic.com https://is2-ssl.mzstatic.com https://is3-ssl.mzstatic.com https://is4-ssl.mzstatic.com https://is5-ssl.mzstatic.com;");
+const accountDocumentPolicy=documentPolicy.replace("script-src 'self';",`script-src 'self' ${turnstileOrigin}; frame-src ${turnstileOrigin};`);
 const sdkPolicy="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' wss://pluto.web.telegram.org wss://venus.web.telegram.org wss://aurora.web.telegram.org wss://vesta.web.telegram.org wss://flora.web.telegram.org; object-src 'none'; base-uri 'none'";
 function response(body,status=200,mime='application/json',retry=null){const headers={'Content-Type':mime,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':base};if(retry)headers['Retry-After']=retry;return new Response(body,{status,headers});}
 // A single SQLite-backed object coordinates the upstream quota across locations.
@@ -21,8 +23,8 @@ export default {
  async fetch(request,env,ctx){
   const url=new URL(request.url),path=url.pathname;
   if(path==='/account-config.json'||path.startsWith('/api/account-auth/'))return accountAuth(request,env);
-  if(path.startsWith('/api/spotify-playlist/'))return spotifyPlaylist(request);
-  if(path.startsWith('/api/spotify-track/'))return spotifyTrackRelease(request,undefined,ctx);
+  if(path.startsWith('/api/spotify-playlist/'))return spotifyPlaylist(request,undefined,env.PULSO_SPOTIFY_LIMIT);
+  if(path.startsWith('/api/spotify-track/'))return spotifyTrackRelease(request,undefined,ctx,env.PULSO_SPOTIFY_LIMIT);
   if(path==='/api/account-profile')return accountProfile(request,env);
   if(path==='/api/account-library')return accountLibrary(request,env);
   if(!['GET','HEAD'].includes(request.method))return response('{}',405);
@@ -46,8 +48,10 @@ export default {
   if(path.split('/').some(p=>p.startsWith('.'))||/[\\\x00]/.test(path))return response('{}',404);
   const asset=await env.ASSETS.fetch(shellAssetRequest(request)),headers=new Headers(asset.headers);
   headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','no-referrer');
-  headers.set('Content-Security-Policy',/\/session\.worker-[^/]+\.js$/.test(path)?sdkPolicy:(asset.headers.get('content-type')??'').startsWith('text/html')?documentPolicy:base);
-  if((asset.headers.get('content-type')??'').startsWith('text/html'))headers.set('Cache-Control','no-store');
+  const html=(asset.headers.get('content-type')??'').startsWith('text/html');
+  const pagePolicy=isAppDocument(path)&&turnstileSiteKey(env)?accountDocumentPolicy:documentPolicy;
+  headers.set('Content-Security-Policy',/\/session\.worker-[^/]+\.js$/.test(path)?sdkPolicy:html?pagePolicy:base);
+  if(html)headers.set('Cache-Control','no-store');
   if(path==='/sw.js'){headers.set('Cache-Control','no-cache');headers.set('Service-Worker-Allowed','/');}
   return new Response(asset.body,{status:asset.status,statusText:asset.statusText,headers});
  }

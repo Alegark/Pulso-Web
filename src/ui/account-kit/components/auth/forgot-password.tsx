@@ -1,4 +1,5 @@
 /* Adapted from Better Auth UI, MIT; see LICENSE and UPSTREAM.json. */
+import { useTurnstile } from "../../turnstile"
 import { flowMemory } from "../../flow-memory"
 "use client"
 
@@ -51,6 +52,7 @@ export function ForgotPassword({ className }: ForgotPasswordProps) {
   } = useAuth<EmailOtpAuthClient>()
 
   const { fetchOptions, resetFetchOptions } = useFetchOptions()
+  const challenge = useTurnstile("password-reset")
 
   const { mutateAsync: requestPasswordReset, isPending } =
     useRequestPasswordResetOtp(authClient, {
@@ -66,11 +68,9 @@ export function ForgotPassword({ className }: ForgotPasswordProps) {
 
   const form = useAuthForm({
     defaultValues: { email: "" },
-    onSubmit: async ({ value }) =>
-      await requestPasswordReset({
-        email: value.email,
-        fetchOptions
-      })
+    onSubmit: async ({ value }) => {
+      await challenge.submit(fetchOptions, options => requestPasswordReset({ email: value.email, fetchOptions: options }))
+    }
   })
 
   const Captcha = plugins.find(
@@ -131,12 +131,13 @@ export function ForgotPassword({ className }: ForgotPasswordProps) {
                 }}
               </form.AppField>
 
+              {challenge.view}
               {Captcha && <div className="flex justify-center">{Captcha}</div>}
 
               <div className="flex flex-col gap-3">
                 <form.AuthFormSubmitButton
                   isPending={isPending}
-                  disabled={isPending}
+                  disabled={isPending || !challenge.ready}
                 >
                   Enviar código
                 </form.AuthFormSubmitButton>

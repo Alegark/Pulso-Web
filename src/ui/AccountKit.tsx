@@ -13,6 +13,7 @@ import {ResetLinkSent} from './account-kit/components/auth/reset-link-sent';
 import {VerifyEmailOtp} from './account-kit/components/auth/email-otp/verify-email-otp';
 import {flowMemory} from './account-kit/flow-memory';
 import {RESET_LINK_SENT_STORAGE_KEY} from './account-kit/components/auth/reset-link-sent';
+import {TurnstileSiteKey} from './account-kit/turnstile';
 import {accountNotices} from './account-kit/notices';
 import {TooltipProvider} from './account-kit/components/ui/tooltip';
 import inputOtpStyle from './account-kit/input-otp.css?url';
@@ -25,10 +26,10 @@ declare module '@better-auth-ui/core' {
 }
 export type AccountView='sign-in'|'sign-up'|'forgot-password'|'reset-password'|'reset-password-otp'|'verify-email'|'reset-link-sent';
 const views=new Set<AccountView>(['sign-in','sign-up','forgot-password','reset-password','reset-password-otp','verify-email','reset-link-sent']);
-export interface AccountKitProps {client:Awaited<ReturnType<typeof getAccountAuthClient>>;view:AccountView;resetToken:string;google:boolean;onBusy:(busy:boolean)=>void;onSession:()=>void;onView:(view:AccountView)=>void}
+export interface AccountKitProps {client:Awaited<ReturnType<typeof getAccountAuthClient>>;view:AccountView;resetToken:string;google:boolean;turnstileSiteKey?:string;onBusy:(busy:boolean)=>void;onSession:()=>void;onView:(view:AccountView)=>void}
 /** The form markup and submission flow come from Better Auth UI. Pulso owns
  * only its dialog, checked navigation, theme and closed error presentation. */
-export default function AccountKit({client,view,resetToken,google,onBusy,onSession,onView}:AccountKitProps){
+export default function AccountKit({client,view,resetToken,google,turnstileSiteKey,onBusy,onSession,onView}:AccountKitProps){
  const [queryClient]=useState(()=>new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0,staleTime:0,refetchOnWindowFocus:false},mutations:{retry:false,gcTime:0}}}));
  const [error,setError]=useState('');
  const notice=useSyncExternalStore(accountNotices.subscribe,accountNotices.getSnapshot);
@@ -54,7 +55,7 @@ export default function AccountKit({client,view,resetToken,google,onBusy,onSessi
  return <div className="account-kit" data-auth-ui="better-auth-ui">
   <link id="input-otp-style" rel="stylesheet" href={inputOtpStyle} precedence="account"/>
   <AuthProvider authClient={client} queryClient={queryClient} locale={esES} baseURL={window.location.origin} basePaths={{auth:'/account'}} redirectTo="/?pulso-account=callback" Link={Link} navigate={navigate} plugins={plugins} socialProviders={google?['google']:[]} emailAndPassword={{enabled:true,name:true,rememberMe:false,requireEmailVerification:true,confirmPassword:true,minPasswordLength:8,maxPasswordLength:128,strengthMeter:false}} localization={{auth:{signIn:'Iniciar sesión',signUp:'Crear cuenta',name:'Tu nombre',email:'Correo electrónico',forgotPassword:'Olvidé mi contraseña',verifyEmail:'Verifica tu correo',resetPassword:'Guardar contraseña',sendResetLink:'Enviar enlace',checkYourEmailTitle:'Revisa tu correo',passwordResetEmailSent:'Si existe una cuenta con ese correo, recibirás un enlace para recuperar tu contraseña.',resetLinkSentTo:'Si existe una cuenta con {{email}}, recibirás un enlace para recuperar tu contraseña.'}}}>
-   <TooltipProvider>{view==='sign-in'?<SignIn socialPosition="top"/>:view==='sign-up'?<SignUp socialPosition="top"/>:view==='forgot-password'?<ForgotPassword/>:view==='reset-password'||view==='reset-password-otp'?<ResetPassword token={resetToken} email={view==='reset-password-otp'?flowMemory.getItem(RESET_LINK_SENT_STORAGE_KEY)??undefined:undefined}/>:view==='verify-email'?<VerifyEmailOtp/>:<ResetLinkSent/>}</TooltipProvider>
+   <TurnstileSiteKey.Provider value={turnstileSiteKey}><TooltipProvider>{view==='sign-in'?<SignIn socialPosition="top"/>:view==='sign-up'?<SignUp socialPosition="top"/>:view==='forgot-password'?<ForgotPassword/>:view==='reset-password'||view==='reset-password-otp'?<ResetPassword token={resetToken} email={view==='reset-password-otp'?flowMemory.getItem(RESET_LINK_SENT_STORAGE_KEY)??undefined:undefined}/>:view==='verify-email'?<VerifyEmailOtp/>:<ResetLinkSent/>}</TooltipProvider></TurnstileSiteKey.Provider>
   </AuthProvider>
   {error&&<p className="account-dialog__error" role="alert">{error}</p>}
   {notice&&<p role={notice.kind==='error'?'alert':'status'}>{notice.message}</p>}

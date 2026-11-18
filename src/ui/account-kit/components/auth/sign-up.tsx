@@ -1,4 +1,5 @@
 /* Adapted from Better Auth UI, MIT; see LICENSE and UPSTREAM.json. */
+import { useTurnstile } from "../../turnstile"
 import { flowMemory } from "../../flow-memory"
 "use client"
 
@@ -92,6 +93,7 @@ export function SignUp({
   } = useAuth()
 
   const { fetchOptions, resetFetchOptions } = useFetchOptions()
+  const challenge = useTurnstile("sign-up")
 
   const { mutateAsync: signUpEmail } = useSignUpEmail(authClient, {
     onError: (error) => {
@@ -144,13 +146,13 @@ export function SignUp({
     },
     onSubmit: async ({ value }) => {
       try {
-        await signUpEmail({
+        await challenge.submit(fetchOptions, options => signUpEmail({
           name: emailAndPassword?.name === false ? "" : value.name,
           email: value.email.trim(),
           password: value.password,
           callbackURL: getAuthCallbackURL(baseURL, redirectTo),
-          fetchOptions
-        })
+          fetchOptions: options
+        }))
       } catch {
         // The mutation reports the error through its configured handler.
       }
@@ -461,12 +463,13 @@ export function SignUp({
                   )}
 
 
+                  {challenge.view}
                   {Captcha && (
                     <div className="flex justify-center">{Captcha}</div>
                   )}
 
                   <div className="flex flex-col gap-3">
-                    <form.AuthFormSubmitButton disabled={isPending}>
+                    <form.AuthFormSubmitButton disabled={isPending || !challenge.ready}>
                       {localization.auth.signUp}
                     </form.AuthFormSubmitButton>
 

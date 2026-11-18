@@ -1,6 +1,17 @@
 import {readBoundedText} from '../../src/accounts/bounded-body.mjs';
 import {handleAuthProxyRequest,resolveNeonAuthLogging} from '@neon/auth/server';
 
+import {clientIp,isRateLimited,rateLimitBody,rateLimitHeaders} from './rate-limit.mjs';
+import {turnstileSiteKey,verifyTurnstile} from './turnstile.mjs';
+
+const challengeActions=new Map([
+ ['sign-up/email','sign-up'],
+ ['email-otp/send-verification-otp','verify-email'],
+ ['request-password-reset','password-reset'],
+ ['email-otp/request-password-reset','password-reset'],
+]);
+const authAttempts=new Set(['sign-in/email','sign-in/social','email-otp/verify-email','email-otp/reset-password','reset-password']);
+
 const mount='/api/account-auth/';
 const methods=new Map([
  ['get-session','GET'],['token','GET'],['sign-in/email','POST'],['sign-up/email','POST'],
@@ -43,10 +54,14 @@ function payload(path,v,origin){
 }
 /** The SDK owns Neon OAuth/cookie semantics. This boundary exposes only the
  * account flows used by Pulso, never admin, SQL, arbitrary URLs or visitor logs. */
-export function createAccountAuthRouter({proxy=handleAuthProxyRequest,timeoutMs=15000}={}){
+export function createAccountAuthRouter({proxy=handleAuthProxyRequest,timeoutMs=15000,siteverify=fetch,siteverifyTimeoutMs=5000}={}){
  return async function accountAuth(request,env){
   const url=new URL(request.url),path=url.pathname;
-  if(path==='/account-config.json')return ['GET','HEAD'].includes(request.method)?json({version:1,enabled:enabled(env),google:enabled(env)&&env.PULSO_AUTH_GOOGLE_ENABLED==='true'}):json({},405);
+  if(path==='/account-config.json'){
+   if(!['GET','HEAD'].includes(request.method))return json({},405);
+   const active=enabled(env);
+   return json({version:1,enabled:active,google:active&&env.PULSO_AUTH_GOOGLE_ENABLED==='true',turnstileSiteKey:active?turnstileSiteKey(env):undefined});
+  }
   if(!path.startsWith(mount))return null;
   const operation=path.slice(mount.length),method=methods.get(operation);
   if(!method)return json({},404);
@@ -60,6 +75,13 @@ export function createAccountAuthRouter({proxy=handleAuthProxyRequest,timeoutMs=
   // Revalidate at Neon, including OAuth exchanges while an older account cookie
   // still exists. A cached profile must not swallow the new one-use verifier.
   if(operation==='get-session')target.searchParams.set('disableCookieCache','true');
+  const action=challengeActions.get(operation);
+  const limiter=action?env.PULSO_AUTH_EMAIL_LIMIT:authAttempts.has(operation)?env.PULSO_AUTH_ATTEMPT_LIMIT:undefined;
+  try{
+   if(await isRateLimited(limiter,clientIp(request)??'unknown')){
+    return Response.json(rateLimitBody,{status:429,headers:{...safeHeaders,...rateLimitHeaders}});
+   }
+  }catch{return json({code:'AUTH_UNAVAILABLE'},503);}
   const headers=new Headers();
   headers.set('Origin',url.origin);
   // No Authorization, Referer, IP, account identity or arbitrary visitor headers.
@@ -69,6 +91,10 @@ export function createAccountAuthRouter({proxy=handleAuthProxyRequest,timeoutMs=
    if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')??''))return json({},415);
    try{body=JSON.stringify(payload(operation,JSON.parse(await boundedText(request,8192)),url.origin));}catch{return json({code:'INVALID_REQUEST'},400);}
    headers.set('Content-Type','application/json');
+  }
+  if(action&&turnstileSiteKey(env)){
+   const code=await verifyTurnstile(request,env,action,siteverify,siteverifyTimeoutMs);
+   if(code)return json({code},code==='TURNSTILE_UNAVAILABLE'?503:400);
   }
   let timer;
   try{

@@ -17,7 +17,8 @@ test('Workers runtime accepts request options and rejects redirects without foll
  const {stripTypeScriptTypes}=await import('node:module');
  const source=await readFile(new URL('../../deployment/cloudflare/spotify-playlist.mjs',import.meta.url),'utf8');
  const moduleName='deployment/cloudflare/spotify-playlist.mjs',matcherName='src/library/catalog-id.ts';
- const readerName='src/accounts/bounded-body.mjs';
+ const readerName='src/accounts/bounded-body.mjs',limiterName='deployment/cloudflare/rate-limit.mjs';
+ const limiter=await readFile(new URL('../../'+limiterName,import.meta.url),'utf8');
  const reader=await readFile(new URL('../../'+readerName,import.meta.url),'utf8');
  const matcher=stripTypeScriptTypes(await readFile(new URL('../../'+matcherName,import.meta.url),'utf8'));
  const contents=source+`
@@ -46,7 +47,7 @@ test('Workers runtime accepts request options and rejects redirects without foll
   return Response.json({calls,status:response.status,data:await response.json()});
  }};
  `;
- const mf=new Miniflare({workers:[{config:{name:'spotify-runtime-test',compatibilityDate:'2026-11-13',manifest:{mainModule:moduleName,modules:{[moduleName]:{type:'esm',contents},[matcherName]:{type:'esm',contents:matcher},[readerName]:{type:'esm',contents:reader}}}}}]});
+ const mf=new Miniflare({workers:[{config:{name:'spotify-runtime-test',compatibilityDate:'2026-11-13',manifest:{mainModule:moduleName,modules:{[moduleName]:{type:'esm',contents},[matcherName]:{type:'esm',contents:matcher},[readerName]:{type:'esm',contents:reader},[limiterName]:{type:'esm',contents:limiter}}}}}]});
  try{
   const url=`https://pulso.test/api/spotify-playlist/${id}`;
   const success=await(await mf.dispatchFetch(url)).json();assert.equal(success.calls,1);assert.equal(success.status,200);assert.equal(success.data.tracks.length,1);
@@ -132,4 +133,21 @@ test('cancelling one Spotify visitor leaves shared work usable and errors can be
  assert.equal((await first).status,502);
  assert.equal((await second).status,200);
  assert.equal(calls,3);
+});
+
+
+test('both Spotify relays share an IP budget and stop before fetch when limited',async()=>{
+ const keys=[];
+ const limiter={limit:async({key})=>{keys.push(key);return {success:false};}};
+ const fetcher=()=>assert.fail('Spotify upstream');
+ for(const kind of ['playlist','track']){
+  const request=new Request(`https://pulso.test/api/spotify-${kind}/${id}`,{
+   headers:{'CF-Connecting-IP':'192.0.2.2','X-Forwarded-For':'198.51.100.1'},
+  });
+  const response=await (kind==='playlist'?spotifyPlaylist(request,fetcher,limiter):spotifyTrackRelease(request,fetcher,undefined,limiter));
+  assert.equal(response.status,429);
+  assert.equal(response.headers.get('Retry-After'),'60');
+  assert.deepEqual(await response.json(),{code:'RATE_LIMITED'});
+ }
+ assert.deepEqual(keys,['192.0.2.2','192.0.2.2']);
 });
