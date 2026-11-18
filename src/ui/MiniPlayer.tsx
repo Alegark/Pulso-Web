@@ -17,6 +17,7 @@ export interface MiniPlayerProps {
   onPause: () => void;
   onOpenPlayer: (opener: HTMLButtonElement) => void;
   artwork?: ReactNode;
+  notice?: ReactNode;
   onPrevious?: () => void; onNext?: () => void; canPrevious?: boolean; canNext?: boolean;
   position?: number; duration?: number; onSeek?: (value:number)=>void;
   volume?: number; onVolume?: (value:number)=>void;
@@ -28,6 +29,7 @@ export function MiniPlayer(props: MiniPlayerProps) {
   const clock=(seconds:number)=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
   return (
     <section className="mini-player" aria-label="Mini reproductor">
+      {props.notice}
       <button type="button" className="mini-player__details" title={[props.title,props.artist].filter(Boolean).join(' · ')} aria-label="Abrir reproductor desde título" onClick={event=>props.onOpenPlayer(event.currentTarget)}>
         {props.artwork&&<span className="mini-player__cover">{props.artwork}</span>}
         <span className="mini-player__copy"><span className="mini-player__title">{props.title}</span>
