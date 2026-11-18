@@ -175,9 +175,13 @@ const databaseRetries=new Set<()=>boolean>();
 const databaseReloadRequired=()=>databaseState==='versionchange'||databaseState==='version-incompatible';
 const databaseRecoverable=()=>databaseState==='blocked'||databaseState==='connection-closed';
 let metadataRescanBlocked=true;
-let owner=false;let busy=false;let status='Abriendo biblioteca…';let tracks:Track[]=[];let playlists:Playlist[]=[];let addedTrackIds:ReadonlySet<string>=new Set();
+let owner=false;let busy=false,busyOwner:symbol|null=null;let status='Abriendo biblioteca…';let tracks:Track[]=[];let playlists:Playlist[]=[];let addedTrackIds:ReadonlySet<string>=new Set();
 const listeners=new Set<()=>void>();const emit=()=>{observeQueueAdmission();finishTransferPlay();listeners.forEach(fn=>fn());};
 let writes=Promise.resolve();let lastSave=0;let configuring=false;
+function startBusy(configure=false){
+ const token=Symbol();busyOwner=token;busy=true;if(configure)configuring=true;
+ return()=>{if(busyOwner!==token)return;busyOwner=null;busy=false;if(configure)configuring=false;emit();};
+}
 let queueSaveTokens=0,queueInsertionUncertain=false,insertionAdmissionEpoch=0,foreignMutationEpoch=0,lastInsertionAdmission='',lastForeignAdmission='',lastInsertionOccupied=false,observingInsertionAdmission=false,insertionCommitInProgress=false;
 const queueSaveTransactions=new Set<{tx:IDBTransaction;current:()=>boolean}>();
 const insertionPresentations=new Map<string,()=>boolean>();
@@ -304,13 +308,14 @@ async function clearQueue(){
  const admitted=captureInsertionCurrent();if(!admitted())return;
  queueInsertions.cancelAll('replaced');await queueInsertions.whenSettled();if(!admitted())return;
  const current=captureRemovalRaw(),operation=control.activity.begin();if(!operation)return;
- busy=true;configuring=true;emit();
+ const endBusy=startBusy(true);emit();
  try{
   player.suspend();player.setQueue([]);suspendedSnapshot=undefined;sourceProtection.invalidateScope();await sourceProtection.releaseUnused();
   if(!current()||!operation.current())return;
   const saved=await saveLatestQueue(()=>current()&&operation.current(),true);
+  if(!current()||!operation.current())return;
   status=saved==='saved'?'Cola vacía. Las canciones y sus archivos se conservan.':'Cola vacía en esta sesión. No se pudo guardar el cambio.';
- }finally{if(current()&&operation.current()){busy=false;configuring=false;queueInsertionUncertain=sourceProtection.getReadonlySnapshot().unknown;control.activity.block('queue-insertion',queueInsertionUncertain);emit();}operation.end();}
+ }finally{try{if(current()&&operation.current()){queueInsertionUncertain=sourceProtection.getReadonlySnapshot().unknown;control.activity.block('queue-insertion',queueInsertionUncertain);}}finally{endBusy();operation.end();}}
 }
 function resumeStartupQueue(){
  const restore=deferredQueueRestore;if(!restore)return;if(!restore.current()){deferredQueueRestore=null;return;}
@@ -564,7 +569,7 @@ async function recoverWork(job:ImportOperation,action:'resume'|'discard'){
  const operation=control.activity.begin();if(!operation)return;
  const scope=scopeId,proof=control.proof,diagnostic=beginDiagnostic('recover-import');
  const current=()=>scope===scopeId&&control.owner&&control.proof===proof&&operation.current();
- busy=true;status='Revisando la copia local…';emit();
+ const endBusy=startBusy();status='Revisando la copia local…';emit();
  let recoveryWorker:Worker|null=null;
  try{
  recoveryWorker=new Worker(new URL('./imports/recovery.worker.ts',import.meta.url),{type:'module'});
@@ -580,14 +585,14 @@ async function recoverWork(job:ImportOperation,action:'resume'|'discard'){
  finally{
   if(recoveryWorker){recoveryWorker.onmessage=null;recoveryWorker.onerror=null;recoveryWorker.onmessageerror=null;recoveryWorker.terminate();}
   if(current())try{await refresh(true,true,diagnostic);}catch{if(current()){control.activity.block('import-state',true);status+=' No se pudo actualizar la vista; conserva tus originales y vuelve a comprobar el estado.';}}
-  diagnostics.finish(diagnostic);operation.end();if(scope===scopeId){busy=false;emit();}
+  diagnostics.finish(diagnostic);endBusy();operation.end();
  }
 }
 async function retainProblemWork(issue:ImportIssue){
- if(!owner||busy||databaseState!=='ready'||copyRemovalPending)return;busy=true;emit();
- try{await retainImportIssue(issue);status='Registro revisado: se conservan todos sus archivos. No se ha confirmado ni eliminado esa copia.';}
- catch{status='No se pudo revisar el registro; se conserva.';}
- finally{try{await refresh();}catch{control.activity.block('import-state',true);status='No se pudo reabrir el almacenamiento. Recarga para revisar el estado.';}busy=false;emit();}
+ if(!owner||busy||databaseState!=='ready'||copyRemovalPending)return;const endBusy=startBusy(),current=captureRemovalRaw();emit();
+ try{await retainImportIssue(issue);if(current())status='Registro revisado: se conservan todos sus archivos. No se ha confirmado ni eliminado esa copia.';}
+ catch{if(current())status='No se pudo revisar el registro; se conserva.';}
+ finally{try{if(current())await refresh();}catch{if(current()){control.activity.block('import-state',true);status='No se pudo reabrir el almacenamiento. Recarga para revisar el estado.';}}finally{endBusy();}}
 }
 async function actWork(fn:(current:()=>boolean)=>Promise<unknown>,onRefreshed?:()=>void){
  if(!owner||busy||copyRemovalBlocked()||queueForeignBlocked())return;const scope=scopeId,diagnostic=beginDiagnostic('edit-organization');
@@ -620,7 +625,7 @@ async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[
  const owns=()=>scope===scopeId&&proof===control.proof&&control.owner&&operation.current();
  const current=()=>owns()&&callerCurrent()&&databaseState==='ready'&&admission===databaseGeneration;
  const preparation=sourceProtection.beginPreparation(saved?saved.entries.map(entry=>entry.trackId):ids,current);
- const sourceAbort=new AbortController(),diagnostic=beginDiagnostic('prepare-queue');let sourcePublished=false;let phase:Phase='validate';let known:Result|undefined;busy=true;configuring=true;player.pause();status='Preparando cola…';emit();
+ const sourceAbort=new AbortController(),diagnostic=beginDiagnostic('prepare-queue');let sourcePublished=false;let phase:Phase='validate';let known:Result|undefined;const endBusy=startBusy(true);player.pause();status='Preparando cola…';emit();
  try{
  let restored=saved;let missing=0;
  if(saved){
@@ -653,8 +658,8 @@ async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[
  finally{
   // Record the primary error above before best-effort resource settlement.
   // Keep Activity admitted through cleanup; an old finally never clears a new scope.
-  if(!sourcePublished)sourceAbort.abort();await preparation.settle();
-  diagnostics.finish(diagnostic);if(owns()){busy=false;configuring=false;emit();}operation.end();
+  try{if(!sourcePublished)sourceAbort.abort();await preparation.settle();}
+  finally{diagnostics.finish(diagnostic);endBusy();operation.end();}
  }
 }
 function snapshot():Snapshot|undefined{
@@ -775,7 +780,7 @@ function applyDatabaseLifecycle(state:DatabaseLifecycleState){
  // Local native notification invalidates before close. A remote realm already
  // revoked itself; this document invalidates synchronously on receipt.
  control.activity.invalidate();player.suspend();clearMediaSession();
- sourceProtection.invalidateScope();void sourceProtection.releaseUnused();busy=false;
+ sourceProtection.invalidateScope();void sourceProtection.releaseUnused();busyOwner=null;busy=false;
  retireDatabaseRealm();
  diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'failed'});
  status=state==='version-incompatible'?'Esta versión no admite la base local. Abre la versión actualizada para continuar.':'La base local cambió de versión. Abre la versión actual para revisar la biblioteca.';
