@@ -128,3 +128,28 @@ test('Play recarga el medio fallido y restaura su posición sin cambiar la entra
  assert.equal(player.generation,generation+1);assert.equal(player.current.id,'q1');assert.equal(audio.plays,1);
  audio.dispatchEvent(new Event('loadedmetadata'));assert.equal(audio.currentTime,2.5);
 });
+
+test('el orden efectivo aleatorio mueve solo las pistas futuras y conserva el orden base',()=>{
+ const {player}=setup();player.setQueue([...entries,{...entries[1],id:'q3'}]);
+ player.restoreModes('off',['q1','q2','q3','q0']);player.select(2);
+ const generation=player.generation,revision=player.queueRevision;
+ player.moveEntry('q3',-1);player.moveEntry('q1',1);player.moveEntry('q2',1);
+ assert.equal(player.queueRevision,revision);
+ player.moveEntry('q0',-1);
+ assert.deepEqual(player.playbackOrder().map(e=>e.id),['q1','q2','q0','q3']);
+ assert.equal(player.queueRevision,revision+1);
+ assert.deepEqual(player.entries.map(e=>e.id),['q0','q1','q2','q3']);
+ assert.equal(player.generation,generation);
+ player.next();assert.equal(player.current.id,'q0');
+});
+test('Play sin selección empieza por la primera ocurrencia en aleatorio',async()=>{
+ const {player}=setup();player.setShuffle(true,()=>0);assert.equal(player.shuffleOrder?.[0],'q1');
+ await player.play();assert.equal(player.current.id,'q1');
+});
+test('Play avanza desde ended si se insertó a continuación en aleatorio',async()=>{
+ const {audio,player}=setup();player.restoreModes('off',['q2','q1','q0']);player.select(0);
+ audio.ended=true;audio.dispatchEvent(new Event('ended'));assert.equal(player.state,'ended');
+ const added={...entries[1],id:'next'};
+ const inserted=player.insertQueue({intentId:'test-next',placement:'next',entries:[added],afterEntryId:'q0',expectedQueueRevision:player.queueRevision,expectedQueueEpoch:player.queueEpoch},()=>true);
+ assert.equal(inserted.kind,'inserted');await player.play();assert.equal(player.current.id,'next');assert.equal(audio.plays,1);
+});

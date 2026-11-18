@@ -51,6 +51,12 @@ export class Player {
     this.invalidate(); this.audio.pause(); this.entries = entries.map(e => ({...e}));
     this.index = -1; this.shuffleOrder=null; this.state = 'idle'; this.emit();
   }
+  /** Full effective order, including playback history and the current entry. */
+  playbackOrder():readonly Readonly<Entry>[] {
+    if(!this.shuffleOrder)return [...this.entries];
+    const byId=new Map(this.entries.map(entry=>[entry.id,entry]));
+    return this.shuffleOrder.map(id=>byId.get(id)!);
+  }
   structure():QueueStructure {
     return Object.freeze({queueRevision:this.revision,queueEpoch:this.epoch,
       entries:Object.freeze(this.entries.map(e=>Object.freeze({...e}))),
@@ -127,8 +133,11 @@ export class Player {
       return;
     }
     if (fromSeconds === undefined) {
-      if (!this.current) { this.select(0, true); return; }
-      if (this.audio.ended || this.state === 'ended') { this.audio.currentTime = 0; this.select(this.index); }
+      if (!this.current) { this.select(this.following(), true); return; }
+      if (this.audio.ended || this.state === 'ended') {
+        const next=this.following();
+        this.select(next>=0?next:this.index);
+      }
     }
     const generation = this.generation,src=this.audio.src,failed=this.observe('play');
     try { if (fromSeconds !== undefined) { this.audio.currentTime = fromSeconds; this.endedConsumed = false; } await this.audio.play(); if (generation !== this.generation && !this.allowed) this.audio.pause(); }
@@ -169,11 +178,16 @@ export class Player {
     this.shuffleOrder=restored;this.emit();
   }
   moveEntry(id:string,delta:-1|1){ if (!this.allowed) return;
-    const current=this.current?.id;const i=this.entries.findIndex(e=>e.id===id);const j=i+delta;
+    const current=this.current?.id;
+    if(this.shuffleOrder){
+      const order=this.shuffleOrder,position=order.indexOf(current??''),i=order.indexOf(id),j=i+delta;
+      if(i<=position||j<=position||j>=order.length)return;
+      ++this.revision;[order[i],order[j]]=[order[j],order[i]];this.emit();return;
+    }
+    const i=this.entries.findIndex(e=>e.id===id);const j=i+delta;
     if(i<0||j<0||j>=this.entries.length)return;
     ++this.revision;
     [this.entries[i],this.entries[j]]=[this.entries[j],this.entries[i]];this.index=this.entries.findIndex(e=>e.id===current);
-    if(this.shuffleOrder){const x=this.shuffleOrder.indexOf(id);const y=x+delta;if(x>=0&&y>=0&&y<this.shuffleOrder.length)[this.shuffleOrder[x],this.shuffleOrder[y]]=[this.shuffleOrder[y],this.shuffleOrder[x]];}
     this.emit();
   }
   removeFuture(id:string){ if (!this.allowed) return;
