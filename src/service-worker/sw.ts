@@ -10,7 +10,7 @@ import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import {resolveRange} from './ranges';
 import {cachedShellResponse} from './shell-response';
-import {appDocumentPath,cachedAppDocument,freshShellDocument,migrateLegacyShells} from './shell-updates';
+import {appDocumentPath,cachedAppDocument,freshShellDocument,migrateLegacyShells,pruneShellCaches} from './shell-updates';
 import {copySourceAsset,copySourceRequest,sameSourceAsset,sourceUUID,sourceProof,type SourceCause,type PinnedRequest,type ReleaseRequest} from '../playback/local-source-protocol';
 import type {LocalAsset} from '../library/library';
 declare const self: ServiceWorkerGlobalScope;
@@ -65,7 +65,10 @@ self.addEventListener('install', event => { event.waitUntil((async()=>{
  // The older worker remains active, including its audio readers and tickets.
  await migrateLegacyShells(caches,SHELL);
 })()); });
-self.addEventListener('activate', event => { event.waitUntil(self.clients.claim()); });
+self.addEventListener('activate',event=>{event.waitUntil((async()=>{
+ try{await pruneShellCaches(caches,SHELL);}catch{/* Cache cleanup must not prevent activation. */}
+ await self.clients.claim();
+})());});
 // No skipWaiting: una versión nueva espera el cierre de clientes anteriores.
 self.addEventListener('message',event=>{
  const source=event.source as Client|null;const port=event.ports[0];const m=event.data;
