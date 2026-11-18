@@ -74,7 +74,7 @@ test('old cached document after slow navigation tries each release once per sess
  const first=fixture(session),fallback=fixture(session);
  try{
   await idle(first);assert.deepEqual(first.nav,[entry]);first.core.stop();
-  await idle(fallback);assert.deepEqual(fallback.nav,[]);assert.equal(fallback.stats().entered,0);assert.equal(fallback.states.at(-1),'available');
+  await idle(fallback);assert.deepEqual(fallback.nav,[]);assert.equal(fallback.stats().entered,0);assert.equal(fallback.pending.at(-1),false);assert.equal(fallback.states.at(-1),'available');
   fallback.core.reload();await flush();await fallback.core.tick();assert.deepEqual(fallback.nav,[entry]);
  }finally{first.core.stop();fallback.core.stop();}
  const nextEntry='/releases/fedcba9876543210.html',next=fixture(session,nextEntry),rollback=fixture(session);
@@ -87,7 +87,7 @@ test('unavailable session storage keeps the app usable with manual navigation',a
  const f=fixture({getItem:()=>null,setItem:()=>{throw Error('denied');}});
  try{
   await f.core.check();await f.core.tick();f.setTime(1000);await f.core.tick();await f.core.tick();
-  assert.deepEqual(f.nav,[]);assert.equal(f.stats().entered,0);
+  assert.deepEqual(f.nav,[]);assert.equal(f.stats().entered,0);assert.equal(f.pending.at(-1),false);
   f.core.reload();await flush();await f.core.tick();assert.deepEqual(f.nav,[entry]);
  }finally{f.core.stop();}
 });

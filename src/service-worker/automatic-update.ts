@@ -69,7 +69,7 @@ export function createAutomaticUpdater(host:UpdateHost){
    const bundle=entryBundle(await text(response,65536,controller.signal));if(!bundle)throw Error('update-bundle');if(controller.signal.aborted||stopped)return;
    lastEntry=entry;
    if(bundle===host.bundle){candidate=null;reset();host.pending(false);host.state?.('current');return;}
-   if(candidate?.entry!==entry){candidate={entry,bundle};reset();host.pending(true);}
+   if(candidate?.entry!==entry){candidate={entry,bundle};reset();host.pending(canApply(entry));}
    host.state?.('available');
   }catch{if(!stopped)host.state?.('unavailable');/* Offline/partial publication leaves the current app usable. */}
   finally{clearTimeout(timer);if(abort===controller)abort=null;checking=false;}
@@ -81,7 +81,7 @@ export function createAutomaticUpdater(host:UpdateHost){
   const selected=candidate;applying=true;
   try{
    if(!await host.prepare(manual)||selected!==candidate||!ready()){reset();return;}
-   if(!manual&&selected&&!recordAttempt(selected.entry))return;
+   if(!manual&&selected&&!recordAttempt(selected.entry)){host.pending(false);return;}
    // The final synchronous guard and admission fence precede navigation. A new
    // Play or write cannot start while the document is leaving.
    release=host.enter();navigating=true;
