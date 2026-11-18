@@ -26,17 +26,28 @@ async function bounded(response,limit,signal){
  finally{signal.removeEventListener('abort',cancel);if(!done)cancel();try{reader.releaseLock();}catch{}}
 }
 export class CatalogRelay{
- constructor({fetcher=(...args)=>fetch(...args),clock=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),spacing=3100,timeout=10000,checkpoint=async()=>{},initial={},resolver=upstream,userAgent='Pulso-Web prototype'}={}){
-  Object.assign(this,{fetcher,clock,sleep,spacing,timeout,checkpoint,resolver,userAgent});this.last=initial.last??0;this.cooldown=initial.cooldown??0;this.cache=new Map();this.inflight=new Map();this.tail=Promise.resolve();this.cacheBytes=0;
+ constructor({fetcher=(...args)=>fetch(...args),clock=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),spacing=3100,timeout=10000,checkpoint=async()=>{},initial={},clientSlots=new Map(),resolver=upstream,userAgent='Pulso-Web prototype'}={}){
+  Object.assign(this,{fetcher,clock,sleep,spacing,timeout,checkpoint,clientSlots,resolver,userAgent});this.last=initial.last??0;this.cooldown=initial.cooldown??0;this.cache=new Map();this.inflight=new Map();this.tail=Promise.resolve();this.cacheBytes=0;
  }
- async get(path,query){
+ async get(path,query,client=null){
   const target=this.resolver(path,query),key=target.url,hit=this.cache.get(key);
   if(hit&&hit.expires>this.clock()){this.cache.delete(key);this.cache.set(key,hit);return hit.value;}
   if(hit){this.cacheBytes-=hit.value.body.length;this.cache.delete(key);}
-  if(this.inflight.has(key))return this.inflight.get(key);if(this.inflight.size>=8)throw new RelayError(503,'5');
+  if(this.inflight.has(key))return this.inflight.get(key);
+  const clientCount=client===null?0:this.clientSlots.get(client)??0;
+  if(clientCount>=2)throw new RelayError(429,'5');
+  if(this.inflight.size>=8)throw new RelayError(503,'5');
+  if(client!==null)this.clientSlots.set(client,clientCount+1);
   const {result,settled}=this.load(target);const work=result.then(value=>{this.cache.set(key,{value,expires:this.clock()+300000,image:target.image});this.cacheBytes+=value.body.length;
    while(this.cacheBytes>33554432||[...this.cache.values()].filter(e=>e.image===target.image).length>(target.image?16:32)){const k=this.cache.keys().next().value;this.cacheBytes-=this.cache.get(k).value.body.length;this.cache.delete(k);}return value;});
-  this.inflight.set(key,work);void settled.then(()=>{if(this.inflight.get(key)===work)this.inflight.delete(key);});return work;
+  this.inflight.set(key,work);void settled.then(()=>{
+   if(this.inflight.get(key)===work)this.inflight.delete(key);
+   if(client!==null){
+    const remaining=this.clientSlots.get(client)-1;
+    if(remaining)this.clientSlots.set(client,remaining);
+    else this.clientSlots.delete(client);
+   }
+  });return work;
  }
  load({url,image}){
   const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),this.timeout);

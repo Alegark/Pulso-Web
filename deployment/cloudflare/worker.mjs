@@ -14,8 +14,8 @@ function response(body,status=200,mime='application/json',retry=null){const head
 // A single SQLite-backed object coordinates the upstream quota across locations.
 // Only last-request/cooldown timestamps persist; query results stay in bounded RAM.
 export class CatalogCoordinator extends DurableObject{
- constructor(ctx,env){super(ctx,env);this.ready=ctx.blockConcurrencyWhile(async()=>{const initial=await ctx.storage.get('quota')??{};this.relay=new CatalogRelay({initial,checkpoint:quota=>ctx.storage.put('quota',quota)});const secondary=await ctx.storage.get('quota-musicbrainz')??{};this.musicbrainz=createMusicBrainzRelay({initial:secondary,checkpoint:quota=>ctx.storage.put('quota-musicbrainz',quota)});});}
- async fetch(request){await this.ready;const url=new URL(request.url);try{const value=await (url.pathname.startsWith('/catalog/musicbrainz/')?this.musicbrainz:this.relay).get(url.pathname,url.search);return response(value.body,200,value.mime);}catch(e){return response('{}',e instanceof RelayError?e.status:502,'application/json',e instanceof RelayError?e.retryAfter:null);}}
+ constructor(ctx,env){super(ctx,env);const clientSlots=new Map();this.ready=ctx.blockConcurrencyWhile(async()=>{const initial=await ctx.storage.get('quota')??{};this.relay=new CatalogRelay({initial,clientSlots,checkpoint:quota=>ctx.storage.put('quota',quota)});const secondary=await ctx.storage.get('quota-musicbrainz')??{};this.musicbrainz=createMusicBrainzRelay({initial:secondary,clientSlots,checkpoint:quota=>ctx.storage.put('quota-musicbrainz',quota)});});}
+ async fetch(request){await this.ready;const url=new URL(request.url);try{const value=await (url.pathname.startsWith('/catalog/musicbrainz/')?this.musicbrainz:this.relay).get(url.pathname,url.search,request.headers.get('CF-Connecting-IP')||'unknown');return response(value.body,200,value.mime);}catch(e){return response('{}',e instanceof RelayError?e.status:502,'application/json',e instanceof RelayError?e.retryAfter:null);}}
 }
 export default {
  async fetch(request,env,ctx){
@@ -37,8 +37,11 @@ export default {
    if(request.method!=='GET')return response('{}',405);
    const origin=request.headers.get('Origin');if(origin&&origin!==url.origin||request.headers.get('Sec-Fetch-Site')==='cross-site')return response('{}',403);
    if(!env.CATALOG)return response('{}',503);
-   // Never forward cookies, authorization, referrer or visitor headers upstream.
-   return env.CATALOG.get(env.CATALOG.idFromName('public-catalog-v1')).fetch(new Request('https://catalog.internal'+path+url.search));
+   // Only Cloudflare's client IP reaches the coordinator, where it stays in RAM.
+   // The upstream gets fixed anonymous headers from the relay.
+   const ip=request.headers.get('CF-Connecting-IP');
+   const headers=ip?{'CF-Connecting-IP':ip}:undefined;
+   return env.CATALOG.get(env.CATALOG.idFromName('public-catalog-v1')).fetch(new Request('https://catalog.internal'+path+url.search,{headers}));
   }
   if(path.split('/').some(p=>p.startsWith('.'))||/[\\\x00]/.test(path))return response('{}',404);
   const asset=await env.ASSETS.fetch(shellAssetRequest(request)),headers=new Headers(asset.headers);
