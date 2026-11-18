@@ -50,7 +50,7 @@ export function TrackActionsMenu({title,artist,artwork,children,active}:TrackAct
   node.close();node.showModal();
   if(focused?.isConnected&&focused.getClientRects().length)focused.focus({preventScroll:true});
  });
- useEffect(()=>{if(!active&&dialog.current?.open)close();},[active]);
+ useEffect(()=>{if(!active&&open)close();},[active,open]);
  useEffect(()=>{
   const node=dialog.current,opener=trigger.current;
   return()=>{

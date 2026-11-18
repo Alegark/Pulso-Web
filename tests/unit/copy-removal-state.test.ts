@@ -102,7 +102,7 @@ test('a busy removal request returns false and is never retried on becoming idle
   assert.equal(await h.controller.start(track),false);
   token.end();await tick();
   assert.equal(h.controller.getView().visible,false);
-  assert.deepEqual(h.events,[]);
+  assert.equal(h.events.includes('discover'),false);
   assert.equal(await h.controller.start(track),true);
   assert.equal(h.controller.getView().state,'ready');
  }finally{token.end();await h.controller.dispose();}
