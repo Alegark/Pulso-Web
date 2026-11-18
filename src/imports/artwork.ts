@@ -250,8 +250,9 @@ export const MAX_AUDIO_TABLE_BYTES=2*1024*1024;
 // sums sizes without retaining an array when chapters are disabled. Estimate up
 // to ~32 MiB decoded at 64 bytes/entry, plus encoded buffers, NOT a heap guarantee.
 export const MAX_AUDIO_TABLE_ENTRIES=Math.floor(MAX_AUDIO_TABLE_BYTES/4);
+export const AUDIO_METADATA_LIMIT_MESSAGE='El audio supera los límites de metadatos. Usa un archivo con tablas de audio más pequeñas.';
 export class AudioMetadataLimitError extends Error {
- constructor(){super('El audio supera los límites de metadatos. Usa un archivo con tablas de audio más pequeñas.');}
+ constructor(){super(AUDIO_METADATA_LIMIT_MESSAGE);}
 }
 async function riffMetadataView(file:File,omitTags:boolean,onOmit:(code:ArtworkFailure)=>void):Promise<File>{
  const h=await bytesAt(file,0,12);

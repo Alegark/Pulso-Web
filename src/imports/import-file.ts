@@ -8,7 +8,7 @@ import {Attempt,type ImportAttemptResult,type DetailedImportResult} from './impo
 import {storeEmbeddedLyrics,LyricsError,type LyricsFailure,type EmbeddedLyricsStoreResult} from '../library/lyrics';
 import {inspectEmbeddedLyrics,type EmbeddedLyricsFailure} from './lyrics';
 import {storeEmbeddedArtwork} from '../library/artwork';
-import {AudioMetadataLimitError,ArtworkError,audioMetadataView,MAX_AUDIO_TABLE_ENTRIES,MAX_ID3_BYTES,inspectEmbeddedArtwork,type ArtworkFailure} from './artwork';
+import {AUDIO_METADATA_LIMIT_MESSAGE,AudioMetadataLimitError,ArtworkError,audioMetadataView,MAX_AUDIO_TABLE_ENTRIES,MAX_ID3_BYTES,inspectEmbeddedArtwork,type ArtworkFailure} from './artwork';
 import {transactionDone} from '../storage/transaction-done';
 import {parseBlob} from 'music-metadata';
 import {sha256} from '@noble/hashes/sha2.js';
@@ -175,7 +175,9 @@ export async function importFile(file:File,signal:AbortSignal,progress:(bytes:nu
  if(result.outcome.recoveryRequired)throw new Error('Resultado incierto. Se conservan los bytes; revisa y recupera la operación antes de importar.');
  if(f.code==='quota-exceeded')throw new DOMException('No hay espacio suficiente. Se conserva tu biblioteca.','QuotaExceededError');
  if(f.code==='cancelled')throw new DOMException('Importación cancelada; se conservan los archivos ya publicados.','AbortError');
- throw AppFailure.create(f);
+ const error=AppFailure.create(f);
+ if(f.phase==='parse'&&f.code==='limit-exceeded')error.message=AUDIO_METADATA_LIMIT_MESSAGE;
+ throw error;
 }
 
 async function metadataView(...args:Parameters<typeof audioMetadataView>){
