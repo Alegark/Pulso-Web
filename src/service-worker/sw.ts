@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import {readRecord, openDatabase, committed, request, registerDatabaseAdmissionPolicy, revalidateDatabaseRealm, subscribeDatabaseLifecycle, retireDatabaseRealm, admittedTransaction, assertDatabaseUse, closeDatabase, type DatabaseLifecycleState} from '../storage/database';
+import {readRecordFrom, openDatabase, committed, request, registerDatabaseAdmissionPolicy, revalidateDatabaseRealm, subscribeDatabaseLifecycle, retireDatabaseRealm, admittedTransaction, assertDatabaseUse, closeDatabase, type DatabaseLifecycleState} from '../storage/database';
 import {copyRealmControl} from '../storage/database-realm-protocol';
 import type {Manifest} from '../storage/assets';
 import {openAssetReader,verificationFailure} from '../storage/asset-reader';
@@ -20,6 +20,15 @@ let lifecycle:DatabaseLifecycleState|null=null;
 let schemaNotReady=false;
 let revalidating=false;
 let epoch=0;
+// Published physical generations are immutable under the generation lock.
+// Keep successful hashes only, bounded to this worker and database epoch.
+const verifiedAssets=new Set<string>();
+const verificationKey=(asset:LocalAsset)=>JSON.stringify([asset.backend,asset.storageKey,asset.revision,asset.sha256,asset.bytes]);
+function rememberVerified(key:string){
+ if(verifiedAssets.has(key))return;
+ if(verifiedAssets.size>=256)verifiedAssets.delete(verifiedAssets.values().next().value!);
+ verifiedAssets.add(key);
+}
 type ActiveRead={client:Client;invalidate:()=>void};
 // Only events currently owned by this worker; no subscription/history survives restart.
 const active=new Set<ActiveRead>();
@@ -34,7 +43,7 @@ registerDatabaseAdmissionPolicy({open:phase=>{
 },use:()=>revalidating&&!fatal()||!lifecycle&&!schemaNotReady,revalidate:()=>revalidating&&!fatal()});
 subscribeDatabaseLifecycle(state=>{
  if(!fatal())lifecycle=state;
- epoch++;
+ epoch++;verifiedAssets.clear();
  for(const item of [...active]){try{item.invalidate();}finally{tell(item.client);}}
  retireDatabaseRealm();
 });
@@ -174,7 +183,7 @@ async function media(event: FetchEvent): Promise<Response> {
   const current=()=>{check();if(released||req.signal.aborted)throw new Error('storage-unavailable');};
   try{
   current();db=await openDatabase();current();
-  const ticket = await readRecord<Ticket>('tickets', token);
+  const ticket = await readRecordFrom<Ticket>(db,'tickets',token);
   if (!ticket || ticket.namespace !== 'local' || (!event.clientId || event.clientId !== ticket.owner)) return fail(403);
   current();const owner = await self.clients.get(ticket.owner);
   if (!owner || new URL(owner.url).origin !== self.location.origin) return fail(403);
@@ -184,7 +193,7 @@ async function media(event: FetchEvent): Promise<Response> {
   if(ticket.version!==undefined&&ticket.version!==2||ticket.version!==2&&Object.hasOwn(ticket,'asset'))return fail(403);
   const pinned=ticket.version===2?copySourceAsset(ticket.asset):null;
   if(ticket.version===2&&(!pinned||pinned.id!==ticket.assetId||!sourceUUID(ticket.generation)||!sourceProof(ticket.ownerProof)))return fail(403);
-  current();const asset = await readRecord<Manifest>('assets', ticket.assetId);current();
+  current();const asset = await readRecordFrom<Manifest>(db,'assets',ticket.assetId);current();
   if(pinned){const actual=copySourceAsset(asset);if(!actual||!sameSourceAsset(actual,pinned))return fail(409);}
   const fixture = fixtures.find(f => f.id === ticket.assetId);
   if (!fixture) {
@@ -195,12 +204,16 @@ async function media(event: FetchEvent): Promise<Response> {
     if(range.partial)headers.set('Content-Range',`bytes ${range.start}-${range.end-1}/${asset.bytes}`);
     if(req.method==='HEAD')return new Response(null,{status:200,headers});
     let reader:Awaited<ReturnType<typeof openAssetReader>>;
-    try{reader=await openAssetReader(asset);}catch(error){const verification=verificationFailure(error,asset.backend);return fail(verification.state==='missing'||verification.state==='corrupt'?409:503);}
+    try{reader=await openAssetReader(asset,true,{signal:req.signal,database:db});}catch(error){const verification=verificationFailure(error,asset.backend);return fail(verification.state==='missing'||verification.state==='corrupt'?409:503);}
     readerRelease=()=>reader.release();
-    try{current();if(pinned){const actual=copySourceAsset(await readRecord<unknown>('assets',pinned.id));current();if(!actual||!sameSourceAsset(actual,pinned))return fail(409);}}catch(error){reader.release();throw error;}
-    const verification=await reader.verifyDetailed(true,{check:current});current();
-    if(verification.state!=='valid')return fail(verification.state==='unknown'?503:409);
-    if(pinned){const actual=copySourceAsset(await readRecord<unknown>('assets',pinned.id));current();if(!actual||!sameSourceAsset(actual,pinned))return fail(409);}
+    try{current();if(pinned){const actual=copySourceAsset(await readRecordFrom<unknown>(db,'assets',pinned.id));current();if(!actual||!sameSourceAsset(actual,pinned))return fail(409);}}catch(error){reader.release();throw error;}
+    const key=verificationKey(asset),verified=verifiedAssets.has(key);
+    if(!verified||asset.backend==='opfs'){
+      const verification=await reader.verifyDetailed(!verified,{check:current});current();
+      if(verification.state!=='valid'){verifiedAssets.delete(key);return fail(verification.state==='unknown'?503:409);}
+    }
+    if(pinned&&!verified){const actual=copySourceAsset(await readRecordFrom<unknown>(db,'assets',pinned.id));current();if(!actual||!sameSourceAsset(actual,pinned))return fail(409);}
+    rememberVerified(key);
     let position=range.start;
     const stream=new ReadableStream<Uint8Array>({start(controller){streamController=controller;},async pull(controller){
       try{
@@ -210,7 +223,7 @@ async function media(event: FetchEvent): Promise<Response> {
         const bytes=await reader.readRange(position,end);current();
         controller.enqueue(bytes);position=end;
         if(position>=range.end){release();controller.close();}
-      }catch(error){release();controller.error(error);}
+      }catch(error){if(!released&&!req.signal.aborted)verifiedAssets.delete(key);release();controller.error(error);}
     },cancel(){release();}});
     streamOwns=true;return new Response(stream,{status:range.partial?206:200,headers});
   }
@@ -224,7 +237,7 @@ async function media(event: FetchEvent): Promise<Response> {
   const hash = sha256.create();
   let offset = 0; const selected: Uint8Array[] = [];
   for (let i=0; i<asset.chunks; i++) {
-    current();const chunk = await readRecord<Uint8Array>('chunks', [asset.storageKey, i]);current(); if (!(chunk instanceof Uint8Array) || !chunk.length || chunk.length > 65536 || offset + chunk.length > asset.bytes) return fail(409);
+    current();const chunk = await readRecordFrom<Uint8Array>(db,'chunks',[asset.storageKey,i]);current(); if (!(chunk instanceof Uint8Array) || !chunk.length || chunk.length > 65536 || offset + chunk.length > asset.bytes) return fail(409);
     hash.update(chunk);
     const from = Math.max(0, range.start-offset); const to = Math.min(chunk.length, range.end-offset);
     if (to > from) selected.push(chunk.slice(from,to)); offset += chunk.length;
