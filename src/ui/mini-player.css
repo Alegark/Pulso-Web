@@ -1,12 +1,13 @@
 /* One compact transport surface. Range controls retain native keyboard behaviour. */
-.pulso-app { padding-block-end: calc(var(--nav-height, 0px) + var(--mini-height, 0px) + 2rem); }
 .pulso-app .mini-player {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: .25rem;
   min-block-size: 68px;
-  padding: .5rem .75rem;
+  --mini-gutter: .75rem;
+  padding-block: .5rem;
+  padding-inline: max(var(--mini-gutter), env(safe-area-inset-left)) max(var(--mini-gutter), env(safe-area-inset-right));
   overflow: visible;
 }
 .pulso-app .mini-player__details {
@@ -56,7 +57,8 @@
     column-gap: clamp(1rem, 3vw, 3rem);
     row-gap: 0;
     min-block-size: 88px;
-    padding: .5rem clamp(1rem, 2vw, 2rem);
+    --mini-gutter: clamp(1rem, 2vw, 2rem);
+    padding-block-end: calc(.5rem + env(safe-area-inset-bottom));
     border: 0;
     border-block-start: 1px solid var(--pulso-border);
     box-shadow: 0 -.25rem 1rem #0711200a;
@@ -72,6 +74,11 @@
   .pulso-app .mini-player .desktop-volume { display: flex; align-items: center; inline-size: min(100%, 9rem); min-inline-size: 0; gap: .625rem; margin: 0; }
   .pulso-app .desktop-volume > svg { inline-size: 18px; block-size: 18px; flex: 0 0 18px; color: var(--pulso-muted); }
 }
+@media (min-width: 601px) and (max-width: 1023px) {
+  /* At tablet widths the navigation is in the document flow. */
+  .pulso-app .mini-player { bottom: calc(.5rem + env(safe-area-inset-bottom)); }
+}
+
 @media (pointer: coarse) and (min-width: 1024px) {
   .pulso-app .mini-player { grid-template-rows: 44px 44px; }
   .pulso-app .mini-player__range input[type="range"],
