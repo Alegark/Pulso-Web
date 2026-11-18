@@ -1,5 +1,6 @@
 import {useEffect,useLayoutEffect,useId,useRef,useState,type ReactNode} from 'react';
 import './track-actions-menu.css';
+import type {Playlist} from '../library/library';
 
 interface TrackActionsMenuProps {
  title:string;
@@ -30,17 +31,21 @@ export function TrackActionsMenu({title,artist,artwork,children,active}:TrackAct
  function show(){
   const node=dialog.current;
   if(!active||!node||node.open)return;
+  setOpen(true);
+ }
+ function showModal(node:HTMLDialogElement){
   node.showModal();
   const previous=document.body.style.overflow;
   document.body.style.overflow='hidden';
   releaseScroll.current=()=>{document.body.style.overflow=previous;};
-  setOpen(true);
  }
  // Reordering a row can detach its dialog from the browser's top layer while
  // leaving `open` set. Restore modality before paint, so the player cannot cover it.
  useLayoutEffect(()=>{
   const node=dialog.current;
-  if(!open||!active||!node?.open||node.matches(':modal'))return;
+  if(!open||!active||!node)return;
+  if(!node.open){showModal(node);return;}
+  if(node.matches(':modal'))return;
   const focused=document.activeElement instanceof HTMLElement&&node.contains(document.activeElement)?document.activeElement:null;
   node.close();node.showModal();
   if(focused?.isConnected&&focused.getClientRects().length)focused.focus({preventScroll:true});
@@ -83,7 +88,7 @@ export function TrackActionsMenu({title,artist,artwork,children,active}:TrackAct
    const rect=event.currentTarget.getBoundingClientRect();
    if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)close();
   }}>
-   <div className="track-actions-menu__handle" aria-hidden="true"/>
+   {open&&<><div className="track-actions-menu__handle" aria-hidden="true"/>
    <header className="track-actions-menu__header">
     {artwork&&<div className="track-actions-menu__art">{artwork}</div>}
     <div className="track-actions-menu__copy"><h2 id={`${id}-title`}>{title}</h2><p>{artist}</p></div>
@@ -96,7 +101,16 @@ export function TrackActionsMenu({title,artist,artwork,children,active}:TrackAct
     const summary=target.closest('summary');
     if(summary){event.preventDefault();const details=summary.parentElement as HTMLDetailsElement;const next=!details.open;back();details.open=next;setSubpage(next);return;}
     if(target.closest('[data-menu-dismiss="true"]'))close();
-   }}>{children}</div>
+   }}>{children}</div></>}
   </dialog>
  </>;
+}
+
+export function TrackPlaylistAction({playlists,trackId,enabled,onAdd}:{playlists:readonly Playlist[];trackId:string;enabled:boolean;onAdd:(list:Playlist)=>void}){
+ const [target,setTarget]=useState('');
+ const list=playlists.find(playlist=>playlist.id===target);
+ return <details className="track-actions-playlist"><summary>Añadir a una playlist</summary>
+  <label>Playlist de destino<select value={list?.id??''} onChange={event=>setTarget(event.target.value)}><option value="">Elige una playlist</option>{playlists.map(playlist=><option key={playlist.id} value={playlist.id}>{playlist.name}</option>)}</select></label>
+  <button disabled={!enabled||!list||list.entries.some(entry=>entry.trackId===trackId)} onClick={()=>{if(list)onAdd(list);}}>Añadir a playlist</button>
+ </details>;
 }
