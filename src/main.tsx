@@ -659,7 +659,7 @@ async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[
 function snapshot():Snapshot|undefined{
  if(suspendedSnapshot)return suspendedSnapshot;
  if(!player.current&&!player.entries.length)return;
- return {version:1,entries:player.entries.map(({id,trackId})=>({id,trackId})),currentEntryId:player.current?.id??null,position:player.current&&Number.isFinite(audio.currentTime)?audio.currentTime:0,repeat:player.repeat,shuffleOrder:player.shuffleOrder?[...player.shuffleOrder]:null};
+ return {version:1,entries:player.entries.map(({id,trackId})=>({id,trackId})),currentEntryId:player.current?.id??null,position:player.current?(audio.readyState===0&&player.pendingRestorePosition!==null?player.pendingRestorePosition:Number.isFinite(audio.currentTime)?audio.currentTime:0):0,repeat:player.repeat,shuffleOrder:player.shuffleOrder?[...player.shuffleOrder]:null};
 }
 let saveFailureBurst=false;let saveFailureScope=diagnostics.scope();
 function saveLatestQueue(caller:()=>boolean=()=>true,allowEmpty=false):Promise<'saved'|'not-saved'>{

@@ -181,9 +181,14 @@ function openDatabaseInternal(revalidating:boolean,existingOnly=false): Promise<
     };
   });
 }
+export async function readRecordFrom<T>(db:IDBDatabase,store:string,key:IDBValidKey):Promise<T|undefined> {
+  const tx=admittedTransaction(db,store);const done=committed(tx);
+  const result=await request<T|undefined>(tx.objectStore(store).get(key));
+  await done;assertDatabaseUse('read');return result;
+}
 export async function readRecord<T>(store: string, key: IDBValidKey): Promise<T | undefined> {
   const db = await openDatabase();
-  try { const tx = admittedTransaction(db,store); const done = committed(tx); void done.catch(()=>{}); const result = await request(tx.objectStore(store).get(key)); await done; assertDatabaseUse('read'); return result; }
+  try { return await readRecordFrom<T>(db,store,key); }
   finally { closeDatabase(db); }
 }
 export async function writeRecord(store: string, key: IDBValidKey, value: unknown) {

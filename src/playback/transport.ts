@@ -29,17 +29,33 @@ function copyTicketReply(value:unknown,count:number):TicketReply|null {
  return {status:m.status===403?403:503,notice:m.notice};
  }catch{return null;}
 }
-async function localController(check:()=>void,strict=false):Promise<ServiceWorker|null> {
- transportNotice='';
- if(workerUnavailable||!navigator.serviceWorker){transportNotice='Modo compatible para archivos pequeños. El inicio sin conexión no está disponible en este enlace.';return null;}
- let registration=await navigator.serviceWorker.getRegistration();
- check();
- if(!registration){try{registration=await navigator.serviceWorker.register('/sw.js',{type:'module'});}catch(error){check();if(strict&&['SecurityError','NotAllowedError'].includes(nativeDOMName(error)??''))throw AppFailure.create(fromKnownError(error,{phase:'transport',backend:'none'}));workerUnavailable=true;transportNotice='Modo compatible para archivos pequeños. El inicio sin conexión no está disponible en este enlace.';return null;}}
- check();await navigator.serviceWorker.ready;check();
- if(!navigator.serviceWorker.controller)await new Promise<void>((resolve,reject)=>{
- const handler=()=>{clearTimeout(timer);resolve();};const timer=window.setTimeout(()=>{navigator.serviceWorker.removeEventListener('controllerchange',handler);reject(new Error('Recarga para activar el transporte local.'));},10000);navigator.serviceWorker.addEventListener('controllerchange',handler,{once:true});
+const compatibleNotice='Modo compatible para archivos pequeños. El inicio sin conexión no está disponible en este enlace.';
+function waitForController(container:ServiceWorkerContainer,signal?:AbortSignal):Promise<ServiceWorker|null>{
+ if(signal?.aborted)return Promise.resolve(null);
+ if(container.controller)return Promise.resolve(container.controller);
+ return new Promise(resolve=>{
+  let settled=false;
+  const finish=(controller:ServiceWorker|null)=>{
+   if(settled)return;settled=true;clearTimeout(timer);
+   container.removeEventListener('controllerchange',changed);signal?.removeEventListener('abort',stop);resolve(controller);
+  };
+  const stop=()=>finish(null);
+  const changed=()=>{if(container.controller)finish(container.controller);};
+  const timer=setTimeout(stop,5000);
+  container.addEventListener('controllerchange',changed);signal?.addEventListener('abort',stop,{once:true});
+  void container.ready.then(changed,stop);
  });
- const controller=navigator.serviceWorker.controller!;
+}
+async function localController(check:()=>void,strict=false,signal?:AbortSignal):Promise<ServiceWorker|null> {
+ transportNotice='';
+ const container=navigator.serviceWorker;
+ if(workerUnavailable||!container){transportNotice=compatibleNotice;return null;}
+ let registration=await container.getRegistration();
+ check();
+ if(!registration){try{registration=await container.register('/sw.js',{type:'module'});}catch(error){check();if(strict&&['SecurityError','NotAllowedError'].includes(nativeDOMName(error)??''))throw AppFailure.create(fromKnownError(error,{phase:'transport',backend:'none'}));workerUnavailable=true;transportNotice=compatibleNotice;return null;}}
+ check();
+ const controller=await waitForController(container,signal);check();
+ if(!controller){transportNotice=compatibleNotice;return null;}
  const supported=await supportsLocalAssets(controller);check();
  if(controller!==navigator.serviceWorker.controller)throw new Error('El transporte local cambió.');
  if(!supported){
@@ -177,7 +193,7 @@ export function startLocalSourcePreparation(values:readonly Readonly<import('../
   let bundle:PreparedLocalSources|null=null,cleanupUncertain=false;
   try{
    if(!expected||!expected.length||!sourceProof(ownerProof))throw AppFailure.create(makeFailure('validate','internal','input-invalid','none'));
-   check();const controller=await localController(check,true);check();
+   check();const controller=await localController(check,true,abort.signal);check();
    let supported=false;
    if(controller){
     supported=await new Promise<boolean>((resolve,reject)=>{
