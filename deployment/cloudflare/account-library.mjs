@@ -42,7 +42,10 @@ export function createAccountLibraryRouter({auth=accountAuth,fetcher=fetch,timeo
    const rows=await readJson(result,LIBRARY_LIMITS.bytes+16384,abort.signal);if(!Array.isArray(rows)||rows.length>1)throw Error('response');
    if(input&&!rows.length)return respond({code:'LIBRARY_CHANGED'},409);
    const row=rows[0];if(row&&(row.user_id!==subject||!Number.isSafeInteger(row.revision)||row.revision<1))throw Error('response');
-   return respond({accountId:subject,revision:row?.revision??null,document:row?validateAccountLibrary(row.document):emptyLibrary()},200,authorization.headers.getSetCookie());
+   let document;
+   try{document=row?validateAccountLibrary(row.document):emptyLibrary();}
+   catch(error){if(error instanceof LibraryDocumentError)return respond({code:'LIBRARY_UNRECOGNIZED'},422,authorization.headers.getSetCookie());throw error;}
+   return respond({accountId:subject,revision:row?.revision??null,document},200,authorization.headers.getSetCookie());
   })(),new Promise(resolve=>{timer=setTimeout(()=>{abort.abort();resolve(respond({code:'LIBRARY_UNAVAILABLE'},503));},timeoutMs);})]);}
   catch{return respond({code:'LIBRARY_UNAVAILABLE'},503);}finally{clearTimeout(timer);}
  };

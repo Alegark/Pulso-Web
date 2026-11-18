@@ -56,3 +56,9 @@ test('library distinguishes known Postgres document rejections from service erro
   assert.deepEqual(await response.json(),{code});
  }
 });
+test('unrecognized stored documents are distinct from upstream outages',async()=>{
+ const route=createAccountLibraryRouter({auth,fetcher:async()=>Response.json([{user_id:id,revision:5,document:{...document,version:2}}])});
+ const response=await route(new Request('https://pulso.test/api/account-library'),env);
+ assert.equal(response.status,422);
+ assert.deepEqual(await response.json(),{code:'LIBRARY_UNRECOGNIZED'});
+});

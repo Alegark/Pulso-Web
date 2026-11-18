@@ -8,7 +8,8 @@ export interface LibrarySyncHost {
  ready():boolean;changed():void;
 }
 export class LibrarySyncConflict extends Error{}
-export const librarySyncMessage={idle:'Biblioteca guardada en este dispositivo.',syncing:'Sincronizando biblioteca…',saved:'Biblioteca sincronizada con tu cuenta.',pending:'Cambios guardados en este dispositivo. Se sincronizarán al recuperar la conexión.',conflict:'La biblioteca cambió en otro dispositivo. Pulsa Sincronizar para combinar los cambios.',unavailable:'No pudimos sincronizar. Tus datos locales se conservan.',tooLarge:'La biblioteca supera el límite de sincronización. Quita elementos de la biblioteca o de tus listas para volver a sincronizar.',invalid:'Algunos datos de la biblioteca no se pueden sincronizar. Tus cambios siguen guardados en este dispositivo.'};
+class UnrecognizedLibrary extends Error{}
+export const librarySyncMessage={idle:'Biblioteca guardada en este dispositivo.',syncing:'Sincronizando biblioteca…',saved:'Biblioteca sincronizada con tu cuenta.',pending:'Cambios guardados en este dispositivo. Se sincronizarán al recuperar la conexión.',conflict:'La biblioteca cambió en otro dispositivo. Pulsa Sincronizar para combinar los cambios.',unavailable:'No pudimos sincronizar. Tus datos locales se conservan.',tooLarge:'La biblioteca supera el límite de sincronización. Quita elementos de la biblioteca o de tus listas para volver a sincronizar.',invalid:'Algunos datos de la biblioteca no se pueden sincronizar. Tus cambios siguen guardados en este dispositivo.',reloadRequired:'Esta versión de Pulso no reconoce la biblioteca de tu cuenta. Recarga la app para volver a sincronizar.'};
 const pollMs=20*60_000,debounceMs=700;
 const offline=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
 const visible=()=>typeof document==='undefined'||document.visibilityState==='visible';
@@ -23,7 +24,7 @@ export function createLibrarySync(host:LibrarySyncHost){
  function clearTimer(){if(timer!==null)clearTimeout(timer);timer=null;}
  function schedule(delay=debounceMs){
   clearTimer();
-  if(!account||run||rejected()||!visible()||offline())return;
+  if(!account||run||rejected()||status==='reloadRequired'||!visible()||offline())return;
   timer=setTimeout(()=>{
    timer=null;
    if(!visible()||offline())return;
@@ -33,7 +34,7 @@ export function createLibrarySync(host:LibrarySyncHost){
  }
  async function sync(){
   if(run)return run;
-  if(!account||rejected()||!host.ready()||Date.now()<retryAt)return;
+  if(!account||rejected()||status==='reloadRequired'||!host.ready()||Date.now()<retryAt)return;
   if(offline()){publish('pending');return;}
   clearTimer();queued=false;
   const id=account,generation=epoch;abort=new AbortController();const signal=abort.signal;
@@ -49,7 +50,9 @@ export function createLibrarySync(host:LibrarySyncHost){
    failures=0;retryAt=0;publish('saved');host.changed();
   }catch(error){
    if(!sameAccount())return;
-   if(error instanceof LibraryDocumentError){
+   if(error instanceof UnrecognizedLibrary){
+    publish('reloadRequired');
+   }else if(error instanceof LibraryDocumentError){
     publish(error.code==='LIBRARY_TOO_LARGE'?'tooLarge':'invalid');
    }else if(offline()){
     retryAt=0;publish('pending');
@@ -82,13 +85,16 @@ export async function accountLibraryRequest(id:string,signal:AbortSignal,update?
  try{
   const response=await fetcher('/api/account-library',{method:update?'PUT':'GET',credentials:'same-origin',cache:'no-store',signal:abort.signal,headers:update?{'Content-Type':'application/json'}:undefined,body:update?JSON.stringify({accountId:id,...update}):undefined});
   if(response.status===409)throw new LibrarySyncConflict();
-  if(response.status===400){
+  if(response.status===400||response.status===422){
    const problem=await readResponse(response,1024,abort.signal);
-   if(problem?.code==='LIBRARY_TOO_LARGE'||problem?.code==='LIBRARY_INVALID')throw new LibraryDocumentError('library-http',problem.code);
+   if(response.status===422&&problem?.code==='LIBRARY_UNRECOGNIZED')throw new UnrecognizedLibrary();
+   if(response.status===400&&(problem?.code==='LIBRARY_TOO_LARGE'||problem?.code==='LIBRARY_INVALID'))throw new LibraryDocumentError('library-http',problem.code);
   }
   if(!response.ok)throw Error('library-http');
   const row=await readResponse(response,2200000,abort.signal);
-  if(row.accountId!==id||row.revision!==null&&(!Number.isSafeInteger(row.revision)||row.revision<1))throw Error('response');return {accountId:id,revision:row.revision,document:validateAccountLibrary(row.document)};
+  if(row.accountId!==id||row.revision!==null&&(!Number.isSafeInteger(row.revision)||row.revision<1))throw Error('response');
+  try{return {accountId:id,revision:row.revision,document:validateAccountLibrary(row.document)};}
+  catch(error){if(error instanceof LibraryDocumentError)throw new UnrecognizedLibrary();throw error;}
  }finally{clearTimeout(timer);signal.removeEventListener('abort',stop);}
 }
 

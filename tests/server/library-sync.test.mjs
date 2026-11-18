@@ -60,3 +60,21 @@ test('local edits arriving during a sync are picked up by a follow-up',async t=>
   t.mock.timers.tick(700);await flush();assert.equal(calls,2);
  }finally{sync.dispose();}
 });
+
+test('an unrecognized cloud document asks for a reload and blocks writes',async()=>{
+ for(const get of [
+  async()=>Response.json({...remote(),document:{...emptyLibrary(),version:2}}),
+  async()=>Response.json({code:'LIBRARY_UNRECOGNIZED'},{status:422}),
+ ]){
+  let reads=0;
+  const sync=createLibrarySync(host({
+   remote:(id,signal)=>{reads++;return accountLibraryRequest(id,signal,undefined,get);},
+   save:async()=>assert.fail('must never overwrite unrecognized cloud data'),
+   apply:async()=>assert.fail('must never apply unrecognized cloud data'),
+  }));
+  try{
+   sync.account(id);await sync.sync();assert.equal(sync.getSnapshot(),'reloadRequired');
+   sync.changed();await sync.sync();assert.equal(reads,1);
+  }finally{sync.dispose();}
+ }
+});
