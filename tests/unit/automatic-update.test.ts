@@ -4,12 +4,12 @@ import {registerUpdateBlocker,updateWorkPending} from '../../src/service-worker/
 const entry='/releases/0123456789abcdef.html';
 const html=(bundle='/assets/new.js')=>`<!doctype html><html><script type="module" crossorigin src="${bundle}"></script><div id="root"></div></html>`;
 const flush=()=>new Promise<void>(resolve=>setImmediate(resolve));
-function fixture(){
+function fixture(session?:Pick<Storage,'getItem'|'setItem'>,initialEntry=entry){
  let time=0,ready=true,bundle='/assets/new.js',prepare=async()=>true;
  const nav:string[]=[],states:UpdateState[]=[],pending:boolean[]=[],manual:boolean[]=[],requests:{url:string;init?:RequestInit}[]=[];
  let entered=0,released=0,reloads=0;
- const core=createAutomaticUpdater({origin:'https://pulso.example',bundle:'/assets/current.js',now:()=>time,quietMs:100,
-  fetcher:async(input,init)=>{const url=String(input);requests.push({url,init});return url.endsWith('/latest.json')?Response.json({version:1,entry}):new Response(html(bundle));},
+ const core=createAutomaticUpdater({origin:'https://pulso.example',bundle:'/assets/current.js',now:()=>time,quietMs:100,session,
+  fetcher:async(input,init)=>{const url=String(input);requests.push({url,init});return url.endsWith('/latest.json')?Response.json({version:1,entry:initialEntry}):new Response(html(bundle));},
   ready:()=>ready,prepare:()=>prepare(),enter:()=>{entered++;return()=>{released++;};},navigate:e=>nav.push(e),reload:()=>{reloads++;},pending:v=>pending.push(v),state:v=>states.push(v),manualPending:v=>manual.push(v)});
  return {core,nav,states,pending,manual,requests,setTime:(v:number)=>{time=v;},setReady:(v:boolean)=>{ready=v;},setBundle:(v:string)=>{bundle=v;},setPrepare:(v:()=>Promise<boolean>)=>{prepare=v;},stats:()=>({entered,released,reloads})};
 }
@@ -65,4 +65,29 @@ test('oversized publication and redirected off-origin entries are never applied'
 
 test('unchanged static pointer does not refetch the versioned HTML on every poll',async()=>{
  const f=fixture();f.setBundle('/assets/current.js');await f.core.check();await f.core.check();assert.equal(f.requests.filter(r=>r.url.endsWith('/latest.json')).length,2);assert.equal(f.requests.filter(r=>r.url.endsWith('.html')).length,1);assert.equal(f.states.at(-1),'current');f.core.stop();
+});
+
+test('old cached document after slow navigation tries each release once per session, with manual reload still available',async()=>{
+ const items=new Map<string,string>();
+ const session={getItem:(key:string)=>items.get(key)??null,setItem:(key:string,value:string)=>{items.set(key,value);}};
+ const idle=async(f:ReturnType<typeof fixture>)=>{await f.core.check();await f.core.tick();f.setTime(1000);await f.core.tick();};
+ const first=fixture(session),fallback=fixture(session);
+ try{
+  await idle(first);assert.deepEqual(first.nav,[entry]);first.core.stop();
+  await idle(fallback);assert.deepEqual(fallback.nav,[]);assert.equal(fallback.stats().entered,0);assert.equal(fallback.states.at(-1),'available');
+  fallback.core.reload();await flush();await fallback.core.tick();assert.deepEqual(fallback.nav,[entry]);
+ }finally{first.core.stop();fallback.core.stop();}
+ const nextEntry='/releases/fedcba9876543210.html',next=fixture(session,nextEntry),rollback=fixture(session);
+ try{
+  await idle(next);assert.deepEqual(next.nav,[nextEntry]);await idle(rollback);assert.deepEqual(rollback.nav,[]);
+ }finally{next.core.stop();rollback.core.stop();}
+});
+
+test('unavailable session storage keeps the app usable with manual navigation',async()=>{
+ const f=fixture({getItem:()=>null,setItem:()=>{throw Error('denied');}});
+ try{
+  await f.core.check();await f.core.tick();f.setTime(1000);await f.core.tick();await f.core.tick();
+  assert.deepEqual(f.nav,[]);assert.equal(f.stats().entered,0);
+  f.core.reload();await flush();await f.core.tick();assert.deepEqual(f.nav,[entry]);
+ }finally{f.core.stop();}
 });

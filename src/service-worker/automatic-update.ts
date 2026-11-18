@@ -1,4 +1,5 @@
 const entryPattern=/^\/releases\/[a-f0-9]{16}\.html$/;
+const attemptKey=(entry:string)=>'pulso-shell:automatic-attempt:'+entry;
 const bundlePattern=/^\/assets\/[A-Za-z0-9_.-]+\.js$/;
 export function updateEntry(value:unknown):string|null {
  if(!value||typeof value!=='object'||Array.isArray(value))return null;
@@ -26,6 +27,7 @@ interface UpdateHost {
  ready:(manual:boolean)=>boolean;prepare:(manual:boolean)=>Promise<boolean>;
  enter:()=>()=>void;navigate:(entry:string)=>void;reload:()=>void;pending:(value:boolean)=>void;
  state?:(value:UpdateState)=>void;manualPending?:(value:boolean)=>void;
+ session?:Pick<Storage,'getItem'|'setItem'>;
  now?:()=>number;quietMs?:number;timeoutMs?:number;
 }
 /** New page/hashed assets, without skipWaiting or changing another tab's reader.
@@ -37,6 +39,16 @@ export function createAutomaticUpdater(host:UpdateHost){
  let abort:AbortController|null=null,watchdog:ReturnType<typeof setTimeout>|undefined,release:(()=>void)|null=null;
  const ready=()=>{try{return !stopped&&host.ready(manual);}catch{return false;}};
  const reset=()=>{idleAt=null;};
+ const attempted=new Set<string>();
+ function canApply(entry:string){
+  try{return !attempted.has(entry)&&host.session?.getItem(attemptKey(entry))!=='1';}
+  catch{return false;}
+ }
+ function recordAttempt(entry:string){
+  if(!canApply(entry))return false;
+  attempted.add(entry);
+  try{host.session?.setItem(attemptKey(entry),'1');return true;}catch{return false;}
+ }
  function stop(){stopped=true;abort?.abort();clearTimeout(watchdog);release?.();release=null;}
  async function check(){
   if(stopped||checking||applying||navigating)return;
@@ -64,11 +76,12 @@ export function createAutomaticUpdater(host:UpdateHost){
  }
  async function tick(){
   if(!candidate&&!manual||stopped||checking||applying||navigating)return;
-  if(!ready()){reset();return;}
+  if(!ready()||!manual&&candidate&&!canApply(candidate.entry)){reset();return;}
   if(!manual){if(idleAt===null){idleAt=now();return;}if(now()-idleAt<quiet)return;}
   const selected=candidate;applying=true;
   try{
    if(!await host.prepare(manual)||selected!==candidate||!ready()){reset();return;}
+   if(!manual&&selected&&!recordAttempt(selected.entry))return;
    // The final synchronous guard and admission fence precede navigation. A new
    // Play or write cannot start while the document is leaving.
    release=host.enter();navigating=true;
@@ -86,7 +99,8 @@ export function startAutomaticUpdates(host:Omit<UpdateHost,'origin'|'bundle'|'fe
  const script=document.querySelector<HTMLScriptElement>('script[type="module"][src]');
  if(!script)return {reload:()=>location.reload(),dispose:()=>{}};
  const bundle=new URL(script.src).pathname;if(!bundlePattern.test(bundle))return {reload:()=>location.reload(),dispose:()=>{}}; // Development is not a deployed release.
- const core=createAutomaticUpdater({...host,origin:location.origin,bundle,fetcher:(...args)=>fetch(...args),navigate:entry=>location.replace(entry),reload:()=>location.reload()});
+ const core=createAutomaticUpdater({...host,origin:location.origin,bundle,fetcher:(...args)=>fetch(...args),navigate:entry=>location.replace(entry),reload:()=>location.reload(),
+  session:{getItem:key=>sessionStorage.getItem(key),setItem:(key,value)=>sessionStorage.setItem(key,value)}});
  let lastCheck=-Infinity;
  const check=()=>{if(document.visibilityState!=='visible'||navigator.onLine===false||Date.now()-lastCheck<15000)return;lastCheck=Date.now();void core.check();};
  const tick=()=>{if(document.visibilityState!=='visible'||navigator.onLine===false){core.reset();return;}void core.tick();};
