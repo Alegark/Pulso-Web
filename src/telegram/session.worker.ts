@@ -117,6 +117,7 @@ self.onmessage=event=>{
  if(['begin','qr-begin','restore','forget'].includes(command.type)&&phase!=='disconnected'||(command.type==='code'||command.type==='resend')&&phase!=='code'||command.type==='qr-check'&&phase!=='qr'||command.type==='password'&&phase!=='password'||command.type==='logout'&&phase!=='connected'){closeLocal();return;}
  active=true;
  void (async()=>{
+  let confirmingAuth=false;
   try{
    if(command.type==='forget'){await clearSavedTelegramSession();if(abort.signal.aborted)return;phase='disconnected';reply(command);self.close();return;}
    if(command.type==='restore'){
@@ -153,8 +154,10 @@ self.onmessage=event=>{
     phase='code';reply(command);return;
    }else if(command.type==='code'||command.type==='password'){
     refreshCooldown();if(!remoteAllowed()){reply(command,'rate-limit',retryAt);return;}
+    confirmingAuth=true;
     if(command.type==='code')await client!.code(phone,command.value,abort.signal);
     else await client!.password(command.value,abort.signal);
+    confirmingAuth=false;
    }
    if(!parseAccountBinding(client!.getAccountBinding())){phase='error';reply(command,'protocol');closeLocal();return;}
    sources=client!.createSources(session);if(!parseSaved(sources.getSaved())){phase='error';reply(command,'protocol');closeLocal();return;}
@@ -165,7 +168,7 @@ self.onmessage=event=>{
    const safe=sessionFailure(error);
    if(safe.passwordNeeded&&['code','begin','qr-begin','qr-check'].includes(command.type)){qrChallenge=null;phase='password';reply(command);return;}
    if(command.type==='qr-check'&&safe.error==='rate-limit'&&qrChallenge){retryBlocked ||=safe.retryAt===null;if(safe.retryAt!==null)retryAt=Math.max(retryAt??0,safe.retryAt);phase='qr';reply(command,safe.error,safe.retryAt);return;}
-   const retryable=command.type==='code'&&safe.error==='code-invalid'||command.type==='password'&&safe.error==='password-invalid'||(command.type==='code'||command.type==='resend'||command.type==='password')&&safe.error==='rate-limit';
+   const retryable=confirmingAuth&&(safe.error==='network'||safe.error==='timeout')||command.type==='code'&&safe.error==='code-invalid'||command.type==='password'&&safe.error==='password-invalid'||(command.type==='code'||command.type==='resend'||command.type==='password')&&safe.error==='rate-limit';
    if(retryable){if(safe.error==='rate-limit'){retryBlocked ||=safe.retryAt===null;if(safe.retryAt!==null)retryAt=Math.max(retryAt??0,safe.retryAt);}phase=command.type==='password'?'password':'code';reply(command,safe.error,safe.retryAt);return;}
    phase='error';phone='';reply(command,command.type==='logout'&&safe.error!=='session-storage'?'logout-unconfirmed':safe.error,safe.retryAt);
    abort.abort();await client?.close().catch(()=>{});self.close();

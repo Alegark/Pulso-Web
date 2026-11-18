@@ -62,7 +62,7 @@ export const sessionErrorText:Record<SessionError,string>={
  network:'No se pudo completar la conexión con Telegram.',
  unsupported:'Telegram solicita un flujo que esta versión aún no admite. Usa una cuenta existente; no se crean cuentas ni se contratan servicios.',
  cancelled:'Se detuvo la conexión en esta pestaña. Si Telegram llegó a autorizarla, puedes revisar y revocar la sesión en Telegram → Ajustes → Dispositivos.',
- timeout:'La operación no terminó a tiempo. Se detuvo la conexión local; revisa Dispositivos en Telegram si la autorización pudo completarse.',
+ timeout:'La operación no terminó a tiempo. Si el formulario sigue abierto, puedes volver a intentarlo.',
  protocol:'No se pudo validar la respuesta de la conexión. Se cerró el acceso local.',
  'logout-unconfirmed':'Se cerró el acceso local, pero no se confirmó la revocación remota. Revisa Telegram → Ajustes → Dispositivos.',
  'logout-storage-unconfirmed':'No se confirmó el cierre ni la eliminación de la sesión guardada. Elimina la sesión guardada en Pulso y revisa Telegram → Ajustes → Dispositivos.',
