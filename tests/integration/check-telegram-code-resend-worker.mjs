@@ -10,6 +10,13 @@ await run('initial request advertises safe next method and no challenge',async s
 await run('worker rejects early resend without invoking SDK',async s=>{s.send('begin','+15555550123');await tick();s.send('resend');await tick();assert.equal(s.fixture.resends,0);assert.equal(s.messages.at(-1).error,'rate-limit');assert.equal(s.messages.at(-1).delivery,'app');s.advance(1000);s.send('resend');await tick();assert.equal(s.fixture.resends,1);assert.equal(s.messages.at(-1).delivery,'sms');assert.equal(s.messages.at(-1).codeResend,null);s.send('code','00000');await tick();assert.equal(s.messages.at(-1).delivery,'sms');assert.equal(s.messages.at(-1).error,'code-invalid')});
 await run('no alternate method is not a fabricated SMS request',async s=>{s.fixture.offer=null;s.send('begin','+15555550123');await tick();s.send('resend');await tick();assert.equal(s.fixture.resends,0);assert.equal(s.messages.at(-1).error,'unsupported');assert.equal(s.closed(),false)});
 for(const fail of ['FLOOD_WAIT_90','FLOOD_WAIT'])await run(fail+' blocks repeated dispatch',async s=>{s.fixture.offer.availableAt=0;s.fixture.fail=fail;s.send('begin','+15555550123');await tick();s.send('resend');await tick();assert.equal(s.messages.at(-1).error,'rate-limit');assert.equal(s.fixture.resends,1);if(fail.endsWith('_90'))assert.equal(s.messages.at(-1).codeResend.availableAt,190000);else assert.equal(s.messages.at(-1).codeResend,null);s.send('resend');await tick();assert.equal(s.fixture.resends,1)});
+await run('FLOOD_WAIT_0 keeps resend available after a finite pause',async s=>{
+ s.fixture.offer.availableAt=0;s.fixture.fail='FLOOD_WAIT_0';
+ s.send('begin','+15555550123');await tick();s.send('resend');await tick();
+ assert.equal(s.messages.at(-1).codeResend.availableAt,101000);
+ s.send('resend');await tick();assert.equal(s.fixture.resends,1);
+ s.fixture.fail=null;s.advance(1000);s.send('resend');await tick();assert.equal(s.fixture.resends,2);assert.equal(s.messages.at(-1).delivery,'sms');
+});
 await run('transient auth errors retain code delivery and the 2FA challenge for explicit retry',async s=>{
  s.send('begin','+15555550123');await tick();
  s.fixture.codeFailure='NETWORK_ERROR';s.send('code','00000');await tick();
