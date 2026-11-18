@@ -32,6 +32,14 @@ let track:Track;let cover:Artwork;const original=tagged(pngBytes);
 await check('PNG/JPEG/WebP Canvas: firma, dimensiones, decode y SHA reales',async()=>{
  for(const mime of ['image/png','image/jpeg','image/webp']){const b=await image(mime);assert(b.type===mime,'canvas formato');const a=await validateArtwork(b);assert(a.mime===mime&&a.width===32&&a.height===24&&a.sha256.length===64,'imagen');}
 });
+await check('APIC JPEG admite MIME histórico y ceros después de EOI',async()=>{
+ const jpeg=new Uint8Array(await (await image('image/jpeg')).arrayBuffer());
+ for(const mime of ['image/jpg','image/pjpeg']){
+  const cover=await inspectEmbeddedArtwork(tagged(join(jpeg,new Uint8Array(24)),mime),'audio/mpeg');
+  assert(cover.state==='ready'&&cover.mime==='image/jpeg'&&cover.width===32,'APIC JPEG');
+ }
+ await rejects(new Blob([join(jpeg,new Uint8Array([0,1]))],{type:'image/jpeg'}),'image-structure');
+});
 await check('worker real importa ID3 Unicode y APIC PNG después del audio',async()=>{
  const worker=new Worker(new URL('../../src/imports/import.worker.ts',import.meta.url),{type:'module'});
  const realm=await beginWorkerAttempt('import',worker,()=>true);
