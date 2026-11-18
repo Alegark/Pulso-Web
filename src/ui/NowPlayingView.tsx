@@ -2,12 +2,14 @@ import {BackButton} from './BackButton';
 import {useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref} from 'react';
 import './now-playing.css';
 
-type View = 'player' | 'lyrics' | 'queue';
+export type PlayerView = 'player' | 'lyrics' | 'queue';
 type Repeat = 'off' | 'one' | 'all';
 
 /** All musical state and operations belong to the caller; this component owns only its view. */
 export interface NowPlayingViewProps {
   open: boolean;
+  view?: PlayerView;
+  onViewChange?: (view:PlayerView)=>void;
   headingRef: Ref<HTMLHeadingElement>;
   title: string;
   artist: string;
@@ -66,7 +68,9 @@ export function NowPlayingView(props:NowPlayingViewProps) {
   useLayoutEffect(()=>{committed.current=props;return()=>{committed.current=null;};});
   let expired=false;
   const active=()=>{if(expired)return false;if(committed.current!==props||!props.current()){expired=true;return false;}return true;};
-  const [view,setView] = useState<View>('player');
+  const [localView,setLocalView] = useState<PlayerView>('player');
+  const view=props.view??localView;
+  const setView=props.onViewChange??setLocalView;
   const queue=useMemo(()=>props.open&&view==='queue'&&(typeof props.queue==='function'?props.queue():props.queue),[props.open,view,props.queue]);
   const previousView = useRef<View>('player');
   const detailHeading = useRef<HTMLHeadingElement>(null);
@@ -83,7 +87,7 @@ export function NowPlayingView(props:NowPlayingViewProps) {
     else if (previousView.current!=='player') { if(surface) surface.scrollTop=savedScroll.current; if(opener.current?.isConnected) opener.current.focus({preventScroll:true}); }
     previousView.current=view;
   },[view,props.open]);
-  function openView(next:Exclude<View,'player'>, source:HTMLButtonElement) {
+  function openView(next:Exclude<PlayerView,'player'>, source:HTMLButtonElement) {
     if (!active()) return;
     opener.current=source;
     savedScroll.current=root.current?.closest<HTMLElement>('.player-surface')?.scrollTop??0;

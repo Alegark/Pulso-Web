@@ -71,7 +71,8 @@ import {CatalogArtwork,TrackCatalogArtwork} from './ui/CatalogArtwork';
 import {MiniPlayer,miniPlayerArtist} from './ui/MiniPlayer';
 import {PlayerSurface} from './ui/PlayerSurface';
 import {PlaybackProgress} from './ui/PlaybackProgress';
-import {NowPlayingView} from './ui/NowPlayingView';
+import {useShellHistory} from './ui/useShellHistory';
+import {NowPlayingView,type PlayerView} from './ui/NowPlayingView';
 import {usePlayerLyrics,PlayerLyricsPreview,PlayerLyricsReader} from './ui/PlayerLyrics';
 import {PlayerArtwork} from './ui/PlayerArtwork';
 import {emptyShellView,matchesShellTrack,recentTracks,homePlaylists,trackAvailability,availabilityText,type ShellView} from './library/shell-selectors';
@@ -956,6 +957,7 @@ function App(){
  const routeHeading=React.useRef<HTMLHeadingElement>(null),playerHeading=React.useRef<HTMLHeadingElement>(null);
  const createInput=React.useRef<HTMLInputElement>(null);
  const [playerOpen,setPlayerOpen]=React.useState(false);
+ const [playerView,setPlayerView]=React.useState<PlayerView>('player');
  const returnContext=React.useRef<{page:typeof page;scroll:number;opener:HTMLButtonElement}|null>(null);
  const navigationIntent=React.useRef(0);
  const routeScroll=React.useRef({inicio:0,buscar:0,biblioteca:0});
@@ -1012,9 +1014,18 @@ function App(){
   const destination=pending.kind==='open'?rescanHeading.current:opener?.isConnected&&opener.getClientRects().length?opener:fallback;
   if(destination){destination.focus({preventScroll:true});destination.scrollIntoView({behavior:'auto',block:pending.kind==='open'?'start':'nearest',inline:'nearest'});}
  });
- function navigate(next:typeof page){setSettingsOpen(false);++navigationIntent.current;const current=shellResponse();moveFocus.current=null;favoriteFocus.current=null;returnContext.current=null;setPlayerOpen(false);routeScroll.current[page]=window.scrollY;setPage(next);requestAnimationFrame(()=>{if(current())window.scrollTo(0,routeScroll.current[next]);});return current;}
+ function navigate(next:typeof page){setSettingsOpen(false);++navigationIntent.current;const current=shellResponse();moveFocus.current=null;favoriteFocus.current=null;returnContext.current=null;setPlayerOpen(false);setPlayerView('player');routeScroll.current[page]=window.scrollY;setPage(next);requestAnimationFrame(()=>{if(current())window.scrollTo(0,routeScroll.current[next]);});return current;}
  function openPlayer(opener:HTMLButtonElement){++navigationIntent.current;const current=shellResponse();moveFocus.current=null;favoriteFocus.current=null;returnContext.current={page,scroll:window.scrollY,opener};setPlayerOpen(true);requestAnimationFrame(()=>{if(!current())return;playerHeading.current?.focus({preventScroll:true});const surface=playerHeading.current?.closest<HTMLElement>('.player-surface');if(surface)surface.scrollTop=0;});}
- function closePlayer(){++navigationIntent.current;const current=shellResponse();const context=returnContext.current;returnContext.current=null;setPlayerOpen(false);if(!context)return;setPage(context.page);requestAnimationFrame(()=>{if(!current())return;window.scrollTo(0,context.scroll);(context.opener.isConnected?context.opener:context.page==='inicio'?document.getElementById('home-heading'):routeHeading.current)?.focus({preventScroll:true});});}
+ function closePlayer(){++navigationIntent.current;const current=shellResponse();const context=returnContext.current;returnContext.current=null;setPlayerOpen(false);setPlayerView('player');if(!context)return;setPage(context.page);requestAnimationFrame(()=>{if(!current())return;window.scrollTo(0,context.scroll);(context.opener.isConnected?context.opener:context.page==='inicio'?document.getElementById('home-heading'):routeHeading.current)?.focus({preventScroll:true});});}
+ function closeLibraryDetail(){const current=shellResponse(),opener=libraryOpener.current;setLibraryDetail(false);setViews(old=>({...old,biblioteca:emptyShellView()}));requestAnimationFrame(()=>{if(current()&&opener?.isConnected)opener.focus({preventScroll:true});});}
+ function closeSettings(){setSettingsOpen(false);requestAnimationFrame(()=>settingsOpener.current?.focus());}
+ const layers:(()=>void)[]=[];
+ if(account.user){
+  if(page==='biblioteca'&&(libraryDetail||libraryArtist))layers.push(libraryDetail?closeLibraryDetail:closeLibraryArtist);
+  if(settingsOpen)layers.push(closeSettings);
+  if(playerOpen){layers.push(closePlayer);if(playerView!=='player')layers.push(()=>setPlayerView('player'));}
+ }
+ useShellHistory(layers);
  function openSpotifyPlaylist(id:string){
   if(!playlists.some(list=>list.id===id))return;
   libraryOpener.current=null;
@@ -1243,7 +1254,7 @@ function App(){
  {!owner&&databaseState==='ready'&&<section aria-label="Control de esta pestaña disponible"><p>Otra pestaña controla la reproducción. Puedes usar Pulso aquí sin iniciar música.</p><button disabled={!canUseThisTab} onClick={()=>{if(playCurrent())void useThisTab();}}>Usar en esta pestaña</button>{transferText&&<p role="status">{transferText}</p>}</section>}
  <section hidden={!settingsOpen} className="settings-view" aria-label="Configuración" aria-labelledby="settings-heading">
   <h2 id="settings-heading" ref={settingsHeading} tabIndex={-1}>Configuración</h2>
-  <button type="button" onClick={()=>{setSettingsOpen(false);requestAnimationFrame(()=>settingsOpener.current?.focus());}}>Cerrar configuración</button>
+  <button type="button" onClick={closeSettings}>Cerrar configuración</button>
 <p className="settings-intro">Tu cuenta, tu música y este navegador.</p><nav className="settings-navigation" aria-label="Secciones de configuración">{([['general','General'],['connections','Conexiones'],['tools','Herramientas']] as const).map(([id,label])=><button key={id} aria-current={settingsSection===id?'page':undefined} onClick={()=>setSettingsSection(id)}>{label}</button>)}</nav><div hidden={settingsSection!=='general'} className="settings-general">
 {storageSummary&&listeningCache&&<StorageSettings summary={storageSummary} groups={storageGroups} onRemove={openDownloadRemoval} items={downloads.map(({asset,aliases})=>{const track=aliases[0],inUse=protectedAssetIds.has(asset.id)||aliases.some(t=>pendingTrackIds.has(t.id));return {id:asset.id,title:track?.title??'Archivo sin ficha',artist:track?.artist??'Artista desconocido',bytes:asset.bytes,protected:inUse,removable:!!track&&removalEligibleTracks.has(track.id),action:<button disabled={!canOrganize||!track||inUse||!removalEligibleTracks.has(track.id)} onClick={event=>{if(track)openRemoval(track,event.currentTarget);}} aria-label={`Quitar descarga de ${track?.title??'archivo sin ficha'}`}>Quitar descarga</button>};})} cacheCopies={listeningCache.copies} canClean={canOrganize} onClean={button=>openCollection({kind:'cache',scope:'global-listening-cache'},'Caché de escucha',button)} canCheck={owner&&!busy&&!botImportActive} onCheck={()=>void admitted('refresh-library',checkFiles)}/>}
 {settingsOpen&&settingsSection==='general'&&<SpotifyPlaylistImport key={account.user.id} canImport={canOrganize&&mutationCurrent()}
@@ -1286,7 +1297,7 @@ function App(){
    if(ok&&!save&&view())closeLibraryArtist();
    return ok;
   }}/>}
- <div hidden={!libraryDetail} className="library-detail"><BackButton className="collection-back" onClick={()=>{const current=shellResponse(),opener=libraryOpener.current;setLibraryDetail(false);setViews(old=>({...old,biblioteca:emptyShellView()}));requestAnimationFrame(()=>{if(current()&&opener?.isConnected)opener.focus({preventScroll:true});});}}>Volver a Biblioteca</BackButton><CollectionHeader title={selected?.name??(favorites?'Favoritos':activeGroup?.label??'Colección')} kind={selected?'Playlist personal':favorites?'Playlist automática':activeGroup?.kind==='album'?'Álbum':'Colección'} count={visible.length} duration={visible.length&&visible.every(({track})=>Number.isFinite(track.duration)&&track.duration>0)?visible.reduce((sum,{track})=>sum+track.duration,0):null}
+ <div hidden={!libraryDetail} className="library-detail"><BackButton className="collection-back" onClick={closeLibraryDetail}>Volver a Biblioteca</BackButton><CollectionHeader title={selected?.name??(favorites?'Favoritos':activeGroup?.label??'Colección')} kind={selected?'Playlist personal':favorites?'Playlist automática':activeGroup?.kind==='album'?'Álbum':'Colección'} count={visible.length} duration={visible.length&&visible.every(({track})=>Number.isFinite(track.duration)&&track.duration>0)?visible.reduce((sum,{track})=>sum+track.duration,0):null}
   artwork={<CollectionCover trackIds={visible.map(({track})=>track.id)} favorite={!selected&&favorites} enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>}
   playing={owner&&collectionQueueMatches&&player.state==='playing'} canPlay={owner&&!busy&&databaseState==='ready'&&!copyRemovalBlocked()&&sourceReview.canPrepare()&&!!visible.length} busy={busy} onPlay={()=>void playCollection()}
   shuffle={collectionQueueMatches&&!!player.shuffleOrder} canShuffle={owner&&!busy&&!collectionBlocked()&&collectionQueueMatches&&!!player.current} onShuffle={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked())player.setShuffle(!player.shuffleOrder);}}/>
@@ -1329,7 +1340,7 @@ function App(){
  <MetadataRescanController key={`metadata-rescan:${scopeId}:${control.proof}:${databaseGeneration}`} activity={control.activity} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} canUse={owner&&!botImportActive&&databaseState==='ready'&&!sourceReview.hasReservation()&&!queueForeignBlocked()} canStart={owner&&!busy&&!botImportActive&&databaseState==='ready'&&!importRecoveryPending()&&!copyRemovalPending&&!sourceReview.hasReservation()&&control.activity.idle} track={rescanTrackId?trackIndex.get(rescanTrackId)??null:null} headingRef={rescanHeading} captureCurrent={captureRescanCurrent} captureAdmission={captureForeignMutationCurrent} onBlocking={setMetadataRescanBlocking} onCommitted={()=>refresh(true,false,null)} onClose={closeRescan}/>
  <div hidden={!settingsOpen||settingsSection!=='tools'} className="settings-secondary"><details className="settings-group"><summary><strong>Verificar playlists</strong><span>Revisar las copias de una selección</span></summary><div className="settings-group__body"><LocalBatchPanel key={`local-batch:${control.proof}`} activity={control.activity} beginDiagnostic={beginPanelDiagnostic} playlist={selected??null} canStart={canOrganize} captureWriteCurrent={captureForeignMutationCurrent} onStatus={text=>{status=text;emit();}}/></div></details></div>
  <PlaybackProgress subscribe={player.subscribe} enabled={playerOpen}>{()=> <PlayerSurface open={playerOpen} onClose={closePlayer} notice={playerOpen?notice:null}>
-  <NowPlayingView open={playerOpen} headingRef={playerHeading} title={player.current?.title??'Sin selección'}
+  <NowPlayingView open={playerOpen} view={playerView} onViewChange={setPlayerView} headingRef={playerHeading} title={player.current?.title??'Sin selección'}
    artist={playerDisplayArtist??'Artista desconocido'} album={currentTrack?displayTrackAlbum(currentTrack):null}
    artwork={currentTrack?<PlayerArtwork activity={control.activity} trackId={currentTrack.id} title={currentTrack.title} artist={playerDisplayArtist} album={displayTrackAlbum(currentTrack)} catalogCover={catalogCovers.get(currentTrack.id)} durationSeconds={currentTrack.duration} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} enabled={owner} current={()=>owner&&playerReadScope()&&player.current?.trackId===currentTrack.id} onArtwork={(image,previousUrl)=>updateMediaSessionArtwork(currentTrack.id,image,previousUrl)} refreshToken={artworkRefreshToken}/>:<div className="artwork-placeholder" aria-hidden="true">♪</div>}
    lyricsPreview={<PlayerLyricsPreview result={playerLyrics.result} timeSeconds={audio.currentTime} loading={playerLyrics.loading} canSeek={owner&&!busy&&!collectionBlocked()&&duration>0} durationSeconds={duration} onSeek={seconds=>{if(playerLifetime()&&playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();void player.play(seconds);}}}/>}
