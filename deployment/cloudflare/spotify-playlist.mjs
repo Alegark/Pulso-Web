@@ -1,3 +1,4 @@
+import {readBoundedText} from '../../src/accounts/bounded-body.mjs';
 import {spotifyArtworkUrl} from '../../src/library/catalog-id.ts';
 const ID=/^[A-Za-z0-9]{22}$/;
 const MAX_BYTES=1024*1024;
@@ -61,15 +62,12 @@ export function parseSpotifyRelease(html,id,reference){
 async function spotifyHtml(fetcher,path,signal,onResponse){
  const upstream=await fetcher('https://open.spotify.com'+path,{redirect:'manual',signal,credentials:'omit',headers:{Accept:'text/html'}});
  onResponse(upstream.status);
- if(!upstream.ok||!upstream.headers.get('content-type')?.includes('text/html')||Number(upstream.headers.get('content-length'))>MAX_BYTES||!upstream.body){
-  await upstream.body?.cancel().catch(()=>{});throw Error('Unavailable');
+ if(!upstream.ok||!upstream.headers.get('content-type')?.includes('text/html')){
+  void upstream.body?.cancel().catch(()=>{});throw Error('Unavailable');
  }
- const reader=upstream.body.getReader(),decoder=new TextDecoder();let html='',bytes=0;
- try{while(true){
-  const {done,value}=await reader.read();if(done)break;
-  bytes+=value.byteLength;if(bytes>MAX_BYTES)throw Error('Oversize');html+=decoder.decode(value,{stream:true});
- }return html+decoder.decode();}finally{await reader.cancel().catch(()=>{});}
+ return readBoundedText(upstream,MAX_BYTES,signal,false);
 }
+
 class SpotifyError extends Error{
  constructor(reason,upstreamStatus){super(reason);this.reason=reason;this.upstreamStatus=upstreamStatus;}
 }

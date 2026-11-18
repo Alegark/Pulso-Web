@@ -33,3 +33,16 @@ test('oversized and never-ending profile bodies are bounded',async()=>{
  const route=createAccountProfileRouter({auth,timeoutMs:10});assert.equal((await route(req({...value,padding:'x'.repeat(2000)}),env)).status,400);
  const stream=new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('{'));}});const request=new Request('https://pulso.test/api/account-profile',{method:'PUT',headers:{Origin:'https://pulso.test','Content-Type':'application/json'},body:stream,duplex:'half'});assert.equal((await route(request,env)).status,503);
 });
+test('profile carries auth cookies through account mismatch, CAS conflict and auth rejection',async()=>{
+ const cookie='pulso=; Path=/; Max-Age=0; HttpOnly';
+ for(const [authStatus,input,status,code] of [[200,{...value,accountId:other},409,'ACCOUNT_CHANGED'],[200,value,409,'PROFILE_CHANGED'],[401,value,401,'SIGN_IN_REQUIRED']]){
+  const route=createAccountProfileRouter({
+   auth:async()=>Response.json({token},{status:authStatus,headers:{'Set-Cookie':cookie}}),
+   fetcher:async()=>Response.json([]),
+  });
+  const response=await route(req(input),env);
+  assert.equal(response.status,status);
+  assert.deepEqual(await response.json(),{code});
+  assert.deepEqual(response.headers.getSetCookie(),[cookie]);
+ }
+});

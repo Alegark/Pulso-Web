@@ -62,3 +62,18 @@ test('unrecognized stored documents are distinct from upstream outages',async()=
  assert.equal(response.status,422);
  assert.deepEqual(await response.json(),{code:'LIBRARY_UNRECOGNIZED'});
 });
+test('library normalizes account UUIDs and forwards every refreshed cookie on conflict and 401',async()=>{
+ const canonical='abcdefab-1234-4321-8abc-abcdefabcdef',upper=canonical.toUpperCase();
+ const token='TESTONLY.'+Buffer.from(JSON.stringify({sub:upper})).toString('base64url')+'.TESTONLY';
+ const cookies=['pulso=renewed; Path=/; HttpOnly','other=updated; Path=/; HttpOnly'];
+ const auth=async()=>Response.json({token},{headers:cookies.map(value=>['Set-Cookie',value])});
+ for(const upstream of [Response.json([]),Response.json({}, {status:401})]){
+  const route=createAccountLibraryRouter({auth,fetcher:async url=>{
+   assert.equal(url.searchParams.get('user_id'),'eq.'+canonical);
+   return upstream;
+  }});
+  const response=await route(req({accountId:upper,revision:2,document}),env);
+  assert.equal(response.status,upstream.ok?409:401);
+  assert.deepEqual(response.headers.getSetCookie(),cookies);
+ }
+});

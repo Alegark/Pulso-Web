@@ -1,3 +1,4 @@
+import {readBoundedJson} from './bounded-body.mjs';
 import {LibraryDocumentError,validateAccountLibrary,mergeAccountLibraries,type AccountLibraryDocument} from './library-document.mjs';
 export interface AccountLibraryRemote {accountId:string;revision:number|null;document:AccountLibraryDocument}
 export interface LibrarySyncHost {
@@ -86,21 +87,14 @@ export async function accountLibraryRequest(id:string,signal:AbortSignal,update?
   const response=await fetcher('/api/account-library',{method:update?'PUT':'GET',credentials:'same-origin',cache:'no-store',signal:abort.signal,headers:update?{'Content-Type':'application/json'}:undefined,body:update?JSON.stringify({accountId:id,...update}):undefined});
   if(response.status===409)throw new LibrarySyncConflict();
   if(response.status===400||response.status===422){
-   const problem=await readResponse(response,1024,abort.signal);
+   const problem=await readBoundedJson(response,1024,abort.signal) as {code?:unknown}|null;
    if(response.status===422&&problem?.code==='LIBRARY_UNRECOGNIZED')throw new UnrecognizedLibrary();
    if(response.status===400&&(problem?.code==='LIBRARY_TOO_LARGE'||problem?.code==='LIBRARY_INVALID'))throw new LibraryDocumentError('library-http',problem.code);
   }
   if(!response.ok)throw Error('library-http');
-  const row=await readResponse(response,2200000,abort.signal);
-  if(row.accountId!==id||row.revision!==null&&(!Number.isSafeInteger(row.revision)||row.revision<1))throw Error('response');
+  const row=await readBoundedJson(response,2200000,abort.signal) as {accountId?:unknown;revision:number|null;document?:unknown}|null;
+  if(!row||row.accountId!==id||row.revision!==null&&(!Number.isSafeInteger(row.revision)||row.revision<1))throw Error('response');
   try{return {accountId:id,revision:row.revision,document:validateAccountLibrary(row.document)};}
   catch(error){if(error instanceof LibraryDocumentError)throw new UnrecognizedLibrary();throw error;}
  }finally{clearTimeout(timer);signal.removeEventListener('abort',stop);}
-}
-
-async function readResponse(response:Response,max:number,signal:AbortSignal){
-  const length=response.headers.get('Content-Length');if(length&&Number(length)>max)throw Error('limit');
-  if(!response.body)throw Error('body');const reader=response.body.getReader(),parts:Uint8Array[]=[];let bytes=0;const stopReader=()=>{void reader.cancel().catch(()=>{});};signal.addEventListener('abort',stopReader,{once:true});if(signal.aborted)stopReader();
-  try{while(true){const {value,done}=await reader.read();if(done)break;bytes+=value.length;if(bytes>max)throw Error('limit');parts.push(value);}}catch(e){void reader.cancel().catch(()=>{});throw e;}finally{signal.removeEventListener('abort',stopReader);reader.releaseLock();}if(signal.aborted)throw Error('aborted');
-  const all=new Uint8Array(bytes);let offset=0;for(const p of parts){all.set(p,offset);offset+=p.length;}return JSON.parse(new TextDecoder().decode(all));
 }

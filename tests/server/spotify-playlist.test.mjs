@@ -17,6 +17,8 @@ test('Workers runtime accepts request options and rejects redirects without foll
  const {stripTypeScriptTypes}=await import('node:module');
  const source=await readFile(new URL('../../deployment/cloudflare/spotify-playlist.mjs',import.meta.url),'utf8');
  const moduleName='deployment/cloudflare/spotify-playlist.mjs',matcherName='src/library/catalog-id.ts';
+ const readerName='src/accounts/bounded-body.mjs';
+ const reader=await readFile(new URL('../../'+readerName,import.meta.url),'utf8');
  const matcher=stripTypeScriptTypes(await readFile(new URL('../../'+matcherName,import.meta.url),'utf8'));
  const contents=source+`
  let trackCalls=0;
@@ -44,7 +46,7 @@ test('Workers runtime accepts request options and rejects redirects without foll
   return Response.json({calls,status:response.status,data:await response.json()});
  }};
  `;
- const mf=new Miniflare({workers:[{config:{name:'spotify-runtime-test',compatibilityDate:'2026-11-13',manifest:{mainModule:moduleName,modules:{[moduleName]:{type:'esm',contents},[matcherName]:{type:'esm',contents:matcher}}}}}]});
+ const mf=new Miniflare({workers:[{config:{name:'spotify-runtime-test',compatibilityDate:'2026-11-13',manifest:{mainModule:moduleName,modules:{[moduleName]:{type:'esm',contents},[matcherName]:{type:'esm',contents:matcher},[readerName]:{type:'esm',contents:reader}}}}}]});
  try{
   const url=`https://pulso.test/api/spotify-playlist/${id}`;
   const success=await(await mf.dispatchFetch(url)).json();assert.equal(success.calls,1);assert.equal(success.status,200);assert.equal(success.data.tracks.length,1);
