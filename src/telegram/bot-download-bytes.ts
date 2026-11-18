@@ -8,6 +8,7 @@ export const BOT_DOWNLOAD_MAX_BYTES=AUDIO_FILE_MAX_BYTES;
 export const BOT_DOWNLOAD_CHUNK_BYTES=512*1024;
 export const botDownloadTransferMs=(bytes:number)=>15000+3000*Math.ceil(bytes/BOT_DOWNLOAD_CHUNK_BYTES);
 export type BotDownloadMime='audio/mpeg'|'audio/mp4'|'audio/wav';
+export const isBotDownloadMime=(mime:unknown):mime is BotDownloadMime=>mime==='audio/mpeg'||mime==='audio/mp4'||mime==='audio/wav';
 export type BotDownloadBytesError='size'|'mime'|'short'|'header'|'cancelled';
 export class BotDownloadBytesFailure extends Error {
  constructor(readonly code:BotDownloadBytesError){super(code);}
@@ -27,7 +28,7 @@ function headerMime(bytes:Uint8Array):BotDownloadMime|null {
 export async function assembleBotDownloadBytes(descriptor:{readonly bytes:number;readonly mime:string},readChunk:(offset:number,limit:number)=>Promise<Uint8Array>,current:()=>boolean):Promise<BotDownloadBytesResult> {
  const {bytes,mime}=descriptor;
  if(!Number.isSafeInteger(bytes)||bytes<=0||bytes>BOT_DOWNLOAD_MAX_BYTES)throw new BotDownloadBytesFailure('size');
- if(mime!=='audio/mpeg'&&mime!=='audio/mp4'&&mime!=='audio/wav')throw new BotDownloadBytesFailure('mime');
+ if(!isBotDownloadMime(mime))throw new BotDownloadBytesFailure('mime');
  const parts:Blob[]=[],hash=sha256.create();
  let offset=0,detectedMime:BotDownloadMime|null=null;
  while(offset<bytes){
