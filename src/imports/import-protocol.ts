@@ -111,7 +111,7 @@ export function createResponseGate(expected:ImportRequest|RecoveryRequest){
  return {kind:'accepted',response};
  };
 }
-/** Opt-in v2 handler. The product workers keep v1 until main is migrated together. */
+/** Handles v2 import commands in the product worker. Recovery uses its own handler. */
 export function createImportV2Handler(send:(response:WorkerResponse)=>void){
  let active:{operationId:string;controller:AbortController}|null=null;
  return async(value:unknown):Promise<boolean>=>{

@@ -29,6 +29,7 @@ try{
  notices();writeTelegramSources(dist);
  const files=execFileSync('tar',['-tzf',archive],{encoding:'utf8'}).split('\n');
  assert.ok(files.includes('src/telegram/session.worker.ts'));
+ assert.ok(!files.some(file=>/^src\/telegram\/auth-(state|scope-store)\.ts$/.test(file)));
  assert.ok(files.includes('node_modules/@mtcute/core/package.json'));
  assert.ok(!files.some(file=>file.includes('.env.fixture')||file.includes('untracked-fixture.txt')));
  const first=readFileSync(archive);
