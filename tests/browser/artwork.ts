@@ -40,6 +40,13 @@ await check('APIC JPEG admite MIME histórico y ceros después de EOI',async()=>
  }
  await rejects(new Blob([join(jpeg,new Uint8Array([0,1]))],{type:'image/jpeg'}),'image-structure');
 });
+await check('los metadatos importados y el nombre de archivo conservan Unicode válido al truncar',async()=>{
+ const split='A'.repeat(299)+'🎵X',fits='B'.repeat(298)+'🎵X';
+ for(const [file,expected] of [[tagged(undefined,'image/png',split),'A'.repeat(299)],[tagged(undefined,'image/png',fits),fits.slice(0,300)],[new File([tagged(undefined,'image/png','')],split+'.mp3',{type:'audio/mpeg'}),'A'.repeat(299)]] as const){
+  const result=await importLocal(file);
+  assert(result.track.title===expected,'límite Unicode del título');
+ }
+});
 await check('worker real importa ID3 Unicode y APIC PNG después del audio',async()=>{
  const worker=new Worker(new URL('../../src/imports/import.worker.ts',import.meta.url),{type:'module'});
  const realm=await beginWorkerAttempt('import',worker,()=>true);
