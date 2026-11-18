@@ -10,12 +10,16 @@ await mkdir(tmp,{recursive:true});
 const out=await mkdtemp(resolve(tmp,'review-playback-sw-'));
 let server,browser;
 try{
- await build({configFile:false,logLevel:'error',publicDir:false,define:{SHELL_FILES:'[]'},build:{outDir:out,lib:{entry:'src/service-worker/sw.ts',formats:['es'],fileName:()=> 'sw.js'}},plugins:[{
+ await build({configFile:false,logLevel:'error',publicDir:false,define:{SHELL_FILES:JSON.stringify(['/','/index.html'])},build:{outDir:out,lib:{entry:'src/service-worker/sw.ts',formats:['es'],fileName:()=> 'sw.js'}},plugins:[{
   name:'testonly-sw-media-counters',enforce:'pre',transform(code,id){
    if(id.endsWith('/storage/database.ts'))return code.replace('req = indexedDB.open(DATABASE, 2);','req = indexedDB.open(DATABASE, 2); Reflect.set(globalThis,"testOpens",(Reflect.get(globalThis,"testOpens")??0)+1);');
    if(id.endsWith('/storage/asset-reader.ts'))return code.replace('const hash=integrity?sha256.create():null;', 'const hash=integrity?sha256.create():null; if(hash)Reflect.set(globalThis,"testHashes",(Reflect.get(globalThis,"testHashes")??0)+1);');
    if(id.endsWith('/service-worker/sw.ts'))return code+`
 self.addEventListener('message',event=>{
+ if(event.data==='test-close-database')event.waitUntil((async()=>{
+  const connection=await openDatabase();connection.dispatchEvent(new Event('close'));
+  event.ports[0].postMessage(true);
+ })());
  if(event.data==='test-notification'){
   const {matchAll,openWindow}=self.clients;
   let closed=false,opened=null,work;
@@ -65,6 +69,10 @@ self.addEventListener('message',event=>{
      if(!file)for(let i=0;i<3;i++)tx.objectStore('chunks').put(data.slice(i*65536,(i+1)*65536),[storageKey,i]);
     });
     if(file)await writeFile(data);
+    for(const name of ['pulso-shell-1111111111111111','pulso-shell-2222222222222222','media']){
+     const cache=await caches.open(name);await cache.put('/index.html',new Response('<title>Previous shell</title>',{headers:{'Content-Type':'text/html'}}));
+    }
+    await caches.open('pulso-shell-3333333333333333'); // Failed install, empty cache.
     await navigator.serviceWorker.register('/sw.js',{type:'module'});
     if(!navigator.serviceWorker.controller)await new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}));
     const ownerProof='pulso-web:local:owner:'+crypto.randomUUID();
@@ -98,23 +106,31 @@ self.addEventListener('message',event=>{
     const ticketKeys=()=>new Promise((resolve,reject)=>{
      const req=db.transaction('tickets').objectStore('tickets').getAllKeys();req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
     });
-    window.pulsoTest={mint,get,rpc,corruptRevision,seedTickets,ticketKeys};
+    const revalidate=()=>rpc({protocol:'pulso-idb-realm',version:1,type:'revalidate',requestId:crypto.randomUUID(),ownerProof});
+    window.pulsoTest={mint,get,rpc,corruptRevision,seedTickets,ticketKeys,revalidate};
    },backend);
+   assert.deepEqual(await page.evaluate(()=>caches.keys()),['pulso-shell-2222222222222222','media','pulso-shell-BUILD_ID']);
    const departed=await context.newPage();await departed.goto(origin);
    const deadOwner=await departed.evaluate(()=>new Promise(resolve=>{
     const channel=new MessageChannel();channel.port1.onmessage=event=>{channel.port1.close();resolve(event.data);};
     navigator.serviceWorker.controller.postMessage('test-client',[channel.port2]);
    }));
+   const ownerToken=await page.evaluate(()=>window.pulsoTest.mint());
+   const foreignStatus=await departed.evaluate(async token=>(await fetch('/_pulso/media/'+token)).status,ownerToken);
+   assert.equal(foreignStatus,403);
    await page.evaluate(deadOwner=>window.pulsoTest.seedTickets(deadOwner),deadOwner);
    await departed.close();
    const result=await page.evaluate(async()=>{
-    const {mint,get,rpc,corruptRevision}=window.pulsoTest;
+    const {mint,get,rpc,corruptRevision,revalidate}=window.pulsoTest;
     const token=await mint(),before=await rpc('test-counters');
     const first=await get(token,'bytes=0-1'),afterFirst=await rpc('test-counters');
     const second=await get(token,'bytes=0-'),cross=await get(token,'bytes=65530-65545'),afterRanges=await rpc('test-counters');
+    await rpc('test-close-database');
+    const revoked=await get(token,'bytes=0-1'),retry=await revalidate(),beforeRetry=await rpc('test-counters');
+    const recovered=await get(token,'bytes=0-1'),afterRetry=await rpc('test-counters');
     await corruptRevision();
     const oldTicket=await get(token,'bytes=0-1'),bad=await get(await mint(),'bytes=0-1');
-    return {before,first,afterFirst,second,cross,afterRanges,oldTicket,bad,keys:await window.pulsoTest.ticketKeys()};
+    return {before,first,afterFirst,second,cross,afterRanges,revoked,retry,beforeRetry,recovered,afterRetry,oldTicket,bad,keys:await window.pulsoTest.ticketKeys()};
    });
    assert.deepEqual(result.first,{status:206,length:2,first:0,last:1,contentRange:'bytes 0-1/131083'});
    assert.equal(result.second.length,131083);
@@ -123,10 +139,17 @@ self.addEventListener('message',event=>{
    assert.equal(result.bad.status,409,'the first read of a new revision verifies bytes outside the requested range');
    assert.deepEqual(result.afterFirst,{opens:result.before.opens+1,hashes:result.before.hashes+1});
    assert.deepEqual(result.afterRanges,{opens:result.afterFirst.opens+2,hashes:result.afterFirst.hashes});
+   assert.equal(result.revoked.status,503);assert.equal(result.retry.state,'ready');
+   assert.deepEqual(result.recovered,result.first);
+   assert.deepEqual(result.afterRetry,{opens:result.beforeRetry.opens+1,hashes:result.beforeRetry.hashes+1});
    assert.deepEqual(result.keys.filter(key=>key.startsWith('test-')),['test-dead-legacy','test-live-v2']);
    const notification=await page.evaluate(()=>window.pulsoTest.rpc('test-notification'));
    assert.deepEqual(notification,{closed:true,opened:'/'});
-   console.log(JSON.stringify({backend,passed:true,reads:3,hashes:1,opens:3,oldTicket:409,firstReadOfCorruptRevision:409,orphanV2Pruned:true,notification}));
+   await context.setOffline(true);
+   const offline=await page.goto(origin+notification.opened);
+   assert.ok(offline?.ok()&&offline.fromServiceWorker());
+   assert.equal(await page.title(),'Local SW media test');
+   console.log(JSON.stringify({backend,passed:true,reads:3,hashes:1,opens:3,foreignStatus,oldTicket:409,firstReadOfCorruptRevision:409,orphanV2Pruned:true,obsoleteShellPruned:true,newHashAfterReadmission:true,notification,offlineRoot:true}));
   }finally{await context.close();}
  }
 }finally{
