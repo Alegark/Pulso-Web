@@ -25,7 +25,10 @@ function writeSourceArchive(out){
  const project=git(['rev-parse','--show-toplevel'],{cwd:root,encoding:'utf8'}).trimEnd();
  const head=git(['rev-parse','HEAD'],{cwd:project,encoding:'utf8'}).trim();
  const tracked=git(['ls-tree','-rz',head,'--',...sourcePaths],{cwd:project});
- if(git(['--no-optional-locks','status','--porcelain','--untracked-files=no','--',...sourcePaths],{cwd:project}).length)throw Error('Uncommitted changes in Telegram source paths');
+ const dirty=git(['--no-optional-locks','status','--porcelain','--untracked-files=no','--',...sourcePaths],{cwd:project}).length>0;
+ // A release snapshot (prepare-cloudflare) must match HEAD exactly; a local build only records that the archive omits uncommitted edits.
+ if(dirty&&project!==root)throw Error('Uncommitted changes in Telegram source paths');
+ if(dirty)console.warn('Telegram sources archive built from HEAD: uncommitted changes are not included. Commit before preparing a release.');
  if(project!==root){
   const files=git(['ls-tree','-rz','--name-only',head,'--',...sourcePaths],{cwd:project,encoding:'utf8'}).split('\0').filter(Boolean);
   for(const path of files){
@@ -61,15 +64,16 @@ function writeSourceArchive(out){
   const commit=stage(['-c','commit.gpgSign=false','commit-tree',tree,'-m','Pulso Telegram sources'],{env,encoding:'utf8'}).trim();
   stage(['archive','--format=tar.gz','--output='+out,commit]);
  }finally{rmSync(temporary,{recursive:true,force:true});}
+ return {dirty};
 }
 
 export function writeTelegramSources(directory){
  const out=resolve(directory),index=JSON.parse(readFileSync(resolve(root,'vendor/telegram-wasm/SOURCE-MANIFEST.json')));
  for(const entry of index.sourceFiles){const data=readFileSync(resolve(root,'vendor/telegram-wasm',entry.path));if(data.length!==entry.bytes||sha(data)!==entry.sha256)throw Error('Telegram WASM source changed: review required');}
- writeSourceArchive(resolve(out,'telegram-sources.tar.gz'));
+ const {dirty}=writeSourceArchive(resolve(out,'telegram-sources.tar.gz'));
  const extra=readFileSync(resolve(root,'vendor/telegram-wasm/PULSO-NOTICES.txt'));
  const notices=resolve(out,'THIRD-PARTY-NOTICES.txt');writeFileSync(notices,Buffer.concat([readFileSync(notices),Buffer.from('\n\n===== Telegram composite WASM sources and licenses =====\n\n'),extra]));
- const manifest=JSON.parse(readFileSync(resolve(out,'third-party-licenses.json')));manifest.sha256=sha(readFileSync(notices));manifest.telegramSources={file:'/telegram-sources.tar.gz',notices:'vendor/telegram-wasm/PULSO-NOTICES.txt'};
+ const manifest=JSON.parse(readFileSync(resolve(out,'third-party-licenses.json')));manifest.sha256=sha(readFileSync(notices));manifest.telegramSources={file:'/telegram-sources.tar.gz',notices:'vendor/telegram-wasm/PULSO-NOTICES.txt',...(dirty?{uncommittedChangesOmitted:true}:{})};
  const countryChunks=[readFileSync(notices),Buffer.from('\n\n===== Country/calling-code facts derived from Google libphonenumber · Apache-2.0 =====\n\n')];
  let offset=countryChunks.reduce((n,bytes)=>n+bytes.length,0);const countryNotices=[];
  for(const record of phoneCountryFiles){

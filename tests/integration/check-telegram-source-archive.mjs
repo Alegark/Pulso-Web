@@ -53,8 +53,12 @@ try{
  appendFileSync(resolve(copy,'src/telegram/session.worker.ts'),'\n// changed snapshot\n');
  notices();assert.throws(()=>fromCopy.writeTelegramSources(dist),/snapshot/i);
  appendFileSync(resolve(snapshot,'src/telegram/session.worker.ts'),'\n// changed worktree\n');
- notices();assert.throws(()=>writeTelegramSources(dist),/uncommitted/i);
+ // Local builds keep working: the archive stays at HEAD and the manifest records the omission.
+ notices();writeTelegramSources(dist);assert.deepEqual(readFileSync(archive),first);
+ assert.equal(JSON.parse(readFileSync(resolve(dist,'third-party-licenses.json'),'utf8')).telegramSources.uncommittedChangesOmitted,true);
+ // A release snapshot is refused while the worktree has uncommitted or staged changes.
+ notices();assert.throws(()=>fromCopy.writeTelegramSources(dist),/uncommitted/i);
  git('add','src/telegram/session.worker.ts');
- assert.throws(()=>writeTelegramSources(dist),/uncommitted/i);
- console.log('PASS tracked sources, reproducible archive, untracked/ignored exclusion, snapshot and dirty-file guards');
+ notices();assert.throws(()=>fromCopy.writeTelegramSources(dist),/uncommitted/i);
+ console.log('PASS tracked sources, reproducible archive, untracked/ignored exclusion, snapshot and release dirty-file guards');
 }finally{if(previousTmp===undefined)delete process.env.TMPDIR;else process.env.TMPDIR=previousTmp;rmSync(temp,{recursive:true,force:true});}
