@@ -1,8 +1,9 @@
+import {linkSnapshotDependencies} from './test-workspace.mjs';
 import {ffmpegExecutable} from '../../scripts/ffmpeg-path.mjs';
 /** R124 TESTONLY NoTelegram: full unchanged MAIN + real worker/client/driver.
  * --prepare never starts browser/server/build. --freeze is mandatory for final.
  */
-import {readFile,writeFile,mkdir,readdir,copyFile,symlink,lstat} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,readdir,copyFile,lstat} from 'node:fs/promises';
 import {resolve,dirname,relative,extname,sep} from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
@@ -28,7 +29,7 @@ if(freezePath){frozen=JSON.parse(await readFile(freezePath,'utf8'));assert.equal
 const before=await sourceMap(project);assert.equal(before['src/telegram/sources-driver.ts'].sha256,'1b9e67195fb17b96ab25081f2275d620dbbefc762446caaae0e9ff57366e8ef2');
 for(const path of Object.keys(before)){await mkdir(dirname(resolve(root,path)),{recursive:true});await copyFile(resolve(project,path),resolve(root,path));}
 await copyFile(resolve(project,'index.html'),resolve(root,'index.html'));
-await symlink(resolve(project,'node_modules'),resolve(root,'node_modules'),'dir');
+await linkSnapshotDependencies(root,project);
 assert.deepEqual(await sourceMap(root),before,'Snapshot complete bytes mismatch');
 // Copy TESTONLY SDK next to its genuine relative imports. Main is never transformed.
 await copyFile(resolve(project,'tests/integration/telegram-sources-main-sdk.ts'),resolve(root,'src/telegram/R124-TESTONLY-sdk.ts'));

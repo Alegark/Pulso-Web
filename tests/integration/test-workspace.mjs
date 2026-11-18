@@ -1,5 +1,5 @@
-import {mkdir,mkdtemp,realpath,rm,statfs,readdir,lstat} from 'node:fs/promises';
-import {resolve,relative,sep} from 'node:path';
+import {mkdir,mkdtemp,realpath,rm,statfs,readdir,lstat,symlink} from 'node:fs/promises';
+import {resolve,relative,sep,isAbsolute} from 'node:path';
 
 // Only this invocation's mkdtemp directory is disposable. Evidence is separate.
 export async function createTestWorkspace(name){
@@ -23,4 +23,15 @@ export async function createTestWorkspace(name){
   const evidenceBytes=await size(evidence);if(evidenceBytes>20*1024**2)throw Error('Run evidence exceeds20MiB; temporary files removed, review evidence manually');
   const after=await statfs('/data');return {removed:true,freeBefore:disk.bavail*disk.bsize,freeAfter:after.bavail*after.bsize};
  }};
+}
+
+// Resolve both directories before linking, including aliases into node_modules.
+export async function linkSnapshotDependencies(snapshot, project = '.') {
+ const source = resolve(project, 'node_modules');
+ const [dependencies, destination] = await Promise.all([realpath(source), realpath(snapshot)]);
+ const position = relative(dependencies, destination);
+ if (position === '' || (!isAbsolute(position) && position !== '..' && !position.startsWith('..' + sep))) {
+  throw new Error('El snapshot no puede enlazar node_modules dentro del propio directorio de dependencias.');
+ }
+ await symlink(dependencies, resolve(destination, 'node_modules'), 'junction');
 }

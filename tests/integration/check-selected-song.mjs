@@ -1,9 +1,10 @@
+import {linkSnapshotDependencies} from './test-workspace.mjs';
 import {ffmpegExecutable} from '../../scripts/ffmpeg-path.mjs';
 /** MUSIC_FLOW full MAIN selection. --prepare keeps history, no browser/build.
  * Final exactly once, immutable attempt directory and exclusive final claim.
  * Sole SDK factory fixture is synthetic, NEVER account/bot/audio acceptance. */
 import assert from 'node:assert/strict';
-import {readFile,writeFile,mkdir,readdir,copyFile,symlink,open} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,readdir,copyFile,open} from 'node:fs/promises';
 import {resolve,dirname,extname,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
@@ -27,7 +28,7 @@ const frozenBytes=await readFile(freezePath),freeze=JSON.parse(frozenBytes);asse
 const before=await sourceMap(project);assert.deepEqual(before,freeze.sources,'STOP freeze differs from complete actual src/public/index/header');
 const root=resolve(run,'isolated-root');await mkdir(root);
 for(const p of Object.keys(before)){await mkdir(dirname(resolve(root,p)),{recursive:true});await copyFile(resolve(project,p),resolve(root,p));}
-await symlink(resolve(project,'node_modules'),resolve(root,'node_modules'),'dir');
+await linkSnapshotDependencies(root,project);
 assert.deepEqual(await sourceMap(root),before);
 await writeFile(resolve(run,'freeze-input.json'),frozenBytes);await writeFile(resolve(run,'source-start.json'),JSON.stringify(before,null,2));
 await mkdir(resolve(run,'harness'));const harnessMap={};

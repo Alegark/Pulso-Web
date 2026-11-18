@@ -1,8 +1,9 @@
+import {linkSnapshotDependencies} from './test-workspace.mjs';
 import {ffmpegExecutable} from '../../scripts/ffmpeg-path.mjs';
 /** R133 TESTONLY NoTelegram: full unchanged MAIN + real worker/client/driver.
  * --prepare never starts browser/server/build. --freeze is mandatory for final.
  */
-import {readFile,writeFile,mkdir,readdir,copyFile,symlink} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,readdir,copyFile} from 'node:fs/promises';
 import {resolve,dirname,extname,sep} from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
@@ -29,7 +30,7 @@ if(freezePath){frozen=JSON.parse(await readFile(freezePath,'utf8'));assert.equal
 const before=await sourceMap(project);
 for(const path of Object.keys(before)){await mkdir(dirname(resolve(root,path)),{recursive:true});await copyFile(resolve(project,path),resolve(root,path));}
 const indexBytes=await readFile(resolve(project,'index.html'));await writeFile(resolve(root,'index.html'),indexBytes);
-await symlink(resolve(project,'node_modules'),resolve(root,'node_modules'),'dir');
+await linkSnapshotDependencies(root,project);
 assert.deepEqual(await sourceMap(root),before,'Snapshot complete bytes mismatch');
 // Copy TESTONLY SDK next to its genuine relative imports. Main is never transformed.
 await copyFile(resolve(project,'tests/integration/telegram-bot-pool-main-sdk.ts'),resolve(root,'src/telegram/R133-TESTONLY-sdk.ts'));

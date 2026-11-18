@@ -1,7 +1,8 @@
+import {linkSnapshotDependencies} from './test-workspace.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'vite';
 import {chromium,webkit} from 'playwright-core';
-import {readFile,writeFile,mkdir,cp,symlink} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,cp} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
@@ -21,7 +22,7 @@ try{
  await mkdir(root,{recursive:true});
  for(const path of Object.keys(manifest.sources)){await mkdir(dirname(root+'/'+path),{recursive:true});await cp(frozen+'/frozen-root/'+path,root+'/'+path);}
  const fixture='tests/integration/update-settings-sdk.ts';await mkdir(dirname(root+'/'+fixture),{recursive:true});await cp(fixture,root+'/'+fixture);
- await symlink(resolve('node_modules'),root+'/node_modules','dir');
+ await linkSnapshotDependencies(root);
  let replacements=0;
  const sdk=()=>({name:'TESTONLY-update-settings-sdk',enforce:'pre',resolveId(source,importer){if(source==='./temporary-sdk'&&importer?.split('?')[0]===root+'/src/telegram/session.worker.ts'){replacements++;return root+'/'+fixture;}}});
  await build({root,configFile:false,logLevel:'error',worker:{plugins:()=>[sdk()]},build:{outDir:out,rolldownOptions:{input:root+'/index.html'}}});

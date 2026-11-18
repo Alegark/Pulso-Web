@@ -1,7 +1,8 @@
+import {linkSnapshotDependencies} from './test-workspace.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'vite';
 import {chromium,webkit} from 'playwright-core';
-import {mkdir,readFile,writeFile,cp,symlink,readdir} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,cp,readdir} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
 import {createHash} from 'node:crypto';
 import {spawn,execFileSync} from 'node:child_process';
@@ -9,7 +10,7 @@ import {once} from 'node:events';
 const base=resolve('.local/storage-usage-acceptance'),run=resolve(base,new Date().toISOString().replace(/[:.]/g,'-')),root=resolve(run,'snapshot'),out=resolve(run,'bundle');await mkdir(root,{recursive:true});
 const hash=b=>createHash('sha256').update(b).digest('hex');
 async function sources(){const m={};async function walk(p){for(const e of await readdir(p,{withFileTypes:true})){const k=p+'/'+e.name;if(e.isDirectory())await walk(k);else {const b=await readFile(k);m[k]={bytes:b.length,sha256:hash(b)};}}}await walk('src');await walk('public');await walk('scripts');await walk('deployment');await walk('tests/integration/helpersalbum-library');for(const p of ['index.html','package.json','package-lock.json','tsconfig.json','vite.config.ts','wrangler.jsonc','tests/integration/check-album-library-main.mjs','tests/integration/storage-usage-acceptance.html','tests/integration/storage-usage-acceptance.ts','tests/integration/check-storage-usage-acceptance.mjs']){const b=await readFile(p);m[p]={bytes:b.length,sha256:hash(b)};}return m;}
-const frozen=await sources();await writeFile(resolve(run,'freeze.json'),JSON.stringify({project:'Pulso-Web',frozen:true,sources:frozen},null,2));for(const p of Object.keys(frozen)){await mkdir(dirname(resolve(root,p)),{recursive:true});await cp(p,resolve(root,p));}await symlink(resolve('node_modules'),resolve(root,'node_modules'));
+const frozen=await sources();await writeFile(resolve(run,'freeze.json'),JSON.stringify({project:'Pulso-Web',frozen:true,sources:frozen},null,2));for(const p of Object.keys(frozen)){await mkdir(dirname(resolve(root,p)),{recursive:true});await cp(p,resolve(root,p));}await linkSnapshotDependencies(root);
 function memory(label){const raw=execFileSync('python3',['scripts/sync_odd_memory.py','--read-only'],{encoding:'utf8'});return writeFile(resolve(run,'engram-'+label+'.json'),raw).then(async()=>{const r=JSON.parse(raw);assert.equal(r.tasks.length,16);assert.equal(r.FullContentVerified,true);for(const t of r.tasks){const b=await readFile(t.file);assert.equal(t.project,'Pulso-Web');assert.equal(t.bytes,b.length);assert.equal(t.ContentSHA256,hash(b));assert.equal(t.FullContentVerified,true);}return r;});}
 const initial=await memory('initial');const report={status:'RUNNING',run,physical:[],ui:[],errors:[],csp:[],external:[],claims:{realAccount:false,realAudio:false,iPhone:false,screenReaderPhysical:false}};let browser,server;
 try{
