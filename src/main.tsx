@@ -977,10 +977,11 @@ function App(){
  }
  function rescanResponse(){const current=shellResponse(),intent=rescanIntent.current,activity=control.activity.scope(),admission=databaseGeneration;return()=>intent===rescanIntent.current&&admission===databaseGeneration&&activity()&&current();}
  function openRemoval(track:Track,opener:HTMLButtonElement){
-  if(!mutationCurrent()||!owner||busy||copyRemovalBlocked()||!removalEligibleTracks.has(track.id))return;
+  if(!mutationCurrent()||!removalHost.canStart()||!removalEligibleTracks.has(track.id)){removalUnavailable();return;}
   removalOpener.current=opener;removalFocus.current={kind:'open',current:rescanResponse(),opener};
   setRemovalRequest({identity:{},track});
  }
+ function removalUnavailable(){removalFocus.current=null;removalOpener.current=null;status='No se pudo iniciar la retirada. Espera a que terminen las operaciones y vuelve a revisar la copia.';emit();}
  function openPendingRemoval(opener:HTMLButtonElement){removalOpener.current=opener;removalFocus.current={kind:'open',current:rescanResponse(),opener};}
  function focusRemoval(){
   const intent=removalFocus.current;if(!intent||!intent.current())return;
@@ -1336,7 +1337,7 @@ function App(){
  </div><details className="create-playlist" hidden={libraryDetail||!!libraryArtist||libraryTab!==null&&libraryTab!=='playlists'}><summary>Crear una playlist</summary><form onSubmit={e=>{e.preventDefault();void viewAct(async current=>{await createPlaylist(name,current);if(current())setName('');});}}><label>Nueva playlist<input ref={createInput} value={name} onChange={e=>setName(e.target.value)} maxLength={100} required/></label><button disabled={!canOrganize}>Crear playlist</button></form></details></section>
  <DownloadRemovalDialog key={`downloads:${collectionKey}`} controller={downloadRemovalController} onClose={closeCollection}/>
  <CollectionRemovalController key={collectionKey} controller={collectionController} headingRef={collectionHeading} onVisible={()=>{}} onClose={closeCollection}/>
- <LocalCopyRemovalController key={`${removalKey}:${removalRecoveryEpoch}`} host={removalHost} startup={copyRemovalStartup?.key===removalKey?copyRemovalStartup.snapshot:null} request={removalRequest} canUse={owner&&databaseState==='ready'} headingRef={removalHeading} onOpen={openPendingRemoval} onVisible={focusRemoval} onClose={closeRemoval}/>
+ <LocalCopyRemovalController key={`${removalKey}:${removalRecoveryEpoch}`} host={removalHost} startup={copyRemovalStartup?.key===removalKey?copyRemovalStartup.snapshot:null} request={removalRequest} onRequestHandled={(identity,started)=>{setRemovalRequest(request=>request?.identity===identity?null:request);if(!started)removalUnavailable();}} canUse={owner&&databaseState==='ready'} headingRef={removalHeading} onOpen={openPendingRemoval} onVisible={focusRemoval} onClose={closeRemoval}/>
  <MetadataRescanController key={`metadata-rescan:${scopeId}:${control.proof}:${databaseGeneration}`} activity={control.activity} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} canUse={owner&&!botImportActive&&databaseState==='ready'&&!sourceReview.hasReservation()&&!queueForeignBlocked()} canStart={owner&&!busy&&!botImportActive&&databaseState==='ready'&&!importRecoveryPending()&&!copyRemovalPending&&!sourceReview.hasReservation()&&control.activity.idle} track={rescanTrackId?trackIndex.get(rescanTrackId)??null:null} headingRef={rescanHeading} captureCurrent={captureRescanCurrent} captureAdmission={captureForeignMutationCurrent} onBlocking={setMetadataRescanBlocking} onCommitted={()=>refresh(true,false,null)} onClose={closeRescan}/>
  <div hidden={!settingsOpen||settingsSection!=='tools'} className="settings-secondary"><details className="settings-group"><summary><strong>Verificar playlists</strong><span>Revisar las copias de una selección</span></summary><div className="settings-group__body"><LocalBatchPanel key={`local-batch:${control.proof}`} activity={control.activity} beginDiagnostic={beginPanelDiagnostic} playlist={selected??null} canStart={canOrganize} captureWriteCurrent={captureForeignMutationCurrent} onStatus={text=>{status=text;emit();}}/></div></details></div>
  <PlaybackProgress subscribe={player.subscribe} enabled={playerOpen}>{()=> <PlayerSurface open={playerOpen} onClose={closePlayer} notice={playerOpen?notice:null}>

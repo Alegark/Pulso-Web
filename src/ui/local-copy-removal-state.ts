@@ -129,7 +129,7 @@ export function createCopyRemovalController(host:CopyRemovalHost,core:typeof rem
   publish({...empty,visible:true,title,state:'preparing',working:true});return r;
  }
  async function start(track:Track){
-  if(disposed||!initialized||run||unknown||pending.length||!host.canStart()||track.assetId===null)return;
+  if(disposed||!initialized||run||unknown||pending.length||!host.canStart()||track.assetId===null)return false;
   const r=begin(track.title);r.token=host.activity.begin();
   const work=(async()=>{
    try{
@@ -153,7 +153,7 @@ export function createCopyRemovalController(host:CopyRemovalHost,core:typeof rem
     if(!live(r)){if(own(r))blocked(r,'changed',r.abort.signal.aborted?'Revisión detenida. No se ha autorizado una retirada nueva.':'La revisión dejó de estar vigente. Conserva la copia y vuelve a revisar.');cleanup(r);}
     else if(view.state!=='ready')cleanup(r);
    }
-  })();r.settlement=work;await work;
+  })();r.settlement=work;await work;return true;
  }
  async function inspect(){
   if(disposed||!initialized||view.working||run?.settling||!host.canRecover())return;
