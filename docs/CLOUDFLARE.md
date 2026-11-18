@@ -166,3 +166,12 @@ La reparación quedó activa en deployment `a93dd904-6bf4-47fb-aafd-f263da2fac1c
 El Worker se comprobó mediante lectura MCP: 318422 bytes, SHA-256 `e73c6acf441d48a39dc92ed76153d49281a39f404e2cebf1cf0fac5e8121ca6f`, activo al100%. Conserva los siete bindings, Workers.dev `pruebassoftware` activo y previews apagadas. Se mantuvo la cuota gratuita; no se leyeron valores de secretos ni se aplicó migración. Se conservaron 110 rutas inmutables JS/CSS/WASM confirmadas; los ocho hashes nuevos del primer upload se transfirieron en tres buckets. Cloudflare no pidió nuevos blobs en la reparación, que volvió a publicar el Worker con las dos rutas restauradas.
 
 La validación local combinada pasó 788/788 unitarias, lint, 14/14 perfiles simulados de bienvenida y 8/8 casos IDB/OPFS de eliminación de colecciones. No se ejecutó aceptación de navegador público, permisos reales, Telegram ni iPhone/Android físicos. Evidencia versionada: [MOBILE-SETTINGS-RELEASE.md](MOBILE-SETTINGS-RELEASE.md); recibos y readback por ruta en `.local/test-evidence/settings-publication-20261117/`.
+
+
+## Revisión de código · 2026-11-18
+
+Publicado por MCP oficial en Workers Free / USD 0 desde `2e4186b2e2758ef50829c7eb24a57b2f99d4d867`. Deployment `88054789-d2e7-4ff7-b39a-2e85756f9d5b`, versión `28f046a0-e6ea-4cbb-9692-4d0066ce2e91` activa al 100 %, entrada `/releases/b837a1c9ee817b34.html`. Worker de 327216 bytes verificado por SHA-256 `b3df88c87f8db7c9c901d845366af57c924aaa4d90560e7d1209af6c93394fe9`.
+
+El readback de MCP confirmó los siete bindings, el mismo namespace de `CATALOG`, workers.dev habilitado y previews desactivadas. Se añadió `/api/account-library` a `run_worker_first` sin aplicar migraciones. HTTPS verificó 223 rutas estáticas por bytes y SHA-256. Raíz, latest, entrada y SW responden 200 por GET y HEAD con CSP. La entrada anterior responde 200. La configuración de cuenta responde 200 con `enabled:true`, `google:true` y `no-store`. Perfil y biblioteca anónimos responden 401, y el PUT de biblioteca desde otro origen responde 403.
+
+La staging `.local/cloudflare-setup` del checkout principal está desfasada. El manifiesto autoritativo de esta entrega está en `.local/test-evidence/code-review-delivery/site-manifest.json` y reúne 226 archivos, incluidos los 176 inmutables verificados de la entrega anterior. [Evidencia de publicación](evidence-code-review-web.json).

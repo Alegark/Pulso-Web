@@ -744,3 +744,10 @@ Siete agentes `gpt-6.2-sol` (esfuerzo alto, worktrees aislados) corrigieron en d
 Verificación final de la rama integrada: typecheck, lint y typecheck:tests PASS; `npm run check` 799/799 unitarias, 60/60 servidor, 10/10 Python; build PASS; runners Chromium 16/16 grupos; `check-review-ui.mjs` PASS en Chromium/WebKit a 390×844 y 1366×768 con cuenta, sesión y audio sintéticos; archivo de fuentes reproducible y protegido. No acredita iPhone físico, Telegram real ni P0-W.
 
 Pendientes que requieren decisión del propietario: Rate Limiting/Turnstile en auth y relays, retención de assets inmutables en Cloudflare, CI con GitHub Actions, selección de fuentes de Telegram sin efecto (W03). Recomendado después: dividir `main.tsx` en vistas, store y runtime; unificar normalizaciones de texto; readmisión automática del SW tras `connection-closed` cuando haya evidencia.
+
+
+## Publicación verificada en Cloudflare · 2026-11-18
+
+Publicado por MCP oficial en Workers Free / USD 0 desde `2e4186b2e2758ef50829c7eb24a57b2f99d4d867`. Deployment `88054789-d2e7-4ff7-b39a-2e85756f9d5b`, versión `28f046a0-e6ea-4cbb-9692-4d0066ce2e91` activa al 100 %, entrada `/releases/b837a1c9ee817b34.html`. Worker de 327216 bytes verificado por SHA-256 `b3df88c87f8db7c9c901d845366af57c924aaa4d90560e7d1209af6c93394fe9`.
+
+HTTPS verificó 223 rutas estáticas por bytes y SHA-256. Raíz, latest, entrada y SW responden 200 por GET y HEAD con CSP. La entrada anterior responde 200. La configuración de cuenta responde 200 con `enabled:true`, `google:true` y `no-store`. Perfil y biblioteca anónimos responden 401, y el PUT de biblioteca desde otro origen responde 403. MCP confirmó los siete bindings y el namespace de `CATALOG`, workers.dev habilitado y previews desactivadas. Evidencia en [evidence-code-review-web.json](../../docs/evidence-code-review-web.json). La verificación de esta publicación se limitó a MCP y HTTPS, sin iPhone físico ni Telegram real. P0-W sigue pendiente.
