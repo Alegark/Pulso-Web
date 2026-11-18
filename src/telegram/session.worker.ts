@@ -10,7 +10,7 @@ import type {BotProvidersDriver} from './bot-providers-driver';
 import type {BotProvidersBridgeReply} from './bot-providers-bridge-protocol';
 import {copyBotSearchEnvelope,parseBotSearchCommand,parseBotSearchReply,type BotSearchCommand,type BotSearchReply} from './bot-search-protocol';
 import type {BotSearchDriver} from './bot-search-driver';
-import type {BotSearchBridgeReply} from './bot-search-bridge-protocol';
+import {isBotSearchCancelReply,type BotSearchBridgeReply} from './bot-search-bridge-protocol';
 import type {QrLoginChallenge} from './qr-login-protocol';
 declare const self:DedicatedWorkerGlobalScope;
 let session='',phase:SessionReply['phase']='disconnected',active=false,phone='';
@@ -28,12 +28,15 @@ function observeRemote(reply:{type:string;retryAt?:number|null;retryBlocked?:boo
 function refreshCooldown(){const cooldown=client?.getAccountCooldown?.();if(cooldown){retryBlocked ||=cooldown.retryBlocked;if(cooldown.retryAt!==null)retryAt=Math.max(retryAt??0,cooldown.retryAt);}}
 function closeLocal(){qrChallenge=null;abort.abort();search?.close();bots?.close();sources?.close();void client?.close().catch(()=>{});self.close();}
 async function searchCommand(command:BotSearchCommand){
- if(!client||phase!=='connected'||active||command.sessionId!==session||command.type!=='bot-search.cancel'&&(searchFlight||searchControl||botFlight||botControl||page||control)||command.type==='bot-search.cancel'&&(!search||!searchFlight||searchControl)){closeLocal();return;}
+ if(!client||phase!=='connected'||active||command.sessionId!==session||command.type!=='bot-search.cancel'&&(searchFlight||searchControl||botFlight||botControl||page||control)||command.type==='bot-search.cancel'&&searchControl){closeLocal();return;}
  const driver=client,binding=parseAccountBinding(driver.getAccountBinding());
  if(!binding||command.accountRef!==binding.accountRef||command.accountEpoch!==binding.accountEpoch){closeLocal();return;}
  const current=()=>!abort.signal.aborted&&client===driver&&driver.getAccountBinding()?.accountRef===binding.accountRef&&driver.getAccountBinding()?.accountEpoch===binding.accountEpoch;
- let core:BotSearchDriver|undefined;try{core=search??=driver.createBotSearch?.(session);}catch{closeLocal();return;}
  const post=(reply:BotSearchReply,sessionClosed:boolean)=>self.postMessage({protocol:'pulso-bot-search',version:1,reply,sessionClosed,retryAt,retryBlocked} satisfies BotSearchBridgeReply);
+ if(command.type==='bot-search.cancel'&&(!search||!searchFlight)){
+  post({...copyBotSearchEnvelope(command),type:'bot-search.error',error:'expired',delivery:'not-dispatched',retryAt:null,retryBlocked:false},false);return;
+ }
+ let core:BotSearchDriver|undefined;try{core=search??=driver.createBotSearch?.(session);}catch{closeLocal();return;}
  let terminal=false,sending=false,notice=false;
  const run=async()=>{try{
   refreshCooldown();let reply:BotSearchReply|null;
@@ -44,10 +47,11 @@ async function searchCommand(command:BotSearchCommand){
    if(progress.type==='bot-search.sending'){if(sending)return;sending=true;}post(progress,false);
   }});
   const settled=command.type!=='bot-search.cancel'&&core?await core.whenSettled():true;
-  if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&(reply.type!=='bot-search.cancelled'||reply.targetRequestId!==command.targetRequestId)){closeLocal();return;}observeRemote(reply);refreshCooldown();
+  if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&!isBotSearchCancelReply(reply,command)){closeLocal();return;}observeRemote(reply);refreshCooldown();
+  if(reply.type==='bot-search.cancelled')searchCancelled=true;
   const sessionClosed=!settled||!current()||!driver.getAccountBinding();post(reply,sessionClosed);if(sessionClosed)closeLocal();
  }catch{closeLocal();}};
- if(command.type==='bot-search.cancel'){searchCancelled=true;const flight=run();searchControl=flight;try{await flight;}finally{if(searchControl===flight)searchControl=null;}}
+ if(command.type==='bot-search.cancel'){const flight=run();searchControl=flight;try{await flight;}finally{if(searchControl===flight)searchControl=null;}}
  else{searchCancelled=false;const flight=run();searchFlight=flight;try{await flight;}finally{if(searchFlight===flight)searchFlight=null;}}
 }
 async function botCommand(command:BotProvidersCommand){

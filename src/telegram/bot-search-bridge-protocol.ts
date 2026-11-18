@@ -5,13 +5,17 @@ export interface BotSearchBridgeReply {
  readonly protocol:'pulso-bot-search';readonly version:1;readonly reply:BotSearchReply;
  readonly sessionClosed:boolean;readonly retryAt:number|null;readonly retryBlocked:boolean;
 }
+export function isBotSearchCancelReply(reply:BotSearchReply,command:Extract<BotSearchCommand,{type:'bot-search.cancel'}>):boolean {
+ return reply.type==='bot-search.cancelled'&&reply.targetRequestId===command.targetRequestId||
+  reply.type==='bot-search.error'&&reply.error==='expired'&&reply.delivery==='not-dispatched';
+}
 export function parseBotSearchBridgeReply(raw:unknown,command:BotSearchCommand):BotSearchBridgeReply|null {
  try{
   const r=dataRecord(raw,['protocol','version','reply','sessionClosed','retryAt','retryBlocked']);
   if(!r||r.protocol!=='pulso-bot-search'||r.version!==1||typeof r.sessionClosed!=='boolean'||typeof r.retryBlocked!=='boolean'||r.retryAt!==null&&(typeof r.retryAt!=='number'||!Number.isSafeInteger(r.retryAt)||r.retryAt<=0||r.retryAt>8640000000000000))return null;
   const reply=parseBotSearchReply(r.reply,command);if(!reply)return null;
   if(command.type==='bot-search.cancel'){
-   if(reply.type!=='bot-search.cancelled'||reply.targetRequestId!==command.targetRequestId)return null;
+   if(!isBotSearchCancelReply(reply,command))return null;
   }else if(reply.type==='bot-search.cancelled')return null;
   if((reply.type==='bot-search.sending'||reply.type==='bot-search.download-progress')&&r.sessionClosed)return null;
   if(reply.type==='bot-search.result'&&JSON.stringify(reply.expectedTarget)!==JSON.stringify(command.type==='bot-search.cancel'?null:command.target??null))return null;
