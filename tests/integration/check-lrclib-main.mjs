@@ -1,3 +1,4 @@
+import {ffmpegExecutable} from '../../scripts/ffmpeg-path.mjs';
 // R62 focal real-main integration. USD0; all external requests fulfilled/aborted.
 import assert from 'node:assert/strict';
 import {readFile,writeFile,mkdir,readdir,cp} from 'node:fs/promises';
@@ -22,7 +23,7 @@ for(const d of ['src','public'])await cp(d,resolve(snap,d),{recursive:true});awa
 const utf=s=>Buffer.from(s,'utf8'),sync=n=>Buffer.from([n>>>21&127,n>>>14&127,n>>>7&127,n&127]),frame=(id,b)=>Buffer.concat([utf(id),sync(b.length),Buffer.alloc(2),b]);
 const frameText=(id,s)=>frame(id,Buffer.concat([Buffer.from([3]),utf(s)]));
 // Own generated MP3 with real 45s audio; ID3 exact title/artist/album, optional USLT.
-execFileSync('node_modules/@ffmpeg-installer/linux-x64/ffmpeg',['-y','-v','error','-f','lavfi','-i','sine=frequency=440:duration=45','-ar','22050','-ac','1','-b:a','32k','-write_xing','0','-id3v2_version','0',resolve(base,'lrclib-main-r62-own.mp3')]);
+execFileSync(ffmpegExecutable(),['-y','-v','error','-f','lavfi','-i','sine=frequency=440:duration=45','-ar','22050','-ac','1','-b:a','32k','-write_xing','0','-id3v2_version','0',resolve(base,'lrclib-main-r62-own.mp3')]);
 const raw=await readFile(resolve(base,'lrclib-main-r62-own.mp3'));let mp3Start=0;while(raw.subarray(mp3Start,mp3Start+3).toString()==='ID3')mp3Start+=10+raw[mp3Start+6]*2097152+raw[mp3Start+7]*16384+raw[mp3Start+8]*128+raw[mp3Start+9];
 function fixture(title,embedded=false){const body=Buffer.concat([frameText('TIT2',title),frameText('TPE1','Autor R62'),frameText('TALB','Álbum R62'),...(embedded?[frame('USLT',Buffer.concat([Buffer.from([3]),utf('spa'),Buffer.from([0]),utf('Letra incrustada original R62')]))]:[])]);const bytes=Buffer.concat([utf('ID3'),Buffer.from([4,0,0]),sync(body.length),body,raw.subarray(mp3Start)]);return{name:title+'.mp3',mimeType:'audio/mpeg',buffer:bytes};}
 const fixtures=[fixture('Prueba R62 A'),fixture('Prueba R62 B'),fixture('Prueba R62 local',true)];report.fixtures=fixtures.map(f=>({name:f.name,bytes:f.buffer.length,sha256:sha(f.buffer),ownSynthetic:true}));

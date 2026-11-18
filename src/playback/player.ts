@@ -30,6 +30,8 @@ export class Player {
   private subscribers = new Set<(change:PlayerChange) => void>();
   private suspended = false;
   private endedConsumed = false;
+  private restorePosition:number|null=null;
+  get pendingRestorePosition() { return this.restorePosition; }
   constructor(readonly audio: Media, private admitted: () => boolean = () => true, private failureObserver?:FailureObserver) {}
   private observe(phase:'play'|'read') {
     let notify:((code:PlayerFailureCode)=>void)|undefined;try{notify=this.failureObserver?.(phase);}catch{/* optional observer */}
@@ -50,6 +52,12 @@ export class Player {
     ++this.revision; ++this.epoch;
     this.invalidate(); this.audio.pause(); this.entries = entries.map(e => ({...e}));
     this.index = -1; this.shuffleOrder=null; this.state = 'idle'; this.emit();
+  }
+  /** Full effective order, including playback history and the current entry. */
+  playbackOrder():readonly Readonly<Entry>[] {
+    if(!this.shuffleOrder)return [...this.entries];
+    const byId=new Map(this.entries.map(entry=>[entry.id,entry]));
+    return this.shuffleOrder.map(id=>byId.get(id)!);
   }
   structure():QueueStructure {
     return Object.freeze({queueRevision:this.revision,queueEpoch:this.epoch,
@@ -88,6 +96,7 @@ export class Player {
     this.emit();return inserted;
   }
   private invalidate() {
+    this.restorePosition=null;
     ++this.generation;
     this.listeners.forEach(([type, fn]) => this.audio.removeEventListener(type, fn));
     this.listeners = [];
@@ -96,16 +105,17 @@ export class Player {
     if (!this.allowed) return;
     const entry = this.entries[index]; if (!entry) return;
     this.invalidate(); this.audio.pause(); this.index = index; this.error = '';this.lastFailure=null;
+    this.restorePosition=Number.isFinite(restorePosition)&&restorePosition>0?restorePosition:null;
     const generation = this.generation; this.endedConsumed = false; const failed=this.observe('read');
     const on = (type: string, fn: () => void) => {
       const guarded: EventListener = () => { if (this.allowed && generation === this.generation && this.audio.src === entry.src) fn(); };
       this.listeners.push([type, guarded]); this.audio.addEventListener(type, guarded);
     };
     on('playing', () => { this.error='';this.lastFailure=null;this.state = 'playing'; this.emit(); });
-    on('pause', () => { if (this.state !== 'ended') this.state = 'paused'; this.emit(); });
+    on('pause', () => { if (this.state !== 'ended' && this.state !== 'error') this.state = 'paused'; this.emit(); });
     on('waiting', () => { this.state = 'buffering'; this.emit(); });
     on('timeupdate', () => this.emit('progress'));
-    on('loadedmetadata', () => { if (restorePosition > 0) { this.seek(restorePosition); restorePosition = 0; } if (this.state === 'loading') this.state = 'paused'; this.emit(); });
+    on('loadedmetadata', () => { const position=this.restorePosition;this.restorePosition=null;if(position!==null)this.seek(position); if (this.state === 'loading') this.state = 'paused'; this.emit(); });
     on('error', () => { let code:PlayerFailureCode='media-unknown';try{switch(this.audio.error?.code){case 1:code='media-aborted';break;case 2:code='media-network';break;case 3:code='media-decode';break;case 4:code='media-unsupported';break;}}catch{/* unknown */}failed(code);this.lastFailure=code; this.state = 'error'; this.error = 'No se pudo leer el audio. Puedes reintentar o elegir la siguiente pista.'; this.emit(); });
     on('ended', () => {
       if (this.endedConsumed || !this.audio.ended) return; this.endedConsumed = true;
@@ -121,13 +131,20 @@ export class Player {
     if (fromSeconds !== undefined) {
       // A lyric is an explicit play-at gesture; never run the replay-at-zero path.
       if (!this.current || !Number.isFinite(fromSeconds) || fromSeconds < 0 || !Number.isFinite(this.audio.duration) || this.audio.duration <= 0 || fromSeconds >= this.audio.duration) return;
-    } else {
-      if (!this.current) { this.select(0, true); return; }
-      if (this.audio.ended || this.state === 'ended') { this.audio.currentTime = 0; this.select(this.index); }
+    }
+    if (this.current && this.state === 'error' && this.lastFailure?.startsWith('media-')) {
+      this.select(this.index, false, fromSeconds ?? this.restorePosition ?? this.audio.currentTime);
+      fromSeconds=undefined;
+    } else if (fromSeconds === undefined) {
+      if (!this.current) { this.select(this.following(), true); return; }
+      if (this.audio.ended || this.state === 'ended') {
+        const next=this.following();
+        this.select(next>=0?next:this.index);
+      }
     }
     const generation = this.generation,src=this.audio.src,failed=this.observe('play');
     try { if (fromSeconds !== undefined) { this.audio.currentTime = fromSeconds; this.endedConsumed = false; } await this.audio.play(); if (generation !== this.generation && !this.allowed) this.audio.pause(); }
-    catch (error) { if (this.allowed && generation === this.generation && this.audio.src===src) { let denied=false;try{denied=error instanceof Error&&error.name==='NotAllowedError';}catch{/* unknown */}failed(denied?'autoplay-denied':'unknown');this.lastFailure=denied?'autoplay-denied':'unknown';this.state = 'error'; this.error = denied ? 'Toca Reproducir para continuar; el navegador requiere una interacción.' : 'El navegador no pudo abrir este audio. Prueba otra pista o vuelve a preparar la cola.'; this.emit(); } }
+    catch (error) { if (this.allowed && generation === this.generation && this.audio.src===src && !this.lastFailure?.startsWith('media-')) { let denied=false;try{denied=error instanceof Error&&error.name==='NotAllowedError';}catch{/* unknown */}failed(denied?'autoplay-denied':'unknown');this.lastFailure=denied?'autoplay-denied':'unknown';this.state = 'error'; this.error = denied ? 'Toca Reproducir para continuar; el navegador requiere una interacción.' : 'El navegador no pudo abrir este audio. Prueba otra pista o vuelve a preparar la cola.'; this.emit(); } }
   }
   pause() { if(this.inserting)return; this.audio.pause(); this.state = 'paused'; this.emit(); }
   following() {
@@ -164,11 +181,16 @@ export class Player {
     this.shuffleOrder=restored;this.emit();
   }
   moveEntry(id:string,delta:-1|1){ if (!this.allowed) return;
-    const current=this.current?.id;const i=this.entries.findIndex(e=>e.id===id);const j=i+delta;
+    const current=this.current?.id;
+    if(this.shuffleOrder){
+      const order=this.shuffleOrder,position=order.indexOf(current??''),i=order.indexOf(id),j=i+delta;
+      if(i<=position||j<=position||j>=order.length)return;
+      ++this.revision;[order[i],order[j]]=[order[j],order[i]];this.emit();return;
+    }
+    const i=this.entries.findIndex(e=>e.id===id);const j=i+delta;
     if(i<0||j<0||j>=this.entries.length)return;
     ++this.revision;
     [this.entries[i],this.entries[j]]=[this.entries[j],this.entries[i]];this.index=this.entries.findIndex(e=>e.id===current);
-    if(this.shuffleOrder){const x=this.shuffleOrder.indexOf(id);const y=x+delta;if(x>=0&&y>=0&&y<this.shuffleOrder.length)[this.shuffleOrder[x],this.shuffleOrder[y]]=[this.shuffleOrder[y],this.shuffleOrder[x]];}
     this.emit();
   }
   removeFuture(id:string){ if (!this.allowed) return;

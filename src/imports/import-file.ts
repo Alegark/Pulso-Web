@@ -8,7 +8,7 @@ import {Attempt,type ImportAttemptResult,type DetailedImportResult} from './impo
 import {storeEmbeddedLyrics,LyricsError,type LyricsFailure,type EmbeddedLyricsStoreResult} from '../library/lyrics';
 import {inspectEmbeddedLyrics,type EmbeddedLyricsFailure} from './lyrics';
 import {storeEmbeddedArtwork} from '../library/artwork';
-import {AudioMetadataLimitError,ArtworkError,audioMetadataView,MAX_AUDIO_TABLE_ENTRIES,MAX_ID3_BYTES,inspectEmbeddedArtwork,type ArtworkFailure} from './artwork';
+import {AUDIO_METADATA_LIMIT_MESSAGE,AudioMetadataLimitError,ArtworkError,audioMetadataView,MAX_AUDIO_TABLE_ENTRIES,MAX_ID3_BYTES,inspectEmbeddedArtwork,type ArtworkFailure} from './artwork';
 import {transactionDone} from '../storage/transaction-done';
 import {parseBlob} from 'music-metadata';
 import {sha256} from '@noble/hashes/sha2.js';
@@ -120,10 +120,11 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
  const digest=bytesToHex(hash.digest());
  if(options.expected&&digest!==options.expected.sha256)fail('verify','integrity','digest-mismatch',backend);
  const candidates=await atBoundary('read','idb',()=>all<LocalAsset>('assets'));const existing=candidates.find(a=>validAsset(a)&&a.sha256===digest&&a.bytes===file.size);
- const text=(s:string|undefined)=>s?.trim().slice(0,300)||null;
+ const truncate=(s:string)=>s.slice(0,300).replace(/[\uD800-\uDFFF]/gu,'');
+ const text=(s:string|undefined)=>s?truncate(s.trim())||null:null;
  const asset:LocalAsset={id:existing?.id??crypto.randomUUID(),namespace:'local',storageKey:job.storageKey,bytes:file.size,sha256:digest,mime,chunks:count,state:'complete',revision:(existing?.revision??0)+1,backend,chunkSize:CHUNK,retention:'kept'};
  const localAlbum=extractLocalAlbumMetadata(metadata.native,mime,albumTags,retried?'not-inspected':metadataWarning?(metadataWarning==='tag-size'?'omitted':metadataWarning==='tag-unsupported'?'not-inspected':'invalid'):null);
- const track:LinkedTrack={...(accountId?{accountId}:{}),localAlbum,id:crypto.randomUUID(),assetId:asset.id,audioFingerprint:{algorithm:'sha256',sha256:digest,bytes:file.size},title:text(metadata.common.title)||file.name.replace(/\.[^.]+$/,'').slice(0,300)||'Sin título',artist:text(metadata.common.artist),album:text(metadata.common.album),duration,favorite:false,revision:1,createdAt:new Date().toISOString(),manualOverrides:{}};
+ const track:LinkedTrack={...(accountId?{accountId}:{}),localAlbum,id:crypto.randomUUID(),assetId:asset.id,audioFingerprint:{algorithm:'sha256',sha256:digest,bytes:file.size},title:text(metadata.common.title)||truncate(file.name.replace(/\.[^.]+$/,''))||'Sin título',artist:text(metadata.common.artist),album:text(metadata.common.album),duration,favorite:false,revision:1,createdAt:new Date().toISOString(),manualOverrides:{}};
  job=await updateOperation(job,{state:'verifying',asset,track,expectedAssetRevision:existing?.revision??0});
  if(writer){assertDatabaseUse('write');closeAttempted=true;attempt.closeState='unknown';await atBoundary('close','opfs',()=>writer!.close());closed=true;attempt.closeState='acknowledged';}
  const reader=await openAssetReader(asset,false);try{const verified=await reader.verifyDetailed();if(verified.state!=='valid')throw AppFailure.create(verified.failure);}finally{reader.release();}
@@ -174,7 +175,9 @@ export async function importFile(file:File,signal:AbortSignal,progress:(bytes:nu
  if(result.outcome.recoveryRequired)throw new Error('Resultado incierto. Se conservan los bytes; revisa y recupera la operación antes de importar.');
  if(f.code==='quota-exceeded')throw new DOMException('No hay espacio suficiente. Se conserva tu biblioteca.','QuotaExceededError');
  if(f.code==='cancelled')throw new DOMException('Importación cancelada; se conservan los archivos ya publicados.','AbortError');
- throw AppFailure.create(f);
+ const error=AppFailure.create(f);
+ if(f.phase==='parse'&&f.code==='limit-exceeded')error.message=AUDIO_METADATA_LIMIT_MESSAGE;
+ throw error;
 }
 
 async function metadataView(...args:Parameters<typeof audioMetadataView>){

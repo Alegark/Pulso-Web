@@ -2146,18 +2146,6 @@
       ]
     },
     {
-      "name": "sonner",
-      "version": "2.0.8",
-      "license": "MIT",
-      "noticeFiles": [
-        {
-          "file": "node_modules/sonner/LICENSE.md",
-          "bytes": 1070,
-          "sha256": "da9201378c36ffd81f51ad0b305f3f0981e90bc558789210ad65d1161eec3b7d"
-        }
-      ]
-    },
-    {
       "name": "strtok3",
       "version": "10.6.3",
       "license": "MIT",

@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
-import {appDocumentPath,cachedAppDocument,freshShellDocument,legacyShellLauncher,migrateLegacyShells} from '../../src/service-worker/shell-updates';
+import {appDocumentPath,cachedAppDocument,freshShellDocument,legacyShellLauncher,migrateLegacyShells,pruneShellCaches} from '../../src/service-worker/shell-updates';
 const document=()=>new Response('<!doctype html><title>Pulso</title><div id="root"></div><script type="module" crossorigin src="/assets/index-old.js"></script>',{headers:{'content-type':'text/html','content-security-policy':"default-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'",etag:'old','content-length':'999'}});
 test('only app documents participate; audio, identity, fixtures and configuration remain outside the migration',()=>{for(const p of ['/','/index.html','/try.html','/listen','/web','/releases/0123456789abcdef.html','/releases/0123456789abcdef'])assert.equal(appDocumentPath(p),true,p);for(const p of ['/telegram-config.json','/sw.js','/_pulso/media/a','/assets/x.js','/pilot.html','/samples.html','/releases/x.html','/other/'])assert.equal(appDocumentPath(p),false,p);});
 test('navigation prefers fresh network and retains a real offline fallback; failed/aborted calls never blank a valid cached shell',async()=>{let reads=0;const cached=async()=>{reads++;return document();};const request=new Request('https://pulso.test/');const fresh=await freshShellDocument(request,cached,async()=>new Response('new',{headers:{'content-type':'text/html'}}));assert.equal(await fresh.text(),'new');assert.equal(reads,0);const offline=await freshShellDocument(request,cached,async()=>{throw Error('offline');});assert.match(await offline.text(),/index-old/);assert.equal(reads,1);const unavailable=await freshShellDocument(request,cached,async()=>new Response('gateway',{status:503}));assert.match(await unavailable.text(),/index-old/);const abort=new AbortController();abort.abort();await assert.rejects(freshShellDocument(new Request('https://pulso.test/',{signal:abort.signal}),cached,async()=>{throw Error('aborted');}));assert.equal(reads,2);});
@@ -25,4 +25,16 @@ test('timeout settles with cached app even when network ignores abort; late body
 
 test('purged and stalled cache lookup cannot stall the recovery document forever',async()=>{
  const response=await freshShellDocument(new Request('https://pulso.test/'),()=>new Promise(()=>{}),async()=>new Response(null,{status:503}),5);assert.equal(response.status,503);assert.match(await response.text(),/Volver a intentar/);
+});
+
+test('activation keeps the current and previous complete shells and leaves foreign caches alone',async()=>{
+ const older='pulso-shell-1111111111111111',previous='pulso-shell-2222222222222222-2222222222222222',incomplete='pulso-shell-3333333333333333',current='pulso-shell-4444444444444444';
+ const names=[older,previous,incomplete,current,'pulso-shell-track-cache','media'],deleted:string[]=[];
+ const storage={
+  keys:async()=>names,
+  match:async(_path:string,options:{cacheName:string})=>options.cacheName===incomplete?undefined:document(),
+  delete:async(name:string)=>{deleted.push(name);return true;}
+ } as unknown as CacheStorage;
+ await pruneShellCaches(storage,current);
+ assert.deepEqual(deleted,[older,incomplete]);
 });

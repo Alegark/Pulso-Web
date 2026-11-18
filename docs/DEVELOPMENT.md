@@ -2,15 +2,21 @@
 
 Destino autorizado: `/data/home/Proyectos/Pulso-Web`. Objetivo completo activo en `odd/tasks/P0-W.md`; implementación actual: piloto T1–T3, preflight público T4 y fase web de importación/biblioteca/playlists. SPEC/README originales y enlaces preservados.
 
-Requisitos comprobados: Node 22.23.3, npm 10.9.9, Linux x64. `npm ci` instala el lockfile.
+Requisitos de desarrollo: Node 22 desde 22.12, npm y Python 3. El entorno de referencia es Node 22.23.3, npm 10.9.9 y Linux x64. Instala las dependencias con `npm ci`.
 
-- `npm run typecheck`: TypeScript estricto del producto.
-- `npm run lint`: TypeScript con símbolos/parámetros sin usar; no equivale a ESLint.
-- `npm run test:unit`: controlador real con medio simulado y rangos HTTP; no demuestra audibilidad.
-- `npm run build`: bundle de producción + `dist/sw.js`, shell por hash, sin skipWaiting.
-- `npm run test:browser`: construye runners reales de IDB y SDK en `.local/browser-tests`. Construirlos no es ejecutarlos. Servirlos SOLO loopback: `npx --no-install vite preview --host 127.0.0.1 --port 4174 --strictPort --outDir .local/browser-tests`. Abrir `/tests/browser/index.html` y `/tests/browser/sdk.html` con preview T3, comprobar `window.pulsoTests`/`window.pulsoSdk`; requieren PASS.
-- Producto local: `npx --no-install vite preview --host 127.0.0.1 --port 4173 --strictPort`. No publicar el puerto.
-- `python3 scripts/generate-fixtures.py` y `node scripts/encode-fixtures.mjs`: generan fixtures propias WAV/MP3/AAC-LC. El encoder FFmpeg GPLv3 es herramienta de desarrollo Linux fijada, utilizada solo con tonos propios; no entra al bundle del producto. Binario antiguo: no procesar archivos ajenos con él. Preservar avisos si se redistribuye la herramienta. Los audios generados no incorporan código del encoder.
+- `npm run check` ejecuta el typecheck y lint del producto, las unitarias `.ts` y `.tsx`, todo `tests/server/*.test.mjs` (incluido Spotify) y los `test_*.py` de servidor.
+- `npm run typecheck:tests` comprueba el tipado estricto de las unitarias con las bibliotecas de Node y del navegador. Ejecuta también este comando cuando cambien pruebas TypeScript.
+- `npm run lint` comprueba símbolos y parámetros sin usar en el producto mediante TypeScript.
+- `npm run build` genera el bundle y `dist/sw.js` sin activar publicaciones.
+- FFmpeg solo se necesita para regenerar fixtures o ejecutar integraciones que codifican audio sintético. Los scripts buscan `FFMPEG_PATH`, el binario npm opcional de Linux x64 o `ffmpeg` en PATH, en ese orden. Las fixtures versionadas bastan para la suite principal. El codificador GPLv3 queda fuera del bundle.
+
+## Portabilidad de las pruebas de navegador
+
+- `npm run test:browser` y `INSTABOX_HEADLESS=1 npm run test:browser:run` usan código y fixtures del repositorio. El primer comando genera un build local y el segundo lo sirve en loopback efímero. Ambos admiten `PULSO_BROWSER_BUILD_DIR` para elegir un directorio de trabajo nuevo. Usa el mismo valor en ambos comandos. Las rutas por defecto son `.local/browser-tests` y las salidas dedicadas de `metadata-rescan`, `album-source` y `lrclib` cuando se compilan por separado.
+- El runner principal y las unitarias nativas `saved-session` y `bot-order-vault-native` usan el ejecutable indicado por `CHROMIUM_PATH` o `/usr/bin/chromium` por defecto. Si esa ruta no contiene un ejecutable, omiten las pruebas de Chromium e indican cómo configurarla. El runner informa `skipped: true` y sale con código 0. En otros sistemas apunta `CHROMIUM_PATH` a un Chromium compatible con Playwright.
+- Hay integraciones autónomas respecto de datos privados, como `check-copy-removal-production.mjs` y `check-local-assets.mjs`, que usan `dist` del proyecto. Los runners históricos de `tests/integration/` pueden fijar otro navegador o una versión, depender de Linux o requerir FFmpeg. Comprueba los prerrequisitos de cada runner.
+- Los runners de regresiones congeladas pueden requerir archivos preexistentes en `.local/`. Por ejemplo, `check-web-quality-audit.mjs` usa un baseline congelado, los `check-copy-removal-*-main.mjs` usan freezes y recibos propios, y `check-pulso-accounts.mjs` espera un sitio compilado en `.local/cloudflare-setup/site` salvo que se indique `ACCOUNT_SITE`. `check-telegram-session.mjs` requiere configuración privada para preparar su SDK local. Estas integraciones quedan fuera de `check` y del runner principal.
+- Para inspeccionar `dist` manualmente usa `npx --no-install vite preview --host 127.0.0.1 --port 4173 --strictPort`.
 
 ## Reproducción de T3 en navegador
 

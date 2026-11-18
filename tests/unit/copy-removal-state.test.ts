@@ -42,7 +42,7 @@ const tick=()=>new Promise(r=>setImmediate(r));
 
 test('outcome remains visible but close and inspect cannot release during refresh',async()=>{
  const wait=deferred();const h=harness({refresh:()=>wait.promise});await h.controller.start(track);const c=consent(h);const work=c.callbacks.confirm(c.value);await tick();
- const view=h.controller.getView();assert.equal(view.state,'result');assert.equal(view.outcome.state,'removed');assert.equal(view.working,true);
+ const view=h.controller.getView();assert.equal(view.state,'result');assert.equal(view.outcome?.state,'removed');assert.equal(view.working,true);
  const cb=h.controller.callbacks(view);assert.equal(cb.close(),false);await cb.inspect();assert.equal(h.inspections,0);assert.equal(h.releases,0);assert.equal(h.activity.count,1);assert.equal(h.blocked,true);
  wait.resolve();await work;assert.equal(h.controller.getView().working,false);assert.equal(cb.close(),false,'old view remains invalid after settlement');assert.equal(h.controller.callbacks(h.controller.getView()).close(),true);assert.equal(h.releases,1);assert.equal(h.activity.count,0);assert.equal(h.blocked,false);await h.controller.dispose();
 });
@@ -94,4 +94,16 @@ test('tracking cleanup distinguishes unavailable, corrupt and mismatched values 
  assert.equal(clearRemovalTracking(ref,()=>memory(JSON.stringify({...ref,operationId:'33333333-3333-4333-8333-333333333333'}))),false);
  assert.equal(clearRemovalTracking(ref,()=>memory()),true);
  const saved=memory(JSON.stringify(ref));assert.equal(clearRemovalTracking(ref,()=>saved),true);assert.equal(saved.getItem(),null);
+});
+
+test('a busy removal request returns false and is never retried on becoming idle',async()=>{
+ const h=harness();const token=h.activity.begin()!;
+ try{
+  assert.equal(await h.controller.start(track),false);
+  token.end();await tick();
+  assert.equal(h.controller.getView().visible,false);
+  assert.equal(h.events.includes('discover'),false);
+  assert.equal(await h.controller.start(track),true);
+  assert.equal(h.controller.getView().state,'ready');
+ }finally{token.end();await h.controller.dispose();}
 });

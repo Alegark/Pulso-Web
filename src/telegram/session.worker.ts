@@ -10,7 +10,7 @@ import type {BotProvidersDriver} from './bot-providers-driver';
 import type {BotProvidersBridgeReply} from './bot-providers-bridge-protocol';
 import {copyBotSearchEnvelope,parseBotSearchCommand,parseBotSearchReply,type BotSearchCommand,type BotSearchReply} from './bot-search-protocol';
 import type {BotSearchDriver} from './bot-search-driver';
-import type {BotSearchBridgeReply} from './bot-search-bridge-protocol';
+import {isBotSearchCancelReply,type BotSearchBridgeReply} from './bot-search-bridge-protocol';
 import type {QrLoginChallenge} from './qr-login-protocol';
 declare const self:DedicatedWorkerGlobalScope;
 let session='',phase:SessionReply['phase']='disconnected',active=false,phone='';
@@ -28,12 +28,15 @@ function observeRemote(reply:{type:string;retryAt?:number|null;retryBlocked?:boo
 function refreshCooldown(){const cooldown=client?.getAccountCooldown?.();if(cooldown){retryBlocked ||=cooldown.retryBlocked;if(cooldown.retryAt!==null)retryAt=Math.max(retryAt??0,cooldown.retryAt);}}
 function closeLocal(){qrChallenge=null;abort.abort();search?.close();bots?.close();sources?.close();void client?.close().catch(()=>{});self.close();}
 async function searchCommand(command:BotSearchCommand){
- if(!client||phase!=='connected'||active||command.sessionId!==session||command.type!=='bot-search.cancel'&&(searchFlight||searchControl||botFlight||botControl||page||control)||command.type==='bot-search.cancel'&&(!search||!searchFlight||searchControl)){closeLocal();return;}
+ if(!client||phase!=='connected'||active||command.sessionId!==session||command.type!=='bot-search.cancel'&&(searchFlight||searchControl||botFlight||botControl||page||control)||command.type==='bot-search.cancel'&&searchControl){closeLocal();return;}
  const driver=client,binding=parseAccountBinding(driver.getAccountBinding());
  if(!binding||command.accountRef!==binding.accountRef||command.accountEpoch!==binding.accountEpoch){closeLocal();return;}
  const current=()=>!abort.signal.aborted&&client===driver&&driver.getAccountBinding()?.accountRef===binding.accountRef&&driver.getAccountBinding()?.accountEpoch===binding.accountEpoch;
- let core:BotSearchDriver|undefined;try{core=search??=driver.createBotSearch?.(session);}catch{closeLocal();return;}
  const post=(reply:BotSearchReply,sessionClosed:boolean)=>self.postMessage({protocol:'pulso-bot-search',version:1,reply,sessionClosed,retryAt,retryBlocked} satisfies BotSearchBridgeReply);
+ if(command.type==='bot-search.cancel'&&(!search||!searchFlight)){
+  post({...copyBotSearchEnvelope(command),type:'bot-search.error',error:'expired',delivery:'not-dispatched',retryAt:null,retryBlocked:false},false);return;
+ }
+ let core:BotSearchDriver|undefined;try{core=search??=driver.createBotSearch?.(session);}catch{closeLocal();return;}
  let terminal=false,sending=false,notice=false;
  const run=async()=>{try{
   refreshCooldown();let reply:BotSearchReply|null;
@@ -44,10 +47,11 @@ async function searchCommand(command:BotSearchCommand){
    if(progress.type==='bot-search.sending'){if(sending)return;sending=true;}post(progress,false);
   }});
   const settled=command.type!=='bot-search.cancel'&&core?await core.whenSettled():true;
-  if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&(reply.type!=='bot-search.cancelled'||reply.targetRequestId!==command.targetRequestId)){closeLocal();return;}observeRemote(reply);refreshCooldown();
+  if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&!isBotSearchCancelReply(reply,command)){closeLocal();return;}observeRemote(reply);refreshCooldown();
+  if(reply.type==='bot-search.cancelled')searchCancelled=true;
   const sessionClosed=!settled||!current()||!driver.getAccountBinding();post(reply,sessionClosed);if(sessionClosed)closeLocal();
  }catch{closeLocal();}};
- if(command.type==='bot-search.cancel'){searchCancelled=true;const flight=run();searchControl=flight;try{await flight;}finally{if(searchControl===flight)searchControl=null;}}
+ if(command.type==='bot-search.cancel'){const flight=run();searchControl=flight;try{await flight;}finally{if(searchControl===flight)searchControl=null;}}
  else{searchCancelled=false;const flight=run();searchFlight=flight;try{await flight;}finally{if(searchFlight===flight)searchFlight=null;}}
 }
 async function botCommand(command:BotProvidersCommand){
@@ -100,9 +104,10 @@ async function open(){
  const {openTemporaryTelegram}=await import('./temporary-sdk');client=await openTemporaryTelegram(identity,abort.signal);return client;
 }
 function reply(command:SessionCommand,error:SessionReply['error']=null,waitUntil:number|null=null,delivery:Delivery|null=phase==='code'?codeDelivery:null){
+ const vaultGeneration=phase==='connected'?client?.getVaultGeneration?.():null;
  const offered=phase==='code'&&!retryBlocked?client?.getCodeResend?.():null;
  const codeResend=offered?{delivery:offered.delivery,availableAt:Math.max(offered.availableAt,retryAt??0)}:null;
- self.postMessage({version:2,session,request:command.request,phase,error,retryAt:waitUntil,delivery,binding:phase==='connected'?parseAccountBinding(client!.getAccountBinding()):null,saved:phase==='connected'?parseSaved(sources!.getSaved()):null,...(phase==='code'?{codeResend}:{}),...(phase==='qr'&&qrChallenge?{qr:qrChallenge}:{}),...(phase==='connected'&&bots?{bots:bots.getSnapshot()!.providers}:{})} satisfies SessionReply);
+ self.postMessage({version:2,session,request:command.request,phase,error,retryAt:waitUntil,delivery,binding:phase==='connected'?parseAccountBinding(client!.getAccountBinding()):null,saved:phase==='connected'?parseSaved(sources!.getSaved()):null,...(vaultGeneration?{vaultGeneration}:{}),...(phase==='code'?{codeResend}:{}),...(phase==='qr'&&qrChallenge?{qr:qrChallenge}:{}),...(phase==='connected'&&bots?{bots:bots.getSnapshot()!.providers}:{})} satisfies SessionReply);
 }
 self.onmessage=event=>{
  if(event.data?.protocol==='pulso-bot-search'){const command=parseBotSearchCommand(event.data);if(!command){closeLocal();return;}void searchCommand(command);return;}
@@ -113,6 +118,7 @@ self.onmessage=event=>{
  if(['begin','qr-begin','restore','forget'].includes(command.type)&&phase!=='disconnected'||(command.type==='code'||command.type==='resend')&&phase!=='code'||command.type==='qr-check'&&phase!=='qr'||command.type==='password'&&phase!=='password'||command.type==='logout'&&phase!=='connected'){closeLocal();return;}
  active=true;
  void (async()=>{
+  let confirmingAuth=false;
   try{
    if(command.type==='forget'){await clearSavedTelegramSession();if(abort.signal.aborted)return;phase='disconnected';reply(command);self.close();return;}
    if(command.type==='restore'){
@@ -147,8 +153,13 @@ self.onmessage=event=>{
     if(Date.now()<offered.availableAt){reply(command,'rate-limit',offered.availableAt);return;}
     codeDelivery=await client.resendCode(abort.signal);if(abort.signal.aborted)return;
     phase='code';reply(command);return;
-   }else if(command.type==='code')await client!.code(phone,command.value,abort.signal);
-   else if(command.type==='password')await client!.password(command.value,abort.signal);
+   }else if(command.type==='code'||command.type==='password'){
+    refreshCooldown();if(!remoteAllowed()){reply(command,'rate-limit',retryAt);return;}
+    confirmingAuth=true;
+    if(command.type==='code')await client!.code(phone,command.value,abort.signal);
+    else await client!.password(command.value,abort.signal);
+    confirmingAuth=false;
+   }
    if(!parseAccountBinding(client!.getAccountBinding())){phase='error';reply(command,'protocol');closeLocal();return;}
    sources=client!.createSources(session);if(!parseSaved(sources.getSaved())){phase='error';reply(command,'protocol');closeLocal();return;}
    await client!.prepareBotProviders?.(session,abort.signal);if(abort.signal.aborted)return;
@@ -158,7 +169,7 @@ self.onmessage=event=>{
    const safe=sessionFailure(error);
    if(safe.passwordNeeded&&['code','begin','qr-begin','qr-check'].includes(command.type)){qrChallenge=null;phase='password';reply(command);return;}
    if(command.type==='qr-check'&&safe.error==='rate-limit'&&qrChallenge){retryBlocked ||=safe.retryAt===null;if(safe.retryAt!==null)retryAt=Math.max(retryAt??0,safe.retryAt);phase='qr';reply(command,safe.error,safe.retryAt);return;}
-   const retryable=command.type==='code'&&safe.error==='code-invalid'||command.type==='password'&&safe.error==='password-invalid'||(command.type==='code'||command.type==='resend'||command.type==='password')&&safe.error==='rate-limit';
+   const retryable=confirmingAuth&&(safe.error==='network'||safe.error==='timeout')||command.type==='code'&&safe.error==='code-invalid'||command.type==='password'&&safe.error==='password-invalid'||(command.type==='code'||command.type==='resend'||command.type==='password')&&safe.error==='rate-limit';
    if(retryable){if(safe.error==='rate-limit'){retryBlocked ||=safe.retryAt===null;if(safe.retryAt!==null)retryAt=Math.max(retryAt??0,safe.retryAt);}phase=command.type==='password'?'password':'code';reply(command,safe.error,safe.retryAt);return;}
    phase='error';phone='';reply(command,command.type==='logout'&&safe.error!=='session-storage'?'logout-unconfirmed':safe.error,safe.retryAt);
    abort.abort();await client?.close().catch(()=>{});self.close();

@@ -1,3 +1,4 @@
+import {classifyTelegramFailure} from './rpc-failure';
 import Long from 'long';
 import {parseSavedBots,type SavedBot} from './saved-session';
 import type {tl} from '@mtcute/core';
@@ -29,18 +30,9 @@ const fail=(error:BotProvidersError):Failure=>({error,retryAt:null,retryBlocked:
 const own=(v:unknown,k:string):unknown=>v&&typeof v==='object'?Object.getOwnPropertyDescriptor(v,k)?.value:undefined;
 /** SDK errors are not DTOs; own normalized text only, protected against hostile shapes. */
 export function botProvidersFailure(error:unknown,now:number):Failure {
- try{
-  const text=own(error,'text')??own(error,'errorMessage')??own(error,'message');
-  if(typeof text!=='string'||text.length>512)return fail('network');
-  if(/^(AUTH_KEY_UNREGISTERED|SESSION_REVOKED|SESSION_EXPIRED|USER_DEACTIVATED|USER_DEACTIVATED_BAN)$/.test(text))return fail('session-expired');
-  if(/^FLOOD_(?:PREMIUM_)?WAIT(?:_|$)/.test(text)){
-   const match=/_(\d+)$/.exec(text),seconds=match?Number(match[1]):own(error,'seconds');
-   const until=typeof seconds==='number'&&Number.isSafeInteger(seconds)&&seconds>=0?now+Math.max(1,seconds)*1000:NaN;
-   const retryAt=Number.isSafeInteger(until)&&until>now&&until<=8640000000000000?until:null;
-   return {error:'rate-limit',retryAt,retryBlocked:retryAt===null};
-  }
-  return fail(/^(USERNAME_INVALID|USERNAME_NOT_OCCUPIED|PEER_ID_INVALID)$/.test(text)?'unsupported':'network');
- }catch{return fail('network');}
+ const {error:kind,retryAt,retryBlocked}=classifyTelegramFailure(error,now);
+ if(kind==='rate-limit')return {error:kind,retryAt,retryBlocked};
+ return fail(kind==='session-expired'?kind:kind==='invalid-peer'?'unsupported':'network');
 }
 interface Identity {id:number;hash:Long;label:string}
 /** Post-decoder budget only, not SDK/network/peak-heap accounting. No hooks or getters.

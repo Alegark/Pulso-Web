@@ -7,6 +7,7 @@ export interface LocalCopyRemovalControllerProps {
  readonly host:CopyRemovalHost;
  readonly startup:CopyRemovalStartup|null;
  readonly request:{readonly identity:object;readonly track:Track}|null;
+ readonly onRequestHandled?:(identity:object,started:boolean)=>void;
  readonly canUse:boolean;
  readonly headingRef?:React.Ref<HTMLHeadingElement>;
  readonly onVisible:()=>void;
@@ -21,7 +22,7 @@ export function LocalCopyRemovalController(props:LocalCopyRemovalControllerProps
  const seen=React.useRef<object|null>(null);
  const view=controller.getView(),callbacks=controller.callbacks(view);
  React.useEffect(()=>{if(props.startup)controller.initialize(props.startup);},[controller,props.startup]);
- React.useEffect(()=>{if(props.startup&&props.request&&seen.current!==props.request.identity){seen.current=props.request.identity;void controller.start(props.request.track);}},[controller,props.request,props.startup]);
+ React.useEffect(()=>{if(!props.request||seen.current===props.request.identity)return;const {identity,track}=props.request;seen.current=identity;void controller.start(track).then(started=>props.onRequestHandled?.(identity,started));},[controller,props.request,props.startup]);
  React.useEffect(()=>()=>{void controller.dispose();},[controller]);
  React.useLayoutEffect(()=>{if(view.visible)props.onVisible();},[view.visible,props.onVisible]);
  if(!view.visible)return view.pendingCount>0?<section aria-label="Retirada pendiente"><p>Hay una retirada pendiente de revisión. Su seguimiento se conserva.</p><button type="button" onClick={event=>{props.onOpen(event.currentTarget);callbacks.show();}}>Revisar retirada pendiente</button></section>:null;

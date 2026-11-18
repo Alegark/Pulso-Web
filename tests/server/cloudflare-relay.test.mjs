@@ -35,3 +35,23 @@ test('late response is cancelled without waiting for cancellation settlement',as
  await assert.rejects(relay.get('/catalog/itunes/search','term=x'),e=>e.status===504);
  finish(new Response(new ReadableStream({cancel(){cancelled=true;return new Promise(()=>{});}}),{headers:{'content-type':'application/json'}}));await new Promise(r=>setTimeout(r,5));assert.equal(cancelled,true);assert.equal(relay.inflight.size,0);
 });
+test('one catalog visitor cannot fill both relays and keeps its slots until transport settles',async()=>{
+ const clientSlots=new Map(),releases=[];
+ const options={clientSlots,spacing:0,timeout:2000,fetcher:()=>new Promise(resolve=>releases.push(resolve))};
+ const first=new CatalogRelay(options),second=new CatalogRelay(options);
+ const a=first.get('/catalog/itunes/search','term=a','192.0.2.1');
+ const b=second.get('/catalog/itunes/search','term=b','192.0.2.1');
+ const shared=first.get('/catalog/itunes/search','term=a','192.0.2.1');
+ try{
+  await assert.rejects(first.get('/catalog/itunes/search','term=c','192.0.2.1'),e=>e.status===429&&e.retryAfter==='5');
+  const independent=first.get('/catalog/itunes/search','term=c','192.0.2.2');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(releases.length,3);
+  for(const resolve of releases.splice(0))resolve(empty());
+  assert.deepEqual(await a,await shared);
+  await Promise.all([b,independent]);
+  const again=second.get('/catalog/itunes/search','term=d','192.0.2.1');
+  await new Promise(resolve=>setImmediate(resolve));releases.shift()(empty());
+  await again;assert.equal(clientSlots.size,0);
+ }finally{for(const resolve of releases)resolve(empty());await Promise.allSettled([a,b,shared]);}
+});

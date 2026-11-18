@@ -10,7 +10,7 @@ test('album-version alias requires complete matching metadata and actual duratio
  assert.equal(expectedAudioTagMismatch(tags,expected,100.5),null);
  for(const v of [{...tags,title:undefined},{...tags,artist:undefined},{...tags,artist:'Artist'},{...tags,artist:'Artist Guest'},{...tags,album:undefined},{...tags,album:'Other'},{...tags,album:'Synthetic-album'},{...tags,title:'Synthetic song (Live)'},{...tags,title:'Synthetic song (Remix)'}])assert.notEqual(expectedAudioTagMismatch(v,expected,100),null);
  assert.notEqual(expectedAudioTagMismatch({...tags,title:expected.title,album:undefined},expected,100),null);assert.notEqual(expectedAudioTagMismatch(tags,expected,101.01),null);assert.notEqual(expectedAudioTagMismatch(tags,expected,undefined),null);
- assert.notEqual(expectedAudioTagMismatch(tags,{sha256:expected.sha256,title:expected.title,artist:expected.artist},100),null);assert.notEqual(expectedAudioTagMismatch({}, {title:expected.title,artist:expected.artist,recordingTitle:expected.recordingTitle}),null);
+ assert.notEqual(expectedAudioTagMismatch(tags,{title:expected.title,artist:expected.artist},100),null);assert.notEqual(expectedAudioTagMismatch({}, {title:expected.title,artist:expected.artist,recordingTitle:expected.recordingTitle}),null);
  assert.equal(expectedAudioTagMismatch({...tags,artists:[tags.artist,'Another artist']},expected,100),'artist');
 });
 test('worker admission requires a closed complete alias context with safe values',()=>{

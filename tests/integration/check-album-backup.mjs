@@ -1,5 +1,6 @@
+import {linkSnapshotDependencies} from './test-workspace.mjs';
 import assert from 'node:assert/strict';import {build} from 'vite';import {chromium,webkit} from 'playwright-core';
-import {mkdir,cp,readFile,writeFile,symlink} from 'node:fs/promises';import {resolve,dirname} from 'node:path';import {createHash} from 'node:crypto';import {spawn} from 'node:child_process';import {once} from 'node:events';
+import {mkdir,cp,readFile,writeFile} from 'node:fs/promises';import {resolve,dirname} from 'node:path';import {createHash} from 'node:crypto';import {spawn} from 'node:child_process';import {once} from 'node:events';
 if(!process.env.INTERFACE_FREEZE)throw Error('INTERFACE_FREEZE required');
 const frozen=resolve(process.env.INTERFACE_FREEZE),manifest=JSON.parse(await readFile(frozen+'/freeze.json')),run=resolve('.local/album-provider-investigation/browser-'+Date.now()),root=run+'/snapshot',out=run+'/bundle';
 const sha=b=>createHash('sha256').update(b).digest('hex');
@@ -12,7 +13,7 @@ const report={status:'INCOMPLETE',cases:[],errors:[],external:[],cleanup:false,s
 const verify=async()=>{for(const [p,x] of Object.entries(manifest.sources)){const b=await readFile(frozen+'/frozen-root/'+p);assert.equal(b.length,x.bytes,p);assert.equal(sha(b),x.sha256,p);}return Object.keys(manifest.sources).length;};
 try{
  report.beforeHashes=await verify();await mkdir(root,{recursive:true});for(const p of Object.keys(manifest.sources)){await mkdir(dirname(root+'/'+p),{recursive:true});await cp(frozen+'/frozen-root/'+p,root+'/'+p);}
- const fixture='tests/integration/interface-main-fixture';await mkdir(dirname(root+'/'+fixture),{recursive:true});for(const ext of ['.ts','.html'])await cp(fixture+ext,root+'/'+fixture+ext);await cp(fixture+'.ts',root+'/tests/integration/collection-removal-final-main-fixture.ts');await symlink(resolve('node_modules'),root+'/node_modules','dir');
+ const fixture='tests/integration/interface-main-fixture';await mkdir(dirname(root+'/'+fixture),{recursive:true});for(const ext of ['.ts','.html'])await cp(fixture+ext,root+'/'+fixture+ext);await cp(fixture+'.ts',root+'/tests/integration/collection-removal-final-main-fixture.ts');await linkSnapshotDependencies(root);
  await build({root,configFile:false,logLevel:'error',build:{outDir:out,rolldownOptions:{input:{main:root+'/index.html',fixture:root+'/'+fixture+'.html'}}}});
  const py="import sys; from http.server import ThreadingHTTPServer; from functools import partial; from pathlib import Path; from scripts.serve_review import Handler; s=ThreadingHTTPServer(('127.0.0.1',0),partial(Handler,directory=Path(sys.argv[1]))); print(s.server_port,flush=True); s.serve_forever()";
  server=spawn('python3',['-u','-c',py,out],{stdio:['ignore','pipe','pipe']});const [port]=await once(server.stdout,'data');const origin=`http://127.0.0.1:${String(port).trim()}`;

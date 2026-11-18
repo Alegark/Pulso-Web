@@ -1,6 +1,7 @@
 /** Real SDK adapter + QR driver. Auth, transport, crypto and vault are synthetic. */
 import {build} from 'vite';import {resolve} from 'node:path';import assert from 'node:assert/strict';import {writeFile} from 'node:fs/promises';
-const f={calls:[],outputs:[],saved:0,notified:0,closes:0,dc:[],lease:0};globalThis.__qrTest=f;
+const artifacts=resolve(process.env.PULSO_TEST_ARTIFACTS??'.local/telegram-qr-login');
+const f={clears:0,calls:[],outputs:[],saved:0,notified:0,closes:0,dc:[],lease:0};globalThis.__qrTest=f;
 const user={type:'user',isSelf:true,isBot:false,id:123456,raw:{_: 'user',self:true,id:123456}};
 const stubs=new Map([
  ['@mtcute/core/client.js',`export class BaseTelegramClient{async prepare(){}async call(r,o){const f=globalThis.__qrTest;f.calls.push({r,o});const v=f.outputs.shift();if(typeof v==='function')return v();return v}async changePrimaryDc(dc){globalThis.__qrTest.dc.push(dc)}async notifyLoggedIn(){globalThis.__qrTest.notified++}async exportSession(){return 'TESTONLY_AUTHORIZATION'}async destroy(){globalThis.__qrTest.closes++}}`],
@@ -9,9 +10,9 @@ const stubs=new Map([
  ['@mtcute/core/methods.js',`const unexpected=()=>{throw Error('Unexpected code/SMS request')};export const sendCode=unexpected,resendCode=unexpected,signIn=unexpected;export async function getMe(){return globalThis.__qrTest.user}export async function checkPassword(){return globalThis.__qrTest.user}`],
  ['@mtcute/wasm',`export const getWasmUrl=()=> 'https://fixture.invalid/test.wasm'`],
  ['./crypto-provider','export async function openCrypto(){return {}}'],
- ['./saved-session',`export function parseSavedBots(){throw Error('Unexpected')}export async function sessionLease(){return String(++globalThis.__qrTest.lease)}export async function saveTelegramSession(lease){const f=globalThis.__qrTest;if(lease!==String(f.lease))return false;f.saved++;return true}export async function loadTelegramSession(){throw Error('Unexpected')}export async function telegramSessionLeaseCurrent(){throw Error('Unexpected')}export async function clearTelegramSessionLease(){throw Error('Unexpected')}export async function loadTelegramBotSelection(){throw Error('Unexpected')}export async function saveTelegramBots(){throw Error('Unexpected')}`]
+ ['./saved-session',`export function parseSavedBots(){throw Error('Unexpected')}export async function sessionLease(){return String(++globalThis.__qrTest.lease)}export async function saveTelegramSession(lease){const f=globalThis.__qrTest;if(lease!==String(f.lease))return false;f.saved++;return true}export async function loadTelegramSession(){throw Error('Unexpected')}export async function telegramSessionLeaseCurrent(){throw Error('Unexpected')}export async function clearTelegramSessionLease(){globalThis.__qrTest.clears++}export async function loadTelegramBotSelection(){throw Error('Unexpected')}export async function saveTelegramBots(){throw Error('Unexpected')}`]
 ]);
-const output=await build({configFile:false,root:resolve('.local/telegram-qr-login'),envDir:false,publicDir:false,logLevel:'silent',plugins:[{name:'qr-auth-injected',enforce:'pre',resolveId(id){if(stubs.has(id))return '\0qr:'+id},load(id){if(id.startsWith('\0qr:'))return stubs.get(id.slice(4))}}],build:{write:false,minify:false,lib:{entry:resolve('src/telegram/temporary-sdk.ts'),formats:['es']},rolldownOptions:{output:{codeSplitting:false}}}});
+const output=await build({configFile:false,root:artifacts,envDir:false,publicDir:false,logLevel:'silent',plugins:[{name:'qr-auth-injected',enforce:'pre',resolveId(id){if(stubs.has(id))return '\0qr:'+id},load(id){if(id.startsWith('\0qr:'))return stubs.get(id.slice(4))}}],build:{write:false,minify:false,lib:{entry:resolve('src/telegram/temporary-sdk.ts'),formats:['es']},rolldownOptions:{output:{codeSplitting:false}}}});
 const code=(Array.isArray(output)?output:[output]).flatMap(x=>x.output).find(x=>x.type==='chunk').code,oldFetch=globalThis.fetch;globalThis.fetch=async url=>{assert.equal(url,'https://fixture.invalid/test.wasm');return new Response(new Uint8Array([0,97,115,109,1,0,0,0]))};
 const {openTemporaryTelegram}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64')),drivers=[],cases=[];f.user=user;
 const raw=()=>({_: 'auth.loginToken',token:new Uint8Array(32),expires:Math.floor(Date.now()/1000)+30});
@@ -21,9 +22,25 @@ try{
  x=await open();f.outputs.push({_: 'auth.loginTokenMigrateTo',dcId:2,token:new Uint8Array(32)},{_: 'auth.loginTokenSuccess'});const from=f.calls.length;assert.equal(await x.d.beginQr(x.controller.signal),null);assert.deepEqual(f.dc,[2]);assert.deepEqual(f.calls.slice(from).map(c=>c.r._),['auth.exportLoginToken','auth.importLoginToken']);cases.push('DC migration imports only the issued token before verifying the user');
  x=await open();f.outputs.push(()=>{throw {text:'SESSION_PASSWORD_NEEDED'}});const before=f.saved;await assert.rejects(x.d.beginQr(x.controller.signal));assert.equal(x.d.getAccountBinding(),null);assert.equal(f.saved,before);await x.d.password('TESTONLY_PASSWORD',x.controller.signal);assert.ok(x.d.getAccountBinding());assert.equal(f.saved,before+1);cases.push('2FA does not authorize until the password step succeeds');
  x=await open();let finish;f.outputs.push(()=>new Promise(r=>finish=r));const pending=x.d.beginQr(x.controller.signal);await new Promise(r=>setImmediate(r));const b=f.saved;await x.d.close();finish({_: 'auth.loginTokenSuccess'});await assert.rejects(pending,/cancelled/);assert.equal(x.d.getAccountBinding(),null);assert.equal(f.saved,b);cases.push('late success after local close does not persist or publish');
- x=await open();f.outputs.push(raw());await x.d.beginQr(x.controller.signal);f.outputs.push(()=>{throw {text:'FLOOD_WAIT_60'}});await assert.rejects(x.d.checkQr(x.controller.signal));const count=f.calls.length;await assert.rejects(x.d.checkQr(x.controller.signal));assert.equal(f.calls.length,count);cases.push('known FLOOD wait prevents an additional auth RPC');
- x=await open();f.outputs.push(raw());await x.d.beginQr(x.controller.signal);f.outputs.push(()=>{throw {text:'FLOOD_WAIT'}});await assert.rejects(x.d.checkQr(x.controller.signal));const c=f.calls.length;await assert.rejects(x.d.checkQr(x.controller.signal));assert.equal(f.calls.length,c);cases.push('unknown FLOOD wait blocks without retry');
+ x=await open();f.outputs.push(raw());await x.d.beginQr(x.controller.signal);f.outputs.push(()=>{throw {text:'FLOOD_WAIT_60'}});await assert.rejects(x.d.checkQr(x.controller.signal));assert.ok(x.d.getAccountCooldown().retryAt>Date.now());const count=f.calls.length;f.outputs.push(raw());assert.ok(await x.d.checkQr(x.controller.signal));assert.equal(f.calls.length,count+1);cases.push('Authentication RPC bypasses account-read admission; worker owns retry policy');
  x=await open();f.outputs.push(raw());await x.d.beginQr(x.controller.signal);f.lease++;f.outputs.push({_: 'auth.loginTokenSuccess'});const prev=f.saved;await assert.rejects(x.d.checkQr(x.controller.signal),/session-storage/);assert.equal(f.saved,prev);assert.equal(x.d.getAccountBinding(),null);cases.push('a competing vault lease denies persistence and connected binding');
- for(const q of f.calls){assert.equal(q.o.maxRetryCount,0);assert.equal(q.o.floodSleepThreshold,0);assert.ok(['auth.exportLoginToken','auth.importLoginToken'].includes(q.r._));}
- await writeFile('.local/telegram-qr-login/adapter.json',JSON.stringify({status:'PASS',cases,realTelegram:false,syntheticSessionOnly:true,noPhoneOrSMSCalls:true},null,2));console.log(JSON.stringify({status:'PASS',groups:cases.length,cases}));
+ for(const wait of ['FLOOD_WAIT_60','FLOOD_WAIT']){
+  x=await open();f.outputs.push({_:'auth.loginTokenSuccess'});await x.d.beginQr(x.controller.signal);
+  const session=crypto.randomUUID(),sources=x.d.createSources(session);
+  f.outputs.push(()=>{throw {text:wait};});
+  const error=await sources.handle({protocol:'pulso-sources',version:1,sessionId:session,...x.d.getAccountBinding(),type:'sources.page',folder:'main',cursor:null,listEpoch:1,operationId:crypto.randomUUID(),requestId:crypto.randomUUID()},{signal:x.controller.signal,current:()=>true});
+  assert.equal(error.error,'rate-limit');assert.equal(x.d.getAccountCooldown().retryBlocked,wait==='FLOOD_WAIT');
+  const cleared=f.clears;await x.d.logout(x.controller.signal);
+  assert.equal(f.clears,cleared+1);assert.equal(f.calls.at(-1).r._,'auth.logOut');
+  assert.equal(x.d.getAccountBinding(),null);cases.push('Remote logout bypasses '+wait);
+ }
+ for(const revoked of ['USER_DEACTIVATED','USER_DEACTIVATED_BAN']){
+  x=await open();f.outputs.push({_:'auth.loginTokenSuccess'});await x.d.beginQr(x.controller.signal);
+  const sessionId=crypto.randomUUID(),sources=x.d.createSources(sessionId),cleared=f.clears;
+  f.outputs.push(()=>{throw {text:revoked};});
+  const error=await sources.handle({protocol:'pulso-sources',version:1,sessionId,...x.d.getAccountBinding(),type:'sources.page',folder:'main',cursor:null,listEpoch:1,operationId:crypto.randomUUID(),requestId:crypto.randomUUID()},{signal:x.controller.signal,current:()=>true});
+  assert.equal(error.error,'session-expired');assert.equal(f.clears,cleared+1);assert.equal(x.d.getAccountBinding(),null);cases.push('Provider revocation clears the vault: '+revoked);
+ }
+ for(const q of f.calls){assert.equal(q.o.maxRetryCount,0);assert.equal(q.o.floodSleepThreshold,0);assert.ok(['auth.exportLoginToken','auth.importLoginToken','messages.getDialogs','auth.logOut'].includes(q.r._));}
+ await writeFile(resolve(artifacts,'adapter.json'),JSON.stringify({status:'PASS',cases,realTelegram:false,syntheticSessionOnly:true,noPhoneOrSMSCalls:true},null,2));console.log(JSON.stringify({status:'PASS',groups:cases.length,cases}));
 }finally{for(const d of drivers)await d.close();globalThis.fetch=oldFetch;delete globalThis.__qrTest;}

@@ -1,3 +1,4 @@
+import {readBoundedText} from '../../src/accounts/bounded-body.mjs';
 import {handleAuthProxyRequest,resolveNeonAuthLogging} from '@neon/auth/server';
 
 const mount='/api/account-auth/';
@@ -14,7 +15,11 @@ function enabled(env){
  try{const u=new URL(env.PULSO_NEON_AUTH_URL);return u.protocol==='https:'&&!u.username&&!u.password&&!u.search&&!u.hash&&/^ep-[a-z0-9-]+\.neonauth\.[a-z0-9.-]+\.neon\.(?:build|tech)$/.test(u.hostname)&&/^\/[a-z0-9_-]+\/auth$/.test(u.pathname)&&typeof env.PULSO_AUTH_COOKIE_SECRET==='string'&&env.PULSO_AUTH_COOKIE_SECRET.length>=32;}
  catch{return false;}
 }
-async function bounded(stream,max){if(!stream)return '';const reader=stream.getReader(),chunks=[];let size=0,timer;try{const read=async()=>{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>max)throw Error('limit');chunks.push(value);}};await Promise.race([read(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('timeout')),5000);})]);}catch(error){void reader.cancel().catch(()=>{});throw error;}finally{clearTimeout(timer);reader.releaseLock();}const out=new Uint8Array(size);let at=0;for(const c of chunks){out.set(c,at);at+=c.length;}return new TextDecoder('utf-8',{fatal:true}).decode(out);}
+async function boundedText(message,max){
+ if(!message.body)return '';
+ const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),5000);
+ try{return await readBoundedText(message,max,abort.signal);}finally{clearTimeout(timer);}
+}
 function validEmail(v){return typeof v==='string'&&v.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);}
 function password(v){return typeof v==='string'&&v.length>=8&&v.length<=128;}
 function payload(path,v,origin){
@@ -62,13 +67,13 @@ export function createAccountAuthRouter({proxy=handleAuthProxyRequest,timeoutMs=
   let body;
   if(method==='POST'){
    if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')??''))return json({},415);
-   try{body=JSON.stringify(payload(operation,JSON.parse(await bounded(request.body,8192)),url.origin));}catch{return json({code:'INVALID_REQUEST'},400);}
+   try{body=JSON.stringify(payload(operation,JSON.parse(await boundedText(request,8192)),url.origin));}catch{return json({code:'INVALID_REQUEST'},400);}
    headers.set('Content-Type','application/json');
   }
   let timer;
   try{
    const response=await Promise.race([proxy({request:new Request(target,{method,headers,body}),path:operation,baseUrl:env.PULSO_NEON_AUTH_URL,cookieSecret:env.PULSO_AUTH_COOKIE_SECRET,sessionDataTtl:0,domain:url.hostname,sameSite:'lax',log:resolveNeonAuthLogging({logLevel:'silent'})}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('timeout')),timeoutMs);})]);
-   const content=await bounded(response.body,65536),out=new Headers(safeHeaders);
+   const content=await boundedText(response,65536),out=new Headers(safeHeaders);
    out.set('Content-Type','application/json');
    for(const cookie of response.headers.getSetCookie())out.append('Set-Cookie',cookie);
    const retry=response.headers.get('Retry-After');if(retry&&/^\d{1,5}$/.test(retry))out.set('Retry-After',retry);

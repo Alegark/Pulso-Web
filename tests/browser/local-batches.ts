@@ -4,7 +4,8 @@ import {importFile} from '../../src/imports/import-file';
 import {all,type Track,type LocalAsset,type Playlist} from '../../src/library/library';
 import {assetDirectory,generationLock} from '../../src/storage/asset-reader';
 import {openDatabase,readRecord,writeRecord} from '../../src/storage/database';
-import {createLocalBatch,readLocalBatch,listLocalBatches,runLocalBatch,recoverLocalBatch,retryLocalBatch,LOCAL_BATCH_PREFIX,LOCAL_BATCH_LOCK,validLocalBatch,localBatchProgress,updateLocalBatch,LocalBatchError,type LocalBatch} from '../../src/library/local-batches';
+import {issuedFailure} from '../../src/errors/app-failure';
+import {createLocalBatch,readLocalBatch,listLocalBatches,runLocalBatch,recoverLocalBatch,retryLocalBatch,LOCAL_BATCH_PREFIX,LOCAL_BATCH_LOCK,validLocalBatch,localBatchProgress,updateLocalBatch,batchErrorObservation,LocalBatchError,type LocalBatch} from '../../src/library/local-batches';
 const results:string[]=[];
 function assert(v:unknown,m:string):asserts v{if(!v)throw new Error(m);}
 async function check(name:string,fn:()=>Promise<void>){try{await fn();results.push(`PASS ${name}`);}catch(e){results.push(`FAIL ${name}: ${e instanceof Error?e.message:String(e)}`);}document.querySelector('#results')!.textContent=results.join('\n');}
@@ -23,7 +24,7 @@ class TestWorker extends NativeWorker {
  const source=`
  const mode=${JSON.stringify(mode)};
  let incoming=null,once=false;
- const queued=[];self.onmessage=e=>{queued.push(e);if(e.data?.type==='start')incoming=e.data;};
+ const queued=[];self.onmessage=e=>queued.push(e);
  let heldDone;const post=self.postMessage.bind(self);
  const notify=name=>post({testProbe:name});
  const live=new Set();let sawHash=false,sawIO=false;
@@ -33,15 +34,19 @@ class TestWorker extends NativeWorker {
  DataView.prototype.getUint32=function(...args){if(live.size)notify('binary-work-in-tx');else if(!sawHash){sawHash=true;notify('hash-outside-tx');}return read32.apply(this,args);};
  const slice=Blob.prototype.slice;
  Blob.prototype.slice=function(...args){if(live.size)notify('blob-io-in-tx');else if(!sawIO){sawIO=true;notify('blob-io-outside-tx');}return slice.apply(this,args);};
- const stop=()=>self.onmessage({data:{...incoming,type:'cancel'}});
+ const stop=()=>{
+ const {version,requestId,jobId}=incoming;
+ self.onmessage(new MessageEvent('message',{data:{version,type:'cancel',requestId,jobId}}));
+ };
  const put=IDBObjectStore.prototype.put;
  IDBObjectStore.prototype.put=function(value,key){
  if(this.name==='chunks')notify('unexpected-byte-write');
+ const request=put.call(this,value,key);
  if(this.name==='settings'&&value?.version===1&&value?.state==='complete'&&String(key).startsWith('local-batch:v1:')&&!once){
- if(mode==='precommit'){once=true;notify('precommit');stop();}
- // postcommit is exercised at the first complete progress message, after await tx completion.
+ // A successful request is still abortable before the transaction commits.
+ if(mode==='precommit')request.addEventListener('success',()=>{once=true;notify('precommit');stop();},{once:true});
  }
- return put.call(this,value,key);
+ return request;
  };
  const getAll=IDBObjectStore.prototype.getAll;
  IDBObjectStore.prototype.getAll=function(range,...args){if(this.name==='settings'&&!range)notify('unbounded-settings');return getAll.call(this,range,...args);};
@@ -63,7 +68,11 @@ class TestWorker extends NativeWorker {
  post(m,...args);
  };
  await import(${JSON.stringify(String(url))});
- const handler=self.onmessage;self.onmessage=e=>{if(e.data?.testRelease){post(heldDone);return;}handler(e);};for(const event of queued)handler(event);
+ const handler=self.onmessage;self.onmessage=e=>{
+ if(e.data?.testRelease){post(heldDone);return;}
+ if(e.data?.type==='start')incoming=e.data;
+ handler(e);
+ };for(const event of queued)self.onmessage(event);
  `;
  const objectUrl=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));super(objectUrl,{...options,type:'module'});URL.revokeObjectURL(objectUrl);lastWorker=this;
  this.addEventListener('message',e=>{if(e.data?.testTerminal){void retryLocalBatch(e.data.testTerminal.id,e.data.testTerminal.revision).then(()=>this.postMessage({testRelease:true}));}if(e.data?.testProbe){probes.push(e.data.testProbe);if(e.data.testProbe==='interrupt'){this.terminate();interruptResolve?.();}}});
@@ -124,7 +133,8 @@ await check('cancelación midverify conserva ready y counts/progreso de bytes re
 });
 await check('cancelación precommit invalida complete; postcommit conserva complete',async()=>{
  for(const mode of ['precommit','postcommit']){const b=await batch([idb.track]);workerMode=mode;let done:LocalBatch;try{done=await runLocalBatch(b.id,signal());}finally{workerMode='';}
- assert(probes.includes(mode),'frontera no ejercida');assert(done!.state===(mode==='precommit'?'cancelled':'complete'),`frontera ${mode}: ${done!.state}`);assert(done!.entries[0].state==='ready','perdió listo');}
+ assert(probes.includes(mode),'frontera no ejercida');assert(done!.state===(mode==='precommit'?'cancelled':'complete'),`frontera ${mode}: ${done!.state}`);assert(done!.entries[0].state==='ready','perdió listo');
+ assert(JSON.stringify(await readLocalBatch(b.id))===JSON.stringify(done),'resultado distinto del commit');}
 });
 await check('AbortSignal ya cancelado y cancelación del consumidor no dejan verifying',async()=>{
  const c=new AbortController();c.abort();const b=await batch([idb.track]);const done=await runLocalBatch(b.id,c.signal);assert(done.state==='cancelled','preabort');
@@ -206,7 +216,16 @@ await check('APIs normalizan fallos IDB de open/transaction/request con causa pr
  IDBObjectStore.prototype.getAll=function(...args:Parameters<IDBObjectStore['getAll']>){if(stage==='request')throw cause;const req=getAll.apply(this,args);this.transaction.abort();return req;};
  }
  try{for(const call of calls){let caught:unknown;try{await call();}catch(error){caught=error;}
- assert(caught instanceof LocalBatchError&&caught.code==='storage'&&(stage==='abort'?caught.cause instanceof DOMException&&caught.cause.name==='AbortError':caught.cause===cause),'error crudo o causa perdida: '+stage);
+ assert(caught instanceof LocalBatchError&&caught.code==='storage','error crudo: '+stage);
+ const primary=batchErrorObservation(caught).primary;
+ assert(primary.backend==='idb'&&primary.family==='storage-unavailable'&&primary.code===(stage==='abort'?'transaction-aborted':'storage-denied'),'clasificación perdida: '+stage);
+ if(stage==='open'){
+ // openDatabase closes the native error at the acquisition boundary.
+ const failure=issuedFailure(caught.cause);
+ assert(caught.cause!==cause&&failure?.phase==='open'&&failure.code==='storage-denied'&&!String(caught.cause).includes('privada'),'causa de apertura sin normalizar');
+ }else if(stage==='abort'){
+ assert(caught.cause instanceof DOMException&&caught.cause.name==='AbortError','causa de aborto perdida');
+ }else assert(caught.cause===cause,'causa nativa perdida: '+stage);
  assert(caught.message==='Lote local: storage'&&!String(caught).includes('privada'),'detalle crudo público');
  }}finally{IDBFactory.prototype.open=open;IDBDatabase.prototype.transaction=transaction;IDBObjectStore.prototype.get=get;IDBObjectStore.prototype.getAll=getAll;}
  }

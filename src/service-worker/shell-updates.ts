@@ -1,5 +1,7 @@
 import {cachedShellResponse} from './shell-response';
 
+const shellCacheName=/^pulso-shell-[a-f0-9]{16}(?:-[a-f0-9]{16})?$/;
+
 export function appDocumentPath(path:string):boolean {
  return /^\/(?:index\.html|try(?:\.html)?|listen(?:\.html)?|web(?:\.html)?)?$/.test(path)||/^\/releases\/[a-f0-9]{16}(?:\.html)?$/.test(path);
 }
@@ -79,7 +81,7 @@ export async function legacyShellLauncher(response:Response):Promise<Response|nu
 
 export async function migrateLegacyShells(storage:CacheStorage,current:string):Promise<void>{
  for(const name of await storage.keys()){
-  if(name===current||!/^pulso-shell-[a-f0-9]{16}(?:-[a-f0-9]{16})?$/.test(name))continue;
+  if(name===current||!shellCacheName.test(name))continue;
   const cache=await storage.open(name);
   for(const key of await cache.keys()){
    if(!appDocumentPath(new URL(key.url).pathname))continue;
@@ -87,4 +89,18 @@ export async function migrateLegacyShells(storage:CacheStorage,current:string):P
    const launcher=await legacyShellLauncher(original);if(launcher)await cache.put(key,launcher);
   }
  }
+}
+
+// CacheStorage lists caches in creation order. A failed previous install can
+// leave an empty cache behind, so keep the latest shell with a document.
+export async function pruneShellCaches(storage:CacheStorage,current:string):Promise<void>{
+ const names=await storage.keys();
+ if(!names.includes(current))return;
+ const older=names.filter(name=>name!==current&&shellCacheName.test(name));
+ let previous:string|undefined;
+ for(const name of [...older].reverse()){
+  const document=await storage.match('/index.html',{cacheName:name,ignoreVary:true});
+  if(document?.ok&&document.headers.get('content-type')?.startsWith('text/html')){previous=name;break;}
+ }
+ await Promise.all(older.filter(name=>name!==previous).map(name=>storage.delete(name)));
 }

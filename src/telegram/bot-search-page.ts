@@ -1,3 +1,4 @@
+import {BOT_DOWNLOAD_MAX_BYTES,isBotDownloadMime} from './bot-download-bytes';
 import Long from 'long';
 import {dataArray,positive} from './sources-protocol';
 import {BOT_SEARCH_BOUNDS as B,botSearchText,matchingSongRows,type BotSearchLimitError,type BotSearchTarget,type BotSearchRow} from './bot-search-protocol';
@@ -81,7 +82,7 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
   if(id<=outgoing||!incomingBot(m,botId))continue;
   const reply=searchOwn(m,'replyTo');let correlation:'reply'|'recent'='recent';
   if(reply!==undefined){const peer=searchOwn(reply,'replyToPeerId');if(searchOwn(reply,'_')!=='messageReplyHeader'||searchOwn(reply,'replyToMsgId')!==outgoing&&!additionalReplies.includes(searchOwn(reply,'replyToMsgId') as number)||peer!==undefined&&!samePeer(peer,botId))continue;correlation='reply';}
-  const fingerprint=botSearchMessageFingerprint(m);const start=rows.length,markup=searchOwn(m,'replyMarkup');
+  const start=rows.length,markup=searchOwn(m,'replyMarkup');
   if(searchOwn(markup,'_')==='replyInlineMarkup'){
    const keyboard=dataArray(searchOwn(markup,'rows'),B.keyboardRows);if(!keyboard)bad('limit','limit-keyboard-rows');
    for(const r of keyboard){if(searchOwn(r,'_')!=='keyboardInlineButtonRow')bad();const buttons=dataArray(searchOwn(r,'buttons'),20);if(!buttons)bad('limit','limit-keyboard-buttons');
@@ -99,14 +100,15 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
   if(searchOwn(media,'_')==='messageMediaDocument'&&searchOwn(doc,'_')==='document'){
    const attrs=dataArray(searchOwn(doc,'attributes'),20);if(!attrs)bad('limit','limit-document-attributes');const audio=attrs.filter(a=>searchOwn(a,'_')==='documentAttributeAudio');
    const mime=searchOwn(doc,'mimeType'),size=searchOwn(doc,'size');
-   if(audio.length===1&&searchOwn(audio[0],'voice')!==true&&typeof mime==='string'&&/^audio\/[a-z0-9.+-]{1,64}$/.test(mime)&&typeof size==='number'){
+   if(audio.length===1&&searchOwn(audio[0],'voice')!==true&&isBotDownloadMime(mime)&&typeof size==='number'){
     const bytes=size,duration=searchOwn(audio[0],'duration');
-    if(Number.isSafeInteger(bytes)&&bytes>0&&typeof duration==='number'&&Number.isFinite(duration)&&duration>=0&&duration<=86400)add(id,{kind:'audio',correlation,title:botSearchText(searchOwn(audio[0],'title')),performer:botSearchText(searchOwn(audio[0],'performer')),durationSeconds:duration,mimeType:mime,bytes});
+    if(Number.isSafeInteger(bytes)&&bytes>0&&bytes<=BOT_DOWNLOAD_MAX_BYTES&&typeof duration==='number'&&Number.isFinite(duration)&&duration>=0&&duration<=86400)add(id,{kind:'audio',correlation,title:botSearchText(searchOwn(audio[0],'title')),performer:botSearchText(searchOwn(audio[0],'performer')),durationSeconds:duration,mimeType:mime,bytes});
    }
   }
   const text=botSearchText(searchOwn(m,'message'),1000);if(text)add(id,{kind:'message',correlation,text});
+  if(rows.length===start){unrecognized=true;continue;}
+  const fingerprint=botSearchMessageFingerprint(m);
   for(const row of rows.slice(start)){const previous=refs.get(row.rowRef)!;const audioFingerprint=row.kind==='audio'?botSearchAudioFingerprint(m):null;refs.set(row.rowRef,Object.freeze({...previous,fingerprint,...(audioFingerprint?{audioFingerprint}:{}),row}));}
-  if(rows.length===start)unrecognized=true;
  }
  // Decode and inspect every bounded candidate BEFORE truncating so concurrency
  // and duplicate exact matches cannot be hidden by display limits. Keep a matching

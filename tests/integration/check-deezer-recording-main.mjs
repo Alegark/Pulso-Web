@@ -1,8 +1,10 @@
+import {linkSnapshotDependencies} from './test-workspace.mjs';
+import {ffmpegExecutable} from '../../scripts/ffmpeg-path.mjs';
 /** MUSIC_FLOW full MAIN selection. --prepare keeps history, no browser/build.
  * Final exactly once, immutable attempt directory and exclusive final claim.
  * Sole SDK factory fixture is synthetic, NEVER account/bot/audio acceptance. */
 import assert from 'node:assert/strict';
-import {readFile,writeFile,mkdir,readdir,copyFile,symlink,open} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,readdir,copyFile,open} from 'node:fs/promises';
 import {resolve,dirname,extname,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
@@ -27,7 +29,7 @@ const frozenBytes=await readFile(freezePath),freeze=JSON.parse(frozenBytes);asse
 const before=await sourceMap(sourceRoot);assert.deepEqual(before,freeze.sources,'STOP freeze differs from complete actual src/public/index/header');
 const root=resolve(run,'isolated-root');await mkdir(root);
 for(const p of Object.keys(before)){await mkdir(dirname(resolve(root,p)),{recursive:true});await copyFile(resolve(sourceRoot,p),resolve(root,p));}
-await symlink(resolve(project,'node_modules'),resolve(root,'node_modules'),'dir');
+await linkSnapshotDependencies(root,project);
 assert.deepEqual(await sourceMap(root),before);
 await writeFile(resolve(run,'freeze-input.json'),frozenBytes);await writeFile(resolve(run,'source-start.json'),JSON.stringify(before,null,2));
 await mkdir(resolve(run,'harness'));const harnessMap={};
@@ -63,12 +65,12 @@ try{
  const seed=(await readFile(resolve(helpers,'seed.ts'),'utf8')).replaceAll('../../../src/','../src/');await writeFile(resolve(root,'__musicflow/seed.ts'),seed);
  await copyFile(resolve(helpers,'snapshot.mjs'),resolve(root,'__musicflow/snapshot.mjs'));
  const wav=Buffer.alloc(44+22050*45*2);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(22050,24);wav.writeUInt32LE(44100,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);for(let i=0;i<22050*45;i++)wav.writeInt16LE(Math.round(1400*Math.sin(2*Math.PI*440*i/22050)),44+i*2);await writeFile(resolve(root,'__musicflow/tone.wav'),wav);
- execFileSync(resolve(project,'node_modules/@ffmpeg-installer/linux-x64/ffmpeg'),['-hide_banner','-loglevel','error','-i',resolve(root,'__musicflow/tone.wav'),'-codec:a','libmp3lame','-b:a','64k',resolve(root,'__musicflow/tone.mp3')],{timeout:30000});
- execFileSync(resolve(project,'node_modules/@ffmpeg-installer/linux-x64/ffmpeg'),['-hide_banner','-loglevel','error','-i',resolve(root,'__musicflow/tone.wav'),'-codec:a','libmp3lame','-b:a','64k','-metadata','title=MUSIC_FLOW Song','-metadata','artist=MUSIC_FLOW Artist','-metadata','album=MUSIC_FLOW Album',resolve(root,'__musicflow/download.mp3')],{timeout:30000});
- for(const [name,title,frequency] of [['second','MUSIC_FLOW Second','550'],['third','MUSIC_FLOW Third','660']])execFileSync(resolve(project,'node_modules/@ffmpeg-installer/linux-x64/ffmpeg'),['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency='+frequency+':duration=45','-codec:a','libmp3lame','-b:a','64k','-metadata','title='+title,'-metadata','artist=MUSIC_FLOW Artist','-metadata','album=MUSIC_FLOW Album',resolve(root,'__musicflow/'+name+'.mp3')],{timeout:30000});
+ execFileSync(ffmpegExecutable(),['-hide_banner','-loglevel','error','-i',resolve(root,'__musicflow/tone.wav'),'-codec:a','libmp3lame','-b:a','64k',resolve(root,'__musicflow/tone.mp3')],{timeout:30000});
+ execFileSync(ffmpegExecutable(),['-hide_banner','-loglevel','error','-i',resolve(root,'__musicflow/tone.wav'),'-codec:a','libmp3lame','-b:a','64k','-metadata','title=MUSIC_FLOW Song','-metadata','artist=MUSIC_FLOW Artist','-metadata','album=MUSIC_FLOW Album',resolve(root,'__musicflow/download.mp3')],{timeout:30000});
+ for(const [name,title,frequency] of [['second','MUSIC_FLOW Second','550'],['third','MUSIC_FLOW Third','660']])execFileSync(ffmpegExecutable(),['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency='+frequency+':duration=45','-codec:a','libmp3lame','-b:a','64k','-metadata','title='+title,'-metadata','artist=MUSIC_FLOW Artist','-metadata','album=MUSIC_FLOW Album',resolve(root,'__musicflow/'+name+'.mp3')],{timeout:30000});
  report.fixtureHashes=Object.fromEntries(await Promise.all(['second.mp3','third.mp3'].map(async name=>[name,sha(await readFile(resolve(root,'__musicflow',name)))])));
- for(const [name,title,artist,album,duration] of [['alias','MUSIC_FLOW Song (Album Version)','MUSIC_FLOW Artist','MUSIC_FLOW Album',45],['wrong-album','MUSIC_FLOW Song (Album Version)','MUSIC_FLOW Artist','Other Album',45],['missing-tags','MUSIC_FLOW Song (Album Version)','','',45],['foreign-artist','MUSIC_FLOW Song (Album Version)','Other Artist','MUSIC_FLOW Album',45],['wrong-duration','MUSIC_FLOW Song (Album Version)','MUSIC_FLOW Artist','MUSIC_FLOW Album',48]])execFileSync(resolve(project,'node_modules/@ffmpeg-installer/linux-x64/ffmpeg'),['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=440:duration='+duration,'-codec:a','libmp3lame','-b:a','64k','-metadata','title='+title,'-metadata','artist='+artist,'-metadata','album='+album,resolve(root,'__musicflow/'+name+'.mp3')],{timeout:30000});
- for(const [name,artist]of [['collaboration','MUSIC_FLOW Artist; Guest'],['wrong-tags','Another Artist']])execFileSync(resolve(project,'node_modules/@ffmpeg-installer/linux-x64/ffmpeg'),['-hide_banner','-loglevel','error','-i',resolve(root,'__musicflow/tone.wav'),'-codec:a','aac','-b:a','64k','-metadata','title=MUSIC_FLOW Song','-metadata','artist='+artist,'-metadata','album=MUSIC_FLOW Album',resolve(root,'__musicflow/'+name+'.m4a')],{timeout:30000});
+ for(const [name,title,artist,album,duration] of [['alias','MUSIC_FLOW Song (Album Version)','MUSIC_FLOW Artist','MUSIC_FLOW Album',45],['wrong-album','MUSIC_FLOW Song (Album Version)','MUSIC_FLOW Artist','Other Album',45],['missing-tags','MUSIC_FLOW Song (Album Version)','','',45],['foreign-artist','MUSIC_FLOW Song (Album Version)','Other Artist','MUSIC_FLOW Album',45],['wrong-duration','MUSIC_FLOW Song (Album Version)','MUSIC_FLOW Artist','MUSIC_FLOW Album',48]])execFileSync(ffmpegExecutable(),['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=440:duration='+duration,'-codec:a','libmp3lame','-b:a','64k','-metadata','title='+title,'-metadata','artist='+artist,'-metadata','album='+album,resolve(root,'__musicflow/'+name+'.mp3')],{timeout:30000});
+ for(const [name,artist]of [['collaboration','MUSIC_FLOW Artist; Guest'],['wrong-tags','Another Artist']])execFileSync(ffmpegExecutable(),['-hide_banner','-loglevel','error','-i',resolve(root,'__musicflow/tone.wav'),'-codec:a','aac','-b:a','64k','-metadata','title=MUSIC_FLOW Song','-metadata','artist='+artist,'-metadata','album=MUSIC_FLOW Album',resolve(root,'__musicflow/'+name+'.m4a')],{timeout:30000});
  await build({...standard,publicDir:false,build:{outDir:resolve(root,'__musicflow/importer'),lib:{entry:resolve(root,'__musicflow/seed.ts'),formats:['es'],fileName:()=> 'seed.js'}}});
  let injections=0;const inject=()=>({name:'MUSIC_FLOW-only-sdk-factory',enforce:'pre',resolveId(s,i){if(s==='./temporary-sdk'&&i?.split('?')[0]===resolve(root,'src/telegram/session.worker.ts')){injections++;return resolve(root,'src/telegram/MUSIC_FLOW-TESTONLY-sdk.ts');}}});
  await build({...standard,plugins:[inject()],worker:{plugins:()=>[inject()]},publicDir:resolve(root,'public'),build:{outDir:outFixture,emptyOutDir:true}});assert.equal(injections,1);report.injections=injections;

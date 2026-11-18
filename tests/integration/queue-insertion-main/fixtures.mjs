@@ -1,3 +1,4 @@
+import {ffmpegExecutable} from '../../../scripts/ffmpeg-path.mjs';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -11,7 +12,7 @@ export async function fixtures(dir){
  await mkdir(dir,{recursive:true});const result=[];
  for(let i=0;i<4;i++){const name=`R110-${String.fromCharCode(65+i)}.wav`,buffer=wav(i);await writeFile(resolve(dir,name),buffer);result.push({name,mimeType:'audio/wav',buffer});}
  // The installed, pinned offline encoder creates an original MP3; no downloaded media.
- const encoder=resolve('node_modules/@ffmpeg-installer/linux-x64/ffmpeg');
+ const encoder=ffmpegExecutable();
  execFileSync(encoder,['-v','error','-y','-i',resolve(dir,result[1].name),'-codec:a','libmp3lame','-b:a','48k','-metadata','title=R110 MP3 propio','-metadata','artist=R110 sintético','-metadata','album=R110 local',resolve(dir,'R110-own.mp3')]);
  const mp3=await readFile(resolve(dir,'R110-own.mp3'));result.push({name:'R110-own.mp3',mimeType:'audio/mpeg',buffer:mp3});
  await writeFile(resolve(dir,'manifest.json'),JSON.stringify(result.map(f=>({name:f.name,bytes:f.buffer.length,sha256:sha(f.buffer),provenance:'Original mathematical PCM; original MP3 encoded locally from it'})),null,2));return result;

@@ -1,7 +1,7 @@
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import {AppFailure,atBoundary,fail,fromKnownError,issuedFailure,makeFailure,nativeDOMName,missingAssetException,type FailureV1} from '../errors/app-failure';
-import {readRecord} from './database';
+import {readRecord,readRecordFrom} from './database';
 import type {LocalAsset} from '../library/library';
 export const ASSET_DIRECTORY='pulso-assets-v1';
 export const WRITER_LOCK='pulso-web:local:asset-writer';
@@ -25,7 +25,7 @@ export function verificationFailure(error:unknown,backend:LocalAsset['backend'])
  return {state:f.code==='asset-missing'?'missing':['length-mismatch','digest-mismatch','local-corrupt'].includes(f.code)?'corrupt':'unknown',failure:f};
 }
 // Lock lifetime belongs to the caller, including verification failures.
-export async function openAssetReader(asset:LocalAsset,current=true,control?:{signal:AbortSignal}):Promise<AssetReader> {
+export async function openAssetReader(asset:LocalAsset,current=true,control?:{signal:AbortSignal;database?:IDBDatabase}):Promise<AssetReader> {
  let unlock:(()=>void)|undefined;
  let acquired!:()=>void, rejected!:(error:unknown)=>void;
  const ready=new Promise<void>((resolve,reject)=>{acquired=resolve;rejected=reject;});
@@ -39,9 +39,12 @@ export async function openAssetReader(asset:LocalAsset,current=true,control?:{si
  let released=false;
  const release=()=>{if(!released){released=true;unlock?.();}};
  const checkSignal=()=>{if(control?.signal.aborted)fail('open','internal','cancelled',asset.backend);};
+ // The caller owns any supplied connection. Each read still uses its own
+ // short transaction, so no transaction stays open across stream backpressure.
+ const read=<T>(store:string,key:IDBValidKey)=>control?.database?readRecordFrom<T>(control.database,store,key):readRecord<T>(store,key);
  try{
  checkSignal();
- if(current){const now=await atBoundary('read','idb',()=>readRecord<LocalAsset>('assets',asset.id));if(!now||now.revision!==asset.revision||now.backend!==asset.backend||now.storageKey!==asset.storageKey)fail('open','integrity','asset-changed',asset.backend);}
+ if(current){const now=await atBoundary('read','idb',()=>read<LocalAsset>('assets',asset.id));if(!now||now.revision!==asset.revision||now.backend!==asset.backend||now.storageKey!==asset.storageKey)fail('open','integrity','asset-changed',asset.backend);}
  checkSignal();
  let file:File|null=null;
  if(asset.backend==='opfs'){
@@ -59,7 +62,7 @@ export async function openAssetReader(asset:LocalAsset,current=true,control?:{si
  if(file){const bytes=new Uint8Array(await file.slice(start,end).arrayBuffer());if(bytes.length!==end-start)fail('read','integrity','length-mismatch','opfs');return bytes;}
  const parts:Uint8Array[]=[];let length=0;
  for(let i=Math.floor(start/65536);i<=Math.floor((end-1)/65536);i++){
- const chunk=await readRecord<unknown>('chunks',[asset.storageKey,i]);
+ const chunk=await read<unknown>('chunks',[asset.storageKey,i]);
  if(chunk===undefined)fail('read','integrity','asset-missing','idb');
  if(!(chunk instanceof Uint8Array))fail('read','integrity','local-corrupt','idb');
  if(chunk.length!==Math.min(65536,asset.bytes-i*65536))fail('read','integrity','length-mismatch','idb');

@@ -1,0 +1,116 @@
+{
+  "sourceCommit": "2e4186b2e2758ef50829c7eb24a57b2f99d4d867",
+  "date": "2026-11-18T20:18:52.815Z",
+  "plan": "Workers Free / USD 0",
+  "origin": "https://pulso-web.pruebassoftware.workers.dev",
+  "deployment": "88054789-d2e7-4ff7-b39a-2e85756f9d5b",
+  "version": "28f046a0-e6ea-4cbb-9692-4d0066ce2e91",
+  "activePercentage": 100,
+  "entry": "/releases/b837a1c9ee817b34.html",
+  "worker": {
+    "bytes": 327216,
+    "sha256": "b3df88c87f8db7c9c901d845366af57c924aaa4d90560e7d1209af6c93394fe9"
+  },
+  "bindings": [
+    {
+      "name": "ASSETS",
+      "type": "assets"
+    },
+    {
+      "name": "CATALOG",
+      "type": "durable_object_namespace",
+      "class_name": "CatalogCoordinator",
+      "namespace_id": "746ddaa2739347e6a8ad334ea8e95ace"
+    },
+    {
+      "name": "PULSO_AUTH_COOKIE_SECRET",
+      "type": "secret_text"
+    },
+    {
+      "name": "PULSO_AUTH_GOOGLE_ENABLED",
+      "type": "secret_text"
+    },
+    {
+      "name": "PULSO_NEON_AUTH_URL",
+      "type": "secret_text"
+    },
+    {
+      "name": "PULSO_NEON_DATA_API_URL",
+      "type": "secret_text"
+    },
+    {
+      "name": "TELEGRAM_API_IDENTITY",
+      "type": "secret_text"
+    }
+  ],
+  "subdomain": {
+    "enabled": true,
+    "previews_enabled": false
+  },
+  "compatibilityDate": "2026-11-13",
+  "newWorkerFirstRoute": "/api/account-library",
+  "migrationsApplied": false,
+  "manifest": {
+    "path": ".local/test-evidence/code-review-delivery/site-manifest.json",
+    "sha256": "a575e6dde227ded0365f1d4145a539ced990a997216bd56d3e6bc9a6a6f9923c",
+    "files": 226,
+    "preservedImmutable": 176,
+    "publicStaticRoutesVerifiedByBytesAndSha256": 223,
+    "staticReadbackExclusions": [
+      ".assetsignore",
+      "_headers",
+      "account-config.json"
+    ]
+  },
+  "http": {
+    "/": {
+      "GET": 200,
+      "HEAD": 200,
+      "csp": true,
+      "headCsp": true,
+      "bytesShaMatch": true
+    },
+    "/latest.json": {
+      "GET": 200,
+      "HEAD": 200,
+      "csp": true,
+      "headCsp": true,
+      "bytesShaMatch": true
+    },
+    "/releases/b837a1c9ee817b34.html": {
+      "GET": 200,
+      "HEAD": 200,
+      "csp": true,
+      "headCsp": true,
+      "bytesShaMatch": true
+    },
+    "/sw.js": {
+      "GET": 200,
+      "HEAD": 200,
+      "csp": true,
+      "headCsp": true,
+      "bytesShaMatch": true
+    },
+    "/account-config.json": {
+      "GET": 200,
+      "enabled": true,
+      "google": true,
+      "noStore": true
+    },
+    "/api/account-profile": {
+      "GET": 401
+    },
+    "/api/account-library": {
+      "GET": 401,
+      "crossOriginPUT": 403
+    },
+    "/releases/d9397c75f05bb80e.html": {
+      "GET": 200
+    }
+  },
+  "limits": {
+    "physicalIPhoneTested": false,
+    "realTelegramTested": false,
+    "p0wComplete": false
+  }
+}

@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {assertBotSearchRawBudget,BotSearchProjectionError,projectBotSearchPage} from '../../src/telegram/bot-search-page';
-import {BOT_SEARCH_LIMIT_DIAGNOSTICS,copyBotSearchEnvelope,parseBotSearchReply,type BotSearchCommand} from '../../src/telegram/bot-search-protocol';
-import {parseBotSearchBridgeReply} from '../../src/telegram/bot-search-bridge-protocol';
+import {BOT_SEARCH_LIMIT_DIAGNOSTICS,copyBotSearchEnvelope,parseBotSearchReply,type BotSearchCommand,type BotSearchLimitError,type BotSearchReply} from '../../src/telegram/bot-search-protocol';
+import {parseBotSearchBridgeReply,type BotSearchBridgeReply} from '../../src/telegram/bot-search-bridge-protocol';
 const id=()=>crypto.randomUUID();
 const command:BotSearchCommand={protocol:'pulso-bot-search',version:1,sessionId:id(),accountRef:id(),accountEpoch:1,providerRevision:1,queryId:id(),requestId:id(),type:'bot-search.search',providerRef:id(),query:'Own query',consent:true};
 test('each diagnostic is a closed enum with unchanged envelope, no private details or free text',()=>{
- for(const error of Object.keys(BOT_SEARCH_LIMIT_DIAGNOSTICS)){
-  const r={...copyBotSearchEnvelope(command),type:'bot-search.error',error,delivery:'acknowledged',retryAt:null,retryBlocked:false};assert.ok(parseBotSearchReply(r,command));
-  const bridge={protocol:command.protocol,version:1,reply:r,sessionClosed:false,retryAt:null,retryBlocked:false};assert.ok(parseBotSearchBridgeReply(bridge,command));
+ for(const error of Object.keys(BOT_SEARCH_LIMIT_DIAGNOSTICS) as BotSearchLimitError[]){
+  const r:BotSearchReply={...copyBotSearchEnvelope(command),type:'bot-search.error',error,delivery:'acknowledged',retryAt:null,retryBlocked:false};assert.ok(parseBotSearchReply(r,command));
+  const bridge:BotSearchBridgeReply={protocol:command.protocol,version:1,reply:r,sessionClosed:false,retryAt:null,retryBlocked:false} as const;assert.ok(parseBotSearchBridgeReply(bridge,command));
   assert.equal(parseBotSearchReply({...r,detail:'PRIVATE'},command),null);assert.equal(parseBotSearchReply({...r,error:'limit-PRIVATE'},command),null);
   assert.equal(parseBotSearchBridgeReply({...bridge,detail:'PRIVATE'},command),null);
  }

@@ -1,7 +1,8 @@
+import {linkSnapshotDependencies} from './test-workspace.mjs';
 // Isolated synthetic full-MAIN regression. No account, bot, remote service, or music download.
 import {build} from 'vite';
 import {chromium} from 'playwright-core';
-import {readFile,writeFile,mkdir,cp,readdir,symlink} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,cp,readdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
@@ -18,7 +19,7 @@ const report={status:'INCOMPLETE',cases:[],requests:[],unexpected:[],errors:[],s
 let server,browser,context,page;const before=await sources();report.freeze=before;await writeFile(resolve(run,'freeze.json'),JSON.stringify(before,null,2));
 const check=async(name,fn)=>{try{await fn();report.cases.push({name,pass:true});console.log('PASS',name)}catch(e){report.cases.push({name,pass:false,error:String(e.stack||e),body:await page?.locator('body').innerText().catch(()=>null)});console.log('FAIL',name,String(e))}};
 try{
- for(const d of ['src','public'])await cp(resolve(root,d),resolve(snap,d),{recursive:true});await cp(resolve(root,'index.html'),resolve(snap,'index.html'));await symlink(resolve(root,'node_modules'),resolve(snap,'node_modules'),'dir');assert.deepEqual(await tree(resolve(snap,'src')),before.src);
+ for(const d of ['src','public'])await cp(resolve(root,d),resolve(snap,d),{recursive:true});await cp(resolve(root,'index.html'),resolve(snap,'index.html'));await linkSnapshotDependencies(snap,root);assert.deepEqual(await tree(resolve(snap,'src')),before.src);
  await build({root:snap,configFile:false,logLevel:'error',build:{outDir:out}});
  // Fixture invokes the real local importer on generated PCM, never a remote music download.
  await mkdir(resolve(snap,'__r146'));const seed=(await readFile(resolve(root,'tests/integration/music-search-main/seed.ts'),'utf8')).replaceAll('../../../src/','../src/').replace("['tone.wav','tone.mp3']","['tone.wav']");await writeFile(resolve(snap,'__r146/seed.ts'),seed);
