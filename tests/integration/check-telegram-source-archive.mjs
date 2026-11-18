@@ -1,7 +1,7 @@
 /** Verify the public source archive in an isolated Git fixture, without a network or an npm install. */
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {cpSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmSync,symlinkSync,writeFileSync,appendFileSync} from 'node:fs';
+import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmSync,symlinkSync,writeFileSync,appendFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
@@ -21,12 +21,19 @@ try{
  git('init','--quiet','--template=');git('add','--all');
  git('-c','user.name=Archive Test','-c','user.email=archive@example.invalid','-c','commit.gpgSign=false','commit','--quiet','-m','fixture');
  symlinkSync(realpathSync('node_modules'),resolve(snapshot,'node_modules'),'dir');
- const {writeTelegramSources}=await import(pathToFileURL(resolve(snapshot,'scripts/telegram-source.mjs')).href);
  writeFileSync(resolve(snapshot,'src','.env.fixture'),'SYNTHETIC_SECRET');
  writeFileSync(resolve(snapshot,'public','untracked-fixture.txt'),'SYNTHETIC_UNTRACKED');
  mkdirSync(resolve(snapshot,'.git/info'),{recursive:true});
  appendFileSync(resolve(snapshot,'.git/info/exclude'),'\nsrc/.env.fixture\n');
- notices();writeTelegramSources(dist);
+ const inheritedIndex=resolve(temp,'unrelated-index'),previousIndex=process.env.GIT_INDEX_FILE;
+ process.env.GIT_INDEX_FILE=inheritedIndex;
+ let writeTelegramSources;
+ try{
+  ({writeTelegramSources}=await import(pathToFileURL(resolve(snapshot,'scripts/telegram-source.mjs')).href));
+  notices();writeTelegramSources(dist);
+ }
+ finally{if(previousIndex===undefined)delete process.env.GIT_INDEX_FILE;else process.env.GIT_INDEX_FILE=previousIndex;}
+ assert.equal(existsSync(inheritedIndex),false);
  const files=execFileSync('tar',['-tzf',archive],{encoding:'utf8'}).split('\n');
  assert.ok(files.includes('src/telegram/session.worker.ts'));
  assert.ok(!files.some(file=>/^src\/telegram\/auth-(state|scope-store)\.ts$/.test(file)));

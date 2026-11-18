@@ -16,7 +16,10 @@ const sourcePaths=['package.json','package-lock.json','vite.config.ts','tsconfig
 // Inventory and Git tree from the published npm tarballs verified against package-lock.json.
 const sdkInventory='bfbc8214a566dbd7d0e65b2dbd42e55f2e4b034f023f30eed600923ce11a133b';
 const sdkTree='a9a2c53f2e96438b0993300a3845861313c787ac';
-const git=(args,options={})=>execFileSync('git',args,{stdio:'pipe',maxBuffer:8*1024*1024,...options});
+const gitEnvironment={...process.env};
+// A build invoked by a Git hook may inherit paths to the caller's Git storage.
+for(const key of ['GIT_DIR','GIT_WORK_TREE','GIT_COMMON_DIR','GIT_INDEX_FILE','GIT_OBJECT_DIRECTORY','GIT_ALTERNATE_OBJECT_DIRECTORIES','GIT_NAMESPACE'])delete gitEnvironment[key];
+const git=(args,options={})=>execFileSync('git',args,{env:gitEnvironment,stdio:'pipe',maxBuffer:8*1024*1024,...options});
 
 function writeSourceArchive(out){
  const project=git(['rev-parse','--show-toplevel'],{cwd:root,encoding:'utf8'}).trimEnd();
@@ -54,7 +57,7 @@ function writeSourceArchive(out){
   stage(['read-tree','-i','--prefix=node_modules/',dependencies]);
   const tree=stage(['write-tree'],{encoding:'utf8'}).trim();
   const identity={name:'Pulso Web',email:'archive@pulso.invalid',date:'2026-11-02T00:00:00Z'};
-  const env={...process.env};for(const role of ['AUTHOR','COMMITTER'])for(const [key,value] of Object.entries(identity))env[`GIT_${role}_${key.toUpperCase()}`]=value;
+  const env={...gitEnvironment};for(const role of ['AUTHOR','COMMITTER'])for(const [key,value] of Object.entries(identity))env[`GIT_${role}_${key.toUpperCase()}`]=value;
   const commit=stage(['-c','commit.gpgSign=false','commit-tree',tree,'-m','Pulso Telegram sources'],{env,encoding:'utf8'}).trim();
   stage(['archive','--format=tar.gz','--output='+out,commit]);
  }finally{rmSync(temporary,{recursive:true,force:true});}
