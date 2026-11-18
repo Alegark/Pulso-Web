@@ -16,6 +16,7 @@ try{
    if(id.endsWith('/storage/asset-reader.ts'))return code.replace('const hash=integrity?sha256.create():null;', 'const hash=integrity?sha256.create():null; if(hash)Reflect.set(globalThis,"testHashes",(Reflect.get(globalThis,"testHashes")??0)+1);');
    if(id.endsWith('/service-worker/sw.ts'))return code+`
 self.addEventListener('message',event=>{
+ if(event.data==='test-client')event.ports[0].postMessage(event.source.id);
  if(event.data==='test-counters')event.ports[0].postMessage({opens:Reflect.get(globalThis,'testOpens')??0,hashes:Reflect.get(globalThis,'testHashes')??0});
 });
 `;
@@ -76,8 +77,26 @@ self.addEventListener('message',event=>{
       if(!file)tx.objectStore('chunks').put(bad.slice(65536,2*65536),[storageKey,1]);
      });
     };
-    window.pulsoTest={mint,get,rpc,corruptRevision};
+    const seedTickets=async deadOwner=>{
+     const liveOwner=await rpc('test-client');
+     await write('tickets',tx=>{
+      const store=tx.objectStore('tickets'),ticket={owner:deadOwner,assetId:id,namespace:'local'};
+      store.put({...ticket,version:2},'test-dead-v2');store.put(ticket,'test-dead-legacy');
+      store.put({...ticket,version:2,owner:liveOwner},'test-live-v2');
+     });
+    };
+    const ticketKeys=()=>new Promise((resolve,reject)=>{
+     const req=db.transaction('tickets').objectStore('tickets').getAllKeys();req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+    });
+    window.pulsoTest={mint,get,rpc,corruptRevision,seedTickets,ticketKeys};
    },backend);
+   const departed=await context.newPage();await departed.goto(origin);
+   const deadOwner=await departed.evaluate(()=>new Promise(resolve=>{
+    const channel=new MessageChannel();channel.port1.onmessage=event=>{channel.port1.close();resolve(event.data);};
+    navigator.serviceWorker.controller.postMessage('test-client',[channel.port2]);
+   }));
+   await page.evaluate(deadOwner=>window.pulsoTest.seedTickets(deadOwner),deadOwner);
+   await departed.close();
    const result=await page.evaluate(async()=>{
     const {mint,get,rpc,corruptRevision}=window.pulsoTest;
     const token=await mint(),before=await rpc('test-counters');
@@ -85,7 +104,7 @@ self.addEventListener('message',event=>{
     const second=await get(token,'bytes=0-'),cross=await get(token,'bytes=65530-65545'),afterRanges=await rpc('test-counters');
     await corruptRevision();
     const oldTicket=await get(token,'bytes=0-1'),bad=await get(await mint(),'bytes=0-1');
-    return {before,first,afterFirst,second,cross,afterRanges,oldTicket,bad};
+    return {before,first,afterFirst,second,cross,afterRanges,oldTicket,bad,keys:await window.pulsoTest.ticketKeys()};
    });
    assert.deepEqual(result.first,{status:206,length:2,first:0,last:1,contentRange:'bytes 0-1/131083'});
    assert.equal(result.second.length,131083);
@@ -94,7 +113,8 @@ self.addEventListener('message',event=>{
    assert.equal(result.bad.status,409,'the first read of a new revision verifies bytes outside the requested range');
    assert.deepEqual(result.afterFirst,{opens:result.before.opens+1,hashes:result.before.hashes+1});
    assert.deepEqual(result.afterRanges,{opens:result.afterFirst.opens+2,hashes:result.afterFirst.hashes});
-   console.log(JSON.stringify({backend,passed:true,reads:3,hashes:1,opens:3,oldTicket:409,firstReadOfCorruptRevision:409}));
+   assert.deepEqual(result.keys.filter(key=>key.startsWith('test-')),['test-dead-legacy','test-live-v2']);
+   console.log(JSON.stringify({backend,passed:true,reads:3,hashes:1,opens:3,oldTicket:409,firstReadOfCorruptRevision:409,orphanV2Pruned:true}));
   }finally{await context.close();}
  }
 }finally{

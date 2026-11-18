@@ -139,13 +139,45 @@ async function physicalSources(source:Client,port:MessagePort,value:unknown):Pro
  }catch{if(client)tell(client);respondFailure();}
  finally{if(db)closeDatabase(db);port.close();}
 }
+async function departedTicketOwners(db:IDBDatabase,clientId:string):Promise<Set<string>> {
+ const owners=new Set<string>();
+ const tx=admittedTransaction(db,'tickets');const done=committed(tx);
+ const cursor=tx.objectStore('tickets').openCursor();
+ cursor.onsuccess=()=>{
+  const row=cursor.result;if(!row)return;
+  const ticket=row.value as Ticket|undefined;
+  if(ticket?.version===2&&typeof ticket.owner==='string'&&ticket.owner!==clientId)owners.add(ticket.owner);
+  row.continue();
+ };
+ await done;
+ const departed=new Set<string>();
+ // Check outside IDB transactions. A client ID belongs to one document,
+ // so a concurrently pinned ticket for a different client is never affected.
+ await Promise.all([...owners].map(async id=>{
+  try{if(!await self.clients.get(id))departed.add(id);}catch{/* Uncertain clients keep their tickets. */}
+ }));
+ return departed;
+}
 async function ticketTransaction(db:IDBDatabase,m:PinnedRequest|ReleaseRequest,clientId:string,current:()=>void):Promise<SourceCause|null> {
+ const departed=m.type==='pinned-local-sources'?await departedTicketOwners(db,clientId):null;
+ current();
  const tx=admittedTransaction(db,m.type==='pinned-local-sources'?['assets','tickets']:['tickets'],'readwrite');
  const done=committed(tx);void done.catch(()=>{});const tickets=tx.objectStore('tickets');let failure:SourceCause|null=null;
  try{
  // Queue all native requests synchronously. No locks, hashing or other async IO
  // inside the transaction; success is exposed only after its oncomplete.
  if(m.type==='pinned-local-sources'){
+ if(departed?.size){
+  const cursor=tickets.openCursor();
+  cursor.onsuccess=()=>{
+   const row=cursor.result;if(!row)return;
+   try{
+    current();const ticket=row.value as Ticket|undefined;
+    if(ticket?.version===2&&departed.has(ticket.owner))row.delete();
+    row.continue();
+   }catch{try{tx.abort();}catch{/* already terminal */}}
+  };
+ }
  const assets=tx.objectStore('assets');
  m.expected.forEach((expected,i)=>{
  const get=assets.get(expected.id);get.onsuccess=()=>{
