@@ -13,7 +13,7 @@
  --color-muted: var(--pulso-soft);
  --color-muted-foreground: var(--pulso-muted);
  --color-border: var(--pulso-border);
- --color-input: var(--pulso-border);
+ --color-input: var(--pulso-control-border);
  --color-ring: var(--pulso-accent);
  --color-destructive: #ffb4b4;
  --radius-lg: .85rem;
@@ -31,7 +31,7 @@
 .account-kit [data-slot=card-title]{font-size:1.7rem;line-height:1.2;font-weight:750;letter-spacing:-.04em;margin:0}
 .account-kit [data-slot=field]{min-inline-size:0}
 .account-kit input{font-family:inherit;font-size:max(1rem,16px);min-inline-size:0}
-.account-kit [data-slot=input],.account-kit [data-slot=input-group]{min-block-size:48px;background:var(--pulso-canvas);border:1px solid var(--pulso-border)}
+.account-kit [data-slot=input],.account-kit [data-slot=input-group]{min-block-size:48px;background:var(--pulso-canvas);border:1px solid var(--pulso-control-border)}
 .account-kit [data-slot=input-group-control]{min-block-size:46px;border:0;background:transparent;padding-block:.7rem}
 .account-kit [data-slot=button]{min-block-size:44px;font-family:inherit;line-height:1.35;white-space:normal;touch-action:manipulation;transition:background-color .15s,color .15s,opacity .15s}
 .account-kit [data-slot=button][data-variant=default]{background:var(--pulso-accent);color:var(--pulso-canvas);font-weight:700}
@@ -39,7 +39,7 @@
 .account-kit a{color:var(--pulso-accent);overflow-wrap:anywhere;touch-action:manipulation}
 .account-kit [data-slot=field-error]{font-size:.9rem;line-height:1.5;color:var(--pulso-foreground);border-inline-start:3px solid var(--pulso-accent);padding-inline-start:.75rem}
 .account-kit [data-slot=input-otp-group]{flex-wrap:wrap;justify-content:center;gap:.3rem}
-.account-kit [data-slot=input-otp-slot]{inline-size:2.25rem;block-size:3rem;border:1px solid var(--pulso-border);border-radius:.45rem;background:var(--pulso-canvas)}
+.account-kit [data-slot=input-otp-slot]{inline-size:2.25rem;block-size:3rem;border:1px solid var(--pulso-control-border);border-radius:.45rem;background:var(--pulso-canvas)}
 .account-kit :focus-visible{outline:2px solid var(--pulso-accent);outline-offset:3px}
 /* Radix uses data-orientation; keep the divider a hairline, not a filled bar. */
 .account-kit [data-slot=separator][data-orientation=horizontal]{block-size:1px;inline-size:100%}

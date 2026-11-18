@@ -8,7 +8,7 @@
 .account-dialog__intro{color:var(--pulso-muted);margin-block:0 1.5rem}
 .account-dialog form,.account-dialog fieldset{display:grid;gap:1.1rem;min-inline-size:0;margin:0;padding:0;border:0;inline-size:100%}
 .account-dialog label{display:grid;gap:.5rem;inline-size:100%;font-weight:550}
-.account-dialog input{box-sizing:border-box;inline-size:100%;min-inline-size:0;min-block-size:48px;padding:.7rem .85rem;border:1px solid var(--pulso-border);border-radius:.7rem;background:var(--pulso-canvas);color:var(--pulso-foreground);font-size:max(1rem,16px)}
+.account-dialog input{box-sizing:border-box;inline-size:100%;min-inline-size:0;min-block-size:48px;padding:.7rem .85rem;border:1px solid var(--pulso-control-border);border-radius:.7rem;background:var(--pulso-canvas);color:var(--pulso-foreground);font-size:max(1rem,16px)}
 .account-dialog button{min-block-size:44px;padding:.6rem .9rem;touch-action:manipulation;user-select:none}
 .account-dialog .account-dialog__primary{background:var(--pulso-accent);color:var(--pulso-canvas);border-color:transparent;font-weight:700;margin-block-start:.25rem;inline-size:100%}
 .account-dialog__google{display:flex;align-items:center;justify-content:center;gap:.75rem;inline-size:100%;font-weight:600}.account-dialog__google span{font-size:1.25rem}
