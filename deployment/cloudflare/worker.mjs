@@ -18,11 +18,11 @@ export class CatalogCoordinator extends DurableObject{
  async fetch(request){await this.ready;const url=new URL(request.url);try{const value=await (url.pathname.startsWith('/catalog/musicbrainz/')?this.musicbrainz:this.relay).get(url.pathname,url.search);return response(value.body,200,value.mime);}catch(e){return response('{}',e instanceof RelayError?e.status:502,'application/json',e instanceof RelayError?e.retryAfter:null);}}
 }
 export default {
- async fetch(request,env){
+ async fetch(request,env,ctx){
   const url=new URL(request.url),path=url.pathname;
   if(path==='/account-config.json'||path.startsWith('/api/account-auth/'))return accountAuth(request,env);
   if(path.startsWith('/api/spotify-playlist/'))return spotifyPlaylist(request);
-  if(path.startsWith('/api/spotify-track/'))return spotifyTrackRelease(request);
+  if(path.startsWith('/api/spotify-track/'))return spotifyTrackRelease(request,undefined,ctx);
   if(path==='/api/account-profile')return accountProfile(request,env);
   if(path==='/api/account-library')return accountLibrary(request,env);
   if(!['GET','HEAD'].includes(request.method))return response('{}',405);
