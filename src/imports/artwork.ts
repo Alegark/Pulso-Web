@@ -20,7 +20,6 @@ function dimensions(b:Uint8Array):{mime:'image/png'|'image/jpeg'|'image/webp';wi
   if(!end)return fail('image-structure');return {mime:'image/png',width:u32(b,16),height:u32(b,20)};
  }
  if(b.length>=4&&b[0]===255&&b[1]===216){
-  if(b.at(-2)!==255||b.at(-1)!==217)return fail('image-structure');
   let count=0,entropy=false;let result:ReturnType<typeof dimensions>|undefined;
   for(let p=2;p<b.length;){
    if(entropy){while(p<b.length&&b[p]!==255)p++;}
@@ -28,7 +27,7 @@ function dimensions(b:Uint8Array):{mime:'image/png'|'image/jpeg'|'image/webp';wi
    if(p>=b.length)return fail('image-structure');const marker=b[p++];
    if(entropy&&(marker===0||marker>=0xd0&&marker<=0xd7))continue;
    if(++count>512)return fail('image-structure');
-   if(marker===0xd9){if(p!==b.length||!result)return fail('image-structure');return result;}
+   if(marker===0xd9){if(!result||b.subarray(p).some(byte=>byte!==0))return fail('image-structure');return result;}
    if(marker===0xd8||marker===0xdc||p+2>b.length)return fail('image-structure');
    const size=u16(b,p);if(size<2||size>b.length-p)return fail('image-structure');
    if(marker>=0xc0&&marker<=0xcf&&![0xc4,0xc8,0xcc].includes(marker)){
@@ -58,7 +57,8 @@ export async function validateArtwork(image:Blob):Promise<Extract<ArtworkInspect
  if(image.size===0||image.size>MAX_ARTWORK_BYTES)fail('image-size');
  const b=new Uint8Array(await image.arrayBuffer());if(b.length!==image.size)fail('image-structure');
  const info=dimensions(b);
- if(image.type&&image.type.toLowerCase()!==info.mime)fail('image-format');
+ const mime=/^image\/(?:p?jpeg|jpg)$/.test(image.type)?'image/jpeg':image.type;
+ if(mime&&mime!==info.mime)fail('image-format');
  if(!info.width||!info.height||info.width>MAX_ARTWORK_DIMENSION||info.height>MAX_ARTWORK_DIMENSION||info.width*info.height>MAX_ARTWORK_PIXELS)fail('image-dimensions');
  if(typeof createImageBitmap!=='function')fail('decode-unavailable');
  const blob=new Blob([b],{type:info.mime});

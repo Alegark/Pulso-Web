@@ -1,7 +1,8 @@
+import {isBotDownloadMime} from './bot-download-bytes';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {dataArray,dataRecord,isUuid,parseAccountBinding,utf8Bytes,type AccountBinding} from './sources-protocol';
 import {recordingTitleCandidate} from '../library/recording-title';
-export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:16,downloadReads:60,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadMs:120000});
+export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:16,downloadReads:60,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadResolveMs:120000});
 // Catalogue and file metadata may differ by a few seconds. This never relaxes
 // the required title/performer/version match or the ranking by closest duration.
 export const BOT_SEARCH_DURATION_TOLERANCE_SECONDS=5;
@@ -143,7 +144,7 @@ export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTa
  const score=(row:BotSearchRow):number=>{
   const correlation=row.correlation==='reply'?1:0;
   if(row.kind==='audio'){
-   if(!row.title||!row.performer||!recordingTitleCandidate(row.title,target.title,target.album,target.durationSeconds)||musicIdentityText(row.performer)!==artist)return 0;
+   if(row.bytes>AUDIO_FILE_MAX_BYTES||!isBotDownloadMime(row.mimeType)||!row.title||!row.performer||!recordingTitleCandidate(row.title,target.title,target.album,target.durationSeconds)||musicIdentityText(row.performer)!==artist)return 0;
    const fileCheck=canCheckBotDurationFromFile(row,target);
    const delta=target.durationSeconds===null||fileCheck?0:Math.abs(target.durationSeconds-row.durationSeconds);
    const tolerance=musicIdentityText(row.title)===title?BOT_SEARCH_DURATION_TOLERANCE_SECONDS:1;

@@ -1,3 +1,4 @@
+import {classifyTelegramFailure} from './rpc-failure';
 import type {tl} from '@mtcute/core';
 import {SOURCES_BOUNDS as B,copyEnvelope,isUuid,parseAccountBinding,parseSourcesCommand,parseSourcesReply,utf8Bytes,type AccountBinding,type Envelope,type Folder,type SourceRow,type SourcesError,type SourcesReply} from './sources-protocol';
 import {projectSourcesPage,ProjectionLimit,type PageAnchor,type ProjectedCandidate} from './sources-page';
@@ -20,18 +21,9 @@ interface Failure {error:SourcesError;retryAt:number|null;retryBlocked:boolean}
 const failure=(error:SourcesError):Failure=>({error,retryAt:null,retryBlocked:false});
 /** Reads only own data fields of an error, including SDK RpcError's normalized text/seconds. */
 export function sourcesFailure(error:unknown,now:number):Failure {
- const field=(key:string):unknown=>error&&typeof error==='object'?Object.getOwnPropertyDescriptor(error,key)?.value:undefined;
- const text=field('text')??field('errorMessage')??field('message');
- if(typeof text!=='string'||text.length>512)return failure('network');
- if(/^FLOOD_(?:PREMIUM_)?WAIT(?:_|$)/.test(text)){
-  const match=/_(\d+)$/.exec(text);const seconds=match?Number(match[1]):field('seconds');
-  const until=typeof seconds==='number'&&Number.isSafeInteger(seconds)&&seconds>=0?now+Math.max(1,seconds)*1000:NaN;
-  const retryAt=Number.isSafeInteger(until)&&until>now&&until<=8640000000000000?until:null;
-  return {error:'rate-limit',retryAt,retryBlocked:retryAt===null};
- }
- if(/^(AUTH_KEY_UNREGISTERED|SESSION_REVOKED|SESSION_EXPIRED|USER_DEACTIVATED|USER_DEACTIVATED_BAN)$/.test(text))return failure('session-expired');
- if(/^(CHANNEL_PRIVATE|CHAT_FORBIDDEN|USER_BANNED_IN_CHANNEL|CHAT_ADMIN_REQUIRED)$/.test(text))return failure('access');
- return failure('network');
+ const {error:kind,retryAt,retryBlocked}=classifyTelegramFailure(error,now);
+ if(kind==='rate-limit')return {error:kind,retryAt,retryBlocked};
+ return failure(kind==='access'||kind==='session-expired'?kind:'network');
 }
 /** Construct only after actual auth User validation. No IO occurs until an explicit page command.
  * The caller must supply its original non-reviving authority capture in context.current.

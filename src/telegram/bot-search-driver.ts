@@ -1,4 +1,4 @@
-import {assembleBotDownloadBytes,BotDownloadBytesFailure} from './bot-download-bytes';
+import {assembleBotDownloadBytes,botDownloadTransferMs,BotDownloadBytesFailure} from './bot-download-bytes';
 import {recordingTitleCandidate} from '../library/recording-title';
 import Long from 'long';
 import type {tl} from '@mtcute/core';
@@ -73,8 +73,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    const shared=dependency.getAccountCooldown?.();
    if(shared)return response(e,{error:'rate-limit',...shared},'not-dispatched');
    if(cooldown&&(cooldown.retryBlocked||cooldown.retryAt!==null&&time.now()<cooldown.retryAt))return response(e,cooldown,'not-dispatched');
-   const duration=c.type==='bot-search.download'?B.downloadMs:B.timeoutMs;
-   const abort=new AbortController(),deadline=time.now()+duration;
+   const duration=c.type==='bot-search.download'?B.downloadResolveMs:B.timeoutMs;
+   const abort=new AbortController();let deadline=time.now()+duration;
    let wake!:(v:BotSearchReply)=>void;const stopped=new Promise<BotSearchReply>(r=>{wake=r;});
    let settle!:(v:boolean)=>void;settlement=new Promise<boolean>(r=>{settle=r;});
    let timer:ReturnType<typeof setTimeout>|undefined,grace:ReturnType<typeof setTimeout>|undefined,delay:ReturnType<typeof setTimeout>|undefined,delayWake:(()=>void)|undefined,finished=false;
@@ -172,6 +172,11 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       const fold=(v:string)=>v.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
       if(!row.title||!recordingTitleCandidate(row.title,c.target.title,c.target.album,c.target.durationSeconds)||c.target.artist&&(!row.performer||fold(row.performer)!==fold(c.target.artist)))throw fail('conflict');
       const document=botSearchDocument(message);if(!document)throw fail('unsupported');
+      check();
+      const transferMs=botDownloadTransferMs(row.bytes);
+      deadline=time.now()+transferMs;
+      if(timer!==undefined)time.clearTimeout(timer);
+      timer=time.setTimeout(()=>f.stop(fail('timeout')),transferMs);
       const result=await assembleBotDownloadBytes({bytes:row.bytes,mime:row.mimeType},async(offset,limit)=>{
        // The descriptor passed validation; zero bytes means ready to receive,
        // not that Telegram has delivered any part of the file yet.
@@ -191,7 +196,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      if(ctx.publish&&live(ctx,capture)){try{ctx.publish(Object.freeze({...e,type:'bot-search.sending',delivery:'uncertain'}));}catch{/* UI observers cannot change authority. */}}
      const ack=botSearchAck(await rpc(ms=>dependency.sendQuery(approved.peer,query!,randomId,abort.signal,ms)),approved.botId,randomId);
      if(!ack||ack<=baseline)throw fail('uncertain');f.delivery='acknowledged';check();
-     let lastCandidates:ReturnType<typeof projectBotSearchPage>|null=null;
+     let lastCandidates:ReturnType<typeof projectBotSearchPage>|null=null,sawBotReply=false;
      const searchResult=(page:ReturnType<typeof projectBotSearchPage>):BotSearchReply=>{
       retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={providerRef:c.providerRef,queryId:c.queryId,revision:c.providerRevision,baseline,outgoing:ack,target:c.target??null};check();
       return Object.freeze({...e,type:'bot-search.result',delivery:'acknowledged',rows:page.rows,expiresAt:retainedUntil,expectedTarget:c.target??null});
@@ -203,11 +208,12 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        lastCandidates=page;
        if(page.rows.some(row=>row.kind==='option')||!c.target?.artist||matchingSongRows(page.rows,c.target).length)return searchResult(page);
       }
-      if(page.unrecognized)throw fail('unsupported');
+      sawBotReply ||= page.unrecognized||page.rows.length>0;
+      if(reads+1===B.reads||deadline-time.now()<=B.pollMs)break;
       await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},Math.min(B.pollMs,Math.max(0,deadline-time.now())));});check();
      }
      if(lastCandidates)return searchResult(lastCandidates);
-     throw fail('timeout');
+     throw fail(sawBotReply?'unsupported':'timeout');
     }catch(error){
      // Internally constructed causes are data-only; SDK errors were normalized in rpc.
      const known=error&&typeof error==='object'&&Object.getPrototypeOf(error)===Object.prototype&&Object.getOwnPropertyDescriptor(error,'error')?.value;
