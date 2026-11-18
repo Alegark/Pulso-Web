@@ -11,6 +11,14 @@ export function musicBrainzCredit(value:unknown):string|null{
  let out='';for(const part of value){if(!row(part)||!text(part.name)||part.joinphrase!==undefined&&(typeof part.joinphrase!=='string'||part.joinphrase.length>40))return null;out+=part.name+(part.joinphrase??'');}
  return text(out)?out:null;
 }
+// Both arrays have already passed musicBrainzCredit. Prefer artist IDs when present.
+function includesReleaseCredit(track:Row[],release:Row[]):boolean{
+ return release.every(credited=>track.some(performer=>{
+  const releaseId=row(credited.artist)?id(credited.artist.id):null;
+  const trackId=row(performer.artist)?id(performer.artist.id):null;
+  return releaseId&&trackId?releaseId===trackId:same(credited.name as string,performer.name as string);
+ }));
+}
 function edition(value:unknown,detail=false):AlbumEdition|null{
  if(!row(value)||!id(value.id)||!text(value.title))return null;
  const credit=musicBrainzCredit(value['artist-credit']);if(!credit)return null;
@@ -42,9 +50,10 @@ export function parseMusicBrainzDetail(data:unknown,requested:CatalogId):AlbumRe
   const ordered=m.tracks.slice().sort((a,b)=>row(a)&&row(b)?Number(a.position)-Number(b.position):0);
   for(let i=0;i<ordered.length;i++){
    const t=ordered[i];if(!row(t)||t.position!==i+1||!text(t.title)||!row(t.recording)||!id(t.recording.id)||t.recording.video===true)return {ok:false,reason:'invalid'};
-   const artist=musicBrainzCredit(t['artist-credit']??t.recording['artist-credit']);if(!artist)return {ok:false,reason:'invalid'};
+   const credit=t['artist-credit']??t.recording['artist-credit'],artist=musicBrainzCredit(credit);if(!artist)return {ok:false,reason:'invalid'};
    const duration=t.length??t.recording.length??null;if(duration!==null&&(!positive(duration)||duration>86400000))return {ok:false,reason:'invalid'};
-   tracks.push({releaseId:requested,trackId:id(t.recording.id)!,disc:d+1,position:i+1,title:t.title,artist,durationMs:duration,primaryArtist:e.artist});
+   const primary=includesReleaseCredit(credit as Row[],data['artist-credit'] as Row[])?{primaryArtist:e.artist}:{};
+   tracks.push({releaseId:requested,trackId:id(t.recording.id)!,disc:d+1,position:i+1,title:t.title,artist,durationMs:duration,...primary});
   }
  }
  if(tracks.length!==e.trackCount)return {ok:false,reason:'incomplete'};
