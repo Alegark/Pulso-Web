@@ -3,6 +3,7 @@ import {all,editTrack,createPlaylist,changePlaylist,verifiedAsset,type LocalAsse
 import {assetDirectory,openAssetReader} from '../../src/storage/asset-reader';
 import {readRecord,writeRecord} from '../../src/storage/database';
 import {createOperation,updateOperation,importIssues,retainImportIssue,assertImportsResolved,type ImportOperation} from '../../src/storage/import-operations';
+import {editDuringImport} from './import-edit-fixture';
 const results:string[]=[];
 function assert(value:unknown,message:string):asserts value{if(!value)throw new Error(message);}
 async function check(name:string,fn:()=>Promise<void>){try{await fn();results.push(`PASS ${name}`);}catch(e){results.push(`FAIL ${name}: ${e instanceof Error?e.message:String(e)}`);}document.querySelector('#results')!.textContent=results.join('\n');}
@@ -35,9 +36,12 @@ await check('IDB legacy sin migración; reparación OPFS missing/corrupt conserv
  let repaired=await importFile(wav(1),signal());assert(repaired.track.id===originalTrack.id&&repaired.track.title==='Corrección vigente'&&repaired.track.favorite,'missing pisó metadata');
  let current=(await verifiedAsset(originalAsset.id,true))!;const corruptKey=current.storageKey;const handle=await(await assetDirectory()).getFileHandle(corruptKey);const writer=await handle.createWritable();await writer.write(new Uint8Array(current.bytes));await writer.close();
  assert(!await verifiedAsset(current.id,true),'corrupción no detectada');
- repaired=await importFile(wav(1),signal(),bytes=>{if(bytes===wav(1).size){void readRecord<Track>('tracks',originalTrack.id).then(t=>t&&editTrack(t.id,t.revision,{album:'Edición durante copia'}));}});
+ const file=wav(1);
+ repaired=await importFile(file,signal(),async bytes=>{if(bytes===file.size)await editDuringImport(originalTrack.id,{album:'Edición durante copia'});});
  current=(await verifiedAsset(current.id,true))!;assert(current.storageKey!==corruptKey&&current.revision===originalAsset.revision+2,'revisión reparación');
- assert(!await missing(corruptKey),'borró generación anterior por reparación');assert(repaired.track.album==='Edición durante copia','pisó edición concurrente');
+ const savedTrack=await readRecord<Track>('tracks',originalTrack.id);
+ assert(!await missing(corruptKey),'borró generación anterior por reparación');
+ assert(repaired.track.album==='Edición durante copia'&&savedTrack?.album===repaired.track.album&&savedTrack.manualOverrides.album===repaired.track.album,'pisó edición concurrente');
  assert((await readRecord<Playlist>('playlists',list.id))?.entries[0].trackId===originalTrack.id,'perdió playlist');
  // IDB repair through OPFS also preserves its previous chunks.
  const chunk=await readRecord<Uint8Array>('chunks',[before.storageKey,0]);assert(chunk,'legacy bytes');const bad=chunk.slice();bad[0]^=255;await writeRecord('chunks',[before.storageKey,0],bad);
