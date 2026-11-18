@@ -8,6 +8,11 @@ import {ACTIVE_LIBRARY_ACCOUNT,attachRestoredAccountTrack} from '../../src/accou
 import {LIBRARY_LIMITS} from '../../src/accounts/library-document.mjs';
 import {readSongAlias,type SongChoice} from '../../src/library/selected-song';
 import {readSongCopyStatus} from '../../src/library/song-copy-status';
+import {discoverCopyRemoval,planCopyRemoval,confirmCopyRemoval} from '../../src/library/local-copy-removal';
+import {readArtwork,setManualArtwork,storeEmbeddedArtwork} from '../../src/library/artwork';
+import {validateArtwork} from '../../src/imports/artwork';
+import {LYRICS_PREFIX,readLyrics,setManualLyrics,storeEmbeddedLyrics} from '../../src/library/lyrics';
+import {authorizeRealmFixture} from './realm-fixture';
 import {FixtureStore} from '../../src/storage/assets';
 import {fixtures} from '../../src/fixtures';
 import {importIssues,retainImportIssue} from '../../src/storage/import-operations';
@@ -84,5 +89,50 @@ await check('búsqueda por cursor ignora otras cuentas y admite el límite por c
  assert(await readSongAlias(choice,current)===null,'límite aceptó coincidencia no comprobada');
  const status=await readSongCopyStatus(choice,current);
  assert(status.state==='missing'&&status.trackId===null,'límite impidió descargar');
+});
+async function reset(){
+ const db=await openDatabase();
+ try{
+  const names=[...db.objectStoreNames],tx=db.transaction(names,'readwrite'),done=transactionDone(tx);
+  for(const name of names)tx.objectStore(name).clear();
+  await done;
+ }finally{db.close();}
+}
+await check('quitar y volver a importar borra portadas y letras incrustadas y conserva las manuales',async()=>{
+ await reset();
+ const revoke=authorizeRealmFixture(),context={current:()=>true,runtimeProtectionCurrent:()=>true,signal:new AbortController().signal};
+ try{
+  const {track}=await importFile(file,context.signal),asset=await readRecord<LocalAsset>('assets',track.assetId);
+  assert(asset,'manifest inicial');
+  const image=document.createElement('canvas');image.width=image.height=2;
+  const png=await new Promise<Blob>(resolve=>image.toBlob(blob=>resolve(blob!),'image/png'));
+  const embedCover=()=>validateArtwork(png);
+  const embedLyrics=async()=>({state:'ready' as const,format:'plain' as const,text:'Letra de prueba',source:{kind:'embedded-id3' as const,tag:'USLT' as const,language:null,descriptor:''}});
+  const artwork=await storeEmbeddedArtwork(track.id,asset.sha256,embedCover);
+  assert(artwork.state==='ready'&&artwork.blob.size>0&&!artwork.manual,'portada incrustada inicial');
+  await storeEmbeddedLyrics(track.id,asset.sha256,embedLyrics);
+  assert((await readLyrics(track.id)).state==='ready','letra incrustada inicial');
+  const alias={...track,id:'ffffffff-ffff-4fff-8fff-ffffffffffff'};
+  await writeRecord('tracks',alias.id,alias);
+  const manual=await setManualArtwork(alias.id,null,0),lyric=await setManualLyrics(alias.id,'Corrección manual','plain',0);
+  const discovery=await discoverCopyRemoval({namespace:'local',trackId:track.id,expectedTrackRevision:track.revision},context);
+  assert(discovery.kind==='candidate','revisión de retirada: '+JSON.stringify(discovery));
+  const plan=await planCopyRemoval(discovery.candidate,context);
+  assert(plan.kind==='ready','plan de retirada: '+JSON.stringify(plan));
+  const result=await confirmCopyRemoval(plan.plan,{planRevision:plan.planRevision,declaration:'accept-possible-only-original-loss',confirmRemoveThisCopy:true},context);
+  assert(result.state==='removed','retirada: '+JSON.stringify(result.primary));
+  assert(!await readRecord('settings',`artwork:v1:${track.id}`),'Blob incrustado retenido');
+  assert(result.freedArtworkBytes===artwork.blob.size,'bytes de portada sin contabilizar');
+  assert(!await readRecord('settings',LYRICS_PREFIX+track.id),'letra incrustada retenida');
+  assert((await readLyrics(alias.id)).revision===lyric.revision,'letra manual borrada');
+  const again=await importFile(file,context.signal);
+  assert(again.track.assetId!==asset.id,'generación reutilizada');
+  assert((await storeEmbeddedArtwork(track.id,asset.sha256,embedCover)).state==='ready','portada no se pudo extraer otra vez');
+  await storeEmbeddedLyrics(track.id,asset.sha256,embedLyrics);
+  assert((await readLyrics(track.id)).origin?.provenance==='embedded','letra extraída no disponible');
+  const retained=await readArtwork(alias.id);
+  assert(retained.state==='absent'&&retained.manual&&retained.revision===manual.revision,'portada oculta manual perdida');
+  assert((await readLyrics(alias.id)).revision===lyric.revision,'letra manual reemplazada');
+ }finally{revoke();}
 });
 (window as unknown as {pulsoLibrary:unknown}).pulsoLibrary={results,passed:results.every(x=>x.startsWith('PASS')),userAgent:navigator.userAgent};document.querySelector('#results')!.textContent+='\nCOMPLETADO';

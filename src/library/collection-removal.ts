@@ -125,7 +125,7 @@ export async function confirmCollectionRemoval(token:CollectionPreviewToken,cons
      if(retained&&sameSourceAsset(retained,discovery.target)&&!await host.record(planned.tracking))return stop('tracking-uncertain');
      return stop('acknowledgement-uncertain');
     }
-    if(result.state==='removed'){removed++;freedBytes+=asset.bytes;}else skip(result.primary?.code??'not-committed');
+    if(result.state==='removed'){removed++;freedBytes+=asset.bytes+(result.freedArtworkBytes??0);}else skip(result.primary?.code??'not-committed');
    }finally{await reserved.release();}
   }catch{return stop(c.signal.aborted?'cancelled':'cleanup-failed');}
  }
