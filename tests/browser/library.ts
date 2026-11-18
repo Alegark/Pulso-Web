@@ -2,7 +2,12 @@ import {importFile as importCore} from '../../src/imports/import-file';
 // These legacy regressions intentionally exercise IDB-specific fault injection.
 const importFile:typeof importCore=(file,signal,progress,options)=>importCore(file,signal,progress,{...options,backend:'idb'});
 import {all,createPlaylist,changePlaylist,editTrack,verifiedAsset,type Track,type LocalAsset,type Playlist} from '../../src/library/library';
-import {readRecord,writeRecord} from '../../src/storage/database';
+import {openDatabase,readRecord,writeRecord} from '../../src/storage/database';
+import {transactionDone} from '../../src/storage/transaction-done';
+import {ACTIVE_LIBRARY_ACCOUNT,attachRestoredAccountTrack} from '../../src/accounts/library-local';
+import {LIBRARY_LIMITS} from '../../src/accounts/library-document.mjs';
+import {readSongAlias,type SongChoice} from '../../src/library/selected-song';
+import {readSongCopyStatus} from '../../src/library/song-copy-status';
 import {FixtureStore} from '../../src/storage/assets';
 import {fixtures} from '../../src/fixtures';
 import {importIssues,retainImportIssue} from '../../src/storage/import-operations';
@@ -39,5 +44,45 @@ await check('cuota simulada en copia no publica pista ni elimina bytes conservad
  IDBObjectStore.prototype.put=function(...args:Parameters<IDBObjectStore['put']>){if(this.name==='chunks')throw new DOMException('cuota simulada','QuotaExceededError');return originalPut.apply(this,args);};
  try{await importFile(file,new AbortController().signal);}catch{rejected=true;}finally{IDBObjectStore.prototype.put=originalPut;}
  assert(rejected,'cuota no ejercitada');assert((await all('tracks')).length===before,'publicación parcial');assert(await verifiedAsset(assetId,true),'original perdido');
+});
+const choice:SongChoice={id:'itunes:1:1:1:2',source:'itunes',title:'Pista de prueba',artist:'Artista de prueba',album:null,duration:2};
+function detached(key:string,accountId:string):Track{
+ return {id:key,accountId,assetId:null,title:choice.title,artist:choice.artist,album:null,duration:2,favorite:false,revision:1,createdAt:'2026-10-31T00:00:00.000Z',manualOverrides:{}};
+}
+await check('lookup recupera la ficha sincronizada sin huella y la descarga conserva su identidad',async()=>{
+ const accountId=crypto.randomUUID(),track=detached(crypto.randomUUID(),accountId),current=()=>true;
+ await writeRecord('settings',ACTIVE_LIBRARY_ACCOUNT,accountId);
+ await writeRecord('tracks',track.id,track);
+ const status=await readSongCopyStatus(choice,current);
+ assert(status.state==='missing'&&status.trackId===track.id&&status.inLibrary,'estado de la ficha restaurada');
+ const remembered=await readSongAlias(choice,current);
+ assert(remembered===track.id,'lookup olvidó la ficha restaurada');
+ const downloaded=await importFile(file,new AbortController().signal,()=>{},{libraryMode:'cache'});
+ assert(await attachRestoredAccountTrack(accountId,remembered,downloaded.track.id,current)===track.id,'descarga no vinculada');
+ assert((await readRecord<Track>('tracks',track.id))?.assetId===downloaded.track.assetId,'ficha restaurada sigue sin copia');
+ assert(!await readRecord('tracks',downloaded.track.id),'ficha temporal duplicada');
+});
+await check('búsqueda por cursor ignora otras cuentas y admite el límite por cuenta sin lanzar',async()=>{
+ const accountId=crypto.randomUUID(),foreign=crypto.randomUUID(),current=()=>true;
+ const track=detached('ffffffff-ffff-4fff-8fff-ffffffffffff',accountId);
+ // The owned match sorts after all placeholders. A foreign match must be ignored.
+ const db=await openDatabase();
+ try{
+  const tx=db.transaction(['tracks','settings'],'readwrite'),done=transactionDone(tx),store=tx.objectStore('tracks');
+  for(let i=0;i<LIBRARY_LIMITS.tracks*2-1;i++){
+   const key=`10000000-0000-4000-8000-${i.toString(16).padStart(12,'0')}`;
+   store.add({...detached(key,i<LIBRARY_LIMITS.tracks?foreign:accountId),duration:i===0?choice.duration:0},key);
+  }
+  store.add(track,track.id);
+  tx.objectStore('settings').put(accountId,ACTIVE_LIBRARY_ACCOUNT);
+  await done;
+ }finally{db.close();}
+ assert(await readSongAlias(choice,current)===track.id,'lookup no encontró la ficha al final de la cuenta');
+ assert((await readSongCopyStatus(choice,current)).trackId===track.id,'badge perdió coincidencia');
+ const extra=detached('ffffffff-ffff-4fff-8fff-fffffffffffe',accountId);
+ await writeRecord('tracks',extra.id,{...extra,duration:0});
+ assert(await readSongAlias(choice,current)===null,'límite aceptó coincidencia no comprobada');
+ const status=await readSongCopyStatus(choice,current);
+ assert(status.state==='missing'&&status.trackId===null,'límite impidió descargar');
 });
 (window as unknown as {pulsoLibrary:unknown}).pulsoLibrary={results,passed:results.every(x=>x.startsWith('PASS')),userAgent:navigator.userAgent};document.querySelector('#results')!.textContent+='\nCOMPLETADO';

@@ -1,4 +1,5 @@
 import {MB_UUID} from './catalog-id';
+import {LIBRARY_LIMITS} from '../accounts/library-document.mjs';
 import {activeLibraryAccount} from '../accounts/library-local';
 import type {PlayerArtworkQuery} from './player-artwork-provider';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
@@ -111,6 +112,15 @@ export async function readSongArtworkIdentity(track:Track,current:()=>boolean):P
   return matches.size===1?[...matches.values()][0]:null;
  }finally{closeDatabase(db);}
 }
+/** Metadata compatibility only. Keep detached tracks so membership is not lost
+ * from the view after removing audio. Ambiguous recordings are never selected. */
+export function compatibleSongMetadata(track:Track,choice:SongChoice):boolean {
+ const artist=choice.artist;
+ return !!artist&&choice.duration!==null&&!!track&&isUuid(track.id)&&typeof track.title==='string'&&typeof track.artist==='string'&&!!track.artist.trim()&&(validAudioFingerprint(track.audioFingerprint)||!!track.accountId&&track.assetId===null)&&
+  typeof track.duration==='number'&&Number.isFinite(track.duration)&&track.duration>0&&Math.abs(track.duration-choice.duration)<=5&&
+  recordingTitlesEquivalent(track.title,choice.title,{actualAlbum:track.album,expectedAlbum:choice.album,actualDurationSeconds:track.duration,expectedDurationSeconds:choice.duration})&&!expectedAudioTagMismatch({title:track.title,artist:track.artist,album:track.album??undefined},{title:choice.title,artist,...(musicIdentityText(track.title)!==musicIdentityText(choice.title)&&choice.album&&choice.duration!==null?{recordingTitle:track.title,album:choice.album,durationSeconds:choice.duration}:{})},track.duration);
+}
+/** The local track identity can outlive the copy. Callers verify availability separately. */
 export async function readSongAlias(choice:SongChoice,current:()=>boolean,allowCompatible=true):Promise<string|null> {
  const accountId=await activeLibraryAccount();
  const key=songChoiceKey(choice);if(!key||!current())return null;
@@ -119,35 +129,47 @@ export async function readSongAlias(choice:SongChoice,current:()=>boolean,allowC
  try{
   if(!current())throw Error('cancelled');const tx=admittedTransaction(db,['settings','tracks'],'readonly'),done=transactionDone(tx);
   const raw=await request<unknown>(tx.objectStore('settings').get(aliasKey(key)));
-  if(raw===undefined){await done;return allowCompatible?await compatibleLocalSong(db,choice,current):null;}const a=alias(raw,key);if(!a){await done;throw Error('Alias musical inválido; revisa el almacenamiento.');}
-  const track=await request<Track|undefined>(tx.objectStore('tracks').get(a.trackId));await done;
-  if(!current())throw Error('cancelled');
-  if(!track||track.accountId!==accountId)return null;
-  if(track.id!==a.trackId)throw Error('La identidad de la ficha local ha cambiado.');
-  // A detached track retains its fingerprint. Never attach an alias to other bytes.
-  if(track.audioFingerprint?.sha256!==a.sha256||track.audioFingerprint?.bytes!==a.bytes)throw Error('La referencia de esta canción ha cambiado.');
-  return track.id;
+  if(raw!==undefined){
+   const a=alias(raw,key);if(!a){await done;throw Error('Alias musical inválido; revisa el almacenamiento.');}
+   const track=await request<Track|undefined>(tx.objectStore('tracks').get(a.trackId));await done;
+   if(!current())throw Error('cancelled');
+   if(track&&track.accountId===accountId){
+    if(track.id!==a.trackId)throw Error('La identidad de la ficha local ha cambiado.');
+    // A detached track retains its fingerprint. Never attach an alias to other bytes.
+    if(track.audioFingerprint?.sha256!==a.sha256||track.audioFingerprint?.bytes!==a.bytes)throw Error('La referencia de esta canción ha cambiado.');
+    return track.id;
+   }
+  }else await done;
+  return allowCompatible?await compatibleLocalSong(db,choice,accountId,current):null;
  }finally{closeDatabase(db);}
 }
-async function compatibleLocalSong(db:IDBDatabase,choice:SongChoice,current:()=>boolean):Promise<string|null> {
- const accountId=await activeLibraryAccount();
+async function compatibleLocalSong(db:IDBDatabase,choice:SongChoice,accountId:string|undefined,current:()=>boolean):Promise<string|null> {
  if(!choice.artist||choice.duration===null||!current())return null;
- const tx=admittedTransaction(db,['tracks','assets'],'readonly'),done=transactionDone(tx);
- const rows=await request<Track[]>(tx.objectStore('tracks').getAll(undefined,2001));
- if(rows.length>2000){await done;throw Error('Hay demasiadas fichas para comprobar una copia compatible.');}
- const candidates=rows.filter(t=>t&&t.accountId===accountId&&isUuid(t.id)&&typeof t.title==='string'&&typeof t.artist==='string'&&t.artist.trim()&&typeof t.duration==='number'&&Number.isFinite(t.duration)&&t.duration>0&&Math.abs(t.duration-choice.duration!)<=5&&recordingTitlesEquivalent(t.title,choice.title,{actualAlbum:t.album,expectedAlbum:choice.album,actualDurationSeconds:t.duration,expectedDurationSeconds:choice.duration})&&!expectedAudioTagMismatch({title:t.title,artist:t.artist,album:t.album??undefined},{title:choice.title,artist:choice.artist,...(musicIdentityText(t.title)!==musicIdentityText(choice.title)&&choice.album&&choice.duration!==null?{recordingTitle:t.title,album:choice.album,durationSeconds:choice.duration}:{})},t.duration)&&validAudioFingerprint(t.audioFingerprint));
- // Detached identities still participate in ambiguity. Filtering by physical
- // availability first could silently select another recording with equal tags.
- if(candidates.length>1){await done;throw Error('Hay varias copias locales compatibles. Revisa tu biblioteca antes de continuar.');}
- const candidate=candidates[0];let id:string|null=null;
- if(candidate?.assetId!=null){
-  const asset=await request<LocalAsset|undefined>(tx.objectStore('assets').get(candidate.assetId));
-  if(asset!==undefined){
-   if(!validAsset(asset)||asset.id!==candidate.assetId||asset.sha256!==candidate.audioFingerprint!.sha256||asset.bytes!==candidate.audioFingerprint!.bytes){await done;throw Error('La referencia de esta copia ha cambiado. Revisa Almacenamiento.');}
-   id=candidate.id;
-  }
- }
- await done;if(!current())throw Error('cancelled');return id;
+ const tx=admittedTransaction(db,'tracks','readonly'),done=transactionDone(tx);
+ // Inspect the whole bounded account before choosing. Detached identities also
+ // participate in ambiguity and can be used as the destination of a download.
+ const result=await new Promise<{id:string|null;ambiguous:boolean}>((resolve,reject)=>{
+  const req=tx.objectStore('tracks').openCursor();
+  let owned=0,id:string|null=null,ambiguous=false;
+  req.onerror=()=>reject(req.error);
+  req.onsuccess=()=>{
+   try{
+    if(!current())throw Error('cancelled');
+    const cursor=req.result;if(!cursor){resolve({id,ambiguous});return;}
+    const track=cursor.value as Track|undefined;
+    if(track&&track.accountId===accountId){
+     if(++owned>LIBRARY_LIMITS.tracks){resolve({id:null,ambiguous:false});return;}
+     if(!ambiguous&&cursor.primaryKey===track.id&&compatibleSongMetadata(track,choice)){
+      ambiguous=id!==null;id=track.id;
+     }
+    }
+    cursor.continue();
+   }catch(error){reject(error);}
+  };
+ });
+ await done;if(!current())throw Error('cancelled');
+ if(result.ambiguous)throw Error('Hay varias copias locales compatibles. Revisa tu biblioteca antes de continuar.');
+ return result.id;
 }
 export async function rememberSongAlias(choice:SongChoice,trackId:string,sha256:string,bytes:number,current:()=>boolean):Promise<void> {
  const key=songChoiceKey(choice);if(!key||choice.source==='local')return;
