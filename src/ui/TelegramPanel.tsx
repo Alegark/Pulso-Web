@@ -48,7 +48,7 @@ export function TelegramPanel({requiredSetup=false,onSetupReady,savedArtists,sav
  React.useEffect(()=>{client.current?.revalidate();});
  React.useEffect(()=>{
   if(!['disconnected','error','connected'].includes(state.phase))return;
-  let live=true;void hasSavedTelegramSession().then(present=>{if(live)setVault({accountId,state:present?'present':'absent'});}).catch(()=>{if(live)setVault({accountId,state:'unknown'});});
+  let live=true;void hasSavedTelegramSession().then(present=>{if(live)setVault({accountId,state:present?'present':'absent'});}).catch(()=>{if(live)setVault(previous=>previous&&previous.accountId===accountId?previous:{accountId,state:'unknown'});});
   return()=>{live=false;};
  },[accountId,scopeKey,state.phase]);
  React.useEffect(()=>{

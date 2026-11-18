@@ -195,6 +195,7 @@ let importProblems:ImportIssue[]=[];
 const unverifiedImportResponses=new Set<string>();
 let availability=new Map<string,{generation:string;state:'available'|'missing'|'invalid'}>();
 let storageEstimate:{usage?:number;quota?:number}|null=null;
+let availabilityNotice='';
 let storedAssets:LocalAsset[]=[];
 let artworkRefreshToken=0;
 let updateReady=false;
@@ -571,7 +572,13 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
  diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'succeeded'});
  storedAssets=[...assets.values()].filter(validAsset);tracks=nextTracks;addedTrackIds=nextAddedTrackIds;playlists=nextPlaylists;operations=nextOperations;importProblems=nextProblems;storageEstimate=estimate;
  availability=nextAvailability;
- if(firstFailure){diagnostics.complete(diagnostic,failurePhase?{...firstFailure,phase:failurePhase}:firstFailure,parent===undefined?'primary':'refresh');status=`No se pudo comprobar la copia local de ${unknown} canciones. Vuelve a comprobar el almacenamiento.`;}
+ if(firstFailure){
+  diagnostics.complete(diagnostic,failurePhase?{...firstFailure,phase:failurePhase}:firstFailure,parent===undefined?'primary':'refresh');
+  availabilityNotice=`No se pudo comprobar la copia local de ${unknown===1?'una canción':unknown+' canciones'}. Vuelve a comprobar el almacenamiento.`;status=availabilityNotice;
+ }else if(availabilityNotice){
+  if(status===availabilityNotice)status='';
+  availabilityNotice='';
+ }
  if(force)artworkRefreshToken++;
  control.activity.block('import-state',false);control.activity.block('opening',false);
  removalEligibleTracks.clear();for(const track of nextTracks){const asset=track.assetId?assets.get(track.assetId):null;if(validAsset(asset)&&asset.bytes<=AUDIO_FILE_MAX_BYTES&&nextAvailability.get(track.id)?.state==='available')removalEligibleTracks.add(track.id);}
