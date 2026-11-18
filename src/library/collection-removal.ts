@@ -6,7 +6,7 @@ import {admittedTransaction, closeDatabase, openExistingDatabase, request} from 
 import {transactionDone} from '../storage/transaction-done';
 import {WRITER_LOCK} from '../storage/asset-reader';
 import {groupAlbums} from './groups';
-import {listeningCacheAssets} from './listening-cache';
+import {indexCopyProtection,listeningCacheAssets} from './listening-cache';
 import {copyLibraryMembership, libraryMembershipKey, makeLibraryMembership} from './library-membership';
 import {describeRemovalData, validateTrack} from './local-copy-removal-snapshot';
 import {copySourceAsset,sameSourceAsset} from '../playback/local-source-protocol';
@@ -25,7 +25,7 @@ export interface CollectionOutcome {readonly metadata:'committed'|'not-committed
 export interface CollectionCleanupHost {readContext():RemovalReadContext;settlementReadContext?():RemovalReadContext;reserve(target:Readonly<LocalAsset>):Promise<{kind:'reserved';context:RemovalContext;release():Promise<void>}|{kind:'blocked';reason:string}>;record(tracking:RemovalTracking):Promise<boolean>;forget(tracking:RemovalTracking):Promise<boolean>}
 type Row={key:IDBValidKey; value:unknown};
 type Snapshot={accountId?:string;tracks:Track[]; playlists:Playlist[]; assets:LocalAsset[]; membership:Map<string,boolean>; queued:Set<string>; canonical:string};
-type Data={selection:CollectionSelection; snapshot:Snapshot; affected:string[]; context:CollectionContext};
+type Data={selection:CollectionSelection; snapshot:Snapshot; affected:string[]; targets:{asset:LocalAsset;track:Track}[]; context:CollectionContext};
 const previews=new WeakMap<CollectionPreviewToken,Data>();
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
 function check(c:CollectionContext):void {if(c.signal.aborted||c.current()!==true)throw new Error('collection-stale');}
@@ -72,11 +72,16 @@ export async function previewCollectionRemoval(selection:CollectionSelection,c:C
  const s=await read(c,selection.kind==='album');const affected=affectedFor(s,selection);const affectedSet=new Set(affected);
  const remainingLists=selection.kind==='playlist'?s.playlists.filter(p=>p.id!==selection.id):s.playlists;
  const protectedIds=new Set(remainingLists.flatMap(p=>p.entries.map(e=>e.trackId)));
- const candidateAssets=s.assets.filter(a=>s.tracks.some(t=>affectedSet.has(t.id)&&t.assetId===a.id));let eligible=0,estimatedBytes=0,shared=0;
- for(const a of candidateAssets){const related=s.tracks.filter(t=>t.assetId===a.id||t.assetId===null&&t.audioFingerprint?.sha256===a.sha256&&t.audioFingerprint.bytes===a.bytes);
-  const protectedCopy=related.some(t=>t.favorite||protectedIds.has(t.id)||s.queued.has(t.id)||s.membership.get(t.id)&&!(selection.kind==='album'&&affectedSet.has(t.id)));
-  if(protectedCopy)shared++;else{eligible++;estimatedBytes+=a.bytes;}}
- const token=Object.freeze({}) as CollectionPreviewToken;previews.set(token,{selection:{...selection},snapshot:s,affected,context:c});
+ const firstTrackByAsset=new Map<string,Track>();
+ for(const t of s.tracks)if(t.assetId!==null&&affectedSet.has(t.id)&&!firstTrackByAsset.has(t.assetId))firstTrackByAsset.set(t.assetId,t);
+ const protectedCopy=indexCopyProtection(s.tracks,t=>t.favorite||protectedIds.has(t.id)||s.queued.has(t.id)||s.membership.get(t.id)===true&&!(selection.kind==='album'&&affectedSet.has(t.id)));
+ const targets:Data['targets']=[];let eligible=0,estimatedBytes=0,shared=0;
+ for(const asset of s.assets){
+  const track=firstTrackByAsset.get(asset.id);if(!track)continue;
+  targets.push({asset,track});
+  if(protectedCopy(asset))shared++;else{eligible++;estimatedBytes+=asset.bytes;}
+ }
+ const token=Object.freeze({}) as CollectionPreviewToken;previews.set(token,{selection:{...selection},snapshot:s,affected,targets,context:c});
  return Object.freeze({token,tracks:affected.length,copiesEligible:eligible,estimatedBytes,retainedShared:shared,cleanupAvailable:true});
 }
 export function releaseCollectionRemovalPreview(token:CollectionPreviewToken):void {previews.delete(token);}
@@ -99,10 +104,9 @@ export async function confirmCollectionRemoval(token:CollectionPreviewToken,cons
  });}catch(e){return rejected(e instanceof Error?e.message:'collection-failed');}
  if(metadata.metadata!=='committed')return metadata;
  let freedBytes=0,removed=0,skipped=0;const skipReasons:string[]=[];const skip=(reason:string)=>{skipped++;skipReasons.push(reason);};
- const affected=new Set(d.affected),assets=d.snapshot.assets.filter(a=>d.snapshot.tracks.some(t=>affected.has(t.id)&&t.assetId===a.id));
  const stop=(reason:string):CollectionOutcome=>({metadata:'committed',cleanup:'stopped',freedBytes,removed,skipped,skipReasons,reason});
- for(const asset of assets){
-  try{check(c);const track=d.snapshot.tracks.find(t=>t.assetId===asset.id&&affected.has(t.id))!;
+ for(const {asset,track} of d.targets){
+  try{check(c);
    const discovery=await discoverCopyRemoval({namespace:'local',trackId:track.id,expectedTrackRevision:track.revision},host.readContext());
    if(discovery.kind!=='candidate'){skip(discovery.reason);continue;}
    const reserved=await host.reserve(discovery.target);if(reserved.kind==='blocked'){skip(reserved.reason);continue;}

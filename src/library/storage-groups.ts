@@ -12,6 +12,10 @@ export function groupStorageDownloads(tracks:readonly Track[],playlists:readonly
  add('favorites','Favoritos','Playlist automática','playlist',tracks.filter(t=>t.favorite).map(t=>t.id),true);
  for(const p of playlists)add('playlist:'+p.id,p.name,'Playlist','playlist',p.entries.map(e=>e.trackId));
  for(const a of groupAlbums(tracks))if(!a.unknown)add('album:'+a.key,a.label,a.artist?'Álbum · '+a.artist:'Álbum','album',a.trackIds);
- const others=assets.filter(a=>!used.has(a.id));if(others.length)groups.push({id:'other',title:'Otras descargas',subtitle:'Sin playlist ni álbum',kind:'other',assetIds:others.map(a=>a.id),trackIds:tracks.filter(t=>t.assetId&&others.some(a=>a.id===t.assetId)).map(t=>t.id),bytes:others.reduce((n,a)=>n+a.bytes,0)});
+ const others=assets.filter(a=>!used.has(a.id));
+ if(others.length){
+  const assetIds=others.map(a=>a.id),otherIds=new Set(assetIds);
+  groups.push({id:'other',title:'Otras descargas',subtitle:'Sin playlist ni álbum',kind:'other',assetIds,trackIds:tracks.filter(t=>t.assetId&&otherIds.has(t.assetId)).map(t=>t.id),bytes:others.reduce((n,a)=>n+a.bytes,0)});
+ }
  return groups;
 }

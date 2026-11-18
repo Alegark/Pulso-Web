@@ -13,6 +13,9 @@ import {readArtwork,setManualArtwork,storeEmbeddedArtwork} from '../../src/libra
 import {validateArtwork} from '../../src/imports/artwork';
 import {LYRICS_PREFIX,readLyrics,setManualLyrics,storeEmbeddedLyrics} from '../../src/library/lyrics';
 import {authorizeRealmFixture} from './realm-fixture';
+import {libraryMembershipKey,makeLibraryMembership} from '../../src/library/library-membership';
+import {previewCollectionRemoval,releaseCollectionRemovalPreview} from '../../src/library/collection-removal';
+import {readLocalCopyInventory} from '../../src/library/local-copy-inventory';
 import {FixtureStore} from '../../src/storage/assets';
 import {fixtures} from '../../src/fixtures';
 import {importIssues,retainImportIssue} from '../../src/storage/import-operations';
@@ -133,6 +136,52 @@ await check('quitar y volver a importar borra portadas y letras incrustadas y co
   const retained=await readArtwork(alias.id);
   assert(retained.state==='absent'&&retained.manual&&retained.revision===manual.revision,'portada oculta manual perdida');
   assert((await readLyrics(alias.id)).revision===lyric.revision,'letra manual reemplazada');
+ }finally{revoke();}
+});
+await check('inventario y retirada conservan referencias de alias, entradas repetidas y fichas desvinculadas',async()=>{
+ await reset();
+ const revoke=authorizeRealmFixture(),context={current:()=>true,signal:new AbortController().signal};
+ try{
+  const mp4=await(await fetch('/fixtures/B.m4a')).arrayBuffer();
+  const {track:a}=await importFile(file,context.signal),{track:b}=await importFile(new File([mp4],'Otra.m4a',{type:'audio/mp4'}),context.signal);
+  const linkedAlias={...a,id:crypto.randomUUID(),favorite:true},detachedAlias={...a,id:crypto.randomUUID(),assetId:null};
+  await writeRecord('tracks',linkedAlias.id,linkedAlias);await writeRecord('tracks',detachedAlias.id,detachedAlias);
+  for(const t of [a,b,linkedAlias])await writeRecord('settings',libraryMembershipKey(t.id),makeLibraryMembership(t.id,false));
+  const entries=(tracks:Track[])=>tracks.map(t=>({id:crypto.randomUUID(),trackId:t.id}));
+  const list:Playlist={id:crypto.randomUUID(),name:'Lista objetivo',revision:1,entries:entries([a,b,a,detachedAlias])};
+  await writeRecord('playlists',list.id,list);
+  const tracks=[a,b,linkedAlias,detachedAlias],assets=await all<LocalAsset>('assets');
+  const affected=new Set(list.entries.map(e=>e.trackId)),candidates=assets.filter(a=>tracks.some(t=>affected.has(t.id)&&t.assetId===a.id));
+  const protectedCopy=(a:LocalAsset)=>tracks.some(t=>(t.assetId===a.id||t.assetId===null&&t.audioFingerprint?.sha256===a.sha256&&t.audioFingerprint.bytes===a.bytes)&&(t.favorite||t.id===detachedAlias.id));
+  const calculatePreview=async()=>{
+   const preview=await previewCollectionRemoval({kind:'playlist',id:list.id,revision:1},context);
+   releaseCollectionRemovalPreview(preview.token);
+   return preview;
+  };
+  const eligible=candidates.filter(a=>!protectedCopy(a)),preview=await calculatePreview();
+  assert(preview.tracks===affected.size&&preview.copiesEligible===eligible.length&&preview.retainedShared===candidates.length-eligible.length,'resumen de retirada');
+  assert(preview.estimatedBytes===eligible.reduce((sum,a)=>sum+a.bytes,0),'estimación de bytes');
+  await writeRecord('tracks',linkedAlias.id,{...linkedAlias,favorite:false,revision:2});
+  assert((await calculatePreview()).retainedShared===1,'la huella desvinculada debe proteger la copia');
+  await writeRecord('tracks',linkedAlias.id,linkedAlias);
+  const other:Playlist={id:crypto.randomUUID(),name:'Otra lista',revision:1,entries:entries([linkedAlias,b,b])};
+  await writeRecord('playlists',other.id,other);
+  const queue=entries([linkedAlias,a,linkedAlias,detachedAlias]);
+  await writeRecord('settings','library-playback',{version:1,entries:queue,currentEntryId:queue[0].id,position:0,repeat:'off',shuffleOrder:null});
+  const inventory=await readLocalCopyInventory({namespace:'local',...context});
+  assert(inventory.referencesComplete,'referencias incompletas');
+  for(const asset of assets){
+   const row=inventory.rows.find(r=>r.trackIds.includes(asset.id===a.assetId?a.id:b.id));
+   const attached=tracks.filter(t=>t.assetId===asset.id).sort((x,y)=>x.id<y.id?-1:1),ids=new Set(attached.map(t=>t.id));
+   const expected={
+    tracks:attached.length,favorites:attached.filter(t=>t.favorite).length,
+    playlists:[list,other].filter(p=>p.entries.some(e=>ids.has(e.trackId))).length,
+    playlistEntries:[list,other].flatMap(p=>p.entries).filter(e=>ids.has(e.trackId)).length,
+    queueOccurrences:queue.filter(e=>ids.has(e.trackId)).length,
+   };
+   assert(JSON.stringify(row?.trackIds)===JSON.stringify([...ids]),'orden de fichas en inventario');
+   assert(JSON.stringify(row?.references)===JSON.stringify(expected),'conteos del inventario');
+  }
  }finally{revoke();}
 });
 (window as unknown as {pulsoLibrary:unknown}).pulsoLibrary={results,passed:results.every(x=>x.startsWith('PASS')),userAgent:navigator.userAgent};document.querySelector('#results')!.textContent+='\nCOMPLETADO';
