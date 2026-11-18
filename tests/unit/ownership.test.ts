@@ -14,3 +14,13 @@ test('old tokens cannot become current after reacquisition or finish a new opera
  const activity=new Activity();activity.open();const old=activity.begin()!;activity.invalidate();activity.open();const fresh=activity.begin()!;
  assert.equal(old.current(),false);old.end();old.end();assert.equal(activity.count,1);assert.equal(fresh.current(),true);fresh.end();assert.equal(activity.idle,true);
 });
+test('activity publishes changes to exposed state once',()=>{
+ let updates=0;const activity=new Activity(()=>updates++);
+ activity.open();activity.reopen();activity.block('a',false);
+ assert.equal(updates,1);
+ const token=activity.begin()!;
+ activity.block('a',true);activity.block('a',true);activity.block('b',true);activity.block('a',false);
+ assert.equal(updates,3);
+ token.end();token.end();activity.block('b',false);activity.close();activity.close();
+ assert.equal(updates,6);
+});
