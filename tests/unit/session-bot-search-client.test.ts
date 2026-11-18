@@ -64,3 +64,19 @@ test('transient command denial does not end the RAM session; old command capture
   activity.invalidate();client.revalidate();assert.equal(w.terminations,1);
  }finally{client.dispose();}
 });
+
+test('logout posts during a download and the cancelled download settles without publishing audio',async()=>{
+ const s=setup();
+ try{
+  const bot=add(s),target={title:'Synthetic recording',artist:null,album:null,durationSeconds:null};
+  s.client.searchBot({providerRef:bot.providerRef,query:target.title,target,consent:true});
+  s.w.result();
+  const row=s.client.searchSnapshot().rows[0];
+  const pending=s.client.downloadBot(row.rowRef,s.client.captureSearchActionCurrent());
+  const download=s.w.last();assert.equal(download.type,'bot-search.download');
+  s.client.logout();assert.equal(s.w.last().type,'logout');assert.equal(s.activity.count,2);
+  s.w.error(download);assert.equal(await pending,null);
+  assert.equal(s.client.snapshot().phase,'disconnecting');
+  s.w.auth('disconnected');assert.equal(s.activity.count,0);
+ }finally{s.client.dispose();}
+});

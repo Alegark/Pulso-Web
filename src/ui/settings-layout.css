@@ -46,7 +46,6 @@
 @media(prefers-reduced-motion:reduce){.settings-view * { scroll-behavior:auto; }}
 .pulso-app .settings-navigation { flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-inline:contain; }
 .pulso-app .settings-navigation button { flex:1 0 auto;padding:.65rem .5rem;white-space:nowrap;overflow-wrap:normal;font-size:.85rem; }
-.pulso-app:has(.settings-view:not([hidden]))>.installed-app-notice { display:none; }
 .pulso-app .storage-groups {list-style:none;padding:0;margin:1rem 0;display:grid;gap:.35rem;}
 .pulso-app .storage-groups li {min-width:0;}
 .pulso-app .storage-groups button {display:flex;align-items:center;gap:.85rem;width:100%;padding:.65rem .25rem;text-align:left;background:transparent;border:0;color:var(--pulso-foreground);}

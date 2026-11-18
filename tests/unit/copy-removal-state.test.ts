@@ -95,3 +95,15 @@ test('tracking cleanup distinguishes unavailable, corrupt and mismatched values 
  assert.equal(clearRemovalTracking(ref,()=>memory()),true);
  const saved=memory(JSON.stringify(ref));assert.equal(clearRemovalTracking(ref,()=>saved),true);assert.equal(saved.getItem(),null);
 });
+
+test('a busy removal request returns false and is never retried on becoming idle',async()=>{
+ const h=harness();const token=h.activity.begin()!;
+ try{
+  assert.equal(await h.controller.start(track),false);
+  token.end();await tick();
+  assert.equal(h.controller.getView().visible,false);
+  assert.equal(h.events.includes('discover'),false);
+  assert.equal(await h.controller.start(track),true);
+  assert.equal(h.controller.getView().state,'ready');
+ }finally{token.end();await h.controller.dispose();}
+});

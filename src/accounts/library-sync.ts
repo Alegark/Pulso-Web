@@ -3,7 +3,7 @@ import {LibraryDocumentError,validateAccountLibrary,mergeAccountLibraries,type A
 export interface AccountLibraryRemote {accountId:string;revision:number|null;document:AccountLibraryDocument}
 export interface LibrarySyncHost {
  read(id:string,current:()=>boolean):Promise<{document:AccountLibraryDocument;base:AccountLibraryDocument}>;
- apply(id:string,sent:AccountLibraryDocument,cloud:AccountLibraryDocument,current:()=>boolean):Promise<void>;
+ apply(id:string,sent:AccountLibraryDocument,cloud:AccountLibraryDocument,current:()=>boolean):Promise<boolean|void>;
  remote(id:string,signal:AbortSignal):Promise<AccountLibraryRemote>;
  save(id:string,revision:number|null,document:AccountLibraryDocument,signal:AbortSignal):Promise<AccountLibraryRemote>;
  ready():boolean;changed():void;
@@ -47,8 +47,8 @@ export function createLibrarySync(host:LibrarySyncHost){
    const merged=mergeAccountLibraries(base,local,remote.document);
    const next=JSON.stringify(merged)===JSON.stringify(remote.document)?remote:await host.save(id,remote.revision,merged,signal);
    if(!current())return;if(next.accountId!==id||JSON.stringify(next.document)!==JSON.stringify(merged))throw Error('response');
-   await host.apply(id,local,next.document,current);if(!current())return;
-   failures=0;retryAt=0;publish('saved');host.changed();
+   const changed=await host.apply(id,local,next.document,current);if(!current())return;
+   failures=0;retryAt=0;publish('saved');if(changed!==false)host.changed();
   }catch(error){
    if(!sameAccount())return;
    if(error instanceof UnrecognizedLibrary){

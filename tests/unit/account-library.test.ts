@@ -41,3 +41,14 @@ test('account-owned imported tracks remain accepted by worker and physical-remov
 test('a malformed remote reply is never treated as an empty library',async()=>{
  await assert.rejects(accountLibraryRequest(uuid(20),new AbortController().signal,undefined,async()=>Response.json({accountId:uuid(20),revision:1}) as never));
 });
+test('only an apply that changes local rows refreshes the library view',async()=>{
+ const id=uuid(20),local=document();let changed=false,notifications=0;
+ const controller=createLibrarySync({ready:()=>true,read:async()=>({document:local,base:local}),
+  remote:async()=>({accountId:id,revision:1,document:local}),save:async()=>{throw Error('unexpected write');},
+  apply:async()=>changed,changed:()=>{notifications++;}});
+ try{
+  controller.account(id);await controller.sync();
+  assert.equal(controller.getSnapshot(),'saved');assert.equal(notifications,0);
+  changed=true;await controller.sync();assert.equal(notifications,1);
+ }finally{controller.dispose();}
+});
