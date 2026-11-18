@@ -1,5 +1,5 @@
 import {BackButton} from './BackButton';
-import {useLayoutEffect, useRef, useState, type ReactNode, type Ref} from 'react';
+import {useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref} from 'react';
 import './now-playing.css';
 
 type View = 'player' | 'lyrics' | 'queue';
@@ -14,7 +14,7 @@ export interface NowPlayingViewProps {
   album?: string | null;
   artwork: ReactNode;
   lyrics: ReactNode;
-  queue: ReactNode;
+  queue: ReactNode | (()=>ReactNode);
   lyricsPreview?: ReactNode;
   status?: ReactNode;
   trackId: string | null;
@@ -67,6 +67,7 @@ export function NowPlayingView(props:NowPlayingViewProps) {
   let expired=false;
   const active=()=>{if(expired)return false;if(committed.current!==props||!props.current()){expired=true;return false;}return true;};
   const [view,setView] = useState<View>('player');
+  const queue=useMemo(()=>props.open&&view==='queue'&&(typeof props.queue==='function'?props.queue():props.queue),[props.open,view,props.queue]);
   const previousView = useRef<View>('player');
   const detailHeading = useRef<HTMLHeadingElement>(null);
   const opener = useRef<HTMLElement|null>(null);
@@ -112,7 +113,7 @@ export function NowPlayingView(props:NowPlayingViewProps) {
       </div>
     </div>
     <div className="np-detail" hidden={view==='player'}><BackButton className="np-back" onClick={()=>setView('player')}>Volver al reproductor</BackButton><h2 ref={detailHeading} tabIndex={-1}>{view==='lyrics'?'Letra':'Cola de reproducción'}</h2><p className="np-detail-track">{props.title} · {props.artist}</p>
-      <div hidden={view!=='lyrics'} className="np-lyrics-content">{props.lyrics}</div><div hidden={view!=='queue'} className="np-queue-content">{props.queue}</div>
+      <div hidden={view!=='lyrics'} className="np-lyrics-content">{props.lyrics}</div><div hidden={view!=='queue'} className="np-queue-content">{queue}</div>
       {(view==='lyrics'||view==='queue')&&transport()}
     </div>
   </div>;
