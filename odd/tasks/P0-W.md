@@ -2357,3 +2357,7 @@ La versión 43 de Cloudflare Workers Free sirve `/releases/d9397c75f05bb80e.html
 ## Spotify · separar playlist y pertenencia a Álbumes · 2026-11-18
 
 T23 registra las nuevas referencias Spotify sin añadirlas a Biblioteca general. Las fichas locales anteriores que carecen de pertenencia escrita se corrigen al abrir la cuenta, sin reimportar ni modificar la playlist. Álbumes excluye «Sin álbum» y conserva singles guardados. Chromium/WebKit 6/6 verificaron migración, guardado explícito persistente, 41 entradas públicas ordenadas sin tarjetas nuevas y retirada de álbum con copia y playlist conservadas. Chromium volvió a reproducir la copia. Lint y 799 unitarias PASS. La verificación pública de esta corrección y el iPhone físico quedan pendientes. P0-W permanece abierto.
+
+### T23 · Corrección de Álbumes publicada · 2026-11-18
+
+Cloudflare versión 45, deployment `71cb4c65-6f3b-418b-9f5c-b48c8f5ab2a2` y entrada `/releases/734a7031cc9996ea.html`. HTTPS 226/226 rutas estáticas. El Worker y la configuración coinciden con v44. La lectura pública Spotify devuelve 41 pistas, cero omitidas y total desconocido. El comportamiento de pertenencia de pistas y retirada sin perder copias compartidas quedó verificado en Chromium y WebKit locales. La aceptación autenticada pública y física en iPhone siguen pendientes. Evidencia y limpieza en T23.
