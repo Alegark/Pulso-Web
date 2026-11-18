@@ -1079,12 +1079,11 @@ function App(){
  const baseRows=React.useMemo(()=>page!=='buscar'&&selected?selected.entries.flatMap((entry,index)=>{const track=trackIndex.get(entry.trackId);return track?[{track,key:entry.id,playlistIndex:index}]:[];}):(favorites?tracks.filter(t=>t.favorite):libraryTracks).map(track=>({track,key:track.id,playlistIndex:-1})),[selected,libraryTracks,tracks,trackIndex,page,favorites]);
  const baseTracks=React.useMemo(()=>baseRows.map(row=>row.track),[baseRows]);
  const albumMetadata=React.useMemo(()=>new Map(tracks.map(t=>[t.id,resolveLocalAlbumMetadata(t)])),[tracks]);
- const metadataScope=React.useMemo(()=>JSON.stringify(tracks.map(t=>{const info=albumMetadata.get(t.id)!;return [t.id,t.title,t.artist,t.album,info.track.state==='known'?info.track.value:null,info.disc.state==='known'?info.disc.value:null,info.albumArtist.state==='known'?info.albumArtist.value:null,info.compilation.state==='known'?info.compilation.value:null];})),[tracks,albumMetadata]);
  const groups=React.useMemo(()=>groupMode==='artists'?groupArtists(baseTracks):groupMode==='albums'?groupAlbums(baseTracks):[],[groupMode,baseTracks]);
  const activeGroup=selectGroup(groups,groupKey);
  React.useEffect(()=>{if(groupKey&&!activeGroup)setGroupKey('');},[groupKey,activeGroup]);
- const visible=React.useMemo(()=>{const ids=activeGroup?new Set(activeGroup.trackIds):null;const rows=baseRows.filter(({track:t})=>(!ids||ids.has(t.id))&&matchesShellTrack(t,views[destination],availability));return groupMode==='albums'&&activeGroup&&!activeGroup.unknown?orderAlbumRows(rows):rows;},[baseRows,activeGroup,views,destination,groupMode]);
- const viewScope=JSON.stringify([page,listId,groupMode,groupKey,query,favorites,present,metadataScope]);
+ const visible=React.useMemo(()=>{const ids=activeGroup?new Set(activeGroup.trackIds):null;const rows=baseRows.filter(({track:t})=>(!ids||ids.has(t.id))&&matchesShellTrack(t,views[destination],availability));return groupMode==='albums'&&activeGroup&&!activeGroup.unknown?orderAlbumRows(rows):rows;},[baseRows,activeGroup,views,destination,groupMode,availability]);
+ const viewScope=React.useMemo(()=>JSON.stringify([page,views[destination]]),[page,views,destination]);
  // Reconcile both namespaces on every data update, including while Inicio is open.
  const routeTotals=React.useMemo(()=>{function routeSelection(route:'buscar'|'biblioteca'){
   const v=views[route],list=route==='biblioteca'?playlists.find(l=>l.id===v.listId):undefined;
@@ -1093,13 +1092,13 @@ function App(){
   const g=selectGroup(gs,v.groupKey),ids=g?new Set(g.trackIds):null;
   return rows.filter(t=>(!ids||ids.has(t.id))&&matchesShellTrack(t,v,availability)).length;
  }
- return {biblioteca:routeSelection('biblioteca'),buscar:routeSelection('buscar')};},[views,playlists,libraryTracks,trackIndex,tracks]);
- const libraryPagination=useLibraryPage(routeTotals.biblioteca,JSON.stringify([views.biblioteca,metadataScope]));
- const searchPagination=useLibraryPage(routeTotals.buscar,JSON.stringify([views.buscar,metadataScope]));
+ return {biblioteca:routeSelection('biblioteca'),buscar:routeSelection('buscar')};},[views,playlists,libraryTracks,trackIndex,tracks,availability]);
+ const libraryPagination=useLibraryPage(routeTotals.biblioteca,JSON.stringify(views.biblioteca));
+ const searchPagination=useLibraryPage(routeTotals.buscar,JSON.stringify(views.buscar));
  const pagination=destination==='buscar'?searchPagination:libraryPagination;
  const playableCollection=React.useMemo(()=>visible.filter(({track})=>trackAvailability(track,availability)==='available'),[visible,availability]);
  const omittedCopies=visible.length-playableCollection.length;
- const collectionPlaybackViewKey=JSON.stringify([viewScope,selected?.revision,playableCollection.map(({key,track})=>[key,track.id])]);
+ const collectionPlaybackViewKey=React.useMemo(()=>JSON.stringify([viewScope,playableCollection.map(({track})=>track.id)]),[viewScope,playableCollection]);
  const latestCollectionPlaybackView=React.useRef(collectionPlaybackViewKey);latestCollectionPlaybackView.current=collectionPlaybackViewKey;
  const collectionQueueMatches=playableCollection.length>0&&player.entries.length===playableCollection.length&&player.entries.every((entry,index)=>entry.trackId===playableCollection[index].track.id);
  const [collectionPreparing,setCollectionPreparing]=React.useState<{view:string;trackId:string}|null>(null);
