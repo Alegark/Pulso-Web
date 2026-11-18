@@ -677,7 +677,10 @@ async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[
   // Record the primary error above before best-effort resource settlement.
   // Keep Activity admitted through cleanup; an old finally never clears a new scope.
   try{if(!sourcePublished)sourceAbort.abort();await preparation.settle();}
-  finally{diagnostics.finish(diagnostic);endBusy();operation.end();if(sourcePublished&&current())schedulePositionSave('state');}
+  finally{
+   if(!sourcePublished&&status==='Preparando cola…')status='Se detuvo la preparación de la cola.';
+   diagnostics.finish(diagnostic);endBusy();operation.end();if(sourcePublished&&current())schedulePositionSave('state');
+  }
  }
 }
 function playbackPosition():QueuePosition{
@@ -733,8 +736,8 @@ function saveLatestQueue(caller:()=>boolean=()=>true,allowEmpty=false):Promise<'
   }finally{if(record)queueSaveTransactions.delete(record);closeDatabase(db);}
  }).then(value=>{if(value==='saved'&&operation.current()&&diagnosticScope())saveFailureBurst=false;return value;}).catch((error):'not-saved'=>{
  if(!operation.current())return 'not-saved';if(diagnosticScope()){if(!saveFailureScope()){saveFailureBurst=false;saveFailureScope=diagnostics.scope();}
- if(!saveFailureBurst){diagnostics.complete(diagnostic,domFailure(error,'write'));saveFailureBurst=true;}}
- status='No se pudo guardar la posición. Tu biblioteca se conserva.';emit();return 'not-saved';}).finally(()=>{diagnostics.finish(diagnostic);--queueSaveTokens;operation.end();});
+ if(!saveFailureBurst){diagnostics.complete(diagnostic,domFailure(error,'write'));saveFailureBurst=true;status='No se pudo guardar la posición. Tu biblioteca se conserva.';emit();}}
+ return 'not-saved';}).finally(()=>{diagnostics.finish(diagnostic);--queueSaveTokens;operation.end();});
  writes=work.then(()=>{});return work;
 }
 let positionTimer:ReturnType<typeof setTimeout>|undefined;
