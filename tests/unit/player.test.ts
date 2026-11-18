@@ -153,3 +153,12 @@ test('Play avanza desde ended si se insertó a continuación en aleatorio',async
  const inserted=player.insertQueue({intentId:'test-next',placement:'next',entries:[added],afterEntryId:'q0',expectedQueueRevision:player.queueRevision,expectedQueueEpoch:player.queueEpoch},()=>true);
  assert.equal(inserted.kind,'inserted');await player.play();assert.equal(player.current.id,'next');assert.equal(audio.plays,1);
 });
+
+test('la posición restaurada permanece disponible hasta cargar metadatos y se limpia al cambiar de selección',async()=>{
+ const {audio,player}=setup();player.select(1,false,3);
+ assert.equal(audio.currentTime,0);assert.equal(player.pendingRestorePosition,3);
+ audio.dispatchEvent(new Event('error'));await player.play();assert.equal(player.pendingRestorePosition,3);
+ audio.dispatchEvent(new Event('loadedmetadata'));assert.equal(player.pendingRestorePosition,null);assert.equal(audio.currentTime,3);
+ player.select(0,false,2);player.select(2);assert.equal(player.pendingRestorePosition,null);
+ player.select(0,false,2);player.suspend();assert.equal(player.pendingRestorePosition,null);
+});
