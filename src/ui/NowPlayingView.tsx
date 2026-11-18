@@ -72,7 +72,7 @@ export function NowPlayingView(props:NowPlayingViewProps) {
   const view=props.view??localView;
   const setView=props.onViewChange??setLocalView;
   const queue=useMemo(()=>props.open&&view==='queue'&&(typeof props.queue==='function'?props.queue():props.queue),[props.open,view,props.queue]);
-  const previousView = useRef<View>('player');
+  const previousView = useRef<PlayerView>('player');
   const detailHeading = useRef<HTMLHeadingElement>(null);
   const opener = useRef<HTMLElement|null>(null);
   const savedScroll = useRef(0);
