@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createLocalCopyProtection,claimBlobCredit} from '../../src/playback/local-copy-protection';
-import {preparedSourceProvenance} from '../../src/playback/transport';
+import {preparedSourceProvenance,startLocalSourcePreparation} from '../../src/playback/transport';
 import type {LocalAsset} from '../../src/library/library';
 import type {BlobCredit,PreparedLocalSources} from '../../src/playback/local-source-protocol';
 import {openAssetReader} from '../../src/storage/asset-reader';
@@ -78,4 +78,26 @@ test('TESTONLY late native lock delivery releases exactly its own acquired lock 
  }}}});
  try{const c=new AbortController(),reader=openAssetReader(asset(1),false,{signal:c.signal});c.abort();await assert.rejects(reader);await own;assert.equal(released,true);}
  finally{if(prior)Object.defineProperty(globalThis,'navigator',prior);else Reflect.deleteProperty(globalThis,'navigator');}
+});
+
+test('un Service Worker pendiente permite fallback Blob o settlement inmediato al cancelar',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const prior=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+ const container=Object.assign(new EventTarget(),{controller:null,ready:new Promise(()=>{}),getRegistration:async()=>({})});
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{serviceWorker:container}});
+ try{
+  let reservations=0;
+  const control=(signal:AbortSignal)=>({signal,current:()=>true,deadlineAt:performance.now()+30000,reserveBlob:()=>{reservations++;return null;}});
+  const proof=`pulso-web:local:owner:${uuid(10)}`;
+  const timed=startLocalSourcePreparation([asset(1)],proof,control(new AbortController().signal));
+  await Promise.resolve();t.mock.timers.tick(5000);
+  const timedResult=await Promise.race([timed.result,new Promise(resolve=>setImmediate(()=>resolve('pending')))]);
+  assert.equal(timedResult!=='pending'&&(timedResult as {kind:string}).kind,'failed');await timed.settled;
+  assert.equal(reservations,1);
+  const abort=new AbortController(),cancelled=startLocalSourcePreparation([asset(1)],proof,control(abort.signal));
+  await Promise.resolve();abort.abort();
+  assert.equal((await cancelled.result).kind,'cancelled');
+  const settled=await Promise.race([cancelled.settled.then(()=>true),new Promise(resolve=>setImmediate(()=>resolve(false)))]);
+  assert.equal(settled,true);assert.equal(reservations,1);
+ }finally{if(prior)Object.defineProperty(globalThis,'navigator',prior);else Reflect.deleteProperty(globalThis,'navigator');}
 });
