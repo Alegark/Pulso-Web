@@ -4,7 +4,8 @@ import {importFile} from '../../src/imports/import-file';
 import {all,type Track,type LocalAsset,type Playlist} from '../../src/library/library';
 import {assetDirectory,generationLock} from '../../src/storage/asset-reader';
 import {openDatabase,readRecord,writeRecord} from '../../src/storage/database';
-import {createLocalBatch,readLocalBatch,listLocalBatches,runLocalBatch,recoverLocalBatch,retryLocalBatch,LOCAL_BATCH_PREFIX,LOCAL_BATCH_LOCK,validLocalBatch,localBatchProgress,updateLocalBatch,LocalBatchError,type LocalBatch} from '../../src/library/local-batches';
+import {issuedFailure} from '../../src/errors/app-failure';
+import {createLocalBatch,readLocalBatch,listLocalBatches,runLocalBatch,recoverLocalBatch,retryLocalBatch,LOCAL_BATCH_PREFIX,LOCAL_BATCH_LOCK,validLocalBatch,localBatchProgress,updateLocalBatch,batchErrorObservation,LocalBatchError,type LocalBatch} from '../../src/library/local-batches';
 const results:string[]=[];
 function assert(v:unknown,m:string):asserts v{if(!v)throw new Error(m);}
 async function check(name:string,fn:()=>Promise<void>){try{await fn();results.push(`PASS ${name}`);}catch(e){results.push(`FAIL ${name}: ${e instanceof Error?e.message:String(e)}`);}document.querySelector('#results')!.textContent=results.join('\n');}
@@ -215,7 +216,16 @@ await check('APIs normalizan fallos IDB de open/transaction/request con causa pr
  IDBObjectStore.prototype.getAll=function(...args:Parameters<IDBObjectStore['getAll']>){if(stage==='request')throw cause;const req=getAll.apply(this,args);this.transaction.abort();return req;};
  }
  try{for(const call of calls){let caught:unknown;try{await call();}catch(error){caught=error;}
- assert(caught instanceof LocalBatchError&&caught.code==='storage'&&(stage==='abort'?caught.cause instanceof DOMException&&caught.cause.name==='AbortError':caught.cause===cause),'error crudo o causa perdida: '+stage);
+ assert(caught instanceof LocalBatchError&&caught.code==='storage','error crudo: '+stage);
+ const primary=batchErrorObservation(caught).primary;
+ assert(primary.backend==='idb'&&primary.family==='storage-unavailable'&&primary.code===(stage==='abort'?'transaction-aborted':'storage-denied'),'clasificación perdida: '+stage);
+ if(stage==='open'){
+ // openDatabase closes the native error at the acquisition boundary.
+ const failure=issuedFailure(caught.cause);
+ assert(caught.cause!==cause&&failure?.phase==='open'&&failure.code==='storage-denied'&&!String(caught.cause).includes('privada'),'causa de apertura sin normalizar');
+ }else if(stage==='abort'){
+ assert(caught.cause instanceof DOMException&&caught.cause.name==='AbortError','causa de aborto perdida');
+ }else assert(caught.cause===cause,'causa nativa perdida: '+stage);
  assert(caught.message==='Lote local: storage'&&!String(caught).includes('privada'),'detalle crudo público');
  }}finally{IDBFactory.prototype.open=open;IDBDatabase.prototype.transaction=transaction;IDBObjectStore.prototype.get=get;IDBObjectStore.prototype.getAll=getAll;}
  }
