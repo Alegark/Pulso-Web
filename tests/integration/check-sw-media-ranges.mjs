@@ -16,6 +16,16 @@ try{
    if(id.endsWith('/storage/asset-reader.ts'))return code.replace('const hash=integrity?sha256.create():null;', 'const hash=integrity?sha256.create():null; if(hash)Reflect.set(globalThis,"testHashes",(Reflect.get(globalThis,"testHashes")??0)+1);');
    if(id.endsWith('/service-worker/sw.ts'))return code+`
 self.addEventListener('message',event=>{
+ if(event.data==='test-notification'){
+  const {matchAll,openWindow}=self.clients;
+  let closed=false,opened=null,work;
+  self.clients.matchAll=async()=>[];self.clients.openWindow=async url=>{opened=new URL(url).pathname;};
+  const click=Object.assign(new Event('notificationclick'),{notification:{data:{kind:'pulso-download',version:1,url:'/untrusted'},close(){closed=true;}},waitUntil(pending){work=pending;}});
+  self.dispatchEvent(click);
+  event.waitUntil(Promise.resolve(work).then(()=>event.ports[0].postMessage({closed,opened})).finally(()=>{
+   self.clients.matchAll=matchAll;self.clients.openWindow=openWindow;
+  }));
+ }
  if(event.data==='test-client')event.ports[0].postMessage(event.source.id);
  if(event.data==='test-counters')event.ports[0].postMessage({opens:Reflect.get(globalThis,'testOpens')??0,hashes:Reflect.get(globalThis,'testHashes')??0});
 });
@@ -114,7 +124,9 @@ self.addEventListener('message',event=>{
    assert.deepEqual(result.afterFirst,{opens:result.before.opens+1,hashes:result.before.hashes+1});
    assert.deepEqual(result.afterRanges,{opens:result.afterFirst.opens+2,hashes:result.afterFirst.hashes});
    assert.deepEqual(result.keys.filter(key=>key.startsWith('test-')),['test-dead-legacy','test-live-v2']);
-   console.log(JSON.stringify({backend,passed:true,reads:3,hashes:1,opens:3,oldTicket:409,firstReadOfCorruptRevision:409,orphanV2Pruned:true}));
+   const notification=await page.evaluate(()=>window.pulsoTest.rpc('test-notification'));
+   assert.deepEqual(notification,{closed:true,opened:'/'});
+   console.log(JSON.stringify({backend,passed:true,reads:3,hashes:1,opens:3,oldTicket:409,firstReadOfCorruptRevision:409,orphanV2Pruned:true,notification}));
   }finally{await context.close();}
  }
 }finally{
