@@ -1,3 +1,4 @@
+import {ffmpegExecutable} from '../../scripts/ffmpeg-path.mjs';
 /** MUSIC_FLOW full MAIN selection. --prepare keeps history, no browser/build.
  * Final exactly once, immutable attempt directory and exclusive final claim.
  * Sole SDK factory fixture is synthetic, NEVER account/bot/audio acceptance. */
@@ -61,8 +62,8 @@ try{
  const seed=(await readFile(resolve(helpers,'seed.ts'),'utf8')).replaceAll('../../../src/','../src/');await writeFile(resolve(root,'__musicflow/seed.ts'),seed);
  await copyFile(resolve(helpers,'snapshot.mjs'),resolve(root,'__musicflow/snapshot.mjs'));
  const wav=Buffer.alloc(44+22050*45*2);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(22050,24);wav.writeUInt32LE(44100,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);for(let i=0;i<22050*45;i++)wav.writeInt16LE(Math.round(1400*Math.sin(2*Math.PI*440*i/22050)),44+i*2);await writeFile(resolve(root,'__musicflow/tone.wav'),wav);
- execFileSync(resolve(project,'node_modules/@ffmpeg-installer/linux-x64/ffmpeg'),['-hide_banner','-loglevel','error','-i',resolve(root,'__musicflow/tone.wav'),'-codec:a','libmp3lame','-b:a','64k',resolve(root,'__musicflow/tone.mp3')],{timeout:30000});
- execFileSync(resolve(project,'node_modules/@ffmpeg-installer/linux-x64/ffmpeg'),['-hide_banner','-loglevel','error','-i',resolve(root,'__musicflow/tone.wav'),'-codec:a','libmp3lame','-b:a','64k','-metadata','title=MUSIC_FLOW Song (Live version)','-metadata','artist=MUSIC_FLOW Artist','-metadata','album=MUSIC_FLOW Album',resolve(root,'__musicflow/download.mp3')],{timeout:30000});
+ execFileSync(ffmpegExecutable(),['-hide_banner','-loglevel','error','-i',resolve(root,'__musicflow/tone.wav'),'-codec:a','libmp3lame','-b:a','64k',resolve(root,'__musicflow/tone.mp3')],{timeout:30000});
+ execFileSync(ffmpegExecutable(),['-hide_banner','-loglevel','error','-i',resolve(root,'__musicflow/tone.wav'),'-codec:a','libmp3lame','-b:a','64k','-metadata','title=MUSIC_FLOW Song (Live version)','-metadata','artist=MUSIC_FLOW Artist','-metadata','album=MUSIC_FLOW Album',resolve(root,'__musicflow/download.mp3')],{timeout:30000});
  await build({...standard,publicDir:false,build:{outDir:resolve(root,'__musicflow/importer'),lib:{entry:resolve(root,'__musicflow/seed.ts'),formats:['es'],fileName:()=> 'seed.js'}}});
  let injections=0;const inject=()=>({name:'MUSIC_FLOW-only-sdk-factory',enforce:'pre',resolveId(s,i){if(s==='./temporary-sdk'&&i?.split('?')[0]===resolve(root,'src/telegram/session.worker.ts')){injections++;return resolve(root,'src/telegram/MUSIC_FLOW-TESTONLY-sdk.ts');}}});
  await build({...standard,plugins:[inject()],worker:{plugins:()=>[inject()]},publicDir:resolve(root,'public'),build:{outDir:outFixture,emptyOutDir:true}});assert.equal(injections,1);report.injections=injections;

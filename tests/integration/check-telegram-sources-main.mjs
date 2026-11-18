@@ -1,3 +1,4 @@
+import {ffmpegExecutable} from '../../scripts/ffmpeg-path.mjs';
 /** R124 TESTONLY NoTelegram: full unchanged MAIN + real worker/client/driver.
  * --prepare never starts browser/server/build. --freeze is mandatory for final.
  */
@@ -38,7 +39,7 @@ await mkdir(resolve(root,'__r124'));
 for(const helper of ['telegram-sources-main-seed.mjs'])await copyFile(resolve(project,'tests/integration',helper),resolve(root,'__r124',helper));
 const wav=Buffer.alloc(44+22050*45*2);wav.write('RIFF',0);wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(22050,24);wav.writeUInt32LE(44100,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);for(let i=0;i<22050*45;i++)wav.writeInt16LE(Math.round(1400*Math.sin(2*Math.PI*440*i/22050)),44+i*2);
 await writeFile(resolve(root,'__r124/tone.wav'),wav);
-execFileSync(resolve(project,'node_modules/@ffmpeg-installer/linux-x64/ffmpeg'),['-hide_banner','-loglevel','error','-i',resolve(root,'__r124/tone.wav'),'-codec:a','libmp3lame','-b:a','64k',resolve(root,'__r124/tone.mp3')],{timeout:30000});
+execFileSync(ffmpegExecutable(),['-hide_banner','-loglevel','error','-i',resolve(root,'__r124/tone.wav'),'-codec:a','libmp3lame','-b:a','64k',resolve(root,'__r124/tone.mp3')],{timeout:30000});
 await writeFile(resolve(root,'__r124/seed.html'),'<!doctype html><meta charset="utf-8"><title>TESTONLY NoTelegram seed</title>');
 const helpers=(await readdir(resolve(project,'tests/integration'))).filter(p=>p==='check-telegram-sources-main.mjs'||p.startsWith('telegram-sources-main-'));
 const manifest={version:1,label:'TESTONLY NoTelegram; no acceptance from preparation',mode:prepare?'PREPARED_NOT_EXECUTED_FINAL':exploratory?'EXPLORATORY':'FINAL_ROOT_GO',sourceMap:before,helpers:{},fixtures:{},injection:'Exactly temporary-sdk resolution; real worker/client/driver/projector/root/player/storage',mainUntransformed:true};

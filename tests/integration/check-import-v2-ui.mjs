@@ -1,3 +1,4 @@
+import {ffmpegExecutable} from '../../scripts/ffmpeg-path.mjs';
 // r11: isolated real main + actual v2 product workers; fresh origins/contexts only.
 // Run: INSTABOX_HEADLESS=1 node tests/integration/check-import-v2-ui.mjs [case substring]
 import assert from 'node:assert/strict';
@@ -26,7 +27,7 @@ report.sourceHashes=Object.fromEntries(Object.entries(before).filter(([p])=>p===
 const receipt=execFileSync('python3',['scripts/sync_odd_memory.py','--read-only'],{encoding:'utf8'});report.engram=JSON.parse(receipt);assert.equal(report.engram.tasks.length,14);assert.equal(report.engram.FullContentVerified,true);await writeFile(dir+'/engram-read-only.json',receipt);
 function wav(seed=1){const rate=8000,n=rate*2,b=Buffer.alloc(44+n*2);b.write('RIFF');b.writeUInt32LE(b.length-8,4);b.write('WAVEfmt ',8);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(rate,24);b.writeUInt32LE(rate*2,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(n*2,40);for(let i=0;i<n;i++)b.writeInt16LE(Math.round(Math.sin(i*2*Math.PI*(200+seed*37)/rate)*2000),44+i*2);return b;}
 await writeFile(dir+'/own.wav',wav());
-for(const [ext,codec]of [['mp3','libmp3lame'],['m4a','aac']])execFileSync('node_modules/@ffmpeg-installer/linux-x64/ffmpeg',['-y','-i',dir+'/own.wav','-codec:a',codec,...(ext==='m4a'?['-profile:a','aac_low']:[]),dir+'/own.'+ext],{stdio:'ignore'});
+for(const [ext,codec]of [['mp3','libmp3lame'],['m4a','aac']])execFileSync(ffmpegExecutable(),['-y','-i',dir+'/own.wav','-codec:a',codec,...(ext==='m4a'?['-profile:a','aac_low']:[]),dir+'/own.'+ext],{stdio:'ignore'});
 const file=(seed=1)=>({name:`PRIVATE_CANARY_${seed}.wav`,mimeType:'audio/wav',buffer:wav(seed)});
 let browser,server,origin;
 const state=p=>p.evaluate(()=>window.r11.state());

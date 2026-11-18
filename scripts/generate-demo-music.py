@@ -1,7 +1,11 @@
 """Three original procedural instrumental sketches. No external recordings or songs."""
 from pathlib import Path
-import array, hashlib, json, math, random, subprocess, sys, wave
+import array, hashlib, json, math, os, platform, random, shutil, subprocess, sys, wave
 ROOT=Path(__file__).resolve().parent.parent
+bundled=ROOT/'node_modules/@ffmpeg-installer/linux-x64/ffmpeg'
+ffmpeg=os.environ.get('FFMPEG_PATH') or (str(bundled) if sys.platform=='linux' and platform.machine()=='x86_64' and bundled.is_file() else 'ffmpeg')
+if not shutil.which(ffmpeg):
+    sys.exit('FFmpeg no disponible para generar muestras. Instálalo en PATH o configura FFMPEG_PATH.')
 RATE=22050
 BEAT=.5
 DURATION=16.5
@@ -43,7 +47,7 @@ def write_piece(name, seed, chords, melody, extension, codec):
     wav=staging/(name+'.wav')
     with wave.open(str(wav),'wb') as w:w.setparams((1,2,RATE,0,'NONE','not compressed'));w.writeframes(pcm.tobytes())
     dest=ROOT/'public'/'samples'/(name+'.'+extension)
-    args=[str(ROOT/'node_modules/@ffmpeg-installer/linux-x64/ffmpeg'),'-y','-i',str(wav),'-codec:a',codec,'-b:a','64k','-metadata','title='+name,'-metadata','artist=Pulso · muestra original','-metadata','album=Prueba instrumental']
+    args=[ffmpeg,'-y','-i',str(wav),'-codec:a',codec,'-b:a','64k','-metadata','title='+name,'-metadata','artist=Pulso · muestra original','-metadata','album=Prueba instrumental']
     if codec=='aac':args+=['-profile:a','aac_low']
     subprocess.run(args+[str(dest)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     b=dest.read_bytes()
