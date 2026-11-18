@@ -14,9 +14,9 @@ test('editable drafts never grant send authority over root safety gates',()=>{
 class WorkerFixture implements SessionWorker {
  onmessage:SessionWorker['onmessage']=null;onerror:SessionWorker['onerror']=null;onmessageerror:SessionWorker['onmessageerror']=null;messages:SessionCommand[]=[];terminations=0;
  postMessage(c:SessionCommand){this.messages.push(c);}terminate(){++this.terminations;}
- reply(phase:SessionReply['phase'],error:SessionReply['error']=null,retryAt:number|null=null){const c=this.messages.at(-1)!;this.onmessage?.({data:{version:2,session:c.session,request:c.request,phase,error,retryAt,delivery:phase==='code'?'app':null,binding:phase==='connected'?{accountRef:crypto.randomUUID(),accountEpoch:1}:null,saved:phase==='connected'?{peerRef:crypto.randomUUID(),kind:'saved',name:'Mensajes guardados'}:null}} as MessageEvent);}
+ reply(phase:SessionReply['phase'],error:SessionReply['error']=null,retryAt:number|null=null,vaultGeneration?:string){const c=this.messages.at(-1)!;this.onmessage?.({data:{version:2,session:c.session,request:c.request,phase,error,retryAt,...(vaultGeneration?{vaultGeneration}:{}),delivery:phase==='code'?'app':null,binding:phase==='connected'?{accountRef:crypto.randomUUID(),accountEpoch:1}:null,saved:phase==='connected'?{peerRef:crypto.randomUUID(),kind:'saved',name:'Mensajes guardados'}:null}} as MessageEvent);}
 }
-function setup(timeout=1000,clearVault=async()=>{}){const activity=new Activity();activity.open();let admitted=true;const workers:WorkerFixture[]=[],states:SessionState[]=[];const client=new TelegramSessionClient(activity,()=>{const scope=activity.scope();return()=>scope()&&admitted&&activity.admitted;},s=>states.push(s),()=>{const w=new WorkerFixture();workers.push(w);return w;},timeout,undefined,undefined,undefined,undefined,undefined,undefined,clearVault);return {activity,client,workers,states,deny:()=>{admitted=false;}};}
+function setup(timeout=1000,clearVault: (generation:string|null)=>Promise<void>=async()=>{}){const activity=new Activity();activity.open();let admitted=true;const workers:WorkerFixture[]=[],states:SessionState[]=[];const client=new TelegramSessionClient(activity,()=>{const scope=activity.scope();return()=>scope()&&admitted&&activity.admitted;},s=>states.push(s),()=>{const w=new WorkerFixture();workers.push(w);return w;},timeout,undefined,undefined,undefined,undefined,undefined,undefined,clearVault);return {activity,client,workers,states,deny:()=>{admitted=false;}};}
 test('closed DTOs reject extras, accessors, malformed phones and nonterminal replies',()=>{
  const c={version:2,session:crypto.randomUUID(),request:crypto.randomUUID(),type:'begin',value:phone};assert.ok(parseSessionCommand(c));assert.equal(parseSessionCommand({...c,sessionString:'never-accepted'}),null);assert.equal(parseSessionCommand({...c,value:'123'}),null);
  assert.equal(parseSessionCommand(Object.defineProperty({...c},'value',{get(){throw Error('hostile');},enumerable:true})),null);
@@ -81,5 +81,14 @@ test('failed logout post and failed page vault deletion report a distinct error'
  try{s.client.begin(phone);const w=s.workers[0];w.reply('connected');w.postMessage=()=>{throw Error('fixture worker closed');};
  s.client.logout();s.client.restore();assert.equal(s.workers.length,1);
  await new Promise(r=>setImmediate(r));assert.equal(attempts,1);assert.equal(s.client.snapshot().error,'logout-storage-unconfirmed');
+ }finally{s.client.dispose();}
+});
+
+test('interrupted logout clears only the authorization generation of the connected worker',async()=>{
+ const generation=crypto.randomUUID(),cleared:(string|null)[]=[];const s=setup(1000,async value=>{cleared.push(value);});
+ try{s.client.begin(phone);s.workers[0].reply('connected',null,null,generation);
+ assert.equal(Object.hasOwn(s.client.snapshot(),'vaultGeneration'),false);
+ s.client.logout();s.client.stop();
+ await new Promise(r=>setImmediate(r));assert.deepEqual(cleared,[generation]);assert.equal(s.client.snapshot().error,'logout-unconfirmed');
  }finally{s.client.dispose();}
 });

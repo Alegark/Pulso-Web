@@ -34,6 +34,7 @@ export interface TemporaryTelegramDriver {
  logout(signal:AbortSignal):Promise<void>;
  close():Promise<void>;
  getAccountBinding():AccountBinding|null;
+ getVaultGeneration?():string|null;
  getAccountCooldown?():TelegramAccountCooldown|null;
  prepareBotProviders?(sessionId:string,signal:AbortSignal):Promise<void>;
  createSources(sessionId:string):SourcesDriver;
@@ -128,6 +129,7 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
   async password(value:string,abort:AbortSignal){current(abort);const user=await checkPassword(client,{password:value,abortSignal:abort});current(abort);await persist(abort);authorized(user);},
   async logout(abort:AbortSignal){current(abort);await clearTelegramSessionLease(lease);persisted=false;current(abort);if(botSearch){const settled=await botSearch.quiesce();current(abort);if(!settled)throw Error('logout-unconfirmed');}if(botProviders){const settled=await botProviders.quiesce();current(abort);if(!settled)throw Error('logout-unconfirmed');}if(sources){const settled=await sources.quiesce();current(abort);if(!settled)throw Error('logout-unconfirmed');}await client.call({_: 'auth.logOut'},{abortSignal:abort});current(abort);await close();},
   getAccountBinding(){return closed||signal.aborted?null:binding;},
+  getVaultGeneration(){return !closed&&!signal.aborted&&binding&&persisted?lease:null;},
   getAccountCooldown,
   async prepareBotProviders(sessionId:string,abort:AbortSignal){
    current(abort);if(!binding||!isUuid(sessionId))throw Error('unsupported');
