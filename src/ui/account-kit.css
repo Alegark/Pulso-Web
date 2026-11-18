@@ -1,4 +1,4 @@
-@layer pulso-base, account-theme, account-utilities;
+@layer account-theme, account-utilities;
 @import 'tailwindcss/theme.css' layer(account-theme);
 @source './account-kit';
 @theme inline {
@@ -24,7 +24,7 @@
 @layer account-utilities {
  .account-kit { @tailwind utilities source(none); }
 }
-.account-kit{color:var(--pulso-foreground);font-family:inherit;min-inline-size:0;overflow-wrap:anywhere}
+.account-kit{color:var(--pulso-foreground);font-family:inherit;min-inline-size:0}
 .account-kit *{box-sizing:border-box}
 .account-kit [data-slot=card]{inline-size:100%;max-inline-size:none;background:transparent;border:0;box-shadow:none;padding:0;gap:1.5rem}
 .account-kit [data-slot=card-header],.account-kit [data-slot=card-content]{padding-inline:0}
@@ -33,7 +33,7 @@
 .account-kit input{font-family:inherit;font-size:max(1rem,16px);min-inline-size:0}
 .account-kit [data-slot=input],.account-kit [data-slot=input-group]{min-block-size:48px;background:var(--pulso-canvas);border:1px solid var(--pulso-control-border)}
 .account-kit [data-slot=input-group-control]{min-block-size:46px;border:0;background:transparent;padding-block:.7rem}
-.account-kit [data-slot=button]{min-block-size:44px;font-family:inherit;max-inline-size:100%;line-height:1.35;white-space:normal;touch-action:manipulation;transition:background-color .15s,color .15s,opacity .15s}
+.account-kit [data-slot=button]{min-block-size:44px;font-family:inherit;line-height:1.35;white-space:normal;touch-action:manipulation;transition:background-color .15s,color .15s,opacity .15s}
 .account-kit [data-slot=button][data-variant=default]{background:var(--pulso-accent);color:var(--pulso-canvas);font-weight:700}
 .account-kit [data-slot=input-group-button]{padding:.4rem;min-inline-size:44px;background:transparent;border:0}
 .account-kit a{color:var(--pulso-accent);overflow-wrap:anywhere;touch-action:manipulation}
