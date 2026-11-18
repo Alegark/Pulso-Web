@@ -1,3 +1,4 @@
+import {queuePositionKey,queuePositionRecord,withQueuePosition,type QueuePosition} from './ui/queue-position';
 import {ShellNotice} from './ui/ShellNotice';
 import {readSavedArtists,setSavedArtist} from './library/saved-artists';
 import {SavedArtistDetail} from './ui/SavedArtistDetail';
@@ -154,9 +155,9 @@ const control=new Ownership(()=>{owner=control.owner;if(control.state==='sin-con
  if(databaseState!=='ready'){if(databaseReloadRequired())control.activity.invalidate();return;}
  suspendedSnapshot=undefined;configuring=true;player.suspend();sourceProtection.invalidateScope();player.setQueue([]);configuring=false;installMediaSession();const opening=control.activity.begin();const scope=scopeId,proof=control.proof;const current=()=>scope===scopeId&&proof===control.proof&&control.owner&&!!opening?.current();const diagnostic=beginDiagnostic('open-library');
  try{await sourceProtection.releaseUnused();if(!current())return;await refresh();if(!current())return;await readRemovalStartup(current);if(!current())return;if(status==='Abriendo biblioteca…')status='';
- const raw=await readRecord<unknown>('settings','library-playback');
+ const [raw,position]=await Promise.all([readRecord<unknown>('settings','library-playback'),readRecord<unknown>('settings',queuePositionKey)]);
  if(!current())return;
- if(raw!==undefined){const normalized=normalizeSnapshot(raw);if(normalized){if(!copyRemovalPending&&normalized.snapshot.entries.length&&normalized.snapshot.entries.every(entry=>tracks.some(track=>track.id===entry.trackId))){deferredQueueRestore={saved:normalized.snapshot,warnings:normalized.warnings,current:captureRemovalRaw()};}else if(copyRemovalPending)status='Hay una retirada pendiente. La cola guardada se conserva sin prepararla ni reproducirla.';}else status='La cola guardada no es válida. Se conserva sin cambios; prepara una nueva selección para reproducir.';}
+ if(raw!==undefined){const normalized=normalizeSnapshot(raw);if(normalized){if(!copyRemovalPending&&normalized.snapshot.entries.length&&normalized.snapshot.entries.every(entry=>tracks.some(track=>track.id===entry.trackId))){deferredQueueRestore={saved:withQueuePosition(normalized.snapshot,position),warnings:normalized.warnings,current:captureRemovalRaw()};}else if(copyRemovalPending)status='Hay una retirada pendiente. La cola guardada se conserva sin prepararla ni reproducirla.';}else status='La cola guardada no es válida. Se conserva sin cambios; prepara una nueva selección para reproducir.';}
  }catch(error){if(current()){diagnostics.complete(diagnostic,localFailure(error,'open'));control.activity.block('opening',true);status='No se pudo abrir el almacenamiento. Cierra otras pestañas o reintenta recargando.';}}finally{diagnostics.finish(diagnostic);opening?.end();}if(current()){resumeStartupQueue();emit();}
 },undefined,{prepare:prepareRelease,blocked:()=>databaseState!=='ready'||releaseBlocked()});
 let databaseState:'ready'|DatabaseLifecycleState='ready';
@@ -178,7 +179,7 @@ const databaseRecoverable=()=>databaseState==='blocked'||databaseState==='connec
 let metadataRescanBlocked=true;
 let owner=false;let busy=false,busyOwner:symbol|null=null;let status='Abriendo biblioteca…';let tracks:Track[]=[];let playlists:Playlist[]=[];let addedTrackIds:ReadonlySet<string>=new Set();
 const listeners=new Set<()=>void>();const emit=()=>{observeQueueAdmission();finishTransferPlay();listeners.forEach(fn=>fn());};
-let writes=Promise.resolve();let lastSave=0;let configuring=false;
+let writes=Promise.resolve();let configuring=false;
 function startBusy(configure=false){
  const token=Symbol();busyOwner=token;busy=true;if(configure)configuring=true;
  return()=>{if(busyOwner!==token)return;busyOwner=null;busy=false;if(configure)configuring=false;emit();};
@@ -676,14 +677,35 @@ async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[
   // Record the primary error above before best-effort resource settlement.
   // Keep Activity admitted through cleanup; an old finally never clears a new scope.
   try{if(!sourcePublished)sourceAbort.abort();await preparation.settle();}
-  finally{diagnostics.finish(diagnostic);endBusy();operation.end();}
+  finally{diagnostics.finish(diagnostic);endBusy();operation.end();if(sourcePublished&&current())schedulePositionSave('state');}
  }
+}
+function playbackPosition():QueuePosition{
+ return {currentEntryId:player.current?.id??null,position:player.current?(audio.readyState===0&&player.pendingRestorePosition!==null?player.pendingRestorePosition:Number.isFinite(audio.currentTime)?audio.currentTime:0):0,repeat:player.repeat};
 }
 function snapshot():Snapshot|undefined{
  if(suspendedSnapshot)return suspendedSnapshot;
- if(!player.current&&!player.entries.length)return;
- return {version:1,entries:player.entries.map(({id,trackId})=>({id,trackId})),currentEntryId:player.current?.id??null,position:player.current?(audio.readyState===0&&player.pendingRestorePosition!==null?player.pendingRestorePosition:Number.isFinite(audio.currentTime)?audio.currentTime:0):0,repeat:player.repeat,shuffleOrder:player.shuffleOrder?[...player.shuffleOrder]:null};
+ if(!player.entries.length)return;
+ return {version:1,entries:player.entries.map(({id,trackId})=>({id,trackId})),...playbackPosition(),shuffleOrder:player.shuffleOrder?[...player.shuffleOrder]:null};
 }
+type QueueCheckpoint={key:string;structure:Snapshot};
+let savedCheckpoint:QueueCheckpoint|undefined;
+function writeQueueCheckpoint(store:IDBObjectStore,key:string,value:QueuePosition,getStructure:()=>Snapshot){
+ const existing=savedCheckpoint?.key===key?savedCheckpoint:undefined;
+ const checkpoint=existing??{key,structure:getStructure()};
+ if(!existing)store.put(checkpoint.structure,'library-playback');
+ store.put(queuePositionRecord(checkpoint.structure,value),queuePositionKey);
+ return checkpoint;
+}
+async function flushQueue(saved:Snapshot,key:string){
+ const db=await openExistingDatabase();
+ try{
+  const tx=admittedTransaction(db,'settings','readwrite'),done=transactionDone(tx);
+  try{const checkpoint=writeQueueCheckpoint(tx.objectStore('settings'),key,saved,()=>saved);await done;savedCheckpoint=checkpoint;}
+  catch(error){try{tx.abort();}catch{/* settled */}await done.catch(()=>{});throw error;}
+ }finally{closeDatabase(db);}
+}
+const playbackCheckpointKey=()=>`${accountEpoch}:${scopeId}:${player.queueRevision}`;
 let saveFailureBurst=false;let saveFailureScope=diagnostics.scope();
 function saveLatestQueue(caller:()=>boolean=()=>true,allowEmpty=false):Promise<'saved'|'not-saved'>{
  const raw=captureRemovalRaw(),review=sourceReview.captureCurrent();
@@ -694,12 +716,19 @@ function saveLatestQueue(caller:()=>boolean=()=>true,allowEmpty=false):Promise<'
  const guard=()=>operation.current()&&current();
  const work=writes.then(async():Promise<'saved'|'not-saved'>=>{
   if(!guard())return 'not-saved';
-  // Read the latest structure at execution, never an old queued snapshot.
-  const saved=snapshot()??(allowEmpty?{version:1 as const,entries:[],currentEntryId:null,position:0,repeat:player.repeat,shuffleOrder:null}:undefined);if(!saved)return 'not-saved';
+  // Take the latest position after opening the transaction; the queue is only
+  // serialized when its revision changes.
   const db=await openExistingDatabase();let record:{tx:IDBTransaction;current:()=>boolean}|undefined;
   try{
-   if(!guard())return 'not-saved';const tx=admittedTransaction(db,'settings','readwrite'),done=transactionDone(tx);record={tx,current:guard};queueSaveTransactions.add(record);
-   try{if(!guard()){tx.abort();await done.catch(()=>{});return 'not-saved';}tx.objectStore('settings').put(saved,'library-playback');if(!guard())try{tx.abort();}catch{/* commit winner */}await done;return 'saved';}
+   if(!guard()||(!allowEmpty&&!suspendedSnapshot&&!player.entries.length))return 'not-saved';
+   const tx=admittedTransaction(db,'settings','readwrite'),done=transactionDone(tx);record={tx,current:guard};queueSaveTransactions.add(record);
+   try{
+    if(!guard()){tx.abort();await done.catch(()=>{});return 'not-saved';}
+    const value=suspendedSnapshot??playbackPosition();
+    const checkpoint=writeQueueCheckpoint(tx.objectStore('settings'),playbackCheckpointKey(),value,()=>snapshot()??{version:1,entries:[],...value,shuffleOrder:null});
+    if(!guard())try{tx.abort();}catch{/* commit winner */}
+    await done;savedCheckpoint=checkpoint;return 'saved';
+   }
    catch(error){try{tx.abort();}catch{/* settled */}await done.catch(()=>{});throw error;}
   }finally{if(record)queueSaveTransactions.delete(record);closeDatabase(db);}
  }).then(value=>{if(value==='saved'&&operation.current()&&diagnosticScope())saveFailureBurst=false;return value;}).catch((error):'not-saved'=>{
@@ -708,9 +737,24 @@ function saveLatestQueue(caller:()=>boolean=()=>true,allowEmpty=false):Promise<'
  status='No se pudo guardar la posición. Tu biblioteca se conserva.';emit();return 'not-saved';}).finally(()=>{diagnostics.finish(diagnostic);--queueSaveTokens;operation.end();});
  writes=work.then(()=>{});return work;
 }
+let positionTimer:ReturnType<typeof setTimeout>|undefined;
+let lastPositionSave=0,positionSaving=false;
 function savePosition(){
- if(!control.owner||configuring||insertionCommitInProgress||copyRemovalBlocked()||queueInsertionUncertain)return;
- void saveLatestQueue();
+ clearTimeout(positionTimer);positionTimer=undefined;
+ if(!control.owner||busy||configuring||insertionCommitInProgress||copyRemovalBlocked()||queueInsertionUncertain)return;
+ if(!suspendedSnapshot&&!player.entries.length&&!savedCheckpoint?.key.startsWith(`${accountEpoch}:${scopeId}:`))return;
+ lastPositionSave=Date.now();positionSaving=true;
+ void saveLatestQueue(undefined,true).finally(()=>{positionSaving=false;});
+}
+function schedulePositionSave(change:'state'|'progress'){
+ if(!control.owner||busy||configuring||insertionCommitInProgress)return;
+ if(change==='progress'&&player.state==='playing'){
+  if(!positionSaving&&Date.now()-lastPositionSave>=2000)savePosition();
+ }else{
+  clearTimeout(positionTimer);
+  const current=captureRemovalRaw();
+  positionTimer=setTimeout(()=>{positionTimer=undefined;if(current())savePosition();},350);
+ }
 }
 let mediaSessionIdentity:string|null=null;
 let mediaSessionArtwork:{trackId:string;image:MediaImage}|null=null;
@@ -728,7 +772,7 @@ function syncMediaSession(){
 }
 player.subscribe(change=>{
  if(change==='state'){sourceProtection.observePlayer();syncMediaSession();}
- if(owner&&!configuring&&!insertionCommitInProgress&&player.current&&(player.state!=='playing'||Date.now()-lastSave>2000)){lastSave=Date.now();savePosition();}
+ schedulePositionSave(change);
  if(change==='state')emit();
 });
 function clearMediaSession(){mediaSessionIdentity=null;mediaSessionArtwork=null;if('mediaSession'in navigator){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState='none';for(const action of ['play','pause','nexttrack','previoustrack','seekto']as const)try{navigator.mediaSession.setActionHandler(action,null);}catch{/* optional */}}}
@@ -736,11 +780,11 @@ function installMediaSession(){if(!('mediaSession'in navigator))return;const sco
  for(const [action,handler]of Object.entries({play:()=>void player.play(),pause:()=>player.pause(),nexttrack:()=>player.next(),previoustrack:()=>player.previous(),seekto:(d:MediaSessionActionDetails)=>{if(d.seekTime!==undefined)player.seek(d.seekTime);}}))try{navigator.mediaSession.setActionHandler(action as MediaSessionAction,(d)=>{if(scope===scopeId&&control.owner&&!busy&&(action==='pause'||!collectionBlocked())){cancelSelectedSongIntent();handler(d);}});}catch{/* optional */}
 }
 async function prepareRelease(){
- const saved=snapshot();suspendedSnapshot=saved;
+ const saved=snapshot(),key=playbackCheckpointKey();suspendedSnapshot=saved;
  ++scopeId;diagnostics.resetScope();player.suspend();clearMediaSession();
  sourceProtection.invalidateScope();await sourceProtection.releaseUnused();
  await writes;
- if(saved)await writeRecord('settings','library-playback',saved);
+ if(saved)await flushQueue(saved,key);
 }
 function releaseBlocked(){let pending=true;try{pending=!!sessionStorage.getItem('pulso-web:organization:pending-operation');}catch{/* Unknown tracking remains blocked. */}return busy||copyRemovalBlocked()||queueForeignBlocked()||pending;}
 async function cede(){try{
@@ -770,8 +814,8 @@ document.addEventListener('keydown',event=>{if(['Tab','Escape','Enter',' '].incl
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){transferPlayIntent=null;savePosition();}});
 window.addEventListener('pagehide',()=>{
  transferPlayIntent=null;
- diagnostics.resetScope();const saved=snapshot();suspendedSnapshot=saved;
- control.hide(async()=>{await writes;if(saved)await writeRecord('settings','library-playback',saved);},releaseBlocked);
+ diagnostics.resetScope();const saved=snapshot(),key=playbackCheckpointKey();suspendedSnapshot=saved;
+ control.hide(async()=>{await writes;if(saved)await flushQueue(saved,key);},releaseBlocked);
  ++scopeId;player.suspend();clearMediaSession();sourceProtection.invalidateScope();void sourceProtection.releaseUnused();
  queueInsertions.cancelAll('revoked');
 });
@@ -819,10 +863,10 @@ function accountBoundary(){
  const next=accountController.getSnapshot().user?.id??null;if(next===activeAccount)return;
  const previous=activeAccount;activeAccount=next;if(previous)status='';librarySync.account(next);preparedLibraryAccount=null;lastLibrarySyncSignature='';savedArtists=[];savedArtistRevision++;tracks=[];playlists=[];addedTrackIds=new Set();availability=new Map();
  if(previous){
-  accountEpoch++;accountQueue=snapshot();accountQueueOwner=previous;transferPlayIntent=null;cancelSelectedSongIntent();queueInsertions.cancelAll('user');control.cancelTransfer();audio.pause();player.suspend();player.setQueue([]);clearMediaSession();
+  const key=playbackCheckpointKey();accountEpoch++;accountQueue=snapshot();accountQueueOwner=previous;transferPlayIntent=null;cancelSelectedSongIntent();queueInsertions.cancelAll('user');control.cancelTransfer();audio.pause();player.suspend();player.setQueue([]);clearMediaSession();
   if(control.owner&&control.activity.idle&&!releaseBlocked()){
    const saved=accountQueue;
-   void control.cede(async()=>{await prepareRelease();if(saved)await writeRecord('settings','library-playback',saved);accountQueue=undefined;},releaseBlocked).then(released=>{if(released&&accountAvailable()&&control.state==='sin-control')void control.acquire();}).catch(()=>{control.activity.close();});
+   void control.cede(async()=>{await prepareRelease();if(saved)await flushQueue(saved,key);accountQueue=undefined;},releaseBlocked).then(released=>{if(released&&accountAvailable()&&control.state==='sin-control')void control.acquire();}).catch(()=>{control.activity.close();});
   }else control.activity.close();
  }
  if(next){
