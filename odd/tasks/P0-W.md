@@ -2373,3 +2373,7 @@ Cloudflare versión 46 sirve `/releases/bed8f65288828366.html`, deployment `4dce
 ## Biblioteca · recuperar una canción incierta · 2026-11-19
 
 T11-T12 registra la revisión por pista desde el lote y las opciones de playlist. El reintento requiere un gesto y usa las correcciones manuales de identificación. Se revisa la copia y el recibo antes de enviar otra consulta. Una copia corrupta se puede desvincular de esa pista mientras se conservan sus bytes y otras referencias. Chromium/WebKit 20/20 verificaron recarga, un gesto por consulta, conservación de registros ambiguos y reemplazo en IDB sin deduplicar contra los bytes corruptos. Se usaron transportes de prueba. La aceptación física en iPhone sigue pendiente y P0-W permanece abierto.
+
+### Reintento por canción publicado · 2026-11-19
+
+Cloudflare versión 48 sirve `/releases/360c83bb0aff68e7.html`, deployment `718db1f5-2069-4348-8e05-b9a023441fdf`. Se verificaron 237/237 rutas y las acciones de revisión y reintento en el módulo de entrada. Worker, Turnstile, límites y 13 bindings coinciden con v47. La aceptación local Chromium/WebKit usa transportes sintéticos. La prueba con Telegram real y el iPhone físico sigue pendiente. Detalle en T11-T12.
