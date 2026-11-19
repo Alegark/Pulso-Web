@@ -1,7 +1,7 @@
 import {chromium,webkit} from 'playwright-core';import {createServer} from 'node:http';import {readFile,writeFile} from 'node:fs/promises';import {resolve,extname} from 'node:path';import assert from 'node:assert/strict';
 import {installRequiredAccountFixture} from './required-account-fixture.mjs';import {createTestWorkspace} from './test-workspace.mjs';
 const site=resolve(process.argv[2]??'');if(!process.argv[2])throw Error('Requires candidate site');
-const work=await createTestWorkspace('account-library-main'),report={cases:[],errors:[],external:[],cleanup:false};let server;
+const work=await createTestWorkspace('download-dock-ui'),report={cases:[],errors:[],external:[],cleanup:false};let server;
 const id=n=>`${String(n).padStart(8,'0')}-1111-4111-8111-111111111111`,user='11111111-1111-4111-8111-111111111111';
 const initial=()=>({version:1,tracks:[1,2].map(n=>({id:id(n+10),title:'Nube propia '+n,artist:'Artista propio',album:'Álbum propio',duration:45,favorite:n===1,inLibrary:true,createdAt:'2026-11-17T00:00:00Z',localAlbum:null,catalog:null})),playlists:[{id:id(50),name:'Playlist de mi cuenta',entries:[1,2].map(n=>({id:id(50+n),trackId:id(n+10)}))}]});
 try{
@@ -38,7 +38,7 @@ try{
   const [a,b]=pages;for(const p of pages){await p.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();await p.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).waitFor();}
   report.cases.push({engine,test:'two actual app instances restore the same account library from metadata',status:'PASS'});
   await a.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).click();await a.getByRole('heading',{name:'Playlist de mi cuenta',exact:true}).waitFor();assert.equal(await a.locator('.library-detail .collection-track-main').count(),2);
-  await a.getByRole('button',{name:'Descargar playlist completa',exact:true}).click();await a.getByText('Conecta Telegram y configura un bot para descargar en este dispositivo.',{exact:true}).waitFor();assert.equal(await a.locator('.library-detail .library-download-hint').count(),1);assert.equal(await a.locator('.download-bubble').count(),0);
+  await a.getByRole('button',{name:'Descargar playlist completa',exact:true}).click();await a.locator('.download-dock__message').getByText('Conecta Telegram y configura un bot para descargar en este dispositivo.',{exact:true}).waitFor();assert.equal(await a.locator('.library-detail .download-dock').count(),0);
   for(const p of pages){const data=await p.evaluate(async()=>{const db=await new Promise((res,rej)=>{const r=indexedDB.open('pulso-web-local-v1');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(Error('open'));});try{const tx=db.transaction(['tracks','assets'],'readonly');const read=n=>new Promise(res=>{const r=tx.objectStore(n).getAll();r.onsuccess=()=>res(r.result);});const [tracks,assets]=await Promise.all([read('tracks'),read('assets')]);return {tracks:tracks.length,assets:assets.length,allMissing:tracks.every(t=>t.assetId===null),commands:window.__libraryCommands};}finally{db.close();}});assert.equal(data.assets,0);assert.equal(data.tracks,2);assert.equal(data.allMissing,true);assert.deepEqual(data.commands,{search:0,download:0});commands=data.commands;}
   report.cases.push({engine,test:'restoration has zero audio assets or bot commands; explicit download has visible connection guidance',status:'PASS',commands});
   await a.getByRole('button',{name:/Volver a Biblioteca/}).click();await a.getByText('Crear una playlist',{exact:true}).click();await a.getByLabel('Nueva playlist',{exact:true}).fill('Creada en dispositivo A');await a.locator('.create-playlist').getByRole('button',{name:'Crear playlist',exact:true}).click();
@@ -49,12 +49,12 @@ try{
   await a.evaluate(({user,selection})=>localStorage.setItem('pulso:library-download:v1:'+user,JSON.stringify(selection)),
    {user,selection:{id:id(69),trackIds:[id(11),id(12)],cursor:1,pending:null}});
   await a.reload();await a.locator('.shell-nav').waitFor();
-  const continueButton=a.getByRole('button',{name:'Continuar descarga de Biblioteca',exact:true});
+  const continueButton=a.getByRole('button',{name:'Continuar descarga',exact:true});
   const discardButton=a.getByRole('button',{name:'Descartar selección pendiente',exact:true});
   assert.equal(await continueButton.count(),0);
   await a.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();
   await a.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).click();
-  await a.locator('.library-detail').getByRole('button',{name:'Continuar descarga de Biblioteca',exact:true}).waitFor();
+  await a.locator('.library-detail').getByRole('button',{name:'Continuar descarga',exact:true}).waitFor();
   assert.equal(await discardButton.count(),0);
   assert.equal(await a.getByRole('button',{name:'Descargar playlist completa',exact:true}).count(),0);
   await a.getByRole('button',{name:'Volver a Biblioteca',exact:true}).click();
@@ -62,12 +62,12 @@ try{
   await a.getByRole('button',{name:'Gestionar descargas',exact:true}).click();
   const storage=a.getByRole('region',{name:'Almacenamiento',exact:true});
   await storage.getByRole('heading',{name:'Tus descargas',exact:true}).waitFor();
-  await storage.getByRole('button',{name:'Continuar descarga de Biblioteca',exact:true}).waitFor();
+  assert.equal(await storage.getByRole('button',{name:'Continuar descarga',exact:true}).count(),0);
   await discardButton.waitFor();
-  assert.equal(await a.locator('.download-bubble').count(),0);
+  assert.equal(await a.locator('.download-dock').count(),0);
   assert.equal(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   assert.deepEqual(await a.evaluate(()=>window.__libraryCommands),{search:0,download:0});
-  report.cases.push({engine,test:'mobile current shell resumes from playlist or Descargas without a floating control',status:'PASS'});
+  report.cases.push({engine,test:'mobile shell offers resume in the playlist and discard in Almacenamiento',status:'PASS'});
 
  }catch(e){report.cases.push({engine,status:'FAIL',error:String(e.stack||e)});}finally{for(const c of contexts)await c.close();await browser?.close();}}
 }finally{if(server)await new Promise(r=>server.close(r));report.cleanup=await work.cleanup();report.status=report.cases.some(c=>c.status==='FAIL')||report.errors.length||report.external.length?'FAIL':'PASS';await writeFile(resolve(work.evidence,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({report:resolve(work.evidence,'report.json'),...report},null,2));}
