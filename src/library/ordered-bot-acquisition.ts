@@ -1,7 +1,9 @@
+import {sha256} from '@noble/hashes/sha2.js';
+import {bytesToHex} from '@noble/hashes/utils.js';
 import {formatStorageMB} from './storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {matchingSongRows} from './selected-song';
-import {botAudioMismatchFields,type BotSearchTarget,type BotDownloadedAudio} from '../telegram/bot-search-protocol';
+import {botAudioMismatchFields,type BotSearchTarget,type BotDownloadedAudio,type BotSearchRow} from '../telegram/bot-search-protocol';
 import type {BotsSnapshot,TelegramSessionClient} from '../telegram/session-client';
 
 export type OrderedProvider={providerRef:string;label:string};
@@ -27,12 +29,16 @@ export function acquisitionFailureText(reasons:readonly AcquisitionFailureReason
  };
  return [...new Set(reasons)].filter(reason=>!reason.startsWith('audio-')).map(reason=>messages[reason]).join(' ')||'No se pudo confirmar una coincidencia musical.';
 }
-type Result={state:'audio';audio:BotDownloadedAudio}|{state:'known-failure';reasons:readonly AcquisitionFailureReason[]}|{state:'uncertain'};
+type Result={state:'audio';audio:BotDownloadedAudio;providerRef:string;rowKey:string;hasAlternate:boolean}|{state:'known-failure';reasons:readonly AcquisitionFailureReason[]}|{state:'uncertain'};
 /** One gesture, one sequential attempt per captured provider. Never releases the client's lane. */
-export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;providers:readonly OrderedProvider[];revision:number;target:BotSearchTarget;signal:AbortSignal;current:()=>boolean;networkCurrent:()=>boolean;remoteClock?:{settledAt:number};progress:(provider:OrderedProvider,index:number,queryId:string|null)=>void}):Promise<Result> {
+function candidateKey(provider:string,row:BotSearchRow):string{
+ const identity=row.kind==='option'?[row.kind,row.label]:row.kind==='audio'?[row.kind,row.title,row.performer,row.durationSeconds,row.mimeType,row.bytes]:[row.kind,row.text];
+ return bytesToHex(sha256(new TextEncoder().encode(JSON.stringify([provider,...identity]))));
+}
+export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;providers:readonly OrderedProvider[];revision:number;target:BotSearchTarget;signal:AbortSignal;current:()=>boolean;networkCurrent:()=>boolean;remoteClock?:{settledAt:number};excludedDigests?:ReadonlySet<string>;excludedRows?:Set<string>;progress:(provider:OrderedProvider,index:number,queryId:string|null)=>void}):Promise<Result> {
  const {client}=p,target={...p.target},network=p.networkCurrent,current=p.current,revision=p.revision,deadline=Date.now()+180000;
  const seen=new Set<string>(),providers=p.providers.filter(provider=>{if(seen.has(provider.providerRef))return false;seen.add(provider.providerRef);return true;}).slice(0,5).map(provider=>({...provider}));
- const reasons:AcquisitionFailureReason[]=[];
+ const reasons:AcquisitionFailureReason[]=[],excludedRows=p.excludedRows??new Set<string>(),retried=new Set<string>();
  let expired=false;
  let ownedCancel:(()=>void)|undefined;
  const cancel=()=>{try{ownedCancel?.();}catch{/* Cancellation cannot grant a new lane. */}};
@@ -56,24 +62,37 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
    });
    p.progress(provider,i,queryId);await terminal;ownedCancel=undefined;settled();
    const found=client.searchSnapshot();if(!live()||!same(found,provider.providerRef,queryId)||found.error||found.delivery!=='acknowledged')return {state:'uncertain'};
-   const matches=matchingSongRows(found.rows,target);if(!matches.length){reasons.push('no-compatible-row');continue;}
+   const matches=matchingSongRows(found.rows,target).map(row=>({row,key:candidateKey(provider.providerRef,row)}))
+    .filter(candidate=>!excludedRows.has(candidate.key));
+   const selected=matches[0];if(!selected){reasons.push('no-compatible-row');continue;}
+   const hasAlternate=matches.some(candidate=>candidate.key!==selected.key);
+   const retryAlternate=()=>{
+    excludedRows.add(selected.key);
+    if(p.excludedRows&&hasAlternate&&!retried.has(provider.providerRef)){
+     retried.add(provider.providerRef);i--;
+    }
+   };
    await wait();if(!live())return {state:'uncertain'};
-   const prior=client.searchSnapshot();if(!same(prior,provider.providerRef,queryId)||prior.error||prior.delivery!=='acknowledged'||!prior.rows.some(r=>r.rowRef===matches[0].rowRef))return {state:'uncertain'};
+   const prior=client.searchSnapshot();if(!same(prior,provider.providerRef,queryId)||prior.error||prior.delivery!=='acknowledged'||!prior.rows.some(r=>r.rowRef===selected.row.rowRef))return {state:'uncertain'};
    const allowed=client.captureSearchActionCurrent();if(!allowed())return {state:'uncertain'};
    let admittedDownload=false;
-   const downloading=client.downloadBot(matches[0].rowRef,allowed,admission=>{if(admission.queryId===queryId){admittedDownload=true;ownedCancel=admission.cancel;if(expired||p.signal.aborted)cancel();}});
+   const downloading=client.downloadBot(selected.row.rowRef,allowed,admission=>{if(admission.queryId===queryId){admittedDownload=true;ownedCancel=admission.cancel;if(expired||p.signal.aborted)cancel();}});
    const audio=await downloading;ownedCancel=undefined;settled();
    if(!admittedDownload)return {state:'uncertain'};
    if(!live())return {state:'uncertain'};
    const after=client.searchSnapshot();if(!same(after,provider.providerRef,queryId))return {state:'uncertain'};
-   if(audio)return JSON.stringify(audio.target)===JSON.stringify(target)?{state:'audio',audio}:{state:'uncertain'};
+   if(audio){
+    if(JSON.stringify(audio.target)!==JSON.stringify(target))return {state:'uncertain'};
+    if(p.excludedDigests?.has(audio.sha256)){reasons.push('file-invalid');retryAlternate();continue;}
+    return {state:'audio',audio,providerRef:provider.providerRef,rowKey:selected.key,hasAlternate};
+   }
    // The exact-menu/file revalidation failed before any callback was sent.
    // The original lane has settled; keep its strict validation and try only the
    // next captured provider. An acknowledged/uncertain callback still stops.
-   if(after.error==='conflict'&&after.delivery==='not-dispatched'){reasons.push('selection-changed');continue;}
-   if(after.error==='file-too-large'&&after.delivery!=='uncertain'){reasons.push('file-too-large');continue;}
-   if(after.delivery==='acknowledged'&&after.error==='file-invalid'){reasons.push('file-invalid');continue;}
-   if(after.delivery==='acknowledged'&&after.error===null&&after.rows.some(r=>r.kind==='audio')&&!matchingSongRows(after.rows,target).length){reasons.push('returned-audio-mismatch');for(const row of after.rows)if(row.kind==='audio')for(const field of botAudioMismatchFields(row,target))reasons.push(`audio-${field}-mismatch`);continue;}
+   if(after.error==='conflict'&&after.delivery==='not-dispatched'){reasons.push('selection-changed');retryAlternate();continue;}
+   if(after.error==='file-too-large'&&after.delivery!=='uncertain'){reasons.push('file-too-large');retryAlternate();continue;}
+   if(after.delivery==='acknowledged'&&after.error==='file-invalid'){reasons.push('file-invalid');retryAlternate();continue;}
+   if(after.delivery==='acknowledged'&&after.error===null&&after.rows.some(r=>r.kind==='audio')&&!matchingSongRows(after.rows,target).length){reasons.push('returned-audio-mismatch');for(const row of after.rows)if(row.kind==='audio')for(const field of botAudioMismatchFields(row,target))reasons.push(`audio-${field}-mismatch`);retryAlternate();continue;}
    return {state:'uncertain'};
   }
   return {state:'known-failure',reasons};

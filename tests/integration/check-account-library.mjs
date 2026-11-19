@@ -67,7 +67,7 @@ try{
   const replacement=await b.evaluate(()=>window.libraryFixture.verifyReplacement(80));
   assert.equal(replacement.before.state,'uncertain');
   assert.equal(replacement.before.canPreserveRetry,true);
-  assert.equal(replacement.reviewed.state,'missing');
+  assert.equal(replacement.reviewed,true);
   assert.equal(replacement.saved,id(80));
   assert.equal(replacement.kept,replacement.old);
   assert.equal(replacement.assetKept,true);
@@ -110,6 +110,39 @@ try{
   assert.ok(after.some(t=>t.id===id(144)&&t.assetId===null));
   assert.ok(after.some(t=>t.id===id(143)&&t.assetId===id(343)));
   report.cases.push({engine,test:'persisted network and unknown save reviews require explicit per-track retry, use corrected metadata and preserve native files and records',status:'PASS'});
+  // Separate context so malformed receipts from the manual review fixture are not
+  // mistaken for staging owned by this batch.
+  for(const mode of ['alternate','exhausted','same-provider','transient','resume']){
+   const automaticContext=await browser.newContext();contexts.push(automaticContext);
+   await automaticContext.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+   const page=await automaticContext.newPage();
+   await page.goto(origin+'/'+work.dir+'/index.html');await page.waitForFunction(()=>!!window.libraryFixture);
+   if(mode==='resume'){
+    await page.evaluate(()=>window.libraryFixture.mountAutomaticBatch('resume',true));
+    await page.reload();await page.waitForFunction(()=>!!window.libraryFixture);
+   }
+   await page.evaluate(mode=>window.libraryFixture.mountAutomaticBatch(mode),mode);
+   await page.getByRole('button',{name:mode==='resume'?'Continuar descarga de Biblioteca':'Descargar playlist completa',exact:true}).click();
+   await page.getByText(mode==='exhausted'?'Descarga parcial: revisa las canciones pendientes.':'Selección descargada en este dispositivo.',{exact:true}).waitFor({state:'attached'});
+   assert.equal(await page.locator('.download-bubble button').filter({hasText:'Revisar descarga'}).count(),0);
+   const trace=await page.evaluate(async()=>({requests:window.automaticFixture.requests,downloads:window.automaticFixture.downloads,saves:window.automaticFixture.saves,receipt:await window.automaticFixture.receipt()}));
+   const thirdRequests=mode==='same-provider'?['A Lote 3','A Lote 3']:mode==='transient'?['A Lote 3']:['A Lote 3','B Lote 3','C Lote 3'];
+   const thirdDownloads=mode==='same-provider'?['A row','A alternate']:mode==='transient'?['A row']:
+    mode==='resume'?['B row','C row']:['A row','B row','C row'];
+   assert.deepEqual(trace.requests,[...thirdRequests,'A Lote 4']);
+   assert.deepEqual(trace.downloads,[...thirdDownloads,'A row']);
+   assert.deepEqual(trace.saves,mode==='exhausted'||mode==='resume'?['Lote 3','Lote 4']:['Lote 3','Lote 3','Lote 4']);
+   assert.deepEqual(trace.receipt,{state:'discarded',chunks:0});
+   const scenarios={
+    alternate:'playlist recovers own staging, skips identical alternative and saves the third and fourth tracks without another gesture',
+    exhausted:'playlist fourth track continues without a gesture after third track exhausts alternatives',
+    'same-provider':'playlist uses another compatible row with only one configured provider',
+    transient:'playlist retries one transient write with the verified blob and no second Telegram download',
+    resume:'playlist continuation repairs staging and skips the recorded bad candidate before recovering track three and then four',
+   };
+   report.cases.push({engine,test:scenarios[mode],status:'PASS'});
+   await page.close();
+  }
  }catch(e){report.cases.push({engine,status:'FAIL',error:String(e.stack||e)});}finally{for(const c of contexts){for(const p of c.pages())await p.evaluate(()=>window.libraryFixture?.dispose()).catch(()=>{});await c.close();}await browser?.close();}}
 }finally{await server?.close();report.cleanup=await work.cleanup();report.status=report.cases.some(c=>c.status==='FAIL')||report.errors.length?'FAIL':'PASS';await writeFile(resolve(work.evidence,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({report:resolve(work.evidence,'report.json'),...report},null,2));}
 if(report.status!=='PASS')process.exitCode=1;

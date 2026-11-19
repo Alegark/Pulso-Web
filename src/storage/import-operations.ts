@@ -32,7 +32,9 @@ function validStoredTrack(value:unknown):value is Track {
  if(!record(value))return false;const t=value as unknown as Track;
  if(t.accountId!==undefined&&!uuid(t.accountId))return false;if(t.catalogChoice!==undefined){try{if(!copyAccountCatalog(t.catalogChoice))return false;}catch{return false;}}
  return (!Object.hasOwn(t,'localAlbum')||copyLocalAlbumMetadata(t.localAlbum)!==null)&&uuid(t.id)&&(t.assetId===null||uuid(t.assetId))&&(t.audioFingerprint==null||record(t.audioFingerprint)&&validAudioFingerprint(t.audioFingerprint))&&typeof t.title==='string'&&t.title.length>0&&t.title.length<=300&&
- [t.artist,t.album].every(v=>v===null||typeof v==='string'&&v.length<=300)&&Number.isFinite(t.duration)&&t.duration>0&&
+ [t.artist,t.album].every(v=>v===null||typeof v==='string'&&v.length<=300)&&Number.isFinite(t.duration)&&
+ (t.duration>0||t.duration===0&&t.assetId===null&&uuid(t.accountId)&&
+  (!t.catalogChoice||t.catalogChoice.source==='spotify'&&t.catalogChoice.duration===null))&&
  (t.organizationRef===undefined||record(t.organizationRef)&&uuid(t.organizationRef.libraryId)&&uuid(t.organizationRef.id))&&
  typeof t.favorite==='boolean'&&positive(t.revision)&&typeof t.createdAt==='string'&&Number.isFinite(Date.parse(t.createdAt))&&
  record(t.manualOverrides)&&Object.entries(t.manualOverrides).every(([k,v])=>['title','artist','album'].includes(k)&&(typeof v==='string'&&v.length<=300||k!=='title'&&v===null));
@@ -141,12 +143,12 @@ async function publicationTracks(store:IDBObjectStore,asset:LocalAsset):Promise<
  return values as Track[];
 }
 /** Publication-only: current records were validated in this transaction, after byte verification. */
-function linkRestoredTracks(store:IDBObjectStore,tracks:Track[],asset:LocalAsset):LinkedTrack[] {
+function linkRestoredTracks(store:IDBObjectStore,tracks:Track[],asset:LocalAsset,duration:number):LinkedTrack[] {
  const linked:LinkedTrack[]=[];
  for(const track of tracks){
  const f=track.audioFingerprint;
  if(track.assetId!==null||!validAudioFingerprint(f)||f.sha256!==asset.sha256||f.bytes!==asset.bytes)continue;
- const next:LinkedTrack={...track,assetId:asset.id,audioFingerprint:{algorithm:'sha256',sha256:asset.sha256,bytes:asset.bytes},revision:track.revision+1};
+ const next:LinkedTrack={...track,assetId:asset.id,duration:track.duration||duration,audioFingerprint:{algorithm:'sha256',sha256:asset.sha256,bytes:asset.bytes},revision:track.revision+1};
  store.put(next,next.id);linked.push(next);
  }return linked;
 }
@@ -158,6 +160,8 @@ async function promoteMembership(settings:IDBObjectStore,trackId:string){
 /** Shared by normal import and recovery: verifies the existing generation before a short CAS. */
 async function deduplicateOperationCore(job:ImportOperation,signal?:AbortSignal,guard?:ImportOperationGuard):Promise<ImportOperation|undefined>{
  checkUse('publish',guard);if(!validImportOperation(job,job.operationId)||!job.asset)fail('commit','internal','conflict','idb');
+ if(!job.track)fail('commit','internal','conflict','idb');
+ const duration=job.track.duration;
  const existing=await atBoundary('read','idb',()=>readRecord<LocalAsset>('assets',job.asset!.id));
  if(!existing)return;
  if(!validAsset(existing))fail('verify','integrity','local-corrupt','idb');
@@ -177,7 +181,7 @@ async function deduplicateOperationCore(job:ImportOperation,signal?:AbortSignal,
  if(!proof||proof.owner!==job.owner||proof.operationId!==job.operationId||proof.everPublished!==false)fail('commit','internal','conflict','idb');
  const tracks=(await publicationTracks(tx.objectStore('tracks'),existing)).filter(t=>t.accountId===job.track?.accountId);const track=tracks.find((t):t is LinkedTrack=>t.assetId===existing.id);
  if(JSON.stringify(now)===JSON.stringify(existing)&&now?.revision===existing.revision&&now.storageKey===existing.storageKey&&now.backend===existing.backend&&validImportOperation(current,job.operationId)&&JSON.stringify(current)===JSON.stringify(job)&&current.owner===job.owner&&current.revision===job.revision&&current.state===job.state){
- checkUse('publish',guard);const linked=linkRestoredTracks(tx.objectStore('tracks'),tracks,existing);
+ checkUse('publish',guard);const linked=linkRestoredTracks(tx.objectStore('tracks'),tracks,existing,duration);
  const resultTrack=track??linked[0];
  if(!resultTrack){await done;return;}
  if(job.libraryMode!=='cache')await promoteMembership(tx.objectStore('settings'),resultTrack.id);checkUse('publish',guard);
@@ -215,7 +219,7 @@ async function publishOperationCore(job:ImportOperation,signal?:AbortSignal,guar
  const tracks=(await publicationTracks(tx.objectStore('tracks'),job.asset)).filter(t=>t.accountId===job.track?.accountId);
  const existing=tracks.find((t):t is LinkedTrack=>t.assetId===job.asset!.id);
  if(signal?.aborted){tx.abort();await done;signal.throwIfAborted();}
- checkUse('publish',guard);const linked=linkRestoredTracks(tx.objectStore('tracks'),tracks,job.asset);
+ checkUse('publish',guard);const linked=linkRestoredTracks(tx.objectStore('tracks'),tracks,job.asset,job.track.duration);
  const track=existing??linked[0]??job.track;const result={track,duplicate:!!existing||linked.length>0};
  tx.objectStore('settings').put({...proof,everPublished:true},ownershipKey(job));
  tx.objectStore('assets').put(job.asset,job.asset.id);
