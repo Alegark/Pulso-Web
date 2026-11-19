@@ -6,7 +6,7 @@ const work=await createTestWorkspace('account-library'),report={cases:[],errors:
 const id=n=>`${String(n).padStart(8,'0')}-1111-4111-8111-111111111111`;
 try{
  await writeFile(resolve(work.dir,'index.html'),'<html><body><h1>TESTONLY account library</h1><script type="module" src="/tests/integration/account-library-fixture.ts"></script></body></html>');
- server=await createServer({configFile:false,cacheDir:resolve(work.dir,'vite-cache'),optimizeDeps:{noDiscovery:true,include:[]},server:{host:'127.0.0.1',port:0,strictPort:false,watch:null},logLevel:'error'});await server.listen();const address=server.httpServer.address(),origin=`http://127.0.0.1:${address.port}`;
+ server=await createServer({configFile:false,cacheDir:resolve(work.dir,'vite-cache'),optimizeDeps:{noDiscovery:true,include:['music-metadata','debug','react','react-dom','react-dom/client','react/jsx-dev-runtime']},server:{host:'127.0.0.1',port:0,strictPort:false,watch:null},logLevel:'error'});await server.listen();const address=server.httpServer.address(),origin=`http://127.0.0.1:${address.port}`;
  for(const engine of ['chromium','webkit']){let browser,contexts=[];try{
   browser=await (engine==='chromium'?chromium:webkit).launch(engine==='chromium'?{executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true}:{headless:true});
   const cloud=new Map();const pages=[];
@@ -29,6 +29,41 @@ try{
   // empty independent cloud response; no browser auth is involved in this fixture.
   await a.evaluate(()=>window.libraryFixture.prepare(101));const isolated=await a.evaluate(()=>window.libraryFixture.snapshot());assert.equal(isolated.document.tracks.length,0);assert.equal(isolated.document.playlists.length,0);await a.evaluate(()=>window.libraryFixture.prepare(100));assert.equal((await a.evaluate(()=>window.libraryFixture.snapshot())).document.tracks.length,3);report.cases.push({engine,test:'account switch preserves and isolates each local metadata set',status:'PASS'});
   await b.evaluate(async()=>{const f=window.libraryFixture;await f.seed(5,true,true);});const physicalBefore=await b.evaluate(()=>window.libraryFixture.physical());const linked=await b.evaluate(()=>window.libraryFixture.attach(1,5));assert.equal(linked,id(1));assert.equal((await b.evaluate(()=>window.libraryFixture.rows('tracks'))).some(t=>t.id===id(5)),false);assert.deepEqual(await b.evaluate(()=>window.libraryFixture.physical()),physicalBefore);report.cases.push({engine,test:'redownload attaches bytes to the restored identity without a second asset or dangling playlist',status:'PASS'});
+  await b.evaluate(()=>window.libraryFixture.stageDownload(80));
+  const sealedCount=(await b.evaluate(()=>window.libraryFixture.rows('assets'))).length;
+  await b.reload();await b.waitForFunction(()=>!!window.libraryFixture);
+  assert.equal((await b.evaluate(()=>window.libraryFixture.resumeDownload(101))).state,'absent');
+  const recovery=await b.evaluate(()=>window.libraryFixture.resumeDownload(100));
+  assert.deepEqual(recovery,{state:'saved',trackId:id(80)});
+  assert.deepEqual(await b.evaluate(()=>window.libraryFixture.resumeDownload(100)),recovery);
+  assert.equal((await b.evaluate(()=>window.libraryFixture.rows('assets'))).length,sealedCount);
+  assert.ok((await b.evaluate(()=>window.libraryFixture.rows('tracks'))).find(t=>t.id===id(80)).assetId);
+  report.cases.push({engine,test:'reload reconciles exact native sealed receipt and binds the previous row without new audio',status:'PASS'});
+  const ui=()=>b.evaluate(()=>window.libraryFixture.mountBatch());
+  const button=name=>b.getByRole('button',{name,exact:true});
+  await ui();await button('Descargar selección').click();await b.waitForFunction(()=>window.batchFixture.lookups()===1);
+  await button('Ir a Inicio').click();await b.getByRole('heading',{name:'Inicio'}).waitFor();
+  await b.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});document.dispatchEvent(new Event('visibilitychange'));window.batchFixture.release();});
+  await b.getByText('Selección descargada en este dispositivo.',{exact:true}).waitFor({state:'attached'});
+  assert.equal(await b.evaluate(()=>window.batchFixture.lookups()),3);
+  await b.reload();await b.waitForFunction(()=>!!window.libraryFixture);
+  await ui();await button('Descargar selección').click();await b.waitForFunction(()=>window.batchFixture.lookups()===1);
+  await b.reload();await b.waitForFunction(()=>!!window.libraryFixture);await ui();
+  await button('Continuar descarga de Biblioteca').waitFor();
+  assert.equal(await b.evaluate(()=>window.batchFixture.lookups()),0);
+  await button('Continuar descarga de Biblioteca').click();await b.evaluate(()=>window.batchFixture.release());
+  await b.getByText('Selección descargada en este dispositivo.',{exact:true}).waitFor({state:'attached'});
+  assert.equal(await b.evaluate(()=>window.batchFixture.lookups()),3);
+  report.cases.push({engine,test:'browser UI navigation, visibility signal, reload and explicit continuation',status:'PASS'});
+  await b.evaluate(()=>window.libraryFixture.stageMissingBatch());await b.reload();
+  await b.waitForFunction(()=>!!window.libraryFixture);await ui();
+  await button('Continuar descarga de Biblioteca').click();
+  await b.getByText('La selección cambió. Vuelve a elegirla.',{exact:true}).waitFor();
+  await button('Descartar selección pendiente').click();
+  assert.deepEqual(await b.evaluate(()=>window.libraryFixture.missingBatchState()),{active:false,held:'save'});
+  await button('Descargar selección').click();await b.evaluate(()=>window.batchFixture.release());
+  await b.getByText('Selección descargada en este dispositivo.',{exact:true}).waitFor({state:'attached'});
+  report.cases.push({engine,test:'missing track can be discarded while its uncertain receipt stays separate from future batches',status:'PASS'});
  }catch(e){report.cases.push({engine,status:'FAIL',error:String(e.stack||e)});}finally{for(const c of contexts){for(const p of c.pages())await p.evaluate(()=>window.libraryFixture?.dispose()).catch(()=>{});await c.close();}await browser?.close();}}
 }finally{await server?.close();report.cleanup=await work.cleanup();report.status=report.cases.some(c=>c.status==='FAIL')||report.errors.length?'FAIL':'PASS';await writeFile(resolve(work.evidence,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({report:resolve(work.evidence,'report.json'),...report},null,2));}
 if(report.status!=='PASS')process.exitCode=1;

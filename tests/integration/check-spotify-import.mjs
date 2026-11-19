@@ -120,7 +120,8 @@ try {
      const [tracks,lists,assets,settings]=await Promise.all(['tracks','playlists','assets','settings'].map(read));
      const keys=await new Promise((resolve,reject)=>{const q=tx.objectStore('settings').getAllKeys();q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
      const releases=Object.fromEntries(keys.flatMap((key,i)=>Array.isArray(key)&&key[0]==='spotify-catalog-release'?[[key[3],settings[i].release]]:[]));
-     return {tracks,lists,assets:assets.length,releases};
+     const membership=Object.fromEntries(keys.flatMap((key,i)=>Array.isArray(key)&&key[0]==='library-membership'?[[key[2],settings[i].added]]:[]));
+     return {tracks,lists,assets:assets.length,releases,membership};
     }finally{db.close();}
    });
    await page.goto(origin);
@@ -181,6 +182,7 @@ try {
    assert.equal(songs[0].assetId,null);assert.equal(songs[2].assetId,null);assert.equal(songs[2].duration,0);
    assert.notEqual(songs[3].id,audioTrack);assert.equal(songs[3].catalogChoice.id,'spotify:'+'d'.repeat(22));
    assert.equal(saved.assets,1);
+   assert.deepEqual(songs.map(song=>saved.membership[song.id]),[false,undefined,false,false]);
    await button('Abrir en Biblioteca').click();await page.getByRole('heading',{name:fixture.name}).waitFor();
    assert.deepEqual(await page.locator('.library-detail .tracks > li strong').allTextContents(),[pending.title,local.title,unknown.title,sameTags.title]);
    try{await page.getByText('4/4 revisadas · 3 con álbum · 3 con portada',{exact:true}).waitFor({timeout:30000});}
@@ -200,13 +202,45 @@ try {
     await page.waitForFunction(()=>document.querySelector('.player-surface .artwork-image')?.naturalWidth>0);
     assert.ok(await page.locator('.player-surface').getByText(appleAlbum,{exact:true}).isVisible());
    }
+   // Recreate the old importer, where a Spotify-owned track had no membership record.
+   await page.evaluate(async ids=>{
+    const db=await new Promise((resolve,reject)=>{const q=indexedDB.open('pulso-web-local-v1');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
+    try{
+     const tx=db.transaction('settings','readwrite'),done=new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);});
+     for(const id of ids)tx.objectStore('settings').delete(['library-membership',1,id]);
+     await done;
+    }finally{db.close();}
+   },[songs[0].id,songs[2].id]);
+   const albums=async()=>{
+    await page.getByRole('navigation',{name:'Principal'}).getByRole('button',{name:'Biblioteca'}).click();
+    const tab=button('Álbumes');if(await tab.getAttribute('aria-pressed')!=='true')await tab.click();
+   };
+   const openFixture=async()=>{
+    await page.getByRole('navigation',{name:'Principal'}).getByRole('button',{name:'Biblioteca'}).click();
+    const tab=button('Playlists');if(await tab.getAttribute('aria-pressed')!=='true')await tab.click();
+    await page.locator('.library-grid .collection-card').filter({hasText:fixture.name}).click();
+   };
    await page.reload();
-   await page.getByRole('navigation',{name:'Principal'}).getByRole('button',{name:'Biblioteca'}).click();
-   await button('Álbumes').click();
+   await albums();
    const existingAlbum=page.locator('.library-grid .collection-card').filter({hasText:sharedAlbum});
    await existingAlbum.waitFor();
    assert.equal(await existingAlbum.count(),1);
-   assert.ok((await existingAlbum.innerText()).includes('2 canciones'));
+   assert.ok((await existingAlbum.innerText()).includes('1 canciones'));
+   const cards=page.locator('.library-grid .collection-card:visible');
+   assert.equal(await cards.count(),2);
+   assert.equal(await cards.filter({hasText:/Sin álbum|Otra edición/}).count(),0);
+   const migrated=await stored();
+   assert.equal(migrated.membership[songs[0].id],false);
+   assert.equal(migrated.membership[songs[2].id],false);
+   assert.deepEqual(migrated.lists[0].entries,list.entries);
+   await openFixture();
+   await button('Opciones de '+pending.title).click();
+   await button('Añadir a Biblioteca').click();
+   await button('En Biblioteca').waitFor();
+   await button('Cerrar opciones de canción').click();
+   await albums();
+   try{await existingAlbum.getByText('2 canciones',{exact:false}).waitFor();}
+   catch(error){report.membershipDiagnostic={explicitSaved:(await stored()).membership[songs[0].id],cards:await cards.allTextContents()};throw error;}
    await existingAlbum.click();
    await button('Retirar álbum').click();
    const albumRemoval=page.locator('.collection-removal');
@@ -214,9 +248,7 @@ try {
    assert.equal(await albumRemoval.locator('dl dd').first().textContent(),'2');
    await albumRemoval.getByRole('button',{name:'Cancelar'}).click();
    await albumRemoval.getByRole('button',{name:'Cerrar',exact:true}).click();
-   await button('Volver a Biblioteca').click();
-   await button('Playlists').click();
-   await page.locator('.library-grid .collection-card').filter({hasText:fixture.name}).click();
+   await openFixture();
    // Model a playlist already imported by the previous release. Keep the exact
    // same Track and Playlist records, removing only its optional cache entry.
    await page.evaluate(async ({account,trackId})=>{
@@ -239,7 +271,9 @@ try {
    const identity=({id,assetId,accountId,catalogChoice})=>({id,assetId,accountId,sourceId:catalogChoice?.id});
    assert.deepEqual(reloaded.tracks.map(identity),saved.tracks.map(identity));
    assert.equal(reloaded.assets,saved.assets);
-   report.cases.push({engine,fixture:'PASS',failureAndClose:true,accountIsolation:true,order:true,refreshReuse:true,metadataAndImages:true,repairPreviousImport:true,catalogBridge:true,albumRemovalPreview:true,nativeAudio:engine==='chromium'?'PASS':'NOT_RUN'});
+   assert.equal(reloaded.membership[songs[0].id],true);
+   assert.deepEqual(songs.slice(2).map(song=>reloaded.membership[song.id]),[false,false]);
+   report.cases.push({engine,fixture:'PASS',failureAndClose:true,accountIsolation:true,order:true,refreshReuse:true,metadataAndImages:true,repairPreviousImport:true,catalogBridge:true,legacyPlaylistMembership:true,savedSingle:true,explicitLibrarySave:true,albumRemovalPreview:true,nativeAudio:engine==='chromium'?'PASS':'NOT_RUN'});
    if(publicData){
     await openImport(publicId);await submit();await result().waitFor();
     const after=await stored(),created=after.lists.find(candidate=>candidate.id!==list.id);
@@ -247,7 +281,7 @@ try {
     const expected=[...new Set(publicData.tracks.filter(row=>row.title.trim()&&row.title.length<=300).map(row=>'spotify:'+row.url.split('/').at(-1)))];
     const actual=created.entries.map(({trackId})=>after.tracks.find(track=>track.id===trackId));
     assert.deepEqual(actual.map(track=>track.catalogChoice?.id),expected);
-    assert.ok(actual.every(track=>track.assetId===null));
+    assert.ok(actual.every(track=>track.assetId===null&&after.membership[track.id]===false));
     assert.equal(after.assets,saved.assets);
     await button('Abrir en Biblioteca').click();
     await page.waitForFunction(()=>document.querySelector('.playlist-catalog [role=status]')?.textContent.includes('4 con álbum'),null,{timeout:30000});
@@ -260,10 +294,24 @@ try {
    }
    const settingsClose=button('Cerrar configuración');
    if(await settingsClose.isVisible())await settingsClose.click();
-   await page.getByRole('navigation',{name:'Principal'}).getByRole('button',{name:'Biblioteca'}).click();
-   const fixtureCard=page.locator('.library-grid .collection-card').filter({hasText:fixture.name});
-   if(!await fixtureCard.isVisible())await button('Playlists').click();
-   await fixtureCard.click();
+   await albums();
+   assert.equal(await cards.count(),2);
+   const savedSingle=cards.filter({hasText:appleAlbum});
+   await savedSingle.click();
+   await button('Retirar álbum').click();
+   await albumRemoval.getByRole('checkbox').check();
+   await albumRemoval.getByRole('button',{name:'Eliminar álbum'}).click();
+   await albumRemoval.getByText('La colección se eliminó.').waitFor();
+   await albumRemoval.getByRole('button',{name:'Cerrar',exact:true}).click();
+   const afterAlbum=await stored();
+   assert.equal(afterAlbum.membership[audioTrack],false);
+   assert.equal(afterAlbum.assets,saved.assets);
+   assert.deepEqual(afterAlbum.lists.find(row=>row.id===list.id).entries,list.entries);
+   await openFixture();
+   if(engine==='chromium'){
+    await button('Escuchar '+local.title).first().click();
+    await page.waitForFunction(()=>window.fixtureAudio.some(audio=>!audio.paused&&audio.currentTime>0));
+   }
    await button('Eliminar playlist').click();
    const removal=page.locator('.collection-removal');
    await removal.getByRole('checkbox').check();
@@ -272,7 +320,7 @@ try {
    const removed=await stored();
    assert.ok(!removed.lists.some(row=>row.id===list.id));
    assert.equal(removed.assets,saved.assets);
-   report.cases.push({engine,deletion:'PASS',enrichedRowsParticipated:true,sharedAudioRetained:true});
+   report.cases.push({engine,deletion:'PASS',enrichedRowsParticipated:true,albumAndPlaylistRemoval:true,sharedAudioRetained:true});
    assert.ok(requests>=4);
   }finally{await context.close();}
  }

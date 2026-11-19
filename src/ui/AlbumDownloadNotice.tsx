@@ -13,7 +13,7 @@ export function AlbumDownloadNotice(){
    <progress aria-label="Canciones guardadas" value={confirmed} max={Math.max(1,total)}/>
    <p role="status">{notice.progress.message}</p>
    <ol>{notice.progress.rows.map((row,index)=><li key={index}><strong>{notice.titles?.[index]??`Canción ${index+1}`}</strong><span>{row.message||'En espera'}</span></li>)}</ol>
-   {albumCoordinator.running&&run?<button type="button" onClick={()=>{if(albumCoordinator.active===run)run.abort.abort();}}>Detener descarga de álbum</button>:<button type="button" onClick={()=>{if(!albumCoordinator.running&&albumCoordinator.notice===notice){albumCoordinator.notice=undefined;notifyAlbumDownload(albumCoordinator);}}}>Cerrar aviso de descarga</button>}
+   {albumCoordinator.running&&run?<button type="button" onClick={()=>{if(albumCoordinator.active===run)run.abort.abort();}}>{run.scope==='library'?'Detener descarga de Biblioteca':'Detener descarga de álbum'}</button>:<button type="button" onClick={()=>{if(!albumCoordinator.running&&albumCoordinator.notice===notice){albumCoordinator.notice=undefined;notifyAlbumDownload(albumCoordinator);}}}>Cerrar aviso de descarga</button>}
   </div>
  </details>;
 }

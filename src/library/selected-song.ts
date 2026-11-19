@@ -20,7 +20,9 @@ export interface SongPlaybackAttempt {
  current():boolean;
  addToLibrary(trackId:string,current:()=>boolean,signal:AbortSignal):Promise<boolean>;
  lookup(choice:SongChoice,signal:AbortSignal):Promise<string|null>;
- save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(bytes:number)=>void):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null}>;
+ save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId?:string):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null}>;
+ waitForDownload?(signal:AbortSignal):Promise<boolean>;
+ reconcileDownload?(operationId:string,trackId:string,signal:AbortSignal):Promise<{state:'saved'|'missing'|'uncertain';trackId:string|null}>;
  play(trackId:string,current:()=>boolean,signal:AbortSignal):Promise<'playing'|'gesture-required'|'failed'>;
 }
 export {musicIdentityText,matchingSongRows} from '../telegram/bot-search-protocol';

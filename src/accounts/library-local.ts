@@ -23,6 +23,12 @@ export async function prepareAccountLibrary(accountId:string,current:()=>boolean
   if(legacy===undefined){legacy=accountId;settings.put(accountId,LEGACY_OWNER);}if(!libraryUuid(legacy))throw Error('owner');
   const tracks=await request<Track[]>(tx.objectStore('tracks').getAll()),lists=await request<Playlist[]>(tx.objectStore('playlists').getAll());check(current);
   for(const t of tracks)if(t.accountId===undefined)tx.objectStore('tracks').put({...t,accountId:legacy},t.id);
+  // Older Spotify imports created a track without an explicit membership.
+  // Existing true/false records and independently-created reused tracks keep their intent.
+  await Promise.all(tracks.filter(t=>(t.accountId??legacy)===accountId&&t.catalogChoice?.source==='spotify').map(async t=>{
+   const key=libraryMembershipKey(t.id),present=await request(settings.getKey(key));check(current);
+   if(present===undefined)settings.add(makeLibraryMembership(t.id,false),key);
+  }));
   for(const p of lists)if(p.accountId===undefined)tx.objectStore('playlists').put({...p,accountId:legacy},p.id);
   const jobs=await request<ImportOperation[]>(tx.objectStore('jobs').getAll());check(current);
   for(const job of jobs)if(validImportOperation(job,job.operationId)&&job.accountId===undefined)tx.objectStore('jobs').put({...job,accountId:legacy,...(job.track?{track:{...job.track,accountId:legacy}}:{}),...(job.result?{result:{...job.result,track:{...job.result.track,accountId:legacy}}}:{})},job.operationId);
@@ -59,7 +65,7 @@ export async function applyAccountLibrary(accountId:string,sent:AccountLibraryDo
    if(!dto.localAlbum)delete next.localAlbum;if(dto.catalog)next.catalogChoice=dto.catalog;else delete next.catalogChoice;
    // Avoid revision churn when only synchronizing an unchanged document.
    if(!old||JSON.stringify({...next,revision:old.revision})!==JSON.stringify(old)){tx.objectStore('tracks').put(next,next.id);changed=true;}
-   const key=libraryMembershipKey(dto.id),membership=await request(tx.objectStore('settings').get(key));if(membership===undefined&&dto.inLibrary===false||membership!==undefined&&copyLibraryMembership(membership,dto.id)?.added!==dto.inLibrary){tx.objectStore('settings').put(makeLibraryMembership(dto.id,dto.inLibrary),key);changed=true;}
+   const key=libraryMembershipKey(dto.id),membership=await request(tx.objectStore('settings').get(key));if(membership===undefined&&(!dto.inLibrary||dto.catalog?.source==='spotify')||membership!==undefined&&copyLibraryMembership(membership,dto.id)?.added!==dto.inLibrary){tx.objectStore('settings').put(makeLibraryMembership(dto.id,dto.inLibrary),key);changed=true;}
   }
   // Removing account organization never physically deletes music. Demote the
   // local record to listening cache; ordinary cache cleanup decides eligibility.
@@ -76,10 +82,11 @@ export async function applyAccountLibrary(accountId:string,sent:AccountLibraryDo
 }
 /** The user requested this exact restored row. Parsed tags/duration have already
  * passed import validation. Reuse those bytes without a second physical copy. */
-export async function attachRestoredAccountTrack(accountId:string,restoredId:string,downloadedId:string,current:()=>boolean):Promise<string>{
+export async function attachRestoredAccountTrack(accountId:string,restoredId:string,downloadedId:string,current:()=>boolean,expectedSource?:{assetId:string;revision:number}):Promise<string>{
  if(restoredId===downloadedId)return downloadedId;
  return write(current,async tx=>{const store=tx.objectStore('tracks');const [restored,downloaded]=await Promise.all([request<Track|undefined>(store.get(restoredId)),request<Track|undefined>(store.get(downloadedId))]);
-  if(!restored||restored.accountId!==accountId||restored.assetId!==null||!downloaded?.assetId||downloaded.accountId!==accountId) return downloadedId;
+  if(!restored||restored.accountId!==accountId||restored.assetId!==null||!downloaded?.assetId||downloaded.accountId!==accountId||
+   expectedSource&&(downloaded.assetId!==expectedSource.assetId||downloaded.revision!==expectedSource.revision)) return downloadedId;
   store.put({...restored,assetId:downloaded.assetId,audioFingerprint:downloaded.audioFingerprint,duration:restored.duration||downloaded.duration,revision:restored.revision+1},restoredId);
   const lists=await request<Playlist[]>(tx.objectStore('playlists').getAll());const member=await request(tx.objectStore('settings').get(libraryMembershipKey(downloadedId)));
   if(!downloaded.favorite&&copyLibraryMembership(member,downloadedId)?.added===false&&!lists.some(p=>p.entries.some(e=>e.trackId===downloadedId))){store.delete(downloadedId);tx.objectStore('settings').delete(libraryMembershipKey(downloadedId));}

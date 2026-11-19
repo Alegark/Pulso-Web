@@ -22,8 +22,8 @@ import {normalizeInternationalTelegramPhone,internationalPhoneNumberErrorText as
 import './telegram.css';
 import {RequiredSetup,SetupBots,setupWasCompleted,rememberCompletedSetup} from './RequiredSetup';
 type MusicSearchProps = React.ComponentProps<typeof MusicSearchController>;
-export interface TelegramPanelProps {canSaveArtist?:boolean;savedArtists?:MusicSearchProps['savedArtists'];saveArtist?:MusicSearchProps['saveArtist'];requiredSetup?:boolean;onSetupReady?:(ready:boolean)=>void;accountId?:string;activity:Activity;canConnect:boolean;scopeKey:string;captureCurrent:()=>()=>boolean;captureLifetime?:()=>()=>boolean;captureSongPlayback?:()=>SongPlaybackAttempt|null;captureSongDownload?:()=>SongPlaybackAttempt|null;captureSongCopyInspection?:()=>SongCopyInspection|null;blockedReason?:TelegramBlockReason;libraryPending?:boolean;onCheckControl?:()=>void;onRequestControl?:()=>void;searchTarget?:HTMLElement|null;searchVisible?:boolean;localTracks?:readonly Track[];libraryTrackIds?:ReadonlySet<string>;songPlaylists?:readonly Playlist[];playerTrackId?:string|null;playerPlaying?:boolean;captureSongManagement?:(id:string)=>SongManagement|null;captureDownloadSave?:()=>((audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void)=>Promise<'saved'|'failed'|'uncertain'>)|null}
-export function TelegramPanel({requiredSetup=false,onSetupReady,savedArtists,saveArtist,canSaveArtist,accountId,activity,canConnect,scopeKey,captureCurrent,captureLifetime=captureCurrent,captureSongPlayback,captureSongDownload,captureSongCopyInspection,blockedReason='busy',libraryPending=false,onCheckControl,onRequestControl,searchTarget=null,searchVisible=false,localTracks=[],libraryTrackIds,songPlaylists=[],playerTrackId=null,playerPlaying=false,captureSongManagement,captureDownloadSave}:TelegramPanelProps){
+export interface TelegramPanelProps {canSaveArtist?:boolean;savedArtists?:MusicSearchProps['savedArtists'];saveArtist?:MusicSearchProps['saveArtist'];requiredSetup?:boolean;onSetupReady?:(ready:boolean)=>void;accountId?:string;activity:Activity;canConnect:boolean;scopeKey:string;captureCurrent:()=>()=>boolean;captureLifetime?:()=>()=>boolean;captureSongPlayback?:()=>SongPlaybackAttempt|null;captureSongDownload?:()=>SongPlaybackAttempt|null;captureBatchDownload?:()=>SongPlaybackAttempt|null;captureSongCopyInspection?:()=>SongCopyInspection|null;blockedReason?:TelegramBlockReason;libraryPending?:boolean;onCheckControl?:()=>void;onRequestControl?:()=>void;searchTarget?:HTMLElement|null;searchVisible?:boolean;localTracks?:readonly Track[];libraryTrackIds?:ReadonlySet<string>;songPlaylists?:readonly Playlist[];playerTrackId?:string|null;playerPlaying?:boolean;captureSongManagement?:(id:string)=>SongManagement|null;captureDownloadSave?:()=>((audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void)=>Promise<'saved'|'failed'|'uncertain'>)|null}
+export function TelegramPanel({requiredSetup=false,onSetupReady,savedArtists,saveArtist,canSaveArtist,accountId,activity,canConnect,scopeKey,captureCurrent,captureLifetime=captureCurrent,captureSongPlayback,captureSongDownload,captureBatchDownload,captureSongCopyInspection,blockedReason='busy',libraryPending=false,onCheckControl,onRequestControl,searchTarget=null,searchVisible=false,localTracks=[],libraryTrackIds,songPlaylists=[],playerTrackId=null,playerPlaying=false,captureSongManagement,captureDownloadSave}:TelegramPanelProps){
  const preference=useTelegramPhonePreference(accountId),phoneTouched=React.useRef(false);
  const phoneAttempt=React.useRef<{client:TelegramSessionClient;accountId:string;phone:string;scope:string}|null>(null);
  const [searchState,setSearchState]=React.useState<BotSearchSnapshot|null>(null);
@@ -31,7 +31,8 @@ export function TelegramPanel({requiredSetup=false,onSetupReady,savedArtists,sav
  const [bots,setBots]=React.useState<BotsSnapshot|null>(null);
  const [vault,setVault]=React.useState<{accountId?:string;state:'present'|'absent'|'unknown'}|null>(null);
  const savedSession=vault&&vault.accountId===accountId?vault.state:'checking';
- const resumeTried=React.useRef<TelegramSessionClient|null>(null);
+ const resumeTried=React.useRef<TelegramSessionClient|null>(null),pageSuspended=React.useRef(false);
+ const [pageGeneration,setPageGeneration]=React.useState(0);
  const [state,setState]=React.useState<SessionState>(initialSessionState);const [phone,setPhone]=React.useState('');const [country,setCountry]=React.useState('');const [code,setCode]=React.useState('');const [password,setPassword]=React.useState('');const [consent,setConsent]=React.useState(false);
  const [now,setNow]=React.useState(Date.now);const client=React.useRef<TelegramSessionClient|null>(null);const heading=React.useRef<HTMLHeadingElement>(null);const input=React.useRef<HTMLInputElement>(null);const current=React.useRef(captureCurrent);current.current=captureCurrent;
  const updateState=React.useRef({phase:state.phase,phone,code,password,country});updateState.current={phase:state.phase,phone,code,password,country};
@@ -52,10 +53,21 @@ export function TelegramPanel({requiredSetup=false,onSetupReady,savedArtists,sav
   return()=>{live=false;};
  },[accountId,scopeKey,state.phase]);
  React.useEffect(()=>{
-  const service=client.current;if(!service||resumeTried.current===service||savedSession!=='present'||state.phase!=='disconnected'||!canConnect||navigator.onLine===false||!current.current()())return;
+  const service=client.current;if(pageSuspended.current||!service||resumeTried.current===service||savedSession!=='present'||state.phase!=='disconnected'||!canConnect||navigator.onLine===false||!current.current()())return;
   resumeTried.current=service;service.restore();
- },[savedSession,state.phase,canConnect,scopeKey]);
- React.useEffect(()=>{const close=()=>client.current?.stop('cancelled');addEventListener('pagehide',close);return()=>removeEventListener('pagehide',close);},[]);
+ },[savedSession,state.phase,canConnect,scopeKey,pageGeneration]);
+ React.useEffect(()=>{
+  const close=(event:PageTransitionEvent)=>{
+   pageSuspended.current=true;
+   if(event.persisted){resumeTried.current=null;client.current?.stop(null);}
+   else client.current?.stop('cancelled');
+  };
+  const reopen=(event:PageTransitionEvent)=>{
+   if(event.persisted){pageSuspended.current=false;setPageGeneration(value=>value+1);}
+  };
+  addEventListener('pagehide',close);addEventListener('pageshow',reopen);
+  return()=>{removeEventListener('pagehide',close);removeEventListener('pageshow',reopen);};
+ },[]);
  React.useEffect(()=>{const pointer=()=>{focusIntent.current=false;};const key=(event:KeyboardEvent)=>{if(event.key==='Tab')focusIntent.current=false;};const focus=(event:FocusEvent)=>{if(event.target instanceof Element&&event.target!==document.body&&event.target!==document.documentElement&&!panel.current?.contains(event.target))focusIntent.current=false;};addEventListener('pointerdown',pointer,true);addEventListener('keydown',key,true);addEventListener('focusin',focus,true);return()=>{focusIntent.current=false;removeEventListener('pointerdown',pointer,true);removeEventListener('keydown',key,true);removeEventListener('focusin',focus,true);};},[]);
  React.useEffect(()=>{if(!state.retryAt&&!state.codeResend)return;const until=Math.max(state.retryAt??0,state.codeResend?.availableAt??0);setNow(Date.now());if(Date.now()>=until)return;const timer=setInterval(()=>{const value=Date.now();setNow(value);if(value>=until)clearInterval(timer);},1000);return()=>clearInterval(timer);},[state.retryAt,state.codeResend]);
  React.useEffect(()=>{if(state.phase==='error')phoneAttempt.current=null;if(state.phase==='connected'){phoneTouched.current=false;setCountry('');setPhone('');setCode('');setPassword('');}if(!focusIntent.current)return;if(state.phase==='code'||state.phase==='password')input.current?.focus();else if(state.phase==='qr')panel.current?.querySelector<HTMLElement>('[data-telegram-qr-heading]')?.focus();else if(state.phase==='connected')heading.current?.focus();if(['code','qr','password','connected'].includes(state.phase))focusIntent.current=false;},[state.phase]);
@@ -102,7 +114,7 @@ export function TelegramPanel({requiredSetup=false,onSetupReady,savedArtists,sav
  {!['disconnected','error'].includes(state.phase)&&(!setupNeeded||state.phase!=='connected')&&<><button onClick={()=>{resumeTried.current=actionClient;if(!localStop?.())return;setCountry('');setPhone('');setCode('');setPassword('');}}>{setupNeeded?'Corregir número':'Detener conexión local'}</button>{!setupNeeded&&<p>Detener esta pestaña conserva la sesión guardada. Para eliminarla, usa «Cerrar sesión en Telegram» o «Eliminar sesión guardada».</p>}</>}
  </section>;
  return <>{setupNeeded?createPortal(<RequiredSetup step={state.phase==='connected'?'bots':'phone'}>{connection}</RequiredSetup>,document.body):connection}
- <LibraryDownloadController tracks={localTracks} client={client.current} bots={bots} connected={state.phase==='connected'&&!setupNeeded} capture={captureSongDownload} capturePlay={captureSongPlayback}/>
+ <LibraryDownloadController accountId={accountId} captureLifetime={captureLifetime} captureBatch={captureBatchDownload} tracks={localTracks} client={client.current} bots={bots} connected={state.phase==='connected'&&!setupNeeded} capture={captureSongDownload} capturePlay={captureSongPlayback}/>
  {searchTarget&&createPortal(<MusicSearchController key={scopeKey} savedArtists={savedArtists} saveArtist={saveArtist} canSaveArtist={canSaveArtist} visible={searchVisible&&!setupNeeded} scopeKey={scopeKey} client={client.current} phase={state.phase} bots={bots} searchState={searchState} canConnect={canConnect} tracks={localTracks} libraryTrackIds={libraryTrackIds} playlists={songPlaylists} playerTrackId={playerTrackId} playerPlaying={playerPlaying} captureSongManagement={captureSongManagement} captureDownloadSave={captureDownloadSave} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureSongCopyInspection={captureSongCopyInspection}/>,searchTarget)}
  </>;
 }
