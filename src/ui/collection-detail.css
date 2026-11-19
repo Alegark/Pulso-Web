@@ -14,19 +14,38 @@
 .collection-header__kind { margin:0 0 .4rem;color:var(--pulso-muted);font-size:.75rem; }
 .pulso-app .collection-header h3 { margin:0;letter-spacing:-.045em;font-size:clamp(1.8rem,5vw,2.8rem);line-height:1.15;overflow-wrap:anywhere; }
 .collection-header__meta { margin:.75rem 0 0;color:var(--pulso-muted);font-size:.85rem; }
-.collection-header__controls { display:flex;align-items:center;gap:.75rem;min-inline-size:0; }
-.collection-header__hint { flex:1;min-inline-size:0;color:var(--pulso-muted);font-size:.8rem; }
+.collection-header__controls { display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;min-inline-size:0; }
+.collection-header__hint { order:1;flex:1 0 100%;min-inline-size:0;color:var(--pulso-muted);font-size:.8rem; }
+.collection-header__hint:empty { display:none; }
 .pulso-app .collection-shuffle,.pulso-app .collection-play { display:grid;place-items:center;flex:none;inline-size:44px;block-size:44px;min-inline-size:44px;border:0;border-radius:50%;padding:0;background:transparent; }
 .pulso-app .collection-shuffle[aria-pressed="true"] { background:var(--pulso-soft);color:var(--pulso-accent); }
 .pulso-app .collection-play { inline-size:64px;block-size:64px;background:var(--pulso-accent);color:var(--pulso-on-accent); }
 .collection-shuffle svg { inline-size:24px;block-size:24px; }.collection-play svg { inline-size:28px;block-size:28px; }
-.pulso-app .collection-tools { margin-block:0 .5rem; }
-.collection-tools>summary { inline-size:fit-content;min-block-size:44px;display:flex;align-items:center;gap:.5rem;color:var(--pulso-muted);font-size:.8rem;list-style:none;cursor:pointer; }
-.collection-tools>summary::-webkit-details-marker { display:none; }
-.collection-tools>summary>span:first-child { display:grid;place-items:center;inline-size:44px;block-size:44px;font-size:1.8rem; }
-.collection-tools__content { padding:1rem;border:1px solid var(--pulso-border);border-radius:1rem;background:var(--pulso-surface);font-size:.85rem; }
-.collection-tools__content>p:first-child { margin-block-start:0; }
-.collection-tools__content>details:first-child { margin-block-start:0; }
+.collection-download-slot { display: contents; }
+.pulso-app .collection-download {
+ display: flex;
+ flex: none;
+ align-items: center;
+ justify-content: center;
+ gap: .25rem;
+ min-inline-size: 44px;
+ min-block-size: 44px;
+ padding: .25rem;
+ border: 0;
+ border-radius: 999px;
+ background: transparent;
+ color: var(--pulso-muted);
+ font-size: .75rem;
+ font-variant-numeric: tabular-nums;
+ touch-action: manipulation;
+}
+.pulso-app .collection-download:not(:disabled):active { background: var(--pulso-soft); }
+.pulso-app .track-actions-menu__content>.collection-menu-danger {
+ margin-block-start: .5rem;
+ border-block-start: 1px solid var(--pulso-border);
+ border-radius: 0;
+ color: var(--pulso-danger);
+}
 .pulso-app .library-detail .tracks { margin:0;padding:0; }
 .pulso-app .library-detail .tracks>li { position:relative;display:grid;grid-template-columns:48px minmax(0,1fr) 44px;column-gap:.75rem;row-gap:0;align-items:center;padding:.55rem 0;border:0; }
 .library-detail .tracks .collection-track-art { inline-size:48px;block-size:48px;border-radius:.3rem;overflow:hidden; }
@@ -43,7 +62,7 @@
 .track-options__content>.controls { margin-block-start:.75rem; }
 .pulso-app .track-options__content button { margin:0;font-size:.8rem; }
 .collection-empty { padding:1.5rem 0;color:var(--pulso-muted); }
-@media(min-width:801px) { .collection-header { grid-template-columns:minmax(180px,240px) minmax(0,1fr);gap:1.5rem 2rem;align-items:end; }.collection-header__art { inline-size:100%;grid-row:1/3; }.collection-header__controls { grid-column:2; }.collection-header__info { align-self:end; }.pulso-app .collection-tools { margin-block-start:1rem; } }
+@media(min-width:801px) { .collection-header { grid-template-columns:minmax(180px,240px) minmax(0,1fr);gap:1.5rem 2rem;align-items:end; }.collection-header__art { inline-size:100%;grid-row:1/3; }.collection-header__controls { grid-column:2; }.collection-header__info { align-self:end; } }
 @media(max-height:480px) and (max-width:800px) { .collection-header__art { inline-size:6rem; } }
 @media(max-width:600px) {
  .pulso-app:has(.library-detail:not([hidden]):not([hidden] *))>.pulso-header { min-block-size:0;margin-block:0;padding-block:0;border:0; }
@@ -54,8 +73,8 @@
 .pulso-app .library-detail .tracks>li { border-radius:.6rem; }
 
 .pulso-app .library-detail .collection-track-main { min-block-size:48px; }
-.collection-tools>summary,.track-options>summary { touch-action:manipulation;user-select:none;-webkit-user-select:none;border-radius:.5rem; }
-.collection-tools[open]>summary,.track-options[open]>summary { color:var(--pulso-accent); }
+.track-options>summary { touch-action:manipulation;user-select:none;-webkit-user-select:none;border-radius:.5rem; }
+.track-options[open]>summary { color:var(--pulso-accent); }
 .track-options__content { overflow-wrap:anywhere; }
 .track-options__content>.controls { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:.5rem;align-items:start; }
 .pulso-app .track-options__content .controls>button { inline-size:100%;min-inline-size:0;text-align:start;white-space:normal; }
@@ -66,7 +85,7 @@
 .library-detail nav[aria-label="Páginas de canciones"] button[aria-disabled="true"] { opacity:.5; }
 @media (hover:hover) and (pointer:fine) {
  .pulso-app .library-detail .tracks>li:hover { background:var(--pulso-soft); }
- .collection-tools>summary:hover,.track-options>summary:hover { background:var(--pulso-soft);color:var(--pulso-foreground); }
+ .track-options>summary:hover { background:var(--pulso-soft);color:var(--pulso-foreground); }
 }
 
 /* Selected music keeps the row's geometry; keyboard focus remains explicit. */
