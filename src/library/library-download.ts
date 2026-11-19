@@ -5,8 +5,12 @@ import type {SongPlaybackAttempt,SongChoice} from './selected-song';
 import {acquireFromOrderedBots,acquisitionFailureText,type OrderedProvider} from './ordered-bot-acquisition';
 import type {TelegramSessionClient} from '../telegram/session-client';
 import {parseBotSearchTarget} from '../telegram/bot-search-protocol';
-export interface LibraryDownloadRequest {id:string;trackIds:readonly string[];title:string;play:boolean}
+export interface LibraryDownloadRequest {id:string;trackIds:readonly string[];title:string;play:boolean;repair?:boolean}
 const uncertainSingleTracks=new Set<string>();
+export function releaseUncertainSingleDownload(trackId:string){uncertainSingleTracks.delete(trackId);}
+const repairListeners=new Set<(trackId:string,title:string)=>void>();
+export function requestLibraryTrackReview(trackId:string,title:string){for(const listener of repairListeners)listener(trackId,title);}
+export function subscribeLibraryTrackReviews(listener:(trackId:string,title:string)=>void){repairListeners.add(listener);return()=>{repairListeners.delete(listener);};}
 const listeners=new Set<(request:LibraryDownloadRequest)=>void>();
 export function requestLibraryDownload(trackIds:readonly string[],title:string,play=false){if(trackIds.length>5000||!trackIds.length)return;const request={id:crypto.randomUUID(),trackIds:[...new Set(trackIds)],title,play:play&&trackIds.length===1};for(const fn of listeners)fn(request);}
 export function subscribeLibraryDownloads(fn:(request:LibraryDownloadRequest)=>void){listeners.add(fn);return()=>{listeners.delete(fn);};}
@@ -14,7 +18,7 @@ export async function downloadLibrarySelection(p:{
  tracks:readonly Track[];attempt:SongPlaybackAttempt;client:TelegramSessionClient;providers:readonly OrderedProvider[];
  revision:number;signal:AbortSignal;current:()=>boolean;update:(rows:AlbumRow[],message:string)=>void;
  checkpoint?:LibraryDownloadCheckpoint;saveCheckpoint?:(checkpoint:LibraryDownloadCheckpoint)=>void;
- heldDownload?:(trackId:string)=>HeldDownload|null;clearHeldDownload?:(trackId:string)=>void;
+ heldDownload?:(trackId:string)=>HeldDownload|null;clearHeldDownload?:(trackId:string)=>void;parkNetworkDownload?:(trackId:string)=>void;
 }):Promise<'finished'|'stopped'>{
  const rows:AlbumRow[]=p.tracks.map(()=>({state:'unattempted',trackId:null,confirmed:false,message:'En espera'}));
  const live=()=>p.current()&&p.attempt.current()&&!p.signal.aborted;
@@ -35,8 +39,9 @@ export async function downloadLibrarySelection(p:{
  try{for(let i=0;i<p.tracks.length;i++){
   if(!await ready())return stop('Descarga detenida. Las copias confirmadas se conservan.');
   const track=p.tracks[i],row=rows[i],choice:SongChoice={source:'local',id:'local:'+track.id,
-   title:track.catalogChoice?.title??track.title,artist:track.catalogChoice?.artist??track.artist,
-   album:track.catalogChoice?.album??track.album,duration:track.catalogChoice?.duration??track.duration};
+   title:track.manualOverrides.title??track.catalogChoice?.title??track.title,
+   artist:'artist' in track.manualOverrides?track.manualOverrides.artist??null:track.catalogChoice?.artist??track.artist,
+   album:'album' in track.manualOverrides?track.manualOverrides.album??null:track.catalogChoice?.album??track.album,duration:track.catalogChoice?.duration??track.duration};
   let id=await p.attempt.lookup(choice,p.signal);
   if(!live())return stop('Descarga detenida. Las copias confirmadas se conservan.');
   const heldDownload=p.heldDownload?.(track.id),previous=i===start&&resuming?resuming:heldDownload;
@@ -62,8 +67,8 @@ export async function downloadLibrarySelection(p:{
    row.state= i<start?'failed':'uncertain';
    row.message=i<start?'Procesada anteriormente y sin copia disponible.':'Entrega anterior sin confirmar. Se omitió al continuar.';
    if(i>=start){
+    if(previous?.kind==='network')p.parkNetworkDownload?.(track.id);
     mark(i+1,null);
-    if(heldDownload)p.clearHeldDownload?.(track.id);
    }
    update(row.message);continue;
   }
@@ -72,7 +77,7 @@ export async function downloadLibrarySelection(p:{
   }
   const target=track.catalogChoice?.source==='spotify'&&!choice.artist?null:
    parseBotSearchTarget({title:choice.title,artist:choice.artist,album:choice.album,durationSeconds:choice.duration||null});
-  if(!target){row.state='failed';row.message='Metadatos insuficientes para buscarla.';mark(i+1,null);update(row.message);continue;}
+  if(!target){row.state='failed';row.message='Faltan datos para buscar esta canción. Usa Corregir identificación en las opciones de la playlist o búscala manualmente en Buscar.';mark(i+1,null);update(row.message);continue;}
   const held={kind:'network' as const,index:i};
   mark(i,held);
   row.message='Buscando canción…';update(row.message);
@@ -83,7 +88,8 @@ export async function downloadLibrarySelection(p:{
    row.state='uncertain';row.message=checkpoint?'Entrega sin confirmar. Puedes continuar con las demás pistas.':'Entrega sin confirmar; revisa antes de repetir.';return stop(row.message);
   }
   if(result.state==='known-failure'){
-   row.state='failed';row.message=acquisitionFailureText(result.reasons);mark(i+1,null);update(row.message);continue;
+   row.state='failed';row.message=acquisitionFailureText(result.reasons);
+   if(result.reasons.includes('no-compatible-row'))row.message+=' Corrige la identificación de la canción en las opciones de la playlist o búscala manualmente en Buscar.';mark(i+1,null);update(row.message);continue;
   }
   mark(i,null);
   // The delivered Blob is held only in this page while waiting for a short local operation.

@@ -2369,3 +2369,7 @@ T11-T12 distingue guardado definitivo fallido de guardado incierto, conserva el 
 ### Descargas y avisos publicados · 2026-11-19
 
 Cloudflare versión 46 sirve `/releases/bed8f65288828366.html`, deployment `4dcedb95-2295-4a2e-ad22-8a6450b48553`. Coincidieron 229/229 rutas por bytes/SHA y el módulo de entrada contiene «Continuar descarga de Biblioteca» y «Notificaciones de descargas». Los runners locales cubrieron reanudación, guardado incierto y preferencias de avisos con transportes de prueba. El Worker y la configuración coinciden con v45. Validación y limpieza en T11-T12 y T18. Sigue pendiente la aceptación con cuenta real y suspensión del iPhone.
+
+## Biblioteca · recuperar una canción incierta · 2026-11-19
+
+T11-T12 registra la revisión por pista desde el lote y las opciones de playlist. El reintento requiere un gesto y usa las correcciones manuales de identificación. Se revisa la copia y el recibo antes de enviar otra consulta. Una copia corrupta se puede desvincular de esa pista mientras se conservan sus bytes y otras referencias. Chromium/WebKit 20/20 verificaron recarga, un gesto por consulta, conservación de registros ambiguos y reemplazo en IDB sin deduplicar contra los bytes corruptos. Se usaron transportes de prueba. La aceptación física en iPhone sigue pendiente y P0-W permanece abierto.

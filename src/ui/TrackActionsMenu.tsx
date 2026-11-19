@@ -101,6 +101,8 @@ export function TrackActionsMenu({title,artist,artwork,children,active}:TrackAct
     const summary=target.closest('summary');
     if(summary){event.preventDefault();const details=summary.parentElement as HTMLDetailsElement;const next=!details.open;back();details.open=next;setSubpage(next);return;}
     if(target.closest('[data-menu-dismiss="true"]'))close();
+   }} onClick={event=>{
+    if(event.target instanceof Element&&event.target.closest('[data-menu-dismiss-after="true"]'))close();
    }}>{children}</div></>}
   </dialog>
  </>;

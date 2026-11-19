@@ -14,7 +14,7 @@ import {parseBlob} from 'music-metadata';
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import {openDatabase,readRecord,request} from '../storage/database';
-import {all,validAsset,type LinkedTrack,type LocalAsset} from '../library/library';
+import {all,validAsset,verifiedAssetDetailed,type LinkedTrack,type LocalAsset} from '../library/library';
 import {ASSET_DIRECTORY,openAssetReader,WRITER_LOCK} from '../storage/asset-reader';
 import {assertImportsResolved,validImportOperation,deduplicateOperation,cleanupOperation,createOperation,importOperation,publishOperation,updateOperation,type ImportOperation,type ImportResult} from '../storage/import-operations';
 export {importOperations,importOperation,recoverImportOperation,importIssues,retainImportIssue} from '../storage/import-operations';
@@ -119,7 +119,17 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
  }
  const digest=bytesToHex(hash.digest());
  if(options.expected&&digest!==options.expected.sha256)fail('verify','integrity','digest-mismatch',backend);
- const candidates=await atBoundary('read','idb',()=>all<LocalAsset>('assets'));const existing=candidates.find(a=>validAsset(a)&&a.sha256===digest&&a.bytes===file.size);
+ const candidates=await atBoundary('read','idb',()=>all<LocalAsset>('assets'));
+ let existing:LocalAsset|undefined;
+ for(const candidate of candidates.filter(a=>validAsset(a)&&a.sha256===digest&&a.bytes===file.size)){
+  checkCancelled(signal);
+  const checked=await verifiedAssetDetailed(candidate.id,true);
+  if(checked.state==='unknown')throw AppFailure.create(checked.failure);
+  if(checked.state==='valid'){existing=candidate;break;}
+  // A missing generation may be repaired in place. Preserve published corrupt bytes
+  // and their references by staging the replacement under a different asset identity.
+  if(checked.state==='missing')existing??=candidate;
+ }
  const truncate=(s:string)=>s.slice(0,300).replace(/[\uD800-\uDFFF]/gu,'');
  const text=(s:string|undefined)=>s?truncate(s.trim())||null:null;
  const asset:LocalAsset={id:existing?.id??crypto.randomUUID(),namespace:'local',storageKey:job.storageKey,bytes:file.size,sha256:digest,mime,chunks:count,state:'complete',revision:(existing?.revision??0)+1,backend,chunkSize:CHUNK,retention:'kept'};

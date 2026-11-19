@@ -52,3 +52,25 @@ export function discardLibraryDownloadCheckpoint(accountId:string,checkpoint:Lib
  writeLibraryDownloadCheckpoint(accountId,null);
  return true;
 }
+
+export function writeHeldLibraryDownload(accountId:string,trackId:string,pending:HeldDownload){
+ if(!uuid(accountId)||!uuid(trackId)||pending.kind==='save'&&!uuid(pending.operationId))throw Error('Invalid held library download');
+ localStorage.setItem(heldKey(accountId,trackId),pending.kind==='network'?'network':pending.operationId);
+}
+export function pendingLibraryTrack(accountId:string,trackId:string):HeldDownload|null{
+ const batch=readLibraryDownloadCheckpoint(accountId),pending=batch?.pending;
+ return pending&&batch.trackIds[pending.index]===trackId?pending:readHeldLibraryDownload(accountId,trackId);
+}
+/** Release only the exact marker just reviewed. Keep the remaining batch and its cursor. */
+export function releaseLibraryTrack(accountId:string,trackId:string,expected:HeldDownload|null):boolean{
+ const same=(a:HeldDownload|null,b:HeldDownload|null)=>a?.kind===b?.kind&&
+  (a?.kind!=='save'||b?.kind==='save'&&a.operationId===b.operationId);
+ if(!same(pendingLibraryTrack(accountId,trackId),expected))return false;
+ const batch=readLibraryDownloadCheckpoint(accountId),pending=batch?.pending;
+ if(batch&&pending&&batch.trackIds[pending.index]===trackId){
+  // Preserve any distinct parked receipt for this track.
+  if(same(readHeldLibraryDownload(accountId,trackId),expected))clearHeldLibraryDownload(accountId,trackId);
+  writeLibraryDownloadCheckpoint(accountId,{...batch,pending:null});
+ }else clearHeldLibraryDownload(accountId,trackId);
+ return true;
+}
