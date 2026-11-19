@@ -161,10 +161,7 @@ export function LibraryDownloadController(props:{collection?:CollectionDownloadA
    update:(rows,message)=>{
     if(flight.current!==abort||latest.current.accountId!==account)return;
     readyId=rows.length===1&&rows[0].confirmed?rows[0].trackId:null;
-    ownedNotice.current={title:request.title,titles:tracks.map(t=>t.title),progress:{rows,message},...(rows.some(row=>row.reason==='parked')?{reviewTrack:(index:number)=>{
-     const track=tracks[index];
-     if(track&&latest.current.accountId===account)void reviewRef.current(track.id,track.title);
-    }}:{})};
+    ownedNotice.current={title:request.title,titles:tracks.map(t=>t.title),progress:{rows,message}};
     albumCoordinator.notice=ownedNotice.current;
     notifyAlbumDownload(albumCoordinator);
    },
@@ -217,14 +214,14 @@ export function LibraryDownloadController(props:{collection?:CollectionDownloadA
     review.kind==='network'?'No hay copia local verificada. Al reintentar se hará una nueva búsqueda en Telegram.':
     'No hay una copia local verificada para esta canción.'}</p>
    {review.state==='missing'&&<button type="button" onClick={()=>void reviewTrack(review.trackId,review.title,'safe')}>Reintentar esta canción</button>}
-   {(review.state==='uncertain'||review.state==='saved'&&!review.settled)&&<button type="button" onClick={()=>{setReview(null);props.onReviewStorage?.();}}>Revisar en Almacenamiento</button>}
+   {props.onReviewStorage&&(review.state==='uncertain'||review.state==='saved'&&!review.settled)&&<button type="button" onClick={()=>{setReview(null);props.onReviewStorage?.();}}>Revisar en Almacenamiento</button>}
    {review.state==='uncertain'&&<>
     <button type="button" onClick={()=>void reviewTrack(review.trackId,review.title)}>Volver a comprobar</button>
     {review.canPreserveRetry&&<button type="button" onClick={()=>void reviewTrack(review.trackId,review.title,'preserve')}>Conservar archivos y reintentar</button>}</>}
    <button type="button" onClick={()=>{checking.current?.abort();setReview(null);}}>Cerrar revisión</button>
  </div>;
  return <>
-  <DownloadDock key={props.accountId} message={notice} review={reviewContent}/>
+  <DownloadDock key={props.accountId} message={notice} review={reviewContent} onReviewStorage={props.onReviewStorage}/>
   {collection?.target&&createPortal(<CollectionDownloadButton label={pending?'Continuar descarga':collection.label}
    disabled={!!waiting.current||(!pending&&(collection.disabled||!collection.request.trackIds.length))}
    complete={!pending&&collection.complete} onStart={()=>{

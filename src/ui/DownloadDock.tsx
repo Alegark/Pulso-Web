@@ -1,6 +1,7 @@
 import {useEffect,useId,useLayoutEffect,useReducer,useRef,useState,type KeyboardEvent,type PointerEvent,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {albumCoordinator,type AlbumCoordinator} from '../library/album-download';
+import type {AlbumRow} from '../library/album-acquisition';
 import './download-dock.css';
 
 const positionKey='pulso:download-dock-position:v1';
@@ -8,6 +9,16 @@ const displayTime=5000;
 const dockEvents=new EventTarget();
 const arrows:Record<string,Point>={ArrowLeft:{x:-16,y:0},ArrowRight:{x:16,y:0},ArrowUp:{x:0,y:-16},ArrowDown:{x:0,y:16}};
 type Point={x:number;y:number};
+const reasonLabels={
+ 'not-found':{row:'No existe en tus bots',summary:'no existe',plural:'no existen'},
+ 'no-valid-file':{row:'Ningún bot entregó un archivo válido',summary:'sin archivo válido',plural:'sin archivo válido'},
+ 'missing-metadata':{row:'Faltan datos para buscarla',summary:'sin datos',plural:'sin datos'},
+ parked:{row:'Pendiente en Almacenamiento',summary:'pendiente en Almacenamiento',plural:'pendientes en Almacenamiento'},
+} satisfies Record<NonNullable<AlbumRow['reason']>,{row:string;summary:string;plural:string}>;
+
+function displayMessage(text?:string){
+ return text?.replace(/ ?\[D\d{2}\]/g,'').trim();
+}
 
 export function openDownloadDock(){
  dockEvents.dispatchEvent(new Event('open'));
@@ -45,7 +56,7 @@ function readPosition():Point|null{
  return null;
 }
 
-export function DownloadDock({message,review}:{message?:{text:string}|null;review?:ReactNode}){
+export function DownloadDock({message,review,onReviewStorage}:{message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
  const {running,active,notice}=useAlbumDownloadState();
  const [finished,setFinished]=useState<{notice:NonNullable<AlbumCoordinator['notice']>;stopped:boolean}|null>(null);
  const [transient,setTransient]=useState('');
@@ -81,8 +92,9 @@ export function DownloadDock({message,review}:{message?:{text:string}|null;revie
  },[]);
  function showMessage(text:string){
   clearTimeout(messageTimer.current);
-  setTransient(text);
-  if(text)messageTimer.current=setTimeout(()=>setTransient(''),displayTime);
+  const message=displayMessage(text)??'';
+  setTransient(message);
+  if(message)messageTimer.current=setTimeout(()=>setTransient(''),displayTime);
  }
  useEffect(()=>{showMessage(message?.text??'');},[message]);
  useEffect(()=>{
@@ -110,10 +122,19 @@ export function DownloadDock({message,review}:{message?:{text:string}|null;revie
  const currentNotice=running?notice:finished?.notice;
  const rows=currentNotice?.progress.rows??[];
  const {saved,total}=downloadCounts(currentNotice);
- const unavailable=rows.filter(row=>!row.confirmed&&row.state==='failed').length;
- const pending=total-saved-unavailable;
- const summary=`${saved} de ${total} guardadas${unavailable?` · ${unavailable} no disponible${unavailable===1?'':'s'}`:''}${pending?` · ${pending} pendiente${pending===1?'':'s'}`:''}`;
+ const remaining=rows.filter(row=>!row.confirmed);
+ const reasonCounts=Object.entries(reasonLabels).flatMap(([reason,labels])=>{
+  const count=remaining.filter(row=>row.reason===reason).length;
+  return count?[`${count} ${count===1?labels.summary:labels.plural}`]:[];
+ });
+ const unavailable=remaining.filter(row=>!row.reason&&row.state==='failed').length;
+ const pending=remaining.filter(row=>!row.reason&&row.state!=='failed').length;
+ const summary=[`${saved} de ${total} guardadas`,...reasonCounts,
+  ...(unavailable?[`${unavailable} no disponible${unavailable===1?'':'s'}`]:[]),
+  ...(pending?[`${pending} pendiente${pending===1?'':'s'}`]:[]),
+ ].join(' · ');
  const currentIndex=rows.findIndex(row=>!row.confirmed&&(row.state==='unattempted'||row.state==='ready'));
+ const progressMessage=(running||finished?.stopped)?displayMessage(currentNotice?.progress.message):undefined;
 
  function clamp(point:Point):Point{
   const area=bounds.current,node=card.current;
@@ -201,13 +222,17 @@ export function DownloadDock({message,review}:{message?:{text:string}|null;revie
       <strong><bdi dir="auto">{currentNotice?.title??active?.title}</bdi></strong>
       <p>{running?summary:finished?.stopped?'Descarga detenida':'Descarga finalizada'}</p>
       {running&&currentIndex>=0&&<p><bdi dir="auto">{currentNotice?.titles?.[currentIndex]??`Canción ${currentIndex+1}`}</bdi></p>}
-      {(transient||currentNotice?.progress.message)&&<p>{transient||currentNotice?.progress.message}</p>}
+      {(transient||progressMessage)&&<p>{transient||progressMessage}</p>}
       <ol>{rows.map((row,index)=>{
-       const failed=row.state==='failed'||row.state==='uncertain';
-       const state=row.confirmed?'Guardada':row.state==='failed'?'No disponible':row.state==='uncertain'?'Por comprobar':'Pendiente';
-       return <li key={index} data-failed={failed}><span className="pulso-visually-hidden">{state}</span><span className="download-dock__row-icon" aria-hidden="true">{row.confirmed?'✓':failed?'⚠':'·'}</span>
-        <div><strong><bdi dir="auto">{currentNotice?.titles?.[index]??`Canción ${index+1}`}</bdi></strong>{row.message&&<span>{row.message}</span>}</div></li>;
+       const failed=!row.confirmed&&(row.state==='failed'||row.state==='uncertain');
+       const reason=!row.confirmed&&row.reason?reasonLabels[row.reason].row:null;
+       const message=reason??displayMessage(row.message);
+       const state=row.confirmed?'Guardada':reason?null:row.state==='failed'?'No disponible':row.state==='uncertain'?'Por comprobar':'Pendiente';
+       return <li key={index} data-failed={failed}>{state&&<span className="pulso-visually-hidden">{state}</span>}<span className="download-dock__row-icon" aria-hidden="true">{row.confirmed?'✓':failed?'⚠':'·'}</span>
+        <div><strong><bdi dir="auto">{currentNotice?.titles?.[index]??`Canción ${index+1}`}</bdi></strong>{message&&<span>{message}</span>}</div></li>;
       })}</ol>
+      {!running&&onReviewStorage&&remaining.some(row=>row.reason==='parked')&&
+       <button type="button" className="download-dock__storage" onClick={()=>{setFinished(null);onReviewStorage();}}>Revisar en Almacenamiento</button>}
      </div>}
      {!expanded&&transient&&<p className="download-dock__message">{transient}</p>}
      {expanded&&running&&active&&<div className="download-dock__footer"><button type="button" onClick={()=>{if(albumCoordinator.active===active)active.abort.abort();}}>Detener</button></div>}

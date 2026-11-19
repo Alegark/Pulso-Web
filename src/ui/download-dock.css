@@ -68,6 +68,13 @@
 .download-dock__panel li strong,.download-dock__panel li div>span { display: block; }
 .download-dock__panel li div>span { color: var(--pulso-muted); }
 .download-dock__panel li[data-failed="true"]>.download-dock__row-icon,.download-dock__panel li[data-failed="true"] div>span { color: var(--pulso-danger); }
+.download-dock__storage {
+ background: transparent;
+ border: 0;
+ text-align: start;
+ text-decoration: underline;
+ cursor: pointer;
+}
 .download-dock__footer,.download-dock__review,.download-dock__message { padding: .6rem .85rem; }
 .download-dock__footer { display: flex; flex: none; justify-content: end; border-block-start: 1px solid var(--pulso-border); }
 .download-dock__footer button,.download-dock__review button {

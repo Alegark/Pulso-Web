@@ -99,7 +99,7 @@ try{
   assert.deepEqual(await b.evaluate(()=>window.trackReviewFixture.queries),[]);
   assert.equal(await b.evaluate(()=>window.trackReviewFixture.held(140).kind),'network');
   await button('Reintentar esta canción').click();
-  await summary('0 de 1 guardadas · 1 no disponible');
+  await summary('0 de 1 guardadas · 1 no existe');
   assert.deepEqual(await b.evaluate(()=>window.trackReviewFixture.queries),['Título corregido']);
   assert.equal(await b.evaluate(()=>window.trackReviewFixture.held(140)),null);
   await review('Título corregido');
@@ -139,7 +139,7 @@ try{
    await page.evaluate(mode=>window.libraryFixture.mountAutomaticBatch(mode),mode);
    await page.getByRole('button',{name:mode==='resume'?'Continuar descarga':'Descargar playlist completa',exact:true}).click();
    const dock=page.getByRole('region',{name:'Descargas',exact:true});
-   await dock.locator('.download-dock__handle').getByText(mode==='exhausted'?'3 de 4 guardadas · 1 no disponible':'4 de 4 guardadas',{exact:true}).waitFor();
+   await dock.locator('.download-dock__handle').getByText(mode==='exhausted'?'3 de 4 guardadas · 1 sin archivo válido':'4 de 4 guardadas',{exact:true}).waitFor();
    assert.equal(await dock.locator('button').filter({hasText:'Revisar descarga'}).count(),0);
    const trace=await page.evaluate(async()=>({requests:window.automaticFixture.requests,downloads:window.automaticFixture.downloads,saves:window.automaticFixture.saves,receipt:await window.automaticFixture.receipt()}));
    const thirdRequests=mode==='same-provider'?['A Lote 3','A Lote 3']:mode==='transient'?['A Lote 3']:['A Lote 3','B Lote 3','C Lote 3'];

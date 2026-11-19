@@ -12,16 +12,57 @@ const work=await createTestWorkspace('download-autoheal');
 const report={cases:[],external:[],errors:[],limits:'Compiled app, real TelegramSessionClient and worker/driver, synthetic SDK and account. Desktop browser engines.'};
 const uuid=n=>String(n).padStart(8,'0')+'-1111-4111-8111-111111111111';
 const user='11111111-1111-4111-8111-111111111111',ids=[1,2,3,4].map(uuid);
-const readyCopies=[1,2].map((n)=>{
+function fixtureWav(n){
  const audio=Buffer.alloc(32044);audio.write('RIFF');audio.writeUInt32LE(audio.length-8,4);audio.write('WAVEfmt ',8);
  audio.writeUInt32LE(16,16);audio.writeUInt16LE(1,20);audio.writeUInt16LE(1,22);audio.writeUInt32LE(8000,24);
  audio.writeUInt32LE(16000,28);audio.writeUInt16LE(2,32);audio.writeUInt16LE(16,34);audio.write('data',36);
  audio.writeUInt32LE(audio.length-44,40);audio[audio.length-1]=n;
- return {id:uuid(80+n),trackId:ids[n-1],sha256:createHash('sha256').update(audio).digest('hex'),audio:audio.toString('base64')};
+ return audio;
+}
+const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
+const readyCopies=[1,2].map(n=>{
+ const audio=fixtureWav(n);
+ return {id:uuid(80+n),trackId:ids[n-1],sha256:digest(audio),audio:audio.toString('base64')};
 });
 const fixture=()=>({name:'playlist-resume-sdk-test',enforce:'pre',resolveId(id){if(id==='./temporary-sdk')return resolve('tests/integration/playlist-resume-sdk.ts');}});
+const allModes=['autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
+const modes=process.env.PLAYLIST_RESUME_MODE?[process.env.PLAYLIST_RESUME_MODE]:allModes;
+assert.ok(modes.every(mode=>allModes.includes(mode)),'Unknown playlist resume test case');
+const reasons={
+ missing:['1 no existe','No existe en tus bots'],
+ 'missing-metadata':['1 sin datos','Faltan datos para buscarla'],
+ parked:['1 pendiente en Almacenamiento','Pendiente en Almacenamiento'],
+ invalid:['1 sin archivo válido','Ningún bot entregó un archivo válido'],
+};
+
+async function checkHeader(page,header,engine,screenshots){
+ const controls=header.locator('.collection-header__controls');
+ const labels=()=>controls.locator('button:visible').evaluateAll(buttons=>buttons.map(button=>button.getAttribute('aria-label')));
+ const expected=['Reproducir playlist','Reproducción aleatoria','Descargar playlist completa','Opciones de playlist'];
+ await controls.getByRole('button',{name:expected[2],exact:true}).waitFor();
+ assert.deepEqual(await labels(),expected);
+ assert.equal(await page.getByRole('button',{name:'Eliminar playlist',exact:true}).count(),0);
+ assert.equal(await page.getByRole('button',{name:/portadas de Spotify/}).count(),0);
+ await page.evaluate(()=>scrollTo(0,0));
+ await page.screenshot({path:`${screenshots}/${engine}-390x844-cabecera.png`});
+ for(const [width,height] of [[320,568],[844,390],[390,844]]){
+  await page.setViewportSize({width,height});
+  await page.evaluate(()=>document.documentElement.style.fontSize='200%');
+  assert.deepEqual(await labels(),expected);
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await header.getByRole('button',{name:'Opciones de playlist',exact:true}).click();
+  const menu=header.getByRole('dialog');
+  await menu.getByRole('button',{name:'Eliminar playlist',exact:true}).waitFor();
+  await menu.getByRole('button',{name:/portadas de Spotify/}).waitFor();
+  for(const label of ['Editar nombre','Filtros de canciones'])await menu.getByText(label,{exact:true}).waitFor();
+  await menu.getByRole('button',{name:'Cerrar opciones de colección'}).click();
+ }
+ await page.evaluate(()=>document.documentElement.style.removeProperty('font-size'));
+}
+
 let server,tempDirectory;
 const oldTemp=process.env.TMPDIR;
+const screenshots=process.env.PULSO_TEST_EVIDENCE_DIR??work.evidence;
 try{
  // Keep test profiles in the worktree using a path short enough for Unix sockets.
  tempDirectory=await open(work.dir,'r');
@@ -35,14 +76,24 @@ try{
   if(process.env.PLAYLIST_RESUME_ENGINE&&process.env.PLAYLIST_RESUME_ENGINE!==engine)continue;
   const browser=await launcher.launch(engine==='chromium'?{executablePath:'/usr/bin/chromium',headless:true}:{headless:true});
   report[engine]=browser.version();
-  try{for(const mode of ['autoheal','missing','invalid','cooldown','staging','parked','ack-lost','connected','single']){
-   const fresh=['autoheal','missing','single'].includes(mode);
+  try{for(const mode of modes){
+   const fresh=['autoheal','missing','missing-metadata','single','album'].includes(mode);
    const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
-   const trace=[];let releaseRestore,holdRestore=false,page;
+   const trace=[];let releaseRestore,releaseSearch,holdRestore=false,page;
    const restoration=new Promise(resolve=>{releaseRestore=resolve;});
+   const searchGate=new Promise(resolve=>{releaseSearch=resolve;});
    try{
     await context.route('**/*',async route=>{
      const url=new URL(route.request().url());
+     if(mode==='album'&&url.origin==='https://itunes.apple.com'){
+      const album={wrapperType:'collection',collectionType:'Album',collectionId:201,collectionName:'Álbum de prueba',
+       artistName:'Artista prueba',trackCount:2};
+      const tracks=[3,4].map((n,index)=>({wrapperType:'track',kind:'song',collectionId:201,trackId:300+n,
+       discNumber:1,discCount:1,trackNumber:index+1,trackCount:2,trackName:`Pista ${n}`,artistName:'Artista prueba',trackTimeMillis:2000}));
+      const results=url.pathname==='/lookup'?[album,...tracks]:[album];
+      return route.fulfill({headers:{'access-control-allow-origin':'*'},json:{resultCount:results.length,results}});
+     }
+     if(mode==='album'&&url.origin==='https://lrclib.net')return route.fulfill({headers:{'access-control-allow-origin':'*'},json:[]});
      if(url.origin!==origin){report.external.push(url.origin);return route.abort();}
      if(url.pathname==='/testonly-seed')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>seed</title>'});
      if(url.pathname==='/__setup-event'){
@@ -50,13 +101,15 @@ try{
       return route.fulfill({json:{}});
      }
      if(url.pathname==='/__playlist-event'){
-      trace.push({...route.request().postDataJSON(),at:Date.now()});
-      return route.fulfill({json:{mode}});
+      const event=route.request().postDataJSON();
+      trace.push({...event,at:Date.now()});
+      if(['missing','album'].includes(mode)&&event.kind==='search'&&event.title==='Pista 3')await searchGate;
+      return route.fulfill({json:{mode:mode==='album'?'missing':mode}});
      }
      return route.fallback();
     });
     await installRequiredAccountFixture(context,origin);
-    const tracks=ids.map((id,i)=>({id,title:'Pista '+(i+1),artist:'Artista prueba',album:null,duration:2,favorite:false,inLibrary:true,createdAt:'2026-11-19T00:00:00Z',localAlbum:null,catalog:null}));
+    const tracks=ids.map((id,i)=>({id,title:'Pista '+(i+1),artist:mode==='missing-metadata'&&i===2?null:'Artista prueba',album:null,duration:2,favorite:false,inLibrary:true,createdAt:'2026-11-19T00:00:00Z',localAlbum:null,catalog:null}));
     let cloud={accountId:user,revision:1,document:{version:1,tracks,playlists:[{id:uuid(99),name:'Playlist pendiente',entries:ids.map((trackId,i)=>({trackId,id:uuid(100+i)}))}]}};
     await context.route(origin+'/api/account-library',async route=>{
      if(route.request().method()==='PUT'){
@@ -142,6 +195,43 @@ try{
      if(parked)sessionStorage.setItem('testonly-unavailable-lock','pulso-web:local:asset:idb:'+operationId);
      return operationId;
     },{user,ids,staging:mode==='staging'||mode==='parked',parked:mode==='parked',readyCopies});
+    const header=page.locator('.collection-header');
+    const dock=page.getByRole('region',{name:'Descargas',exact:true});
+    const handle=dock.locator('.download-dock__handle');
+    const panel=dock.locator('.download-dock__panel');
+    if(mode==='album'){
+     await page.locator('.bot-providers-list li').first().waitFor({state:'attached'});
+     await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).click();
+     const input=page.getByRole('searchbox',{name:'Canción, álbum o artista'});
+     await input.fill('Álbum de prueba');
+     await input.press('Enter');
+     await page.locator('[data-catalog-kind="album"]').filter({hasText:'Álbum de prueba'}).first().click();
+     await page.getByRole('button',{name:'Añadir álbum',exact:true}).click();
+     await handle.getByText('0/2',{exact:true}).waitFor();
+     await page.locator('.album-actions').getByRole('button',{name:/Ver descargas/}).click();
+     await dock.getByRole('button',{name:'Detener',exact:true}).waitFor();
+     await panel.getByText('Álbum de prueba',{exact:true}).waitFor();
+     releaseSearch();
+     await handle.getByText('1 de 2 guardadas · 1 no existe',{exact:true}).waitFor();
+     await handle.click();
+     await panel.locator('li[data-failed=true]').getByText('No existe en tus bots',{exact:true}).waitFor();
+     await panel.locator('li[data-failed=false]').getByText('Pista 4',{exact:true}).waitFor();
+     const assets=await page.evaluate(async()=>{
+      const db=await new Promise((resolve,reject)=>{
+       const req=indexedDB.open('pulso-web-local-v1');
+       req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+      });
+      try{return await new Promise((resolve,reject)=>{
+       const req=db.transaction('assets').objectStore('assets').getAll();
+       req.onsuccess=()=>resolve(req.result.filter(asset=>asset.state==='complete').map(asset=>asset.sha256));
+       req.onerror=()=>reject(req.error);
+      });}finally{db.close();}
+     });
+     assert.deepEqual(assets,[digest(fixtureWav(14))]);
+     assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.title),['Pista 3','Pista 3','Pista 4']);
+     report.cases.push({engine,mode,status:'PASS'});
+     continue;
+    }
     if(!fresh){
      holdRestore=true;
      await page.reload();
@@ -152,25 +242,66 @@ try{
       await page.getByText('Cuenta autenticada en esta pestaña.',{exact:false}).waitFor({state:'attached'});
       await page.locator('.bot-providers-list li').first().waitFor({state:'attached'});
      }
-     await page.getByRole('button',{name:'Continuar descarga de Biblioteca',exact:true}).click();
+     await header.getByRole('button',{name:'Continuar descarga',exact:true}).click();
      if(mode!=='connected'){
-      await page.getByText('Esperando a que Telegram termine de preparar tus bots…',{exact:true}).waitFor();
+      await dock.locator('.download-dock__message').getByText('Esperando a que Telegram termine de preparar tus bots…',{exact:true}).waitFor();
       assert.equal(trace.length,0);
       releaseRestore();
      }
     }else{
      await page.locator('.bot-providers-list li').first().waitFor({state:'attached'});
-     await page.getByRole('button',{name:mode==='single'?'Escuchar Pista 3':'Descargar playlist completa',exact:true}).click();
+     if(mode==='missing'){
+      assert.equal(await dock.count(),0);
+      await checkHeader(page,header,engine,screenshots);
+     }
+     const start=mode==='single'?page.getByRole('button',{name:'Escuchar Pista 3',exact:true}):
+      header.getByRole('button',{name:'Descargar playlist completa',exact:true});
+     await start.click();
+    }
+    if(mode==='missing'){
+     await handle.getByText('2/4',{exact:true}).waitFor();
+     assert.equal(await handle.getAttribute('aria-expanded'),'false');
+     await page.screenshot({path:`${screenshots}/${engine}-390x844-plegada.png`});
+     await header.getByRole('button',{name:/Ver descargas/}).click();
+     assert.equal(await handle.evaluate(el=>el===document.activeElement),true);
+     await dock.getByRole('button',{name:'Detener',exact:true}).waitFor();
+     await panel.getByText('Pista 3',{exact:true}).first().waitFor();
+     await handle.click();
+     assert.equal(await handle.getAttribute('aria-expanded'),'false');
+     releaseSearch();
     }
     const allSaved=['autoheal','cooldown','ack-lost','single'].includes(mode);
-    const summary=allSaved?'Selección descargada en este dispositivo.':'Descarga parcial: revisa las canciones pendientes.';
-    await page.getByText(summary,{exact:true}).waitFor({state:'attached',timeout:45000});
+    const [reasonCount,reasonText]=reasons[mode]??reasons.invalid;
+    const summary=mode==='single'?'1 de 1 guardadas':allSaved?'4 de 4 guardadas':`3 de 4 guardadas · ${reasonCount}`;
+    await handle.getByText(summary,{exact:true}).waitFor({timeout:45000});
+    assert.equal(await handle.getAttribute('aria-expanded'),'false');
+    await handle.click();
+    await panel.getByText('Descarga finalizada',{exact:true}).waitFor();
+    assert.equal(await panel.locator('li').count(),mode==='single'?1:4);
+    assert.equal(await page.locator('.library-detail .download-dock, .library-detail [aria-label="Revisión de descarga"]').count(),0);
+    for(const label of ['Ver canciones','Continuar descarga de Biblioteca']){
+     assert.equal(await page.getByRole('button',{name:label,exact:true}).count(),0);
+    }
+    assert.doesNotMatch(await panel.innerText(),/\[D\d+\]/);
     if(!allSaved){
-     await page.getByText('Ver canciones',{exact:true}).click();
-     await page.getByText(mode==='parked'?'Pendiente en Almacenamiento':mode==='missing'?'No existe en tus bots':'Ningún bot entregó un archivo válido',{exact:true}).waitFor();
+     const failed=panel.locator('li[data-failed=true]').filter({hasText:'Pista 3'});
+     await failed.getByText(reasonText,{exact:true}).waitFor();
+     assert.equal(await panel.locator('li[data-failed=true]').count(),1);
+    }
+    const storage=dock.getByRole('button',{name:'Revisar en Almacenamiento',exact:true});
+    assert.equal(await storage.count(),mode==='parked'?1:0);
+    assert.equal(await dock.getByRole('button').count(),mode==='parked'?2:1);
+    if(mode==='parked'){
+     await storage.click();
+     await dock.waitFor({state:'detached'});
+     await page.locator('#download-copy-recovery, [aria-label="Almacenamiento"]').first().waitFor();
+    }
+    if(mode==='missing'){
+     await page.screenshot({path:`${screenshots}/${engine}-390x844-final.png`});
+     await dock.waitFor({state:'detached',timeout:6500});
     }
     const searches=trace.filter(e=>e.kind==='search');
-    assert.deepEqual(searches.map(e=>e.title),mode==='single'?['Pista 3','Pista 3']:mode==='parked'?['Pista 4']:mode==='ack-lost'?['Pista 3','Pista 4']:[...(fresh?['Pista 1','Pista 2']:[]),'Pista 3','Pista 3','Pista 4']);
+    assert.deepEqual(searches.map(e=>e.title),mode==='single'?['Pista 3','Pista 3']:mode==='parked'?['Pista 4']:mode==='ack-lost'?['Pista 3','Pista 4']:mode==='missing-metadata'?['Pista 1','Pista 2','Pista 4']:[...(fresh?['Pista 1','Pista 2']:[]),'Pista 3','Pista 3','Pista 4']);
     if(mode==='ack-lost'){
      const lost=await page.evaluate(()=>window.__TESTONLY_outcomes.filter(outcome=>outcome.type==='lost-ack'));
      assert.deepEqual(lost,[{type:'lost-ack',writeState:'published'}]);
@@ -211,9 +342,11 @@ try{
     assert.deepEqual(linked,mode==='single'?[false,false,true,false]:[true,true,allSaved,true]);
     if(mode==='single')assert.equal(await page.evaluate(({user,id})=>localStorage.getItem('pulso:library-download-held:v1:'+user+':'+id),{user,id:ids[2]}),null);
     assert.equal(new Set(copies.filter(Boolean).map(copy=>copy.id)).size,linked.filter(Boolean).length);
+    assert.deepEqual(copies.map((copy,index)=>copy?.digest??null),linked.map((saved,index)=>
+     saved?digest(fixtureWav(!fresh&&index<2?index+1:index+11)):null));
     report.cases.push({engine,mode,searches:searches.map(e=>e.title),linked,status:'PASS'});
    }catch(error){report.cases.push({engine,mode,status:'FAIL',error:String(error.stack??error),trace:trace.map(({kind,title})=>({kind,title})),outcomes:await page?.evaluate(()=>window.__TESTONLY_outcomes).catch(()=>[])});}
-   finally{releaseRestore();await context.close();}
+   finally{releaseRestore();releaseSearch();await context.close();}
   }}finally{await browser.close();}
  }
  assert.equal(report.external.length,0);
@@ -223,7 +356,7 @@ finally{
  if(oldTemp===undefined)delete process.env.TMPDIR;else process.env.TMPDIR=oldTemp;
  await tempDirectory?.close();
  report.cleanup=await work.cleanup();
- report.status=report.cases.length===(process.env.PLAYLIST_RESUME_ENGINE?9:18)&&report.cases.every(c=>c.status==='PASS')&&!report.errors.length?'PASS':'FAIL';
+ report.status=report.cases.length===modes.length*(process.env.PLAYLIST_RESUME_ENGINE?1:2)&&report.cases.every(c=>c.status==='PASS')&&!report.errors.length?'PASS':'FAIL';
  await writeFile(work.evidence+'/report.json',JSON.stringify(report,null,2));
  console.log(JSON.stringify({report:work.evidence+'/report.json',...report},null,2));
  if(report.status!=='PASS')process.exitCode=1;

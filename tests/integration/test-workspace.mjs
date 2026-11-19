@@ -12,8 +12,14 @@ export async function createTestWorkspace(name){
  if(await size(evidenceBase)>=200*1024**2)throw Error('Test evidence budget reached (200 MiB); compact reviewed evidence first');
  const base=resolve('.local/tmp');await mkdir(base,{recursive:true});
  if(await realpath(base)!==base)throw Error('Test tmp directory must not be a symlink');
- const path=await mkdtemp(`${base}/${name}-`);
- const evidence=resolve('.local/test-evidence',path.split(sep).at(-1));
+ const runRoot=resolve(process.env.PULSO_TEST_TMP_DIR??base);
+ if(runRoot!==base&&!runRoot.startsWith(base+sep))throw Error('Test run must be inside .local/tmp');
+ if(await realpath(runRoot)!==runRoot)throw Error('Test run must not be a symlink');
+ const evidenceRoot=resolve(process.env.PULSO_TEST_EVIDENCE_DIR??evidenceBase);
+ if(evidenceRoot!==evidenceBase&&!evidenceRoot.startsWith(evidenceBase+sep))throw Error('Test evidence must be inside .local/test-evidence');
+ if(await realpath(evidenceRoot)!==evidenceRoot)throw Error('Test evidence must not be a symlink');
+ const path=await mkdtemp(`${runRoot}/${name}-`);
+ const evidence=resolve(evidenceRoot,path.split(sep).at(-1));
  await mkdir(evidence,{recursive:true});
  const device=(await lstat(path)).dev;
  async function checkTree(dir){for(const e of await readdir(dir,{withFileTypes:true})){const child=resolve(dir,e.name),st=await lstat(child);if(st.dev!==device)throw Error('Refusing mounted test path');if(e.isDirectory())await checkTree(child);}}

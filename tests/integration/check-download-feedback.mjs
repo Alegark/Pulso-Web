@@ -57,6 +57,9 @@ await handle.press('ArrowLeft');
 assert.ok((await handle.boundingBox()).x<beforeKey.x);
 await handle.press('Enter');
 await dock.getByText('Canción dos',{exact:true}).first().waitFor();
+await dock.getByText('Preparando la siguiente canción…',{exact:true}).waitFor();
+await dock.getByText('En espera',{exact:true}).waitFor();
+assert.doesNotMatch(await dock.innerText(), /\[D\d{2}\]/);
 await handle.press('Space');
 await dock.locator('.download-dock__handle[aria-expanded=false]').waitFor();
 const savedPosition=await handle.boundingBox();
@@ -84,11 +87,11 @@ for(const size of [{width:320,height:568},{width:568,height:320}]){
 await dock.getByRole('button',{name:'Detener',exact:true}).click();
 assert.equal(await page.evaluate(()=>feedbackUI.aborted()),true);
 await page.evaluate(()=>feedbackUI.finish());
-await dock.getByText('1 de 2 guardadas · 1 no disponible',{exact:true}).waitFor();
+await dock.getByText('1 de 2 guardadas · 1 no existe',{exact:true}).waitFor();
 await handle.click();
 await dock.locator('li[data-failed=true]').getByText('No existe en tus bots',{exact:true}).waitFor();
 await dock.waitFor({state:'detached',timeout:6500});
-report.cases.push(`${name}: route persistence, native tap, resize and 320px/text 200%, stop, verbatim failure, timed dismissal`);
+report.cases.push(`${name}: route persistence, native tap, resize and 320px/text 200%, stop, localized failure, timed dismissal`);
 }finally{await browser.close();}}
 assert.deepEqual(report.errors,[]);assert.deepEqual(report.external,[]);report.status='PASS';}catch(e){report.status='FAIL';report.error=String(e.stack||e);}finally{
  let serverStopped=true;
