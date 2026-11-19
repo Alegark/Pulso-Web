@@ -38,7 +38,7 @@ npx wrangler deploy --dry-run --outdir .local/cloudflare-setup/dry-run
 npx wrangler dev --local --ip 127.0.0.1
 ```
 
-El build de Cloudflare se realiza en `.local/cloudflare-setup/build-root`; la salida revisable está en `.local/cloudflare-setup/site` y su manifiesto en `site-manifest.json`. No sustituye `dist` de la entrega anterior ni copia el archivo privado de identidad Telegram. Wrangler y su estado local son herramientas de desarrollo, sin inclusión en el bundle de la app.
+El build de Cloudflare se realiza en `.local/cloudflare-setup/build-root`. La salida limpia está en `.local/cloudflare-setup/site` y su manifiesto candidato en `.local/cloudflare-setup/site-manifest.json`. No sustituye `dist` de la entrega anterior ni copia el archivo privado de identidad Telegram. Wrangler y su estado local son herramientas de desarrollo, sin inclusión en el bundle de la app.
 
 ## Publicación y futuras actualizaciones
 
@@ -53,11 +53,43 @@ Para actualizar:
 3. Registrar el manifiesto completo en `assets-upload-session` mediante MCP; transferir sólo los hashes solicitados con su JWT temporal. Adjuntar el completion token al upload de Worker y conservar los bindings/migraciones existentes conforme al incremento. No poner credenciales o sesiones de usuarios dentro de assets o código.
 4. Mantener previews desactivadas. Verificar de nuevo sin Authorization la URL pública, HTML y hashes de assets, CSP de documento/SDK, WASM, SW, capacidades, configuración no-store, catálogo y portadas.
 
-`npm run deploy:cloudflare` es una alternativa manual de Wrangler y **no fue el mecanismo de esta publicación**. Un cambio local o un push a Git no actualizan automáticamente la web; no se configuró CI/CD.
+El mecanismo de publicación es el MCP oficial. Wrangler se usa en simulación para preparar el Worker. Subir el sitio limpio con `npm run deploy:cloudflare` omitiría la retención. Un cambio local o un push a Git no actualizan automáticamente la web.
 
 La evidencia de la entrega está en [evidence-cloudflare-public.json](evidence-cloudflare-public.json). Los recibos de autenticación, despliegue y comprobaciones completas permanecen en `.local/cloudflare-mcp/` y `.local/cloudflare-publish/`, fuera de Git.
 
 El cambio de origen no migra IndexedDB, OPFS, permisos ni la sesión Telegram del enlace anterior. Los datos del origen viejo permanecen allí y no deben borrarse. Una prueba de Cloudflare no debe presentarse como migración de música o aceptación física de iPhone.
+
+
+## Retención de assets inmutables
+
+La decisión del propietario del 2026-11-18 conserva la versión actual, todas las publicaciones de las últimas 30 × 24 horas (incluido el límite) y, como mínimo, los tres HTML de versión anteriores más recientes y distintos. Si se vuelve a publicar el mismo HTML, su nueva publicación tiene fecha propia. Las publicaciones recientes con el mismo HTML cuentan una sola vez para el mínimo. Se conserva cualquier asset compartido mientras figure en el candidato o en una publicación retenida.
+
+El manifiesto con `schemaVersion: 1` registra `currentEntry`, `releases` con `entry`, `publishedAt` y `assets`, y el inventario `files` con ruta, bytes y SHA-256. Cada build limpio atribuye a su entrada todo lo emitido bajo `assets/` y su HTML de `releases/`. Así también entran los imports dinámicos de Cuenta, metadatos y Telegram, sus dependencias, CSS, fuentes, workers y WASM. `assets/` queda reservado para rutas inmutables. Las demás rutas son estables y salen siempre del build limpio, incluidos `latest.json`, `sw.js`, iconos, avisos, licencias y `telegram-sources.tar.gz`. Si falta una ruta estable del manifiesto publicado, el freeze falla. Un recurso nuevo que deba mantener bytes distintos por versión debe emitirse bajo una ruta inmutable.
+
+### Arranque desde el manifiesto del 18 de noviembre
+
+El manifiesto autoritativo de 226 archivos de `.local/test-evidence/code-review-delivery/site-manifest.json` carece de procedencia por asset. Las fechas de los recibos identifican publicaciones individuales, pero la incorporación de un archivo nuevo al inventario acumulado no demuestra que las publicaciones posteriores hayan dejado de usarlo. La migración conserva todos los inmutables de ese inventario como un conjunto heredado con fecha límite `2026-11-18T23:59:59.999Z`, el final del día UTC de la publicación verificada. La hora del [recibo versionado](evidence-code-review-web.json) corresponde al inicio del procedimiento. El mismo recibo acredita el hash del inventario y la entrada activa. El conjunto se retira sólo cuando esa fecha queda fuera de la ventana y hay tres entradas anteriores distintas con procedencia y fecha posterior al límite heredado. Los archivos del conjunto que siga usando alguna versión retenida se conservan. Este criterio no usa la fecha de modificación de archivos ni supone un orden a partir de sus hashes.
+
+### Cambios en build-candidate, freeze y deploy
+
+1. Mantener el checkout aislado del commit y el build limpio en `build-candidate.sh`. Conservar el manifiesto candidato junto al sitio y el Worker compilado. Comprobar por MCP que el deployment activo corresponde al recibo y que el SHA-256 del manifiesto anterior coincide con el guardado en ese recibo. Para este primer freeze, usar los valores del recibo versionado, no la staging anterior ni el manifiesto del penúltimo deployment.
+2. Sustituir en `freeze.mjs` la fusión masiva de `assets/` y `releases/` por el comando versionado. Eliminar la comparación que exigía un HTML distinto: un cambio sólo del Worker u otros archivos estables puede republicar la misma entrada. Usar la misma fecha UTC con milisegundos en simulación y freeze. Ejecutar desde el checkout del candidato con rutas absolutas a los artefactos. Por ejemplo, para el arranque:
+
+   ```sh
+   node scripts/prepare-cloudflare.mjs --dry-run \
+     --site "$candidate/source/.local/cloudflare-setup/site" \
+     --candidate-manifest "$candidate/source/.local/cloudflare-setup/site-manifest.json" \
+     --previous-manifest "$published_manifest" \
+     --previous-sha256 a575e6dde227ded0365f1d4145a539ced990a997216bd56d3e6bc9a6a6f9923c \
+     --legacy-entry /releases/b837a1c9ee817b34.html \
+     --legacy-published-at 2026-11-18T23:59:59.999Z --as-of "$freeze_time"
+   ```
+
+   `published_manifest` apunta al manifiesto activo y `freeze_time` es el instante planificado para iniciar el freeze. La simulación revisa los bytes del candidato y devuelve las rutas y el total de bytes que saldrían. Para congelar, sustituir `--dry-run` por `--freeze` y agregar `--previous-origin https://pulso-web.pruebassoftware.workers.dev --output "$candidate/frozen-site-manifest.json"`. El freeze coteja `latest.json` público, descarga sólo los inmutables retenidos que falten, verifica bytes/SHA y escribe el manifiesto congelado fuera de `site/`. En las publicaciones siguientes, omitir ambos parámetros `--legacy-*` y usar el SHA del nuevo recibo. Si se ejecuta nuevamente (por ejemplo tras un fallo de publicación), partir de un build limpio.
+3. Hacer que `deploy.mjs` consuma ese manifiesto congelado desde la ruta del candidato, en lugar de sobrescribir el manifiesto activo. Registrar en `freeze.json` la entrada, cantidad y SHA-256 completos del manifiesto congelado y los bytes/SHA del Worker. Antes de pedir la sesión de upload, comprobar el hash del manifiesto, la igualdad exacta de rutas del sitio con `files`, los bytes/SHA y el puntero de la versión nueva. Mantener las exclusiones de transporte existentes (`.assetsignore`, `_headers`, `_redirects` y mapas). El inventario de la sesión de upload se deriva únicamente del manifiesto congelado. Conservar la verificación contra el deployment activo por id/versión y el manejo de bindings existente.
+4. Tras la publicación y el readback independiente por MCP/HTTPS, registrar en `published_time` la fecha de creación del deployment activo confirmado por MCP, en UTC con milisegundos. Verificar `latest.json`, el HTML actual y `sw.js`, los SHA de rutas retenidas y que las rutas retiradas dan 404 con GET de asset (el GET de navegación al HTML retirado debe abrir Pulso). Promover el inventario congelado a manifiesto publicado con `node scripts/prepare-cloudflare.mjs --mark-published --candidate-manifest "$candidate/frozen-site-manifest.json" --published-at "$published_time" --output "$candidate/published-site-manifest.json"`. Guardar ese manifiesto como el activo junto con su SHA-256 y el recibo, conservando el anterior hasta completar la verificación. El campo `publishedAt` queda pendiente durante la preparación. Si falla el readback, resolver la discrepancia antes de promover cualquier manifiesto.
+
+La navegación al HTML retirado usa el documento actual, incluso si hay un SW activo anterior. Si la app antigua sigue abierta, su comprobación de `latest.json` puede llevarla a la versión actual en cuanto la actividad permita recargar. El SW mantiene su fallback local sin que el sitio publicado conserve indefinidamente ese HTML. La recuperación con red y el fallback local se prueban por separado de la aceptación física en iPhone.
 
 ## Fuentes oficiales consultadas
 
