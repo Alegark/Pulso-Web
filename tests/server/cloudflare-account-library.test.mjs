@@ -77,3 +77,12 @@ test('library normalizes account UUIDs and forwards every refreshed cookie on co
   assert.deepEqual(response.headers.getSetCookie(),cookies);
  }
 });
+
+test('library PUT uses the same authenticated write binding as profile PUT',async()=>{
+ const limiter={limit:async({key})=>{assert.equal(key,id);return {success:false};}};
+ const route=createAccountLibraryRouter({auth,fetcher:()=>assert.fail('Data API write')});
+ const response=await route(req({accountId:id,revision:null,document}),{...env,PULSO_ACCOUNT_WRITE_LIMIT:limiter});
+ assert.equal(response.status,429);
+ assert.equal(response.headers.get('Retry-After'),'60');
+ assert.deepEqual(await response.json(),{code:'RATE_LIMITED'});
+});

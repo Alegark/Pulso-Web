@@ -1,10 +1,11 @@
 /* Adapted from Better Auth UI, MIT; see LICENSE and UPSTREAM.json. */
+import { useTurnstile } from "../../../turnstile"
 import { flowMemory } from "../../../flow-memory"
 "use client"
 
 import { getAuthLinkURL } from "@better-auth-ui/core"
 import type { EmailOtpAuthClient } from "@better-auth-ui/core/plugins/email-otp"
-import { useAuth, useAuthPlugin } from "@better-auth-ui/react"
+import { useAuth, useAuthPlugin, useFetchOptions } from "@better-auth-ui/react"
 import {
   useSendVerificationOtp,
   useVerifyEmailOtp
@@ -78,6 +79,8 @@ export function VerifyEmailOtp({ className }: VerifyEmailOtpProps) {
   )
 
   const { cooldown, isCoolingDown, startCooldown } = useResendCooldown()
+  const { fetchOptions } = useFetchOptions()
+  const challenge = useTurnstile("verify-email", !isCoolingDown)
 
   // Sign-up already sent a code to this address, so restoring it also starts
   // the cooldown — otherwise the hydrated render would offer an immediate
@@ -109,6 +112,14 @@ export function VerifyEmailOtp({ className }: VerifyEmailOtpProps) {
       }
     })
 
+  function sendCode(address: string) {
+    return challenge.submit(fetchOptions, options => sendVerificationOtp({
+      email: address,
+      type: "email-verification",
+      fetchOptions: options
+    }))
+  }
+
   const isPending = isSending || isVerifying
 
   const verifyCode = async (completedCode: string) => {
@@ -121,10 +132,7 @@ export function VerifyEmailOtp({ className }: VerifyEmailOtpProps) {
     defaultValues: { code: "", email: "" },
     onSubmit: async ({ value }) => {
       if (!email) {
-        await sendVerificationOtp({
-          email: value.email,
-          type: "email-verification"
-        })
+        await sendCode(value.email)
         return
       }
       await verifyCode(value.code)
@@ -197,12 +205,13 @@ export function VerifyEmailOtp({ className }: VerifyEmailOtpProps) {
                 </form.AppField>
               )}
 
+              {challenge.view}
               <form.AuthFormServerError />
 
               <div className="flex flex-col gap-3">
                 <form.AuthFormSubmitButton
                   isPending={isPending}
-                  disabled={isPending || (Boolean(email) && !codeComplete)}
+                  disabled={isPending || (email ? !codeComplete : !challenge.ready)}
                 >
                   {email
                     ? emailOtpLocalization.verifyCode
@@ -215,14 +224,9 @@ export function VerifyEmailOtp({ className }: VerifyEmailOtpProps) {
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={isPending || isCoolingDown}
+                    disabled={isPending || isCoolingDown || !challenge.ready}
                     onClick={() =>
-                      void runAuthFormAction(form, () =>
-                        sendVerificationOtp({
-                          email,
-                          type: "email-verification"
-                        })
-                      )
+                      void runAuthFormAction(form, () => sendCode(email))
                     }
                   >
                     {isCoolingDown

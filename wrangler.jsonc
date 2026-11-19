@@ -44,5 +44,39 @@
   ],
   "observability": {
     "enabled": false
-  }
+  },
+  "ratelimits": [
+    {
+      "name": "PULSO_AUTH_EMAIL_LIMIT",
+      "namespace_id": "21801",
+      "simple": {
+        "limit": 5,
+        "period": 60
+      }
+    },
+    {
+      "name": "PULSO_AUTH_ATTEMPT_LIMIT",
+      "namespace_id": "21802",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    },
+    {
+      "name": "PULSO_ACCOUNT_WRITE_LIMIT",
+      "namespace_id": "21803",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    },
+    {
+      "name": "PULSO_SPOTIFY_LIMIT",
+      "namespace_id": "21804",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    }
+  ]
 }

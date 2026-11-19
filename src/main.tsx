@@ -1,3 +1,4 @@
+import {RateLimited,rateLimitedMessage} from './http/rate-limit.mjs';
 import {queuePositionKey,queuePositionRecord,withQueuePosition,type QueuePosition} from './ui/queue-position';
 import {ShellNotice} from './ui/ShellNotice';
 import {readSavedArtists,setSavedArtist} from './library/saved-artists';
@@ -895,7 +896,7 @@ function App(){
  const [,render]=React.useReducer(n=>n+1,0);React.useEffect(()=>{listeners.add(render);return()=>{listeners.delete(render);};},[]);
  const enrichmentScope=`${account.user?.id}:${scopeId}:${control.proof}:${databaseGeneration}`;
  const catalogFlight=React.useRef<{id:string;controller:AbortController}|null>(null);
- const [spotifyCatalog,setSpotifyCatalog]=React.useState<{id:string;progress:SpotifyCatalogProgress|null;state:'running'|'done'|'failed'}|null>(null);
+ const [spotifyCatalog,setSpotifyCatalog]=React.useState<{id:string;progress:SpotifyCatalogProgress|null;state:'running'|'done'|'failed'|'rateLimited'}|null>(null);
  React.useEffect(()=>{
   setSpotifyCatalog(null);
   return()=>{catalogFlight.current?.controller.abort();catalogFlight.current=null;};
@@ -920,9 +921,9 @@ function App(){
     });
     await reload();
     if(active())setSpotifyCatalog({id,progress,state:'done'});
-   }catch{
+   }catch(error){
     await reload();
-    if(active())setSpotifyCatalog(old=>({id,progress:old?.progress??null,state:'failed'}));
+    if(active())setSpotifyCatalog(old=>({id,progress:old?.progress??null,state:error instanceof RateLimited?'rateLimited':'failed'}));
    }finally{if(catalogFlight.current===flight)catalogFlight.current=null;}
   })();
  }
@@ -1360,7 +1361,7 @@ function App(){
  {activeGroup?.kind==='album'&&!activeGroup.unknown&&libraryAlbums.some(group=>group.key===activeGroup.key&&!group.unknown)&&<button type="button" disabled={!canOrganize} onClick={event=>openCollection({kind:'album',scope:'global-library',key:activeGroup.key},activeGroup.label,event.currentTarget)}>Retirar álbum</button>}
  <button type="button" disabled={!canOrganize||!visible.length} onClick={()=>requestLibraryDownload(visible.map(({track})=>track.id),selected?.name??activeGroup?.label??'Mi biblioteca')}>Descargar esta selección en este dispositivo</button>
  {selected&&<div className="playlist-catalog">
-  {spotifyCatalog?.id===selected.id&&<p role="status">{spotifyCatalog.state==='failed'?'No se pudo terminar la búsqueda de álbumes y portadas.':
+  {spotifyCatalog?.id===selected.id&&<p role="status">{spotifyCatalog.state==='rateLimited'?rateLimitedMessage:spotifyCatalog.state==='failed'?'No se pudo terminar la búsqueda de álbumes y portadas.':
    spotifyCatalog.progress?.total===0?'Esta playlist no tiene pistas importadas de Spotify.':
    spotifyCatalog.progress?`${spotifyCatalog.progress.checked}/${spotifyCatalog.progress.total} revisadas · ${spotifyCatalog.progress.linked} con álbum · ${spotifyCatalog.progress.covers} con portada`:'Buscando álbumes y portadas…'}</p>}
   {spotifyCatalog?.id===selected.id&&spotifyCatalog.state==='running'?

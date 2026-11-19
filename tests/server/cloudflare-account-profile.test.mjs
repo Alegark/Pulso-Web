@@ -46,3 +46,23 @@ test('profile carries auth cookies through account mismatch, CAS conflict and au
   assert.deepEqual(response.headers.getSetCookie(),[cookie]);
  }
 });
+
+test('write limit uses the Neon token subject across IPs and excludes reads and unconfirmed accounts',async()=>{
+ const keys=[];
+ const limitedEnv={...env,PULSO_ACCOUNT_WRITE_LIMIT:{limit:async({key})=>{keys.push(key);return {success:false};}}};
+ const route=createAccountProfileRouter({auth,fetcher:async(_url,{method})=>{
+  assert.equal(method,'GET');
+  return Response.json([]);
+ }});
+ for(const ip of ['192.0.2.1','192.0.2.2']){
+  const response=await route(req({...value,accountId:id.toUpperCase()},{'CF-Connecting-IP':ip,'Authorization':'Bearer ignored'}),limitedEnv);
+  assert.equal(response.status,429);
+  assert.equal(response.headers.get('Retry-After'),'60');
+  assert.deepEqual(await response.json(),{code:'RATE_LIMITED'});
+ }
+ assert.equal((await route(req({...value,accountId:other}),limitedEnv)).status,409);
+ assert.equal((await route(new Request('https://pulso.test/api/account-profile'),limitedEnv)).status,200);
+ const anonymous=createAccountProfileRouter({auth:async()=>Response.json({}, {status:401})});
+ assert.equal((await anonymous(req(value),limitedEnv)).status,401);
+ assert.deepEqual(keys,[id,id]);
+});
