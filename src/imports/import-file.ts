@@ -19,7 +19,7 @@ import {ASSET_DIRECTORY,openAssetReader,WRITER_LOCK} from '../storage/asset-read
 import {assertImportsResolved,validImportOperation,deduplicateOperation,cleanupOperation,createOperation,importOperation,publishOperation,updateOperation,type ImportOperation,type ImportResult} from '../storage/import-operations';
 export {importOperations,importOperation,recoverImportOperation,importIssues,retainImportIssue} from '../storage/import-operations';
 export type ImportLyricsWarning=EmbeddedLyricsFailure|LyricsFailure;
-export interface ImportOptions {libraryMode?:'cache';backend?:'idb'|'opfs'|'auto';operationId?:string;expected?:ExpectedAudioMetadata}
+export interface ImportOptions {libraryMode?:'cache';backend?:'idb'|'opfs'|'auto';operationId?:string;expected?:ExpectedAudioMetadata;parkedOperationIds?:readonly string[]}
 const CHUNK=65536;
 async function writeDirectory(){return atBoundary('open','opfs',async()=>{assertDatabaseUse('write');const root=await navigator.storage.getDirectory();assertDatabaseUse('write');return root.getDirectoryHandle(ASSET_DIRECTORY,{create:true});});}
 /** Owns WRITER_LOCK internally, including recovery gating and final outcome resolution. */
@@ -66,7 +66,7 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
  if(!/^[a-f0-9-]{36}$/.test(operationId))fail('validate','internal','input-invalid','none');
  const prior=await importOperation(operationId);
  if(prior){if((prior.state==='sealed'||prior.state==='discarded')&&prior.result)return prior.result;fail('reconcile','write-uncertain','imports-unresolved','idb');}
- await assertImportsResolved();
+ await assertImportsResolved(accountId&&options.libraryMode==='cache'&&options.parkedOperationIds?{accountId,operationIds:options.parkedOperationIds}:undefined);
  checkCancelled(signal); if(!file.size||file.size>100*1024*1024)fail('validate','internal','limit-exceeded','none');
  const header=new Uint8Array(await atBoundary('read','none',()=>file.slice(0,16).arrayBuffer()));const ascii=(a:number,b:number)=>new TextDecoder().decode(header.slice(a,b));
  const mime=ascii(0,3)==='ID3'||(header[0]===255&&(header[1]&0xe0)===0xe0)?'audio/mpeg':ascii(4,8)==='ftyp'?'audio/mp4':ascii(0,4)==='RIFF'&&ascii(8,12)==='WAVE'?'audio/wav':null;

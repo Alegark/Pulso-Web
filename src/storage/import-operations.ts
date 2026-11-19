@@ -131,8 +131,28 @@ async function createOperationCore(job:ImportOperation){
  }catch(error){try{tx.abort();}catch{/* settled */}await done.catch(()=>{});throw error;}
  }finally{closeDatabase(db);}
 }
-export async function assertImportsResolved(){
- if((await importOperations()).some(job=>!terminal(job))||(await importIssues()).some(issue=>!issue.retained))fail('reconcile','write-uncertain','imports-unresolved','idb');
+/** Isolate only a known cache receipt. Its published result or separate
+ * staging generation stays intact and remains available to Storage recovery. */
+async function isolatableDownload(job:ImportOperation,accountId:string){
+ if(job.accountId!==accountId||job.libraryMode!=='cache')return false;
+ if(terminal(job))return true;
+ const proof=await owned(job);
+ return proof?.everPublished===false&&!(await all<LocalAsset>('assets')).some(asset=>asset.backend===job.backend&&asset.storageKey===job.storageKey);
+}
+export async function canParkImport(operationId:string,accountId:string,signal:AbortSignal,current:()=>boolean){
+ return navigator.locks.request(WRITER_LOCK,{signal},async()=>{
+  if(!current()||signal.aborted)return false;
+  const job=await importOperation(operationId);
+  return !!job&&await isolatableDownload(job,accountId)&&current()&&!signal.aborted;
+ });
+}
+export async function assertImportsResolved(parked?:{accountId:string;operationIds:readonly string[]}){
+ const ids=new Set(parked?.operationIds);
+ for(const job of await importOperations()){
+  if(!terminal(job)&&!(parked&&ids.has(job.operationId)&&await isolatableDownload(job,parked.accountId)))
+   fail('reconcile','write-uncertain','imports-unresolved','idb');
+ }
+ if((await importIssues()).some(issue=>!issue.retained))fail('reconcile','write-uncertain','imports-unresolved','idb');
 }
 /** Keep keys and values together and validate the entire snapshot before any link/write.
  * A mismatched key may alias a healthy identity: neither row is safe to reconcile. */

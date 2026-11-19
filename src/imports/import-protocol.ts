@@ -60,15 +60,20 @@ export function copyImportResult(value:unknown):DetailedImportResult|null{
  if(Object.hasOwn(r,'lyricsInspection')){const i=inspectionCopy(r.lyricsInspection);if(!i)return null;r.lyricsInspection=i;}
  return r as unknown as DetailedImportResult;
 }
-export type ImportRequest={version:2;type:'import';operationId:string;file:File;libraryMode?:'cache';expected?:ExpectedAudioMetadata}|{version:2;type:'cancel';operationId:string};
+export type ImportRequest={version:2;type:'import';operationId:string;file:File;libraryMode?:'cache';expected?:ExpectedAudioMetadata;parkedOperationIds?:string[]}|{version:2;type:'cancel';operationId:string};
 export type RecoveryRequest={version:2;type:'recover';requestId:string;operationId:string;revision:number;action:'resume'|'discard'};
 const fileSize=typeof Blob==='undefined'?undefined:Object.getOwnPropertyDescriptor(Blob.prototype,'size')?.get;
 const fileName=typeof File==='undefined'?undefined:Object.getOwnPropertyDescriptor(File.prototype,'name')?.get;
 export function copyWorkerRequest(value:unknown):ImportRequest|RecoveryRequest|null{
- const h=optionalRecord(value,['version','type','operationId'],['file','expected','libraryMode','requestId','revision','action']);if(!h||h.version!==2||!uuid(h.operationId))return null;
+ const h=optionalRecord(value,['version','type','operationId'],['file','expected','libraryMode','parkedOperationIds','requestId','revision','action']);if(!h||h.version!==2||!uuid(h.operationId))return null;
  if(h.type==='cancel'){const r=plain(h,['version','type','operationId']);return r as ImportRequest|null;}
  if(h.type==='import'){
- const r=optionalRecord(h,['version','type','operationId','file'],['expected','libraryMode']);if(!r||Object.hasOwn(r,'libraryMode')&&r.libraryMode!=='cache')return null;
+ const r=optionalRecord(h,['version','type','operationId','file'],['expected','libraryMode','parkedOperationIds']);if(!r||Object.hasOwn(r,'libraryMode')&&r.libraryMode!=='cache')return null;
+ if(Object.hasOwn(r,'parkedOperationIds')){
+  const ids=array(r.parkedOperationIds,5000);
+  if(r.libraryMode!=='cache'||!ids?.length||!ids.every(uuid)||new Set(ids).size!==ids.length||ids.includes(h.operationId))return null;
+  r.parkedOperationIds=ids;
+ }
  try{if(!integer(fileSize?.call(r.file),1,100*1024*1024)||typeof fileName?.call(r.file)!=='string')return null;}catch{return null;}
  if(r.expected!==undefined){const e=optionalRecord(r.expected,['sha256','title','artist'],['recordingTitle','album','durationSeconds']);if(!e||!text(e.sha256,64,64)||! /^[a-f0-9]{64}$/.test(e.sha256)||!text(e.title,300,1)||e.artist!==null&&!text(e.artist,300,1))return null;const grouped=['recordingTitle','album','durationSeconds'].filter(k=>Object.hasOwn(e,k)).length;if(grouped!==0&&grouped!==3)return null;if(grouped===3&&(!text(e.recordingTitle,300,1)||!e.recordingTitle.trim()||!text(e.album,300,1)||!e.album.trim()||typeof e.durationSeconds!=='number'||!Number.isFinite(e.durationSeconds)||e.durationSeconds<=0||e.durationSeconds>86400||!recordingTitleCandidate(e.recordingTitle,e.title,e.album,e.durationSeconds)))return null;r.expected=e;}
  return r as ImportRequest;
@@ -121,7 +126,7 @@ export function createImportV2Handler(send:(response:WorkerResponse)=>void){
  const controller=new AbortController();active={operationId:request.operationId,controller};
  try{
  const {importFileDetailed}=await import('./import-file');
- const attempt=await importFileDetailed(request.file,controller.signal,bytes=>send({version:2,type:'progress',operationId:request.operationId,bytes}),{operationId:request.operationId,expected:request.expected,libraryMode:request.libraryMode});
+ const attempt=await importFileDetailed(request.file,controller.signal,bytes=>send({version:2,type:'progress',operationId:request.operationId,bytes}),{operationId:request.operationId,expected:request.expected,libraryMode:request.libraryMode,parkedOperationIds:request.parkedOperationIds});
  if(attempt.kind==='confirmed'){
  const result=copyImportResult(attempt.result);
  if(result)send({version:2,type:'complete',operationId:request.operationId,result,outcome:attempt.outcome});

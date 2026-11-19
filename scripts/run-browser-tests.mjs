@@ -4,6 +4,12 @@ import {extname, resolve, sep} from 'node:path';
 import {chromium} from 'playwright-core';
 import {chromiumPath, chromiumSkipReason} from './chromium-path.mjs';
 
+// The compiled shell suite owns its synthetic SDK, loopback server and teardown.
+if (process.argv.length === 3 && process.argv[2] === 'download-autoheal') {
+  await import('../tests/integration/check-playlist-resume-main.mjs');
+  process.exit(process.exitCode ?? 0);
+}
+
 const cases = {
   'metadata-rescan': ['metadata-rescan.html','pulsoMetadataRescan'],
   'album-source': ['album-source.html','pulsoAlbumSource'],

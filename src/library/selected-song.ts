@@ -20,10 +20,12 @@ export interface SongPlaybackAttempt {
  current():boolean;
  addToLibrary(trackId:string,current:()=>boolean,signal:AbortSignal):Promise<boolean>;
  lookup(choice:SongChoice,signal:AbortSignal,repair?:boolean):Promise<string|null>;
- save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId?:string):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean}>;
+ save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId?:string):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean;storageUnavailable?:boolean}>;
  waitForDownload?(signal:AbortSignal):Promise<boolean>;
  inspectDownload?(trackId:string,signal:AbortSignal):Promise<string|null>;
  reconcileDownload?(operationId:string,trackId:string,signal:AbortSignal,repair?:boolean):Promise<{state:'saved'|'missing'|'uncertain';trackId:string|null}>;
+ reconcileSongDownload?(operationId:string,choice:SongChoice,signal:AbortSignal):Promise<{state:'saved'|'missing'|'uncertain';trackId:string|null}>;
+ parkDownload?(operationId:string,signal:AbortSignal):Promise<void>;
  play(trackId:string,current:()=>boolean,signal:AbortSignal):Promise<'playing'|'gesture-required'|'failed'>;
 }
 export {musicIdentityText,matchingSongRows} from '../telegram/bot-search-protocol';
