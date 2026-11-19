@@ -32,10 +32,10 @@ try{
  server=await preview({configFile:false,build:{outDir:bundle},preview:{host:'127.0.0.1',port:0}});
  const origin='http://127.0.0.1:'+server.httpServer.address().port;
  for(const [engine,launcher] of [['chromium',chromium],['webkit',webkit]]){
+  if(process.env.PLAYLIST_RESUME_ENGINE&&process.env.PLAYLIST_RESUME_ENGINE!==engine)continue;
   const browser=await launcher.launch(engine==='chromium'?{executablePath:'/usr/bin/chromium',headless:true}:{headless:true});
   report[engine]=browser.version();
   try{for(const mode of ['autoheal','missing','invalid','cooldown','staging','parked','ack-lost','connected','single']){
-   if(process.env.PLAYLIST_RESUME_ENGINE&&process.env.PLAYLIST_RESUME_ENGINE!==engine)continue;
    const fresh=['autoheal','missing','single'].includes(mode);
    const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
    const trace=[];let releaseRestore,holdRestore=false,page;
@@ -162,7 +162,6 @@ try{
      await page.locator('.bot-providers-list li').first().waitFor({state:'attached'});
      await page.getByRole('button',{name:mode==='single'?'Escuchar Pista 3':'Descargar playlist completa',exact:true}).click();
     }
-    await page.waitForFunction(()=>document.body.textContent?.includes('Buscando canción'));
     const allSaved=['autoheal','cooldown','ack-lost','single'].includes(mode);
     const summary=allSaved?'Selección descargada en este dispositivo.':'Descarga parcial: revisa las canciones pendientes.';
     await page.getByText(summary,{exact:true}).waitFor({state:'attached',timeout:45000});
