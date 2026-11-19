@@ -82,10 +82,11 @@ export async function applyAccountLibrary(accountId:string,sent:AccountLibraryDo
 }
 /** The user requested this exact restored row. Parsed tags/duration have already
  * passed import validation. Reuse those bytes without a second physical copy. */
-export async function attachRestoredAccountTrack(accountId:string,restoredId:string,downloadedId:string,current:()=>boolean):Promise<string>{
+export async function attachRestoredAccountTrack(accountId:string,restoredId:string,downloadedId:string,current:()=>boolean,expectedSource?:{assetId:string;revision:number}):Promise<string>{
  if(restoredId===downloadedId)return downloadedId;
  return write(current,async tx=>{const store=tx.objectStore('tracks');const [restored,downloaded]=await Promise.all([request<Track|undefined>(store.get(restoredId)),request<Track|undefined>(store.get(downloadedId))]);
-  if(!restored||restored.accountId!==accountId||restored.assetId!==null||!downloaded?.assetId||downloaded.accountId!==accountId) return downloadedId;
+  if(!restored||restored.accountId!==accountId||restored.assetId!==null||!downloaded?.assetId||downloaded.accountId!==accountId||
+   expectedSource&&(downloaded.assetId!==expectedSource.assetId||downloaded.revision!==expectedSource.revision)) return downloadedId;
   store.put({...restored,assetId:downloaded.assetId,audioFingerprint:downloaded.audioFingerprint,duration:restored.duration||downloaded.duration,revision:restored.revision+1},restoredId);
   const lists=await request<Playlist[]>(tx.objectStore('playlists').getAll());const member=await request(tx.objectStore('settings').get(libraryMembershipKey(downloadedId)));
   if(!downloaded.favorite&&copyLibraryMembership(member,downloadedId)?.added===false&&!lists.some(p=>p.entries.some(e=>e.trackId===downloadedId))){store.delete(downloadedId);tx.objectStore('settings').delete(libraryMembershipKey(downloadedId));}
