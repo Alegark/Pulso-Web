@@ -2361,3 +2361,11 @@ T23 registra las nuevas referencias Spotify sin añadirlas a Biblioteca general.
 ### T23 · Corrección de Álbumes publicada · 2026-11-18
 
 Cloudflare versión 45, deployment `71cb4c65-6f3b-418b-9f5c-b48c8f5ab2a2` y entrada `/releases/734a7031cc9996ea.html`. HTTPS 226/226 rutas estáticas. El Worker y la configuración coinciden con v44. La lectura pública Spotify devuelve 41 pistas, cero omitidas y total desconocido. El comportamiento de pertenencia de pistas y retirada sin perder copias compartidas quedó verificado en Chromium y WebKit locales. La aceptación autenticada pública y física en iPhone siguen pendientes. Evidencia y limpieza en T23.
+
+## Biblioteca · reanudación de descargas de playlist · 2026-11-19
+
+T11-T12 distingue guardado definitivo fallido de guardado incierto, conserva el cursor por cuenta y permite continuar por gesto tras recuperar el recibo de importación. Navegación y señal de ocultación no cancelan por sí solas. Chromium/WebKit 16/16 verificaron el controlador, recarga real y un recibo IDB sellado reconciliado sin otra copia. Las pruebas usan datos y transportes sintéticos. Lint, suite 806/806 y 7/7 focales PASS. Causa del caso físico de iPhone, publicación de este delta y P0-W siguen pendientes.
+
+### Descargas y avisos publicados · 2026-11-19
+
+Cloudflare versión 46 sirve `/releases/bed8f65288828366.html`, deployment `4dcedb95-2295-4a2e-ad22-8a6450b48553`. Coincidieron 229/229 rutas por bytes/SHA y el módulo de entrada contiene «Continuar descarga de Biblioteca» y «Notificaciones de descargas». Los runners locales cubrieron reanudación, guardado incierto y preferencias de avisos con transportes de prueba. El Worker y la configuración coinciden con v45. Validación y limpieza en T11-T12 y T18. Sigue pendiente la aceptación con cuenta real y suspensión del iPhone.

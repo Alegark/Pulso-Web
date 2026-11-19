@@ -19,6 +19,7 @@ import {TrackActionsMenu,TrackPlaylistAction,trackActionOpener} from './ui/Track
 import {AccountAccess} from './ui/AccountAccess';
 import {AccountRequired} from './ui/AccountRequired';
 import {MobileInstallNotice} from './ui/MobileInstallNotice';
+import {DownloadNotificationSettings} from './ui/DownloadNotificationSettings';
 import {reuseInstalledWindow} from './pwa/launch-reuse';
 import {accountController} from './accounts/neon-provider';
 import {AlbumDownloadNotice} from './ui/AlbumDownloadNotice';
@@ -42,6 +43,7 @@ import {Player} from './playback/player';
 import {normalizeSnapshot,planQueueRestore,restoreAssetAvailable,type Snapshot} from './playback/queue-restore';
 import {all,createPlaylist,changePlaylist,editTrack,verifiedAssetDetailed,validAsset,validAudioFingerprint,type LocalAsset,type Track,type Playlist} from './library/library';
 import {importOperations,importIssues,retainImportIssue,terminal,type ImportOperation,type ImportIssue} from './storage/import-operations';
+import {reconcileLibraryDownload} from './library/library-download-recovery';
 import {readRecord,writeRecord,openExistingDatabase,admittedTransaction,request,closeDatabase,subscribeDatabaseLifecycle,registerDatabaseOpenGuard,registerDatabaseUseGuard,retireDatabaseRealm,type DatabaseLifecycleState} from './storage/database';
 import {transactionDone} from './storage/transaction-done';
 import {registerDatabaseRealmHost,beginWorkerAttempt,revokeDatabaseWorkerAttempts,activeDatabaseWorkerAttempts,type RealmAttempt} from './storage/database-realms';
@@ -390,11 +392,11 @@ function captureBotAudioImport(libraryMode?:'cache'){
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();let used=false;
  const allowed=()=>admitted()&&raw()&&review()&&!busy&&!importRecoveryPending()&&!metadataRescanBlocked&&!copyRemovalPending&&!sourceReview.hasReservation()&&!queueForeignBlocked();
  if(!allowed()||botImportActive||!songAdmissionIdle())return null;
- return async(audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null}>=>{
+ return async(audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId:string=crypto.randomUUID()):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null}>=>{
   if(used||!allowed()||botImportActive||!songAdmissionIdle()||signal.aborted)return {state:'failed',trackId:null};used=true;
   const operation=control.activity.begin();if(!operation)return {state:'failed',trackId:null};const own={};botImportActive=own;emit();
   const current=()=>admitted()&&raw()&&review()&&operation.current()&&botImportActive===own&&!sourceReview.hasReservation()&&!queueForeignBlocked();
-  const operationId=crypto.randomUUID();let outcome:OutcomeV1|undefined,confirmed=false;const diagnostic=beginDiagnostic('import-audio');
+  let outcome:OutcomeV1|undefined,confirmed=false;const diagnostic=beginDiagnostic('import-audio');
   try{
    if(!current()||signal.aborted)return {state:'failed',trackId:null};
    const suffix=audio.mime==='audio/mpeg'?'.mp3':audio.mime==='audio/mp4'?'.m4a':'.wav';
@@ -420,12 +422,25 @@ let selectedSongIntent=0;
 let miniPlayerArtistHint:{entryId:string;artist:string}|null=null;
 function cancelSelectedSongIntent(){++selectedSongIntent;emit();}
 function captureSongDownload():SongPlaybackAttempt|null {return captureSongPlayback('download');}
-function captureSongPlayback(purpose:'playback'|'download'='playback'):SongPlaybackAttempt|null {
+function captureBatchDownload():SongPlaybackAttempt|null {return captureSongPlayback('batch');}
+function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback'):SongPlaybackAttempt|null {
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();
  if(!admitted()||busy||copyRemovalBlocked()||queueForeignBlocked()||!songAdmissionIdle())return null;
  const intent=purpose==='playback'?++selectedSongIntent:selectedSongIntent;let queueing=false,playUsed=false,rememberedId:string|null=null,primaryArtist:string|null=null;
- const current=()=>(purpose==='download'||intent===selectedSongIntent)&&raw()&&review()&&(queueing||admitted());
+ const current=()=>(purpose!=='playback'||intent===selectedSongIntent)&&raw()&&review()&&(purpose==='batch'||queueing||admitted());
+ const waitForDownload=(signal:AbortSignal)=>waitForSongAdmission({signal,
+  current:()=>current()&&!importRecoveryPending()&&!unverifiedImportResponses.size,
+  ready:()=>!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&songAdmissionIdle(),
+  subscribe:changed=>{listeners.add(changed);return()=>{listeners.delete(changed);};},
+ });
  return Object.freeze({current,
+  ...(purpose==='batch'?{waitForDownload,async reconcileDownload(operationId:string,trackId:string,signal:AbortSignal){
+   const accountId=accountController.getSnapshot().user?.id;
+   if(!accountId)return {state:'uncertain' as const,trackId:null};
+   const receipt=await reconcileLibraryDownload(accountId,operationId,trackId,signal,current);
+   if(receipt.state==='saved'&&current())await refresh(false,false,null);
+   return receipt;
+  }}:{}),
   async addToLibrary(trackId:string,caller:()=>boolean,signal:AbortSignal){
    const live=()=>{try{return current()&&caller()===true&&!signal.aborted&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&!botImportActive&&control.activity.resolved;}catch{return false;}};
    const admitted=await waitForSongAdmission({current:live,ready:songAdmissionIdle,signal,subscribe:changed=>{listeners.add(changed);return()=>{listeners.delete(changed);};}});
@@ -449,21 +464,22 @@ function captureSongPlayback(purpose:'playback'|'download'='playback'):SongPlayb
     return track.id;
    }finally{token.end();}
   },
-  async save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(n:number)=>void){
+  async save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(n:number)=>void,operationId?:string){
    if(!current()||signal.aborted)return {state:'failed' as const,trackId:null};
    const save=captureBotAudioImport('cache');if(!save)return {state:'failed' as const,trackId:null};
-   const result=await save(audio,signal,onProgress);if(result.state!=='saved'||!result.trackId)return result;
+   const result=await save(audio,signal,onProgress,operationId);if(result.state!=='saved'||!result.trackId)return result;
    // A matching restored fingerprint keeps the old Track and all its organization.
    const restored=rememberedId?tracks.find(t=>t.id===rememberedId&&t.assetId!==null&&t.audioFingerprint?.sha256===audio.sha256&&t.audioFingerprint.bytes===audio.bytes):null;
    let trackId=restored?.id??result.trackId;
    if(rememberedId&&trackId!==rememberedId&&current()&&!signal.aborted){const accountId=accountController.getSnapshot().user?.id;if(accountId){trackId=await attachRestoredAccountTrack(accountId,rememberedId,trackId,()=>current()&&!signal.aborted);await refresh(false,false,null);}}
+   if(purpose==='batch'&&rememberedId!==trackId)return {state:'uncertain' as const,trackId};
    if(!current()||signal.aborted)return {state:'saved' as const,trackId};
    const token=control.activity.begin();if(!token)return {state:'uncertain' as const,trackId};
    try{await rememberSongAlias(choice,trackId,audio.sha256,audio.bytes,()=>current()&&!signal.aborted&&token.current());return {state:'saved' as const,trackId};}
    catch{return {state:'uncertain' as const,trackId};}finally{token.end();}
   },
   async play(trackId:string,caller:()=>boolean,signal:AbortSignal){
-   if(purpose==='download'||playUsed||signal.aborted||!current()||!caller()||busy||copyRemovalBlocked()||queueForeignBlocked())return 'failed' as const;playUsed=true;
+   if(purpose!=='playback'||playUsed||signal.aborted||!current()||!caller()||busy||copyRemovalBlocked()||queueForeignBlocked())return 'failed' as const;playUsed=true;
    const guardedPlay=async()=>{
     const entry=player.current,epoch=player.queueEpoch;
     const stop=()=>{if(control.owner&&player.current===entry&&player.queueEpoch===epoch)player.pause();};
@@ -1326,9 +1342,9 @@ function App(){
   startSpotifyCatalog(saved.result.playlist.id);
   return {...saved.result,available};
  }} onOpen={openSpotifyPlaylist}/>}
-<section className="settings-group settings-appearance"><h3>Apariencia</h3><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label></section><section className="settings-group settings-app-update" aria-labelledby="app-update-heading"><h3 id="app-update-heading">Actualización de la app</h3><div className="settings-group__body"><p role="status">{manualReloadPending?'Esperando a que terminen las operaciones para recargar…':updateState==='checking'?'Comprobando versión…':updateState==='current'?'Actualizada':updateState==='available'?'Nueva versión disponible':'No se pudo comprobar si hay actualizaciones.'}</p><button type="button" disabled={manualReloadPending||updateNavigationLocked} onClick={()=>{player.pause();automaticUpdates?.reload();}}>Recargar app</button><p>Recarga Pulso y conserva tus datos. Si hay música sonando, se pausará.</p></div></section><section className="settings-group" aria-label="Sincronización de biblioteca"><h3>Biblioteca de tu cuenta</h3><div className="settings-group__body"><p role="status">{librarySyncMessage[librarySyncState]}</p><p>Playlists, favoritos y álbumes se conservan con tu cuenta. Los artistas guardados y las descargas se conservan en este dispositivo.</p><button type="button" disabled={!owner||busy||librarySyncState==='syncing'} onClick={()=>void librarySync.sync()}>Sincronizar biblioteca</button></div></section></div><div className="settings-groups">
+<section className="settings-group settings-appearance"><h3>Apariencia</h3><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label></section><DownloadNotificationSettings/><section className="settings-group settings-app-update" aria-labelledby="app-update-heading"><h3 id="app-update-heading">Actualización de la app</h3><div className="settings-group__body"><p role="status">{manualReloadPending?'Esperando a que terminen las operaciones para recargar…':updateState==='checking'?'Comprobando versión…':updateState==='current'?'Actualizada':updateState==='available'?'Nueva versión disponible':'No se pudo comprobar si hay actualizaciones.'}</p><button type="button" disabled={manualReloadPending||updateNavigationLocked} onClick={()=>{player.pause();automaticUpdates?.reload();}}>Recargar app</button><p>Recarga Pulso y conserva tus datos. Si hay música sonando, se pausará.</p></div></section><section className="settings-group" aria-label="Sincronización de biblioteca"><h3>Biblioteca de tu cuenta</h3><div className="settings-group__body"><p role="status">{librarySyncMessage[librarySyncState]}</p><p>Playlists, favoritos y álbumes se conservan con tu cuenta. Los artistas guardados y las descargas se conservan en este dispositivo.</p><button type="button" disabled={!owner||busy||librarySyncState==='syncing'} onClick={()=>void librarySync.sync()}>Sincronizar biblioteca</button></div></section></div><div className="settings-groups">
 <section hidden={settingsSection!=='connections'} className="settings-group"><h3>Cuenta y fuentes</h3><div className="settings-group__body"><section aria-label="Música de Telegram"><details className="settings-help"><summary>Cómo buscar y escuchar</summary><p>En Buscar puedes consultar sugerencias musicales y las opciones del bot que elijas. Conecta tu cuenta de Telegram y configura tus bots para consultarlos. Al elegir una canción se comprueba tu copia local; si falta, se obtiene del bot para descargarla y escucharla. Límite por canción: {formatStorageMB(AUDIO_FILE_MAX_BYTES)}.</p></details></section>
- <TelegramPanel requiredSetup onSetupReady={onSetupReady} accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureSongCopyInspection={captureSongCopyInspection} savedArtists={savedArtists} canSaveArtist={canSaveArtist} saveArtist={(artist,save)=>saveCatalogArtist(artist,save,mutationCurrent)} searchTarget={musicSearchTarget} searchVisible={page==='buscar'&&!settingsOpen} localTracks={tracks} libraryTrackIds={addedTrackIds} songPlaylists={playlists} playerTrackId={player.current?.trackId??null} playerPlaying={owner&&player.state==='playing'} captureSongManagement={captureSongManagement} captureDownloadSave={captureBotAudioSave}/></div></section>
+ <TelegramPanel requiredSetup onSetupReady={onSetupReady} accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureBatchDownload={captureBatchDownload} captureSongCopyInspection={captureSongCopyInspection} savedArtists={savedArtists} canSaveArtist={canSaveArtist} saveArtist={(artist,save)=>saveCatalogArtist(artist,save,mutationCurrent)} searchTarget={musicSearchTarget} searchVisible={page==='buscar'&&!settingsOpen} localTracks={tracks} libraryTrackIds={addedTrackIds} songPlaylists={playlists} playerTrackId={player.current?.trackId??null} playerPlaying={owner&&player.state==='playing'} captureSongManagement={captureSongManagement} captureDownloadSave={captureBotAudioSave}/></div></section>
 <section hidden={settingsSection!=='tools'} className="settings-group"><h3>Reproducción y pestañas</h3><div className="settings-group__body"><section aria-label="Control de esta pestaña"><h2>Control de reproducción</h2><p role="status">{owner?'Activa en esta pestaña':control.state==='adquiriendo'?'Preparando control…':'Control en otra pestaña'}</p>{transferText&&<p role="status">{transferText}</p>}{owner?<><button onClick={()=>{if(!playCurrent())return;transferPlayIntent=null;void cede();}}>Ceder control</button>{control.requests.length>0&&<div><p>{control.requests.length} pestañas solicitan el control.</p><button onClick={()=>{if(playCurrent())control.retain();}}>Conservar control</button></div>}<p>{control.activity.count} operaciones activas. La cesión espera a que las operaciones estén resueltas.</p></>:<><button disabled={!canUseThisTab} onClick={()=>{if(playCurrent())void useThisTab();}}>Usar en esta pestaña</button>{['pending','acquiring'].includes(control.transferState)&&<button onClick={()=>{if(playCurrent())cancelTabTransfer();}}>Cancelar solicitud de control</button>}<button disabled={!control.supported||control.state!=='sin-control'||control.transferState==='pending'} onClick={()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}}>Comprobar disponible</button><p>Puedes mantener varias pestañas abiertas. Al usar esta, la anterior guarda la cola y se detiene antes de ceder. Cambiar de pestaña no inicia música. Si hay operaciones pendientes o una versión anterior, cede el control allí o cierra esa entrada.{!control.messaging?' Los avisos entre pestañas no están disponibles; cede manualmente en la otra pestaña.':''}</p></>}</section></div></section></div></section>
  {unverifiedImportResponses.size>0&&<section aria-label="Respuestas de copias pendientes"><h2>Hay respuestas sin confirmar</h2><p>No se pudo confirmar el resultado de una operación. Conservamos los datos y pausamos las descargas y los cambios de organización. Revisaremos los registros locales sin repetir descargas ni borrar archivos.</p><button disabled={!owner||busy} onClick={()=>void admitted('refresh-library',checkFiles)}>Revisar respuestas pendientes</button></section>}
  {importRecoveryPending()&&<section aria-label="Recuperación de copias"><h2>Hay copias pendientes de confirmar</h2><p>Las nuevas descargas están en pausa. Puedes verificar una copia interrumpida o descartar únicamente su parcial; las canciones ya conservadas no se borran.</p><ul>{operations.filter(job=>!terminal(job)).map(job=><li key={job.operationId}><p>{job.state==='uncertain'||job.state==='publishing'?'Resultado por confirmar':job.state==='cleanup'?'Parcial pendiente':'Copia interrumpida'} · {formatStorageProgress(job.bytes,job.expectedBytes)} copiados</p><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'||!job.asset||!job.track} onClick={()=>void viewRecover(job,'resume')}>Verificar y recuperar copia</button><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'} onClick={()=>setDiscardId(job.operationId)}>Descartar copia incompleta</button>{discardId===job.operationId&&<div><p>Se comprobará que esta copia no esté publicada ni en uso antes de descartar su parcial. La biblioteca y los archivos conservados permanecen.</p><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'} onClick={()=>{setDiscardId(null);void viewRecover(job,'discard');}}>Confirmar descarte del parcial</button><button onClick={()=>setDiscardId(null)}>Conservar copia</button></div>}</li>)}</ul>{importProblems.filter(issue=>!issue.retained).map((issue,i)=><div key={i}><p>{issue.kind==='legacy'?'Registro de importación anterior sin propiedad verificable.':'Registro de importación inválido o sin propiedad verificable.'} Conservaremos sus archivos; no se puede autorizar su limpieza ni dar la copia por completa.</p><button disabled={!owner||busy||copyRemovalPending||databaseState!=='ready'} onClick={()=>void viewRetain(issue)}>Conservar esos archivos y continuar</button></div>)}</section>}
