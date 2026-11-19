@@ -1,7 +1,7 @@
 import {build,preview} from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import {chromium,webkit} from 'playwright-core';
-import {writeFile} from 'node:fs/promises';
+import {open,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -20,10 +20,12 @@ const readyCopies=[1,2].map((n)=>{
  return {id:uuid(80+n),trackId:ids[n-1],sha256:createHash('sha256').update(audio).digest('hex'),audio:audio.toString('base64')};
 });
 const fixture=()=>({name:'playlist-resume-sdk-test',enforce:'pre',resolveId(id){if(id==='./temporary-sdk')return resolve('tests/integration/playlist-resume-sdk.ts');}});
-let server;
+let server,tempDirectory;
 const oldTemp=process.env.TMPDIR;
-process.env.TMPDIR=resolve(work.dir);
 try{
+ // Keep test profiles in the worktree using a path short enough for Unix sockets.
+ tempDirectory=await open(work.dir,'r');
+ process.env.TMPDIR=`/proc/${process.pid}/fd/${tempDirectory.fd}`;
  const bundle=work.dir+'/bundle';
  await build({configFile:false,plugins:[tailwindcss(),fixture()],worker:{plugins:()=>[fixture()]},logLevel:'error',build:{outDir:bundle}});
  await writeFile(bundle+'/telegram-config.json',JSON.stringify({api_id:12345,api_hash:'0'.repeat(32)}));
@@ -220,6 +222,7 @@ try{
 finally{
  if(server)await new Promise(resolve=>server.httpServer.close(resolve));
  if(oldTemp===undefined)delete process.env.TMPDIR;else process.env.TMPDIR=oldTemp;
+ await tempDirectory?.close();
  report.cleanup=await work.cleanup();
  report.status=report.cases.length===(process.env.PLAYLIST_RESUME_ENGINE?9:18)&&report.cases.every(c=>c.status==='PASS')&&!report.errors.length?'PASS':'FAIL';
  await writeFile(work.evidence+'/report.json',JSON.stringify(report,null,2));
