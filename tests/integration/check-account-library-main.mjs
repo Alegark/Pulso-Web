@@ -16,12 +16,29 @@ try{
    await c.route(origin+'/api/account-library',r=>{if(r.request().method()==='PUT'){const v=r.request().postDataJSON();if(v.accountId!==user||v.revision!==cloud.revision)return r.fulfill({status:409,json:{code:'LIBRARY_CHANGED'}});cloud={accountId:user,revision:cloud.revision+1,document:v.document};}return r.fulfill({json:cloud});});
    await c.route(origin+'/telegram-config.json',r=>r.fulfill({json:{}}));
    await c.addInitScript(()=>{try{delete Navigator.prototype.serviceWorker;}catch{}window.__libraryCommands={search:0,download:0};const original=Worker.prototype.postMessage;Worker.prototype.postMessage=function(value,...rest){if(value?.type==='bot-search.search')window.__libraryCommands.search++;if(value?.type==='bot-search.download')window.__libraryCommands.download++;return original.call(this,value,...rest);};});
-   const p=await c.newPage();p.on('pageerror',e=>report.errors.push({engine,error:String(e)}));await p.goto(origin);await p.locator('.shell-nav').waitFor();await p.getByText('Nube propia 2',{exact:true}).first().waitFor();pages.push(p);
+   // Seed only setup presence so the real shell opens while Telegram stays offline.
+   await c.route(origin+'/testonly-seed',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>TESTONLY setup seed</title>'}));
+   const p=await c.newPage();p.on('pageerror',e=>report.errors.push({engine,error:String(e)}));
+   await p.goto(origin+'/testonly-seed');
+   await p.evaluate(async account=>{
+    localStorage.setItem('pulso:setup:v1:'+account,'complete');
+    const db=await new Promise((resolve,reject)=>{
+     const open=indexedDB.open('pulso-web-telegram-session-v1',1);
+     open.onupgradeneeded=()=>open.result.createObjectStore('authorization');
+     open.onsuccess=()=>resolve(open.result);open.onerror=()=>reject(open.error);
+    });
+    try{await new Promise((resolve,reject)=>{
+     const tx=db.transaction('authorization','readwrite');
+     tx.objectStore('authorization').put('TESTONLY_OFFLINE_SETUP','session');
+     tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);
+    });}finally{db.close();}
+   },user);
+   await p.goto(origin);await p.locator('.shell-nav').waitFor();await p.getByText('Nube propia 2',{exact:true}).first().waitFor();pages.push(p);
   }
   const [a,b]=pages;for(const p of pages){await p.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();await p.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).waitFor();}
   report.cases.push({engine,test:'two actual app instances restore the same account library from metadata',status:'PASS'});
   await a.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).click();await a.getByRole('heading',{name:'Playlist de mi cuenta',exact:true}).waitFor();assert.equal(await a.locator('.library-detail .collection-track-main').count(),2);
-  await a.getByRole('button',{name:'Descargar esta selección en este dispositivo',exact:true}).click();await a.getByText('Conecta Telegram y configura un bot para descargar en este dispositivo.',{exact:true}).waitFor();await a.getByRole('button',{name:'Cerrar aviso',exact:true}).click();
+  await a.getByRole('button',{name:'Descargar playlist completa',exact:true}).click();await a.getByText('Conecta Telegram y configura un bot para descargar en este dispositivo.',{exact:true}).waitFor();await a.getByRole('button',{name:'Cerrar aviso',exact:true}).click();
   for(const p of pages){const data=await p.evaluate(async()=>{const db=await new Promise((res,rej)=>{const r=indexedDB.open('pulso-web-local-v1');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(Error('open'));});try{const tx=db.transaction(['tracks','assets'],'readonly');const read=n=>new Promise(res=>{const r=tx.objectStore(n).getAll();r.onsuccess=()=>res(r.result);});const [tracks,assets]=await Promise.all([read('tracks'),read('assets')]);return {tracks:tracks.length,assets:assets.length,allMissing:tracks.every(t=>t.assetId===null),commands:window.__libraryCommands};}finally{db.close();}});assert.equal(data.assets,0);assert.equal(data.tracks,2);assert.equal(data.allMissing,true);assert.deepEqual(data.commands,{search:0,download:0});commands=data.commands;}
   report.cases.push({engine,test:'restoration has zero audio assets or bot commands; explicit download has visible connection guidance',status:'PASS',commands});
   await a.getByRole('button',{name:/Volver a Biblioteca/}).click();await a.getByText('Crear una playlist',{exact:true}).click();await a.getByLabel('Nueva playlist',{exact:true}).fill('Creada en dispositivo A');await a.locator('.create-playlist').getByRole('button',{name:'Crear playlist',exact:true}).click();

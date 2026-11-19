@@ -2377,3 +2377,7 @@ T11-T12 registra la revisión por pista desde el lote y las opciones de playlist
 ### Reintento por canción publicado · 2026-11-19
 
 Cloudflare versión 48 sirve `/releases/360c83bb0aff68e7.html`, deployment `718db1f5-2069-4348-8e05-b9a023441fdf`. Se verificaron 237/237 rutas y las acciones de revisión y reintento en el módulo de entrada. Worker, Turnstile, límites y 13 bindings coinciden con v47. La aceptación local Chromium/WebKit usa transportes sintéticos. La prueba con Telegram real y el iPhone físico sigue pendiente. Detalle en T11-T12.
+
+## Biblioteca · descarga completa con recuperación automática · 2026-11-19
+
+T11-T12 registra la recuperación automática dentro de la playlist completa. El lote verifica copias y recibos, repara exclusivamente staging propio comprobado, conserva los archivos publicados y prueba una alternativa compatible con un presupuesto de dos escrituras por pista. Chromium/WebKit comprobaron que la cuarta canción sigue sin gesto adicional cuando falla la tercera, incluyendo reanudación por recarga. La app compilada confirmó la entrada desde Biblioteca. Se usaron datos y transportes sintéticos. La aceptación física en iPhone sigue pendiente y P0-W permanece abierto.

@@ -1,8 +1,9 @@
 import {attachRestoredAccountTrack} from '../accounts/library-local';
+import {issuedFailure} from '../errors/app-failure';
 import {WRITER_LOCK} from '../storage/asset-reader';
 import {admittedTransaction,closeDatabase,openDatabase,readRecord,request} from '../storage/database';
 import {transactionDone} from '../storage/transaction-done';
-import {importOperation} from '../storage/import-operations';
+import {importOperation,recoverImportOperation,terminal} from '../storage/import-operations';
 import {validAudioFingerprint,verifiedAssetDetailed,type LocalAsset,type Track} from './library';
 
 /** The receipt must belong to this account and its bytes must still verify
@@ -43,11 +44,11 @@ function matchesFingerprint(track:Track,asset:LocalAsset):boolean{
 }
 /** Preserve the asset and all other references. Recheck this account's exact
  * Track and the old copy under the import writer lock before unlinking it. */
-async function unlinkUnusableCopy(track:Track&{assetId:string},signal:AbortSignal,live:()=>boolean):Promise<boolean>{
+async function unlinkUnusableCopy(track:Track&{assetId:string},signal:AbortSignal,live:()=>boolean,definiteOnly=false):Promise<boolean>{
  return navigator.locks.request(WRITER_LOCK,{signal},async()=>{
   if(!live())return false;
   const copy=await verifiedAssetDetailed(track.assetId,true);
-  if(!live()||copy.state==='valid'&&matchesFingerprint(track,copy.asset))return false;
+  if(!live()||definiteOnly&&copy.state!=='missing'&&copy.state!=='corrupt'||copy.state==='valid'&&matchesFingerprint(track,copy.asset))return false;
   const db=await openDatabase();
   try{
    const tx=admittedTransaction(db,'tracks','readwrite'),done=transactionDone(tx),tracks=tx.objectStore('tracks');
@@ -58,6 +59,11 @@ async function unlinkUnusableCopy(track:Track&{assetId:string},signal:AbortSigna
    return same;
   }finally{closeDatabase(db);}
  });
+}
+/** Only a proven unusable link may be replaced automatically. Keep all bytes. */
+export async function prepareBatchCopyReplacement(track:Track,accountId:string,signal:AbortSignal,current:()=>boolean){
+ return track.accountId===accountId&&track.assetId!==null&&
+  unlinkUnusableCopy({...track,assetId:track.assetId},signal,()=>current()&&!signal.aborted,true);
 }
 export async function inspectLibraryTrackDownload(accountId:string,trackId:string,operationId:string|undefined,signal:AbortSignal,current:()=>boolean,repair=false):Promise<LibraryTrackDownloadReview>{
  const live=()=>current()&&!signal.aborted,unknown={state:'uncertain' as const,settled:false,canPreserveRetry:false};
@@ -84,4 +90,30 @@ export async function inspectLibraryTrackDownload(accountId:string,trackId:strin
   const result=await reconcileLibraryDownload(accountId,operationId,trackId,signal,current);
   return {state:result.state,settled:result.state!=='uncertain',canPreserveRetry:result.state!=='saved'};
  }catch{return unknown;}
+}
+
+/** Recover exactly the cache operation recorded for this row. The storage
+ * recovery transaction proves staging ownership and excludes published bytes. */
+export async function repairBatchLibraryDownload(accountId:string,operationId:string,trackId:string,signal:AbortSignal,current:()=>boolean){
+ const live=()=>current()&&!signal.aborted;
+ const first=await reconcileLibraryDownload(accountId,operationId,trackId,signal,current);
+ if(!live()||first.state!=='uncertain')return first;
+ try{
+  const track=await readRecord<Track>('tracks',trackId);
+  const job=await importOperation(operationId);
+  if(!live()||track?.accountId!==accountId||!job||job.accountId!==accountId||job.libraryMode!=='cache'||terminal(job))return first;
+  if(job.asset&&job.track){
+   try{await recoverImportOperation(operationId,job.revision,'resume',live);}
+   catch(error){
+    if(!live()||!['asset-missing','digest-mismatch','length-mismatch','local-corrupt'].includes(issuedFailure(error)?.code??''))return first;
+   }
+  }
+  const pending=await importOperation(operationId);
+  if(!live()||!pending||pending.accountId!==accountId||pending.libraryMode!=='cache')return first;
+  if(!terminal(pending)){
+   if(pending.result)return first;
+   await recoverImportOperation(operationId,pending.revision,'discard',live);
+  }
+  return reconcileLibraryDownload(accountId,operationId,trackId,signal,current);
+ }catch{return first;}
 }

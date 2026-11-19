@@ -44,7 +44,7 @@ import {Player} from './playback/player';
 import {normalizeSnapshot,planQueueRestore,restoreAssetAvailable,type Snapshot} from './playback/queue-restore';
 import {all,createPlaylist,changePlaylist,editTrack,verifiedAssetDetailed,validAsset,validAudioFingerprint,type LocalAsset,type Track,type Playlist} from './library/library';
 import {importOperations,importIssues,retainImportIssue,terminal,type ImportOperation,type ImportIssue} from './storage/import-operations';
-import {reconcileLibraryDownload} from './library/library-download-recovery';
+import {inspectLibraryTrackDownload,prepareBatchCopyReplacement,reconcileLibraryDownload,repairBatchLibraryDownload} from './library/library-download-recovery';
 import {readRecord,writeRecord,openExistingDatabase,admittedTransaction,request,closeDatabase,subscribeDatabaseLifecycle,registerDatabaseOpenGuard,registerDatabaseUseGuard,retireDatabaseRealm,type DatabaseLifecycleState} from './storage/database';
 import {transactionDone} from './storage/transaction-done';
 import {registerDatabaseRealmHost,beginWorkerAttempt,revokeDatabaseWorkerAttempts,activeDatabaseWorkerAttempts,type RealmAttempt} from './storage/database-realms';
@@ -393,7 +393,7 @@ function captureBotAudioImport(libraryMode?:'cache'){
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();let used=false;
  const allowed=()=>admitted()&&raw()&&review()&&!busy&&!importRecoveryPending()&&!metadataRescanBlocked&&!copyRemovalPending&&!sourceReview.hasReservation()&&!queueForeignBlocked();
  if(!allowed()||botImportActive||!songAdmissionIdle())return null;
- return async(audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId:string=crypto.randomUUID()):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null}>=>{
+ return async(audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId:string=crypto.randomUUID()):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean}>=>{
   if(used||!allowed()||botImportActive||!songAdmissionIdle()||signal.aborted)return {state:'failed',trackId:null};used=true;
   const operation=control.activity.begin();if(!operation)return {state:'failed',trackId:null};const own={};botImportActive=own;emit();
   const current=()=>admitted()&&raw()&&review()&&operation.current()&&botImportActive===own&&!sourceReview.hasReservation()&&!queueForeignBlocked();
@@ -410,8 +410,10 @@ function captureBotAudioImport(libraryMode?:'cache'){
    if(confirmed)verifiedResponse(operationId);else if(outcome.recoveryRequired)unverifiedResponse(operationId);
    // Even a cancellation that loses to commit must reconcile the confirmed receipt.
    try{await refresh(true,false,diagnostic,'refresh');}catch{control.activity.block('import-state',true);return {state:'uncertain',trackId:null};}
-   status=confirmed?'Canción descargada, verificada y guardada en este navegador.':outcome.recoveryRequired?'La copia requiere revisión antes de volver a descargar.':'No se pudo guardar la canción.';emit();
-   return {state:confirmed?'saved':outcome.recoveryRequired?'uncertain':'failed',trackId:confirmed&&settled.response?.type==='complete'?settled.response.result.track.id:null};
+   status=confirmed?(libraryMode==='cache'?'':'Canción descargada, verificada y guardada en este navegador.'):outcome.recoveryRequired?'La copia requiere revisión antes de volver a descargar.':'No se pudo guardar la canción.';emit();
+   return {state:confirmed?'saved':outcome.recoveryRequired?'uncertain':'failed',
+    trackId:confirmed&&settled.response?.type==='complete'?settled.response.result.track.id:null,
+    ...(!confirmed&&!outcome.recoveryRequired&&['transaction-aborted','storage-unavailable'].includes(outcome.primary?.code??'')?{retryWrite:true}:{})};
   }catch{return {state:confirmed||outcome?.recoveryRequired?'uncertain':'failed',trackId:null};}
   finally{diagnostics.finish(diagnostic);if(botImportActive===own)botImportActive=null;operation.end();emit();}
  };
@@ -423,10 +425,11 @@ let selectedSongIntent=0;
 let miniPlayerArtistHint:{entryId:string;artist:string}|null=null;
 function cancelSelectedSongIntent(){++selectedSongIntent;emit();}
 function captureSongDownload():SongPlaybackAttempt|null {return captureSongPlayback('download');}
-function captureBatchDownload():SongPlaybackAttempt|null {return captureSongPlayback('batch');}
-function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback'):SongPlaybackAttempt|null {
+function captureBatchDownload(recoverPending=false):SongPlaybackAttempt|null {return captureSongPlayback('batch',recoverPending);}
+function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',recoverPending=false):SongPlaybackAttempt|null {
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();
- if(!admitted()||busy||copyRemovalBlocked()||queueForeignBlocked()||!songAdmissionIdle())return null;
+ if(!admitted()||busy||copyRemovalPending||collectionBlocked()||queueForeignBlocked()||
+  !recoverPending&&(copyRemovalBlocked()||!songAdmissionIdle()))return null;
  const intent=purpose==='playback'?++selectedSongIntent:selectedSongIntent;let queueing=false,playUsed=false,rememberedId:string|null=null,primaryArtist:string|null=null;
  const current=()=>(purpose!=='playback'||intent===selectedSongIntent)&&raw()&&review()&&(purpose==='batch'||queueing||admitted());
  const waitForDownload=(signal:AbortSignal)=>waitForSongAdmission({signal,
@@ -435,12 +438,25 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback'):S
   subscribe:changed=>{listeners.add(changed);return()=>{listeners.delete(changed);};},
  });
  return Object.freeze({current,
-  ...(purpose==='batch'?{waitForDownload,async reconcileDownload(operationId:string,trackId:string,signal:AbortSignal){
+  ...(purpose==='batch'?{waitForDownload,async inspectDownload(trackId:string,signal:AbortSignal){
+   const account=accountController.getSnapshot().user?.id;
+   if(!account)return null;
+   const result=await inspectLibraryTrackDownload(account,trackId,undefined,signal,current);
+   return result.state==='saved'?trackId:null;
+  },async reconcileDownload(operationId:string,trackId:string,signal:AbortSignal,repair=false){
    const accountId=accountController.getSnapshot().user?.id;
    if(!accountId)return {state:'uncertain' as const,trackId:null};
-   const receipt=await reconcileLibraryDownload(accountId,operationId,trackId,signal,current);
-   if(receipt.state==='saved'&&current())await refresh(false,false,null);
-   return receipt;
+   const token=control.activity.begin();
+   if(!token)return {state:'uncertain' as const,trackId:null};
+   const live=()=>current()&&token.current()&&!signal.aborted&&!busy&&!copyRemovalPending&&!collectionBlocked()&&!queueForeignBlocked();
+   try{
+    const receipt=await (repair?repairBatchLibraryDownload:reconcileLibraryDownload)(accountId,operationId,trackId,signal,live);
+    if(live()&&receipt.state!=='uncertain'){
+     if(repair)verifiedResponse(operationId);
+     if(repair||receipt.state==='saved')await refresh(false,false,null);
+    }
+    return receipt;
+   }finally{token.end();}
   }}:{}),
   async addToLibrary(trackId:string,caller:()=>boolean,signal:AbortSignal){
    const live=()=>{try{return current()&&caller()===true&&!signal.aborted&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&!botImportActive&&control.activity.resolved;}catch{return false;}};
@@ -449,7 +465,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback'):S
    const management=captureSongManagement(trackId);
    return management?.current()?management.add(live):false;
   },
-  async lookup(choice:SongChoice,signal:AbortSignal){
+  async lookup(choice:SongChoice,signal:AbortSignal,repair=false){
    const live=()=>current()&&!signal.aborted;
    primaryArtist=((choice.source==='itunes'||choice.source==='musicbrainz')?choice.searchArtist:choice.source==='lrclib'?choice.artist:null)?.trim()||null;
    if(!live()||!songAdmissionIdle())throw Error('La biblioteca está ocupada.');const token=control.activity.begin();if(!token)throw Error('Sin control.');
@@ -459,6 +475,11 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback'):S
     if(track&&track.id!==id)throw Error('La identidad de la ficha local ha cambiado.');
     if(!track||track.assetId===null)return null;
     const checked=await verifiedAssetDetailed(track.assetId,true);if(!live())throw Error('cancelled');
+    if(repair&&purpose==='batch'&&(checked.state==='missing'||checked.state==='corrupt')){
+     const accountId=accountController.getSnapshot().user?.id;
+     if(accountId&&await prepareBatchCopyReplacement(track,accountId,signal,()=>live()&&token.current()))return null;
+     throw Error('No se pudo preparar la sustitución de esta copia de Biblioteca.');
+    }
     if(checked.state==='missing')return null;
     if(checked.state!=='valid')throw Error('No se pudo verificar la copia local. Revisa Almacenamiento antes de repetir la descarga.');
     if(!validAudioFingerprint(track.audioFingerprint)||checked.asset.sha256!==track.audioFingerprint.sha256||checked.asset.bytes!==track.audioFingerprint.bytes)throw Error('La copia local no coincide con la identidad de audio guardada. Revisa Almacenamiento.');
@@ -1383,7 +1404,10 @@ function App(){
   shuffle={collectionQueueMatches&&!!player.shuffleOrder} canShuffle={owner&&!busy&&!collectionBlocked()&&collectionQueueMatches&&!!player.current} onShuffle={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked())player.setShuffle(!player.shuffleOrder);}}/>
  {selected&&<button type="button" disabled={!canOrganize} onClick={event=>openCollection({kind:'playlist',id:selected.id,revision:selected.revision},selected.name,event.currentTarget)}>Eliminar playlist</button>}
  {activeGroup?.kind==='album'&&!activeGroup.unknown&&libraryAlbums.some(group=>group.key===activeGroup.key&&!group.unknown)&&<button type="button" disabled={!canOrganize} onClick={event=>openCollection({kind:'album',scope:'global-library',key:activeGroup.key},activeGroup.label,event.currentTarget)}>Retirar álbum</button>}
- <button type="button" disabled={!canOrganize||!visible.length} onClick={()=>requestLibraryDownload(visible.map(({track})=>track.id),selected?.name??activeGroup?.label??'Mi biblioteca')}>Descargar esta selección en este dispositivo</button>
+ <button type="button" disabled={!canOrganize||!(selected?.entries.length??visible.length)} onClick={()=>{
+  const ids=selected?selected.entries.map(entry=>entry.trackId).filter(id=>trackIndex.has(id)):visible.map(({track})=>track.id);
+  requestLibraryDownload(ids,selected?.name??activeGroup?.label??'Mi biblioteca');
+ }}>{selected?'Descargar playlist completa':'Descargar esta selección en este dispositivo'}</button>
  {selected&&<div className="playlist-catalog">
   {spotifyCatalog?.id===selected.id&&<p role="status">{spotifyCatalog.state==='rateLimited'?rateLimitedMessage:spotifyCatalog.state==='failed'?'No se pudo terminar la búsqueda de álbumes y portadas.':
    spotifyCatalog.progress?.total===0?'Esta playlist no tiene pistas importadas de Spotify.':

@@ -3,7 +3,7 @@ import {createPortal} from 'react-dom';
 import './library-download.css';
 import {registerUpdateBlocker} from '../service-worker/update-blockers';
 import {subscribeLibraryDownloads,subscribeLibraryTrackReviews,releaseUncertainSingleDownload,downloadLibrarySelection,type LibraryDownloadRequest} from '../library/library-download';
-import {clearHeldLibraryDownload,discardLibraryDownloadCheckpoint,readHeldLibraryDownload,readLibraryDownloadCheckpoint,writeLibraryDownloadCheckpoint,pendingLibraryTrack,releaseLibraryTrack,writeHeldLibraryDownload,type HeldDownload,type LibraryDownloadCheckpoint} from '../library/library-download-checkpoint';
+import {clearHeldLibraryDownload,discardLibraryDownloadCheckpoint,readHeldLibraryDownload,readLibraryDownloadCheckpoint,writeLibraryDownloadCheckpoint,pendingLibraryTrack,releaseLibraryTrack,sameHeldDownload,writeHeldLibraryDownload,type HeldDownload,type LibraryDownloadCheckpoint} from '../library/library-download-checkpoint';
 import {inspectLibraryTrackDownload} from '../library/library-download-recovery';
 import {albumCoordinator,notifyAlbumDownload} from '../library/album-download';
 import {orderedProviders} from '../library/ordered-bot-acquisition';
@@ -11,7 +11,7 @@ import type {BotsSnapshot,TelegramSessionClient} from '../telegram/session-clien
 import type {Track} from '../library/library';
 import type {SongPlaybackAttempt} from '../library/selected-song';
 
-export function LibraryDownloadController(props:{accountId?:string;captureLifetime?:()=>()=>boolean;onReviewStorage?:()=>void;onReviewed?:(operationId?:string)=>void;tracks:readonly Track[];client:TelegramSessionClient|null;bots:BotsSnapshot|null;connected:boolean;capture?:()=>SongPlaybackAttempt|null;capturePlay?:()=>SongPlaybackAttempt|null;captureBatch?:()=>SongPlaybackAttempt|null}){
+export function LibraryDownloadController(props:{accountId?:string;captureLifetime?:()=>()=>boolean;onReviewStorage?:()=>void;onReviewed?:(operationId?:string)=>void;tracks:readonly Track[];client:TelegramSessionClient|null;bots:BotsSnapshot|null;connected:boolean;capture?:()=>SongPlaybackAttempt|null;capturePlay?:()=>SongPlaybackAttempt|null;captureBatch?:(recoverPending?:boolean)=>SongPlaybackAttempt|null}){
  const latest=useRef(props);latest.current=props;
  const flight=useRef<AbortController|null>(null);
  const ownedNotice=useRef<typeof albumCoordinator.notice>(undefined);
@@ -65,7 +65,8 @@ export function LibraryDownloadController(props:{accountId?:string;captureLifeti
   if(flight.current||albumCoordinator.running){setNotice('Hay otra descarga en curso.');return;}
   const providers=orderedProviders(p.bots);
   if(!p.client||!p.connected||!p.bots||!providers.length){setNotice('Conecta Telegram y configura un bot para descargar en este dispositivo.');return;}
-  const attempt=(request.play?p.capturePlay:p.captureBatch??p.capture)?.();
+  const autoRepair=!request.play&&!request.repair;
+  const attempt=(request.play?p.capturePlay:p.captureBatch??p.capture)?.(autoRepair&&restore?.pending?.kind==='save');
   if(!attempt?.current()){setNotice('Biblioteca está ocupada. Revisa Almacenamiento si hay una copia pendiente y vuelve a continuar.');return;}
   const index=new Map(p.tracks.map(t=>[t.id,t]));
   const tracks=request.trackIds.map(id=>index.get(id)).filter((t):t is Track=>!!t);
@@ -110,7 +111,7 @@ export function LibraryDownloadController(props:{accountId?:string;captureLifeti
   const current=()=>flight.current===abort&&latest.current.accountId===account&&attempt.current();
   let readyId:string|null=null,finished=false;
   void downloadLibrarySelection({tracks,attempt,client:p.client,providers,revision:p.bots.revision,signal:abort.signal,current,
-   checkpoint,saveCheckpoint:account&&checkpoint?next=>{
+   autoRepair,checkpoint,saveCheckpoint:account&&checkpoint?next=>{
     if(!current())throw Error('Library download changed');
     if(request.repair||request.play){
      if(next.pending)writeHeldLibraryDownload(account,tracks[0].id,next.pending);
@@ -122,15 +123,25 @@ export function LibraryDownloadController(props:{accountId?:string;captureLifeti
     checkpoint=next;
    }:undefined,
    heldDownload:account&&checkpoint?id=>readHeldLibraryDownload(account,id):undefined,
-   parkNetworkDownload:account&&checkpoint?id=>{if(current())writeHeldLibraryDownload(account,id,{kind:'network'});}:undefined,
-   clearHeldDownload:account&&checkpoint?id=>{if(current())clearHeldLibraryDownload(account,id);}:undefined,
+   parkDownload:account&&checkpoint?(id,marker)=>{
+    if(!current())return;
+    const parked=readHeldLibraryDownload(account,id);
+    if(parked?.kind==='save'&&!sameHeldDownload(parked,marker)){
+     if(marker.kind==='network')return;
+     throw Error('An earlier receipt is still pending');
+    }
+    writeHeldLibraryDownload(account,id,marker);
+   }:undefined,
+   clearHeldDownload:account&&checkpoint?(id,expected)=>{
+    if(current()&&sameHeldDownload(readHeldLibraryDownload(account,id),expected))clearHeldLibraryDownload(account,id);
+   }:undefined,
    update:(rows,message)=>{
     if(flight.current!==abort||latest.current.accountId!==account)return;
     readyId=rows.length===1&&rows[0].confirmed?rows[0].trackId:null;
-    ownedNotice.current={title:request.title,titles:tracks.map(t=>t.title),progress:{rows,message},reviewTrack:index=>{
+    ownedNotice.current={title:request.title,titles:tracks.map(t=>t.title),progress:{rows,message},...(!autoRepair?{reviewTrack:(index:number)=>{
      const track=tracks[index];
      if(track&&latest.current.accountId===account)void reviewRef.current(track.id,track.title);
-    }};
+    }}:{})};
     albumCoordinator.notice=ownedNotice.current;
     notifyAlbumDownload(albumCoordinator);
    },
@@ -184,11 +195,6 @@ export function LibraryDownloadController(props:{accountId?:string;captureLifeti
    <button type="button" onClick={()=>{checking.current?.abort();setReview(null);}}>Cerrar revisión</button>
   </section>}
   {(notice||pending)&&<p role="status">{notice||'Hay una descarga de Biblioteca pendiente.'}</p>}
-  {pending?.pending&&<button type="button" onClick={()=>{
-   const track=props.tracks.find(t=>t.id===pending.trackIds[pending.pending!.index]);
-   if(track)void reviewTrack(track.id,track.title);
-   else setNotice('La canción ya no está en esta selección. Puedes descartar el progreso pendiente.');
-  }}>Revisar canción pendiente</button>}
   {pending&&<>
    <button type="button" onClick={()=>start({id:pending.id,trackIds:pending.trackIds,title:'Selección de Biblioteca',play:false},pending)}>Continuar descarga de Biblioteca</button>
    <button type="button" onClick={()=>{
