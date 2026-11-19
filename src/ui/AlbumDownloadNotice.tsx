@@ -12,7 +12,7 @@ export function AlbumDownloadNotice(){
   <div className="download-bubble__panel"><header><strong>{notice.title}</strong><span role="status">{state} · {confirmed} de {total} guardadas</span></header>
    <progress aria-label="Canciones guardadas" value={confirmed} max={Math.max(1,total)}/>
    <p role="status">{notice.progress.message}</p>
-   <ol>{notice.progress.rows.map((row,index)=><li key={index}><strong>{notice.titles?.[index]??`Canción ${index+1}`}</strong><span>{row.message||'En espera'}</span></li>)}</ol>
+   <ol>{notice.progress.rows.map((row,index)=><li key={index}><strong>{notice.titles?.[index]??`Canción ${index+1}`}</strong><span>{row.message||'En espera'}</span>{notice.reviewTrack&&!albumCoordinator.running&&(row.state==='failed'||row.state==='uncertain')&&<button type="button" onClick={()=>notice.reviewTrack?.(index)}>Revisar descarga</button>}</li>)}</ol>
    {albumCoordinator.running&&run?<button type="button" onClick={()=>{if(albumCoordinator.active===run)run.abort.abort();}}>{run.scope==='library'?'Detener descarga de Biblioteca':'Detener descarga de álbum'}</button>:<button type="button" onClick={()=>{if(!albumCoordinator.running&&albumCoordinator.notice===notice){albumCoordinator.notice=undefined;notifyAlbumDownload(albumCoordinator);}}}>Cerrar aviso de descarga</button>}
   </div>
  </details>;

@@ -1,15 +1,16 @@
 import {createElement,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {LibraryDownloadController} from '../../src/ui/LibraryDownloadController';
+import {TrackActionsMenu} from '../../src/ui/TrackActionsMenu';
 import {AlbumDownloadNotice} from '../../src/ui/AlbumDownloadNotice';
-import {requestLibraryDownload} from '../../src/library/library-download';
+import {requestLibraryDownload,requestLibraryTrackReview} from '../../src/library/library-download';
 import type {SongPlaybackAttempt} from '../../src/library/selected-song';
 import type {TelegramSessionClient} from '../../src/telegram/session-client';
-import {reconcileLibraryDownload} from '../../src/library/library-download-recovery';
-import {readHeldLibraryDownload,readLibraryDownloadCheckpoint,writeLibraryDownloadCheckpoint} from '../../src/library/library-download-checkpoint';
+import {reconcileLibraryDownload,inspectLibraryTrackDownload} from '../../src/library/library-download-recovery';
+import {readHeldLibraryDownload,readLibraryDownloadCheckpoint,writeLibraryDownloadCheckpoint,writeHeldLibraryDownload} from '../../src/library/library-download-checkpoint';
 import {importFile} from '../../src/imports/import-file';
 import type {Track} from '../../src/library/library';
-import {openDatabase,admittedTransaction,request,closeDatabase} from '../../src/storage/database';
+import {openDatabase,admittedTransaction,request,closeDatabase,writeRecord} from '../../src/storage/database';
 import {transactionDone} from '../../src/storage/transaction-done';
 import {prepareAccountLibrary,readAccountLibrary,applyAccountLibrary,attachRestoredAccountTrack} from '../../src/accounts/library-local';
 import {createLibrarySync,accountLibraryRequest} from '../../src/accounts/library-sync';
@@ -20,6 +21,14 @@ let account=id(100),live=true;
 async function rows(store:string){const db=await openDatabase();try{const tx=admittedTransaction(db,store),done=transactionDone(tx);const value=await request(tx.objectStore(store).getAll());await done;return value;}finally{closeDatabase(db);}}
 async function seed(n:number,owned=false,cache=false){const db=await openDatabase();try{const tx=admittedTransaction(db,['tracks','settings','assets','chunks'],'readwrite'),done=transactionDone(tx);const t={id:id(n),...(owned?{accountId:account}:{}),title:'Propia '+n,artist:'Artista propio',album:'Álbum propio',duration:2,createdAt:'2026-11-17T00:00:00Z',revision:1,assetId:id(n+200),audioFingerprint:{algorithm:'sha256',sha256:'a'.repeat(64),bytes:16},favorite:false,manualOverrides:{}};tx.objectStore('tracks').put(t,t.id);tx.objectStore('assets').put({id:t.assetId,namespace:'local',storageKey:t.assetId,bytes:16,sha256:'a'.repeat(64),mime:'audio/wav',chunks:1,state:'complete',revision:1,chunkSize:65536,backend:'idb',retention:'kept'},t.assetId);tx.objectStore('chunks').put(new Uint8Array(16).fill(n),[t.assetId,0]);if(cache)tx.objectStore('settings').put(makeLibraryMembership(t.id,false),libraryMembershipKey(t.id));await done;}finally{closeDatabase(db);}}
 async function mutate(store:string,key:string,patch:object){const db=await openDatabase();try{const tx=admittedTransaction(db,store,'readwrite'),done=transactionDone(tx),s=tx.objectStore(store),old=await request(s.get(key));s.put({...old,...patch},key);await done;}finally{closeDatabase(db);}}
+function testAudio(){
+  const wav=new Uint8Array(32044),v=new DataView(wav.buffer);
+  const ascii=(at:number,text:string)=>{for(let i=0;i<text.length;i++)wav[at+i]=text.charCodeAt(i);};
+  ascii(0,'RIFF');v.setUint32(4,wav.length-8,true);ascii(8,'WAVEfmt ');v.setUint32(16,16,true);
+  v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);
+  v.setUint16(32,2,true);v.setUint16(34,16,true);ascii(36,'data');v.setUint32(40,wav.length-44,true);
+ return new File([wav],'copia-prueba.wav',{type:'audio/wav'});
+}
 const sync=createLibrarySync({read:readAccountLibrary,apply:applyAccountLibrary,remote:accountLibraryRequest,save:(i,r,d,s)=>accountLibraryRequest(i,s,{revision:r,document:d}),ready:()=>live,changed:()=>{}});
 const api={id,seed,rows,mutate,
  async prepare(n:number){sync.account(null);account=id(n);await prepareAccountLibrary(account,()=>true);sync.account(account);},
@@ -37,13 +46,8 @@ const api={id,seed,rows,mutate,
     assetId:null,revision:1,favorite:false,createdAt:'2026-11-17T00:00:00Z',manualOverrides:{}};
    tx.objectStore('tracks').add(track,trackId);await done;
   }finally{closeDatabase(db);}
-  const wav=new Uint8Array(32044),v=new DataView(wav.buffer);
-  const ascii=(at:number,text:string)=>{for(let i=0;i<text.length;i++)wav[at+i]=text.charCodeAt(i);};
-  ascii(0,'RIFF');v.setUint32(4,wav.length-8,true);ascii(8,'WAVEfmt ');v.setUint32(16,16,true);
-  v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);
-  v.setUint16(32,2,true);v.setUint16(34,16,true);ascii(36,'data');v.setUint32(40,wav.length-44,true);
   writeLibraryDownloadCheckpoint(account,{id:crypto.randomUUID(),trackIds:[trackId],cursor:0,pending:{kind:'save',index:0,operationId}});
-  await importFile(new File([wav],'copia-prueba.wav',{type:'audio/wav'}),new AbortController().signal,undefined,{operationId,libraryMode:'cache',backend:'idb'});
+  await importFile(testAudio(),new AbortController().signal,undefined,{operationId,libraryMode:'cache',backend:'idb'});
  },
  async resumeDownload(accountNumber:number){
   const accountId=id(accountNumber),checkpoint=readLibraryDownloadCheckpoint(accountId);
@@ -56,6 +60,56 @@ const api={id,seed,rows,mutate,
  },
  missingBatchState(){
   return {active:readLibraryDownloadCheckpoint(id(120))!==null,held:readHeldLibraryDownload(id(120),id(130))?.kind??null};
+ },
+ async verifyReplacement(n:number){
+  const target=(await rows('tracks')).find((t:Track)=>t.id===id(n)) as Track;
+  const old=target.assetId!,asset=(await rows('assets')).find(a=>a.id===old);
+  const db=await openDatabase();try{
+   const tx=admittedTransaction(db,['chunks','tracks'],'readwrite'),done=transactionDone(tx);
+   const chunks=tx.objectStore('chunks'),bytes=await request<Uint8Array>(chunks.get([asset.storageKey,0]));
+   bytes[bytes.length-1]^=1;chunks.put(bytes,[asset.storageKey,0]);
+   tx.objectStore('tracks').put({...target,id:id(145),favorite:true},id(145));
+   await done;
+  }finally{closeDatabase(db);}
+  const signal=new AbortController().signal;
+  const before=await inspectLibraryTrackDownload(target.accountId!,target.id,undefined,signal,()=>true);
+  const reviewed=await inspectLibraryTrackDownload(target.accountId!,target.id,undefined,signal,()=>true,true);
+  await prepareAccountLibrary(target.accountId!,()=>true);
+  const saved=await importFile(testAudio(),signal,undefined,{libraryMode:'cache',backend:'idb'});
+  const [tracks,assets]=await Promise.all([rows('tracks'),rows('assets')]);
+  return {before,reviewed,saved:saved.track.id,newAsset:tracks.find((t:Track)=>t.id===target.id)?.assetId,
+   old,kept:tracks.find((t:Track)=>t.id===id(145))?.assetId,assetKept:assets.some(a=>a.id===old)};
+ },
+ async stageReview(){
+  const track={id:id(140),accountId:id(120),title:'Título corregido',artist:'Artista corregido',album:null,duration:2,
+   assetId:null,revision:2,favorite:false,createdAt:'2026-11-17T00:00:00Z',manualOverrides:{title:'Título corregido',artist:'Artista corregido'},
+   catalogChoice:{source:'spotify',id:'fixture',title:'Título anterior',artist:null,album:null,duration:2}} as Track;
+  const unknown={...track,id:id(141),title:'Guardado ambiguo'};
+  await writeRecord('tracks',track.id,track);await writeRecord('tracks',unknown.id,unknown);
+  await writeRecord('jobs',id(142),{fixture:'never delete'});
+  await seed(143,true);
+  const linked={...track,id:id(144),title:'Copia corrupta compartida',assetId:id(343)};
+  await writeRecord('tracks',linked.id,linked);
+  writeHeldLibraryDownload(id(120),track.id,{kind:'network'});
+  writeHeldLibraryDownload(id(120),unknown.id,{kind:'save',operationId:id(142)});
+ },
+ async mountReview(){
+  const tracks=(await rows('tracks')).filter((t:Track)=>[id(140),id(141),id(144)].includes(t.id));
+  const bots={revision:1,providers:[{providerRef:'testonly',label:'KD',username:'kdmusic_bot'}]} as never;
+  const queries:string[]=[],snapshot={available:true,pending:false,cancelling:false,error:null,delivery:'acknowledged',retryBlocked:false,retryAt:null,rows:[]};
+  const client={botsSnapshot:()=>bots,captureBotsCurrent:()=>()=>true,captureSearchActionCurrent:()=>()=>true,
+   searchSnapshot:()=>snapshot,subscribeSearch:()=>()=>{},searchBot(input:any,_guard:any,admit:any){
+    queries.push(input.query);const queryId=crypto.randomUUID();admit({queryId,cancel:()=>{}});
+    Object.assign(snapshot,{queryId,providerRef:input.providerRef,providerRevision:1,expectedTarget:input.target});
+   }} as unknown as TelegramSessionClient;
+  const attempt:SongPlaybackAttempt={current:()=>true,lookup:async()=>null,
+   save:async()=>{throw Error('Unexpected save');},addToLibrary:async()=>{throw Error('Unexpected membership change');},play:async()=>{throw Error('Unexpected playback');}};
+  const host=document.createElement('div');document.body.append(host);createRoot(host).render(createElement('main',null,
+   ...tracks.map((t:Track)=>createElement('li',{key:t.id},createElement(TrackActionsMenu,{title:t.title,artist:t.artist??'',active:true,
+    children:createElement('button',{'data-menu-dismiss-after':'true',onClick:()=>requestLibraryTrackReview(t.id,t.title)},'Revisar descarga de esta canción')}))),
+   createElement(LibraryDownloadController,{accountId:id(120),tracks,client,bots,connected:true,captureBatch:()=>attempt}),
+   createElement(AlbumDownloadNotice)));
+  Object.assign(window,{trackReviewFixture:{queries,held:(n:number)=>readHeldLibraryDownload(id(120),id(n))}});
  },
  mountBatch(){
   const rows=[1,2,3].map(n=>({id:id(90+n),title:'Canción '+n,artist:'Prueba',album:null,duration:2,assetId:null,favorite:false,

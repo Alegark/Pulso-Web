@@ -167,7 +167,7 @@ async function deduplicateOperationCore(job:ImportOperation,signal?:AbortSignal,
  const f=fromKnownError(error,{phase:'open',backend:existing.backend});
  if(f.code==='asset-missing')return;throw AppFailure.create(f);
  }
- try{const verified=await reader.verifyDetailed();if(verified.state==='unknown')throw AppFailure.create(verified.failure);if(verified.state!=='valid')return;}finally{reader.release();}
+ try{const verified=await reader.verifyDetailed(true);if(verified.state==='unknown')throw AppFailure.create(verified.failure);if(verified.state!=='valid')return;}finally{reader.release();}
  const db=await openDatabase();let next:ImportOperation|undefined;
  try{const tx=admittedTransaction(db,['assets','tracks','jobs','settings'],'readwrite');const done=transactionDone(tx);const detach=abortOnSignal(tx,signal);
  try{
