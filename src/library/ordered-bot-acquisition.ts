@@ -1,3 +1,5 @@
+import {sha256} from '@noble/hashes/sha2.js';
+import {bytesToHex} from '@noble/hashes/utils.js';
 import {formatStorageMB} from './storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {matchingSongRows} from './selected-song';
@@ -37,10 +39,10 @@ type Result={state:'audio';audio:BotDownloadedAudio}|{state:'known-failure';reas
 function candidateIdentity(row:BotSearchRow):readonly unknown[]{
  return row.kind==='option'?[row.kind,row.label]:row.kind==='audio'?[row.kind,row.title,row.performer,row.durationSeconds,row.mimeType,row.bytes]:[row.kind,row.text];
 }
-export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;providers:readonly OrderedProvider[];revision:number;target:BotSearchTarget;signal:AbortSignal;current:()=>boolean;networkCurrent:()=>boolean;remoteClock?:{settledAt:number};accept?:(audio:BotDownloadedAudio)=>Promise<CandidateDisposition|'saved'>;excludedDigests?:ReadonlySet<string>;progress:(provider:OrderedProvider,index:number,queryId:string|null)=>void}):Promise<Result> {
+export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;providers:readonly OrderedProvider[];revision:number;target:BotSearchTarget;signal:AbortSignal;current:()=>boolean;networkCurrent:()=>boolean;remoteClock?:{settledAt:number};accept?:(audio:BotDownloadedAudio,rowKey:string)=>Promise<CandidateDisposition|'saved'>;excludedDigests?:ReadonlySet<string>;excludedRowKeys?:ReadonlySet<string>;progress:(provider:OrderedProvider,index:number,queryId:string|null)=>void}):Promise<Result> {
  const {client}=p,target={...p.target},network=p.networkCurrent,current=p.current,revision=p.revision,deadline=Date.now()+SONG_SEARCH_MS;
  const seen=new Set<string>(),providers=p.providers.filter(provider=>{if(seen.has(provider.providerRef))return false;seen.add(provider.providerRef);return true;}).slice(0,5).map(provider=>({...provider}));
- const reasons:AcquisitionFailureReason[]=[],excludedRows=new Set<string>();
+ const reasons:AcquisitionFailureReason[]=[],excludedRows=new Set(p.excludedRowKeys);
  let expired=false,unavailable=false;
  let ownedCancel:(()=>void)|undefined;
  const cancel=()=>{try{ownedCancel?.();}catch{/* Cancellation cannot grant a new lane. */}};
@@ -111,7 +113,9 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      const identity=JSON.stringify([provider.providerRef,...candidateIdentity(row)]);
      const occurrence=occurrences.get(identity)??0;
      occurrences.set(identity,occurrence+1);
-     return {row,key:JSON.stringify([identity,occurrence])};
+     // The first occurrence uses the key already stored in v50 checkpoints.
+     const key=bytesToHex(sha256(new TextEncoder().encode(occurrence?JSON.stringify([identity,occurrence]):identity)));
+     return {row,key};
     }).filter(candidate=>!excludedRows.has(candidate.key));
     const selected=matches[0];
     if(!selected){if(!selections)reasons.push('no-compatible-row');break;}
@@ -141,7 +145,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     if(audio&&!p.excludedDigests?.has(audio.sha256)){
      if(!p.accept)return {state:'audio',audio};
      let disposition:CandidateDisposition|'saved';
-     try{disposition=await p.accept(audio);}catch{return {state:'stopped'};}
+     try{disposition=await p.accept(audio,selected.key);}catch{return {state:'stopped'};}
      if(disposition==='saved')return {state:'audio',audio};
      if(disposition!=='retry')return {state:disposition};
      reasons.push('file-invalid');

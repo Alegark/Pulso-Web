@@ -77,6 +77,7 @@ export async function downloadLibrarySelection(p:{
     Object.assign(row,{state:'failed',message:'Procesada anteriormente sin copia'});
    }else{
     const result=await downloadSong({...p,choice,trackId:track.id,index:i,current:live,networkCurrent,remoteClock,
+     previousAttempts:previous?.kind==='save'?previous.attempts:undefined,
      mark:value=>{pending=value;mark(i,value);},message:message=>{row.message=message;update(message);},progress:()=>{}});
     if(result.state==='stopped'||!live())return stop();
     Object.assign(row,result);

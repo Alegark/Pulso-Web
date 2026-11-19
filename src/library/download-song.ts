@@ -1,30 +1,34 @@
 import {acquireFromOrderedBots,type CandidateDisposition} from './ordered-bot-acquisition';
 import type {AlbumRow} from './album-acquisition';
-import type {PendingDownload} from './library-download-checkpoint';
+import type {PendingDownload,SavedCandidate} from './library-download-checkpoint';
 import type {SongChoice,SongPlaybackAttempt} from './selected-song';
 import {isBotSearchQuery,parseBotSearchTarget} from '../telegram/bot-search-protocol';
 
 export const parkedSong={state:'uncertain',reason:'parked',message:'Pendiente en Almacenamiento'} as const;
 
-export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBots>[0],'target'|'accept'|'excludedDigests'>&{
+export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBots>[0],'target'|'accept'|'excludedDigests'|'excludedRowKeys'>&{
  choice:SongChoice;attempt:SongPlaybackAttempt;trackId?:string;index:number;
+ previousAttempts?:readonly SavedCandidate[];
  mark:(pending:PendingDownload)=>void;message:(message:string)=>void;
 }):Promise<(Partial<AlbumRow>&{state:AlbumRow['state']}) | {state:'stopped'}>{
  const {choice,attempt,signal,current,trackId}=p;
  const target=parseBotSearchTarget({title:choice.title,artist:choice.artist,album:choice.album,durationSeconds:choice.duration||null});
  if(!target?.artist||!isBotSearchQuery(target.title+' '+target.artist))return {state:'failed',reason:'missing-metadata',message:'Faltan datos para buscarla'};
  let savedId:string|null=null;
- const failedDigests=new Set<string>();
+ let previousAttempts=p.previousAttempts??[];
+ const failedDigests=new Set(previousAttempts.map(candidate=>candidate.digest));
+ const excludedRowKeys=new Set(previousAttempts.map(candidate=>candidate.rowKey));
  const network=()=>p.mark({kind:'network',index:p.index});
  network();
  p.message('Buscando canción…');
- const result=await acquireFromOrderedBots({...p,target,excludedDigests:failedDigests,accept:async (audio):Promise<CandidateDisposition|'saved'>=>{
+ const result=await acquireFromOrderedBots({...p,target,excludedDigests:failedDigests,excludedRowKeys,accept:async (audio,rowKey):Promise<CandidateDisposition|'saved'>=>{
+  const attempts=[...previousAttempts.slice(-1),{digest:audio.sha256,rowKey}];
   // One repeat of the same bytes for a transient write failure, after proving
   // that the previous operation published nothing. Every write has a new ID.
   for(let write=0;write<2;write++){
    if(!current()||attempt.waitForDownload&&!await attempt.waitForDownload(signal)||!current())return 'stopped';
    const operationId=crypto.randomUUID();
-   p.mark({kind:'save',index:p.index,operationId});
+   p.mark({kind:'save',index:p.index,operationId,attempts});
    p.message('Guardando copia…');
    let local:Awaited<ReturnType<SongPlaybackAttempt['save']>>={state:'uncertain',trackId:null};
    try{local=await attempt.save(audio,choice,signal,()=>{},operationId);}
@@ -47,6 +51,7 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
    }
    if(!local.retryWrite)break;
   }
+  previousAttempts=attempts;
   failedDigests.add(audio.sha256);
   network();
   p.message('Probando otra opción…');
@@ -56,7 +61,7 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
  if(savedId)return {state:'downloaded',trackId:savedId,confirmed:true,message:'Descargada'};
  if(result.state==='parked')return parkedSong;
  if(result.state==='unavailable'||result.state==='uncertain')return {state:'failed',message:'Telegram no respondió a tiempo'};
- if(result.state==='known-failure'&&result.reasons.some(reason=>reason!=='no-compatible-row'))return {state:'failed',reason:'no-valid-file',message:'Ningún bot entregó un archivo válido'};
+ if(result.state==='known-failure'&&(failedDigests.size||result.reasons.some(reason=>reason!=='no-compatible-row')))return {state:'failed',reason:'no-valid-file',message:'Ningún bot entregó un archivo válido'};
  if(result.state==='known-failure'&&result.reasons.length)return {state:'failed',reason:'not-found',message:'No existe en tus bots'};
  return {state:'failed',message:'No hay bots disponibles'};
 }
