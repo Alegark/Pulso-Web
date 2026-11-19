@@ -70,10 +70,8 @@ export function copyWorkerRequest(value:unknown):ImportRequest|RecoveryRequest|n
  if(h.type==='import'){
  const r=optionalRecord(h,['version','type','operationId','file'],['expected','libraryMode','parkedOperationIds']);if(!r||Object.hasOwn(r,'libraryMode')&&r.libraryMode!=='cache')return null;
  if(Object.hasOwn(r,'parkedOperationIds')){
-  const raw=r.parkedOperationIds;
-  if(r.libraryMode!=='cache'||!Array.isArray(raw)||raw.length<1||raw.length>5000)return null;
-  const ids=Array.from(raw);
-  if(!ids.every(uuid)||new Set(ids).size!==ids.length||ids.includes(h.operationId))return null;
+  const ids=array(r.parkedOperationIds,5000);
+  if(r.libraryMode!=='cache'||!ids?.length||!ids.every(uuid)||new Set(ids).size!==ids.length||ids.includes(h.operationId))return null;
   r.parkedOperationIds=ids;
  }
  try{if(!integer(fileSize?.call(r.file),1,100*1024*1024)||typeof fileName?.call(r.file)!=='string')return null;}catch{return null;}

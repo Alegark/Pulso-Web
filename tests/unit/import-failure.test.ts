@@ -64,3 +64,20 @@ test('descriptor snapshots cannot change validated version or bypass captured ma
  let ids=0;const changing=new Proxy({version:2,type:'progress',operationId:id,bytes:1},{getOwnPropertyDescriptor(target,key){const d=Reflect.getOwnPropertyDescriptor(target,key);return key==='operationId'&&d?{...d,value:++ids===1?id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'}:d;}});
  const gate=createResponseGate({version:2,type:'import',operationId:id,file:new File([new Uint8Array(3)],'private')});assert.equal(gate(changing).kind,'protocol');
 });
+
+test('parked import IDs are copied as closed cache-only data',()=>{
+ const parked=crypto.randomUUID();
+ const request={version:2,type:'import',operationId:id,file:new File(['audio'],'synthetic.wav'),libraryMode:'cache'};
+ const copied=copyWorkerRequest({...request,parkedOperationIds:[parked]});
+ assert.ok(copied);
+ assert.deepEqual({...copied},{...request,parkedOperationIds:[parked]});
+ for(const ids of [[id],[parked,parked],['foreign'],Array(1),[]]){
+  assert.equal(copyWorkerRequest({...request,parkedOperationIds:ids}),null);
+ }
+ const accessors=[parked];
+ let reads=0;
+ Object.defineProperty(accessors,'0',{get(){reads++;return parked;}});
+ assert.equal(copyWorkerRequest({...request,parkedOperationIds:accessors}),null);
+ assert.equal(reads,0);
+ assert.equal(copyWorkerRequest({...request,libraryMode:undefined,parkedOperationIds:[parked]}),null);
+});
