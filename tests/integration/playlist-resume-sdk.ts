@@ -1,0 +1,47 @@
+/** Synthetic SDK transport. The application worker and bot drivers remain native. */
+import Long from 'long';
+import {openTemporaryTelegram as setupSdk} from './required-setup-sdk';
+import {createBotSearchDriver} from '../../src/telegram/bot-search-driver';
+
+function wav(){
+ const bytes=new Uint8Array(32044),header=new DataView(bytes.buffer);
+ const ascii=(at:number,value:string)=>{for(let i=0;i<value.length;i++)bytes[at+i]=value.charCodeAt(i);};
+ ascii(0,'RIFF');header.setUint32(4,bytes.length-8,true);ascii(8,'WAVEfmt ');
+ header.setUint32(16,16,true);header.setUint16(20,1,true);header.setUint16(22,1,true);
+ header.setUint32(24,8000,true);header.setUint32(28,16000,true);
+ header.setUint16(32,2,true);header.setUint16(34,16,true);ascii(36,'data');header.setUint32(40,bytes.length-44,true);
+ return bytes;
+}
+export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal){
+ const base=await setupSdk(identity,signal),bytes=wav();
+ let title='',peer=0;
+ const history=(messages:unknown[]=[])=>({_:'messages.messages',messages,users:[],chats:[]});
+ const report=async(kind:string,details:object)=>await (await fetch('/__playlist-event',{method:'POST',body:JSON.stringify({kind,...details})})).json();
+ const resolveIdentity=async(username:string)=>{
+  peer=username==='kdmusic_bot'?101:username==='deezermusicbot'?102:103;
+  return {_:'contacts.resolvedPeer',peer:{_:'peerUser',userId:peer},users:[{_:'user',id:peer,bot:true,username,firstName:username,accessHash:new Long(3,peer,false)}],chats:[]};
+ };
+ const message=()=>({_:'message',id:12,peerId:{_:'peerUser',userId:peer},fromId:{_:'peerUser',userId:peer},date:1,message:'',
+  replyTo:{_:'messageReplyHeader',replyToMsgId:10},media:{_:'messageMediaDocument',document:{_:'document',id:new Long(12,1),
+   accessHash:new Long(45,2),fileReference:new Uint8Array([4,5]),dcId:2,mimeType:'audio/wav',size:bytes.length,
+   attributes:[{_:'documentAttributeAudio',duration:2,title,performer:'Artista prueba'}]}}});
+ return {...base,createBotSearch(session:string){
+  const pool=base.createBotProviders(session);
+  return createBotSearchDriver(base.getAccountBinding()!,session,{
+   captureProvider:(ref,rev)=>pool.captureSearchProvider(ref,rev),resolveIdentity,
+   async readHistory(_peer,_min,limit){return limit===1?history():history([message()]);},
+   async sendQuery(_peer,query){
+    const found=/Pista [1-4]/.exec(query);if(!found)throw Error('Unexpected fixture query');
+    title=found[0];await report('search',{title,peer});return {_:'updateShortSentMessage',out:true,id:10,date:1,pts:1,ptsCount:1};
+   },
+   async readKnown(){return history([message()]);},
+   async readDocumentPart(_document,offset,limit){
+    const {mode}=await report('read',{title,peer});
+    if(title==='Pista 3'&&mode==='cooldown')throw {errorMessage:'FLOOD_WAIT_2'};
+    if(title==='Pista 3')return new Uint8Array(0);
+    return bytes.slice(offset,offset+limit);
+   },
+   invalidateSession(){void base.close();},
+  });
+ }};
+}

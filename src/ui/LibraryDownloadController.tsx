@@ -1,6 +1,7 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import './library-download.css';
+import {AlbumDownloadNotice,useAlbumDownloadState} from './AlbumDownloadNotice';
 import {registerUpdateBlocker} from '../service-worker/update-blockers';
 import {subscribeLibraryDownloads,subscribeLibraryTrackReviews,releaseUncertainSingleDownload,downloadLibrarySelection,type LibraryDownloadRequest} from '../library/library-download';
 import {clearHeldLibraryDownload,discardLibraryDownloadCheckpoint,readHeldLibraryDownload,readLibraryDownloadCheckpoint,writeLibraryDownloadCheckpoint,pendingLibraryTrack,releaseLibraryTrack,sameHeldDownload,writeHeldLibraryDownload,type HeldDownload,type LibraryDownloadCheckpoint} from '../library/library-download-checkpoint';
@@ -11,7 +12,8 @@ import type {BotsSnapshot,TelegramSessionClient} from '../telegram/session-clien
 import type {Track} from '../library/library';
 import type {SongPlaybackAttempt} from '../library/selected-song';
 
-export function LibraryDownloadController(props:{accountId?:string;captureLifetime?:()=>()=>boolean;onReviewStorage?:()=>void;onReviewed?:(operationId?:string)=>void;tracks:readonly Track[];client:TelegramSessionClient|null;bots:BotsSnapshot|null;connected:boolean;capture?:()=>SongPlaybackAttempt|null;capturePlay?:()=>SongPlaybackAttempt|null;captureBatch?:(recoverPending?:boolean)=>SongPlaybackAttempt|null}){
+export function LibraryDownloadController(props:{target?:HTMLElement|null;allowDiscard?:boolean;startAction?:ReactNode;accountId?:string;captureLifetime?:()=>()=>boolean;onReviewStorage?:()=>void;onReviewed?:(operationId?:string)=>void;tracks:readonly Track[];client:TelegramSessionClient|null;bots:BotsSnapshot|null;connected:boolean;connectionPhase?:'initializing'|'connected'|'disconnected'|'blocked';capture?:()=>SongPlaybackAttempt|null;capturePlay?:()=>SongPlaybackAttempt|null;captureBatch?:(recoverPending?:boolean)=>SongPlaybackAttempt|null}){
+ const download=useAlbumDownloadState();
  const latest=useRef(props);latest.current=props;
  const flight=useRef<AbortController|null>(null);
  const ownedNotice=useRef<typeof albumCoordinator.notice>(undefined);
@@ -19,6 +21,17 @@ export function LibraryDownloadController(props:{accountId?:string;captureLifeti
  const [pending,setPending]=useState<LibraryDownloadCheckpoint|null>(null);
  const [review,setReview]=useState<{trackId:string;title:string;state:'checking'|'saved'|'missing'|'uncertain';kind?:HeldDownload['kind'];canPreserveRetry?:boolean;settled?:boolean}|null>(null);
  const checking=useRef<AbortController|null>(null);
+ const reviewCard=useRef<HTMLElement>(null);
+ const reviewTrackId=review?.trackId;
+ useEffect(()=>{
+  if(!reviewTrackId)return;
+  const frame=requestAnimationFrame(()=>{
+   const card=reviewCard.current;
+   if(card){card.focus({preventScroll:true});card.scrollIntoView({block:'nearest'});}
+  });
+  return()=>cancelAnimationFrame(frame);
+ },[reviewTrackId]);
+ const waiting=useRef<{request:LibraryDownloadRequest;restore?:LibraryDownloadCheckpoint;account:string|undefined}|null>(null);
 
  async function reviewTrack(trackId:string,title:string,retry:'no'|'safe'|'preserve'='no'){
   const p=latest.current,account=p.accountId,guard=p.captureLifetime?.();
@@ -64,9 +77,16 @@ export function LibraryDownloadController(props:{accountId?:string;captureLifeti
   const p=latest.current;
   if(flight.current||albumCoordinator.running){setNotice('Hay otra descarga en curso.');return;}
   const providers=orderedProviders(p.bots);
-  if(!p.client||!p.connected||!p.bots||!providers.length){setNotice('Conecta Telegram y configura un bot para descargar en este dispositivo.');return;}
+  const phase=p.connectionPhase??(p.connected?'connected':'disconnected');
+  if(phase==='initializing'){
+   if(!request.repair)waiting.current={request,restore,account:p.accountId};
+   setNotice('Esperando a que Telegram termine de preparar tus bots…');return;
+  }
+  if(phase==='blocked'){setNotice('El control de la pestaña o el acceso a Almacenamiento todavía impide continuar. El progreso se conserva.');return;}
+  if(!p.client||phase!=='connected'){setNotice('Conecta Telegram y configura un bot para descargar en este dispositivo.');return;}
+  if(!p.bots||!providers.length){setNotice('Telegram está conectado. Configura un bot de música compatible.');return;}
   const autoRepair=!request.play&&!request.repair;
-  const attempt=(request.play?p.capturePlay:p.captureBatch??p.capture)?.(autoRepair&&restore?.pending?.kind==='save');
+  const attempt=(request.play?p.capturePlay:p.captureBatch??p.capture)?.(autoRepair&&!!restore);
   if(!attempt?.current()){setNotice('Biblioteca está ocupada. Revisa Almacenamiento si hay una copia pendiente y vuelve a continuar.');return;}
   const index=new Map(p.tracks.map(t=>[t.id,t]));
   const tracks=request.trackIds.map(id=>index.get(id)).filter((t):t is Track=>!!t);
@@ -108,6 +128,12 @@ export function LibraryDownloadController(props:{accountId?:string;captureLifeti
   const abort=new AbortController();
   flight.current=abort;setPending(null);setNotice('');setReview(null);albumCoordinator.running=true;
   const run={scope:'library',editionId:0,key:request.id,title:request.title,abort};albumCoordinator.active=run;
+  ownedNotice.current={title:request.title,titles:tracks.map(track=>track.title),progress:{
+   message:'Comprobando las copias de esta selección…',
+   rows:tracks.map(()=>({state:'unattempted',trackId:null,confirmed:false,message:''})),
+  }};
+  albumCoordinator.notice=ownedNotice.current;
+  notifyAlbumDownload(albumCoordinator);
   const current=()=>flight.current===abort&&latest.current.accountId===account&&attempt.current();
   let readyId:string|null=null,finished=false;
   void downloadLibrarySelection({tracks,attempt,client:p.client,providers,revision:p.bots.revision,signal:abort.signal,current,
@@ -162,16 +188,22 @@ export function LibraryDownloadController(props:{accountId?:string;captureLifeti
   });
  }
  const startRef=useRef(start);startRef.current=start;
- useEffect(()=>registerUpdateBlocker(()=>flight.current!==null),[]);
+ useEffect(()=>{
+  const queued=waiting.current;
+  if(!queued||queued.account!==props.accountId||props.connectionPhase==='initializing')return;
+  waiting.current=null;
+  startRef.current(queued.request,queued.restore);
+ },[props.accountId,props.connectionPhase,props.bots,props.connected]);
+ useEffect(()=>registerUpdateBlocker(()=>flight.current!==null||waiting.current!==null),[]);
  useEffect(()=>{
   const unsubscribe=subscribeLibraryDownloads(request=>startRef.current(request));
   const unsubscribeReview=subscribeLibraryTrackReviews((id,title)=>void reviewRef.current(id,title));
-  const suspend=()=>{flight.current?.abort();checking.current?.abort();};
+  const suspend=()=>{waiting.current=null;flight.current?.abort();checking.current?.abort();};
   addEventListener('pagehide',suspend);
   return()=>{unsubscribe();unsubscribeReview();removeEventListener('pagehide',suspend);};
  },[]);
  useEffect(()=>{
-  setNotice('');setPending(null);setReview(null);
+  waiting.current=null;setNotice('');setPending(null);setReview(null);
   if(props.accountId)try{setPending(readLibraryDownloadCheckpoint(props.accountId));}catch{setNotice('No se pudo leer el progreso guardado de la descarga.');}
   return()=>{
    checking.current?.abort();checking.current=null;
@@ -179,8 +211,12 @@ export function LibraryDownloadController(props:{accountId?:string;captureLifeti
    if(ownedNotice.current&&albumCoordinator.notice===ownedNotice.current){albumCoordinator.notice=undefined;notifyAlbumDownload(albumCoordinator);}
   };
  },[props.accountId]);
- return notice||pending||review?createPortal(<aside className="library-download-hint">
-  {review&&<section aria-label="Revisión de descarga">
+ if(!props.target)return null;
+ return createPortal(<div className="library-download-context">
+  {!download.running&&!pending&&!waiting.current&&props.startAction}
+  {(!notice||download.running)&&<AlbumDownloadNotice coordinator={download}/>}
+  {(notice||pending||review)&&<div className="library-download-hint">
+  {review&&<section ref={reviewCard} tabIndex={-1} aria-label="Revisión de descarga">
    <strong>{review.title}</strong>
    <p role="status">{review.state==='checking'?'Comprobando esta canción…':
     review.state==='saved'?(review.settled?'Copia verificada y disponible en Biblioteca.':'La copia de Biblioteca está disponible. Hay un guardado anterior pendiente de revisar en Almacenamiento.'):
@@ -194,18 +230,18 @@ export function LibraryDownloadController(props:{accountId?:string;captureLifeti
     {review.canPreserveRetry&&<button type="button" onClick={()=>void reviewTrack(review.trackId,review.title,'preserve')}>Conservar archivos y reintentar</button>}</>}
    <button type="button" onClick={()=>{checking.current?.abort();setReview(null);}}>Cerrar revisión</button>
   </section>}
-  {(notice||pending)&&<p role="status">{notice||'Hay una descarga de Biblioteca pendiente.'}</p>}
-  {pending&&<>
-   <button type="button" onClick={()=>start({id:pending.id,trackIds:pending.trackIds,title:'Selección de Biblioteca',play:false},pending)}>Continuar descarga de Biblioteca</button>
-   <button type="button" onClick={()=>{
+  {(notice||pending&&!download.notice)&&<p role="status">{notice||'Hay una descarga de Biblioteca pendiente.'}</p>}
+  {pending&&!download.running&&<div className="library-download-context__actions">
+   <button type="button" disabled={!!waiting.current} onClick={()=>start({id:pending.id,trackIds:pending.trackIds,title:'Selección de Biblioteca',play:false},pending)}>Continuar descarga de Biblioteca</button>
+   {props.allowDiscard&&<button type="button" onClick={()=>{
     if(!props.accountId||flight.current||albumCoordinator.running)return;
     try{
      if(props.captureLifetime&&!props.captureLifetime()()){setNotice('Usa Pulso en esta pestaña para descartar la selección.');return;}
-     discardLibraryDownloadCheckpoint(props.accountId,pending);
+     waiting.current=null;discardLibraryDownloadCheckpoint(props.accountId,pending);
      setPending(readLibraryDownloadCheckpoint(props.accountId));setNotice('');
     }catch{setNotice('No se pudo descartar el progreso de la selección.');}
-   }}>Descartar selección pendiente</button>
-  </>}
-  {notice&&<button type="button" onClick={()=>setNotice('')}>Cerrar aviso</button>}
- </aside>,document.body):null;
+   }}>Descartar selección pendiente</button>}
+  </div>}
+  </div>}
+ </div>,props.target);
 }

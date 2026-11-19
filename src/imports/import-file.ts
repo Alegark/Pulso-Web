@@ -90,15 +90,28 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
  checkCancelled(signal); const duration=metadata.format.duration;
  if(!duration||!Number.isFinite(duration)||duration<=0)fail('parse','integrity','audio-duration-invalid','none');
  if(!metadata.format.codec)fail('parse','integrity','audio-codec-missing','none');
- // Capability selection happens before creating staging. Runtime OPFS failures never switch backend.
+ // A directory capability can fail in the worker even when its methods exist.
+ // Choose a fallback only before ownership, staging or bytes have been written.
  const available=typeof navigator.storage?.getDirectory==='function'&&typeof FileSystemFileHandle!=='undefined'&&typeof FileSystemFileHandle.prototype.createWritable==='function';
- const backend=options.backend==='idb'?'idb':available?'opfs':'idb';attempt.backend=backend;attempt.closeState=backend==='opfs'?'not-attempted':'not-applicable';
+ let backend:'opfs'|'idb'=options.backend==='idb'?'idb':available?'opfs':'idb';
  if(options.backend==='opfs'&&!available)fail('open','storage-unavailable','storage-unavailable','opfs');
- let job:ImportOperation={version:1,operationId,owner:crypto.randomUUID(),revision:1,state:'writing',backend,storageKey:crypto.randomUUID(),bytes:0,expectedBytes:file.size,...(accountId?{accountId}:{}),...(options.libraryMode==='cache'?{libraryMode:'cache' as const}:{})};
- // Resolve a key collision before recording ownership, so cleanup can never claim an old file.
- assertDatabaseUse('write');const directory=backend==='opfs'?await writeDirectory():undefined;assertDatabaseUse('write');
- if(directory)try{await directory.getFileHandle(job.storageKey);fail('open','internal','conflict','opfs');}catch(error){if(nativeDOMName(error)!=='NotFoundError')throw AppFailure.create(fromKnownError(error,{phase:'open',backend:'opfs'}));}
- 
+ const storageKey=crypto.randomUUID();
+ let directory:FileSystemDirectoryHandle|undefined;
+ if(backend==='opfs'){
+  try{
+   directory=await writeDirectory();
+   try{await directory.getFileHandle(storageKey);fail('open','internal','conflict','opfs');}
+   catch(error){if(nativeDOMName(error)!=='NotFoundError')throw AppFailure.create(fromKnownError(error,{phase:'open',backend:'opfs'}));}
+  }catch(error){
+   if(options.backend==='opfs'||issuedFailure(error)?.code==='conflict')throw error;
+   checkCancelled(signal);
+   directory=undefined;backend='idb';
+  }
+ }
+ attempt.backend=backend;attempt.closeState=backend==='opfs'?'not-attempted':'not-applicable';
+ checkCancelled(signal);
+ let job:ImportOperation={version:1,operationId,owner:crypto.randomUUID(),revision:1,state:'writing',backend,storageKey,bytes:0,expectedBytes:file.size,...(accountId?{accountId}:{}),...(options.libraryMode==='cache'?{libraryMode:'cache' as const}:{})};
+
  let writer:FileSystemWritableFileStream|undefined;let closeAttempted=false;let closed=false;
  try{
  attempt.started=true;await createOperation(job);
