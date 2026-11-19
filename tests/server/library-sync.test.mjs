@@ -78,3 +78,23 @@ test('an unrecognized cloud document asks for a reload and blocks writes',async(
   }finally{sync.dispose();}
  }
 });
+
+test('library rate limit retains local changes and waits for Retry-After before writing again',async()=>{
+ let writes=0,applied=0;
+ const sync=createLibrarySync(host({
+  apply:async()=>{applied++;},
+  save:(id,revision,document,signal)=>accountLibraryRequest(id,signal,{revision,document},async()=>{
+   writes++;
+   return Response.json({code:'RATE_LIMITED'},{status:429,headers:{'Retry-After':'60'}});
+  }),
+ }));
+ try{
+  sync.account(id);
+  await sync.sync();
+  assert.equal(sync.getSnapshot(),'rateLimited');
+  sync.changed();
+  await sync.sync();
+  assert.equal(writes,1);
+  assert.equal(applied,0);
+ }finally{sync.dispose();}
+});

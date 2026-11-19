@@ -1,3 +1,4 @@
+import {RateLimited} from '../http/rate-limit.mjs';
 import {ACTIVE_LIBRARY_ACCOUNT} from '../accounts/library-local';
 import {libraryUuid, LIBRARY_LIMITS} from '../accounts/library-document.mjs';
 import {type Playlist, type Track} from '../library/library';
@@ -45,6 +46,7 @@ function songKey(title:string,artist:string|null){
 export async function readSpotifyPlaylist(id:string,signal:AbortSignal):Promise<SpotifyPlaylist> {
  if(!spotifyId.test(id))throw Error('Identificador de Spotify inválido.');
  const response=await fetch(`/api/spotify-playlist/${id}`,{signal,credentials:'omit',cache:'no-store'});
+ if(response.status===429)throw new RateLimited(response);
  if(!response.ok)throw Error('No se pudo leer el enlace. Comprueba que la playlist sea pública e inténtalo de nuevo.');
  return parsePlaylist(await response.json());
 }

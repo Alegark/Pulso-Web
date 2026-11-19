@@ -20,3 +20,105 @@ test('actual Neon proxy cannot swallow an OAuth verifier behind an older session
  try{const request=new Request('https://pulso.test/api/account-auth/get-session?neon_auth_session_verifier=TESTONLY-verifier',{headers:{Cookie:'__Secure-neon-auth.session_token=older-test-token'}});const r=await createAccountAuthRouter()(request,env);assert.equal(r.status,200);assert.equal(calls.length,1);assert.equal(new URL(calls[0]).searchParams.get('neon_auth_session_verifier'),'TESTONLY-verifier');assert.equal(new URL(calls[0]).searchParams.get('disableCookieCache'),'true');}
  finally{globalThis.fetch=original;}
 });
+
+const turnstileSiteKey='1x00000000000000000000AA';
+const passingSecret='1x0000000000000000000000000000000AA';
+const failingSecret='2x0000000000000000000000000000000AA';
+const spentSecret='3x0000000000000000000000000000000AA';
+const dummyToken='XXXX.DUMMY.TOKEN.XXXX';
+const signIn={email:'own@example.test',password:'test-only-password'};
+const protectedOperations=[
+ ['sign-up/email','sign-up',{...signIn,name:'Persona de prueba'}],
+ ['email-otp/send-verification-otp','verify-email',{email:signIn.email,type:'email-verification'}],
+ ['request-password-reset','password-reset',{email:signIn.email}],
+ ['email-otp/request-password-reset','password-reset',{email:signIn.email}],
+];
+const activeTurnstile={...env,PULSO_TURNSTILE_SITE_KEY:turnstileSiteKey,PULSO_TURNSTILE_SECRET:passingSecret};
+
+test('opaque limiter decisions separate IP-based email and login budgets and stop upstream work',async()=>{
+ const emailKeys=[],attemptKeys=[];
+ const limiter=keys=>({limit:async({key})=>{keys.push(key);return {success:false};}});
+ const limitedEnv={...activeTurnstile,PULSO_AUTH_EMAIL_LIMIT:limiter(emailKeys),PULSO_AUTH_ATTEMPT_LIMIT:limiter(attemptKeys)};
+ const route=createAccountAuthRouter({proxy:()=>assert.fail('Neon'),siteverify:()=>assert.fail('Siteverify')});
+ for(const [operation,,body] of [...protectedOperations,['sign-in/email',null,signIn]]){
+  const response=await route(post(operation,body,{'CF-Connecting-IP':'192.0.2.5','X-Forwarded-For':'198.51.100.1'}),limitedEnv);
+  assert.equal(response.status,429);
+  assert.equal(response.headers.get('Retry-After'),'60');
+  assert.equal(response.headers.get('Cache-Control'),'no-store');
+  assert.deepEqual(await response.json(),{code:'RATE_LIMITED'});
+ }
+ assert.deepEqual(emailKeys,Array(4).fill('192.0.2.5'));
+ assert.deepEqual(attemptKeys,['192.0.2.5']);
+});
+
+test('Turnstile activation needs both keys, exposes just the sitekey, and never challenges login or code submission',async()=>{
+ const route=createAccountAuthRouter({proxy:async()=>Response.json({}),siteverify:()=>assert.fail('Siteverify')});
+ const config=new Request('https://pulso.test/account-config.json');
+ for(const disabled of [env,{...env,PULSO_TURNSTILE_SITE_KEY:turnstileSiteKey},{...env,PULSO_TURNSTILE_SECRET:passingSecret}]){
+  assert.deepEqual(await (await route(config,disabled)).json(),{version:1,enabled:true,google:true});
+  assert.equal((await route(post('sign-up/email',{...signIn,name:'Persona'}),disabled)).status,200);
+ }
+ assert.deepEqual(await (await route(config,activeTurnstile)).json(),{version:1,enabled:true,google:true,turnstileSiteKey});
+ assert.equal((await route(post('sign-in/email',signIn),activeTurnstile)).status,200);
+ assert.equal((await route(post('email-otp/verify-email',{email:signIn.email,otp:'123456'}),activeTurnstile)).status,200);
+ const result=await route(post('sign-up/email',{...signIn,name:'Persona'}),activeTurnstile);
+ assert.equal(result.status,400);
+ assert.deepEqual(await result.json(),{code:'TURNSTILE_REQUIRED'});
+});
+
+test('Siteverify sends the Cloudflare IP and checks success, action, hostname, and one-use tokens',async()=>{
+ for(const [operation,action,body] of protectedOperations){
+  let proxyCalls=0,siteCalls=0;
+  const route=createAccountAuthRouter({
+   proxy:async({request})=>{
+    proxyCalls++;
+    assert.equal(request.headers.get('X-Pulso-Turnstile'),null);
+    assert.ok(!(await request.text()).includes(dummyToken));
+    return Response.json({});
+   },
+   siteverify:async(url,options)=>{
+    siteCalls++;
+    assert.equal(url,'https://challenges.cloudflare.com/turnstile/v0/siteverify');
+    assert.equal(options.method,'POST');
+    assert.equal(options.redirect,'error');
+    const input=JSON.parse(options.body);
+    assert.deepEqual(input,{secret:input.secret,response:dummyToken,remoteip:'2001:db8::1'});
+    if(input.secret===failingSecret)return Response.json({success:false,'error-codes':['invalid-input-response']});
+    if(input.secret===spentSecret)return Response.json({success:false,'error-codes':['timeout-or-duplicate']});
+    assert.equal(input.secret,passingSecret);
+    // Cloudflare dummy success itself has no action and returns example.com.
+    // Supply production-shaped fields only after covering that exact response.
+    if(siteCalls===1)return Response.json({success:true,hostname:'example.com'});
+    if(siteCalls===2)return Response.json({success:true,hostname:'pulso.test',action:'wrong-action'});
+    return Response.json({success:true,hostname:'pulso.test',action});
+   },
+  });
+  for(const [secret,expected] of [[passingSecret,400],[passingSecret,400],[passingSecret,200],[failingSecret,400],[spentSecret,400]]){
+   const request=post(operation,{...body,turnstileToken:'ignored'},{'X-Pulso-Turnstile':dummyToken,'CF-Connecting-IP':'2001:db8::1'});
+   const response=await route(request,{...activeTurnstile,PULSO_TURNSTILE_SECRET:secret});
+   assert.equal(response.status,expected);
+   if(expected===400)assert.deepEqual(await response.json(),{code:'TURNSTILE_INVALID'});
+  }
+  assert.equal(proxyCalls,1);
+  assert.equal(siteCalls,5);
+ }
+});
+
+test('Siteverify network, HTTP, malformed body and deadline errors fail closed',async()=>{
+ const [operation,,body]=protectedOperations[0];
+ for(const siteverify of [
+  async()=>{throw new Error('Synthetic network error');},
+  async()=>new Response('',{status:503}),
+  async()=>new Response('not JSON'),
+  async()=>Response.json({success:false,'error-codes':['internal-error']}),
+  async(_url,{signal})=>new Promise((_,reject)=>{
+   const keepAlive=setTimeout(()=>reject(Error('Timeout was not applied')),500);
+   signal.addEventListener('abort',()=>{clearTimeout(keepAlive);reject(signal.reason);},{once:true});
+  }),
+ ]){
+  const route=createAccountAuthRouter({siteverify,siteverifyTimeoutMs:20,proxy:()=>assert.fail('Neon')});
+  const response=await route(post(operation,body,{'X-Pulso-Turnstile':dummyToken}),activeTurnstile);
+  assert.equal(response.status,503);
+  assert.deepEqual(await response.json(),{code:'TURNSTILE_UNAVAILABLE'});
+ }
+});

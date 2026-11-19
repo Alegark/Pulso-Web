@@ -1,5 +1,7 @@
 import {readBoundedText} from '../../src/accounts/bounded-body.mjs';
 import {spotifyArtworkUrl} from '../../src/library/catalog-id.ts';
+import {clientIp,isRateLimited,rateLimitBody,rateLimitHeaders} from './rate-limit.mjs';
+
 const ID=/^[A-Za-z0-9]{22}$/;
 const MAX_BYTES=1024*1024;
 function field(value,max=500){if(typeof value!=='string'||value.length>max)throw Error('Invalid metadata');return value;}
@@ -20,7 +22,7 @@ export function parseSpotifyPlaylist(html){
  const total=Number.isSafeInteger(entity.totalTracks)&&entity.totalTracks>=entity.trackList.length?entity.totalTracks:null;
  return {name,tracks,readCount:rows.length,omitted,total,limited:entity.trackList.length>=100,complete:total!==null&&total===rows.length};
 }
-const reply=(body,status)=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'}});
+const reply=(body,status,headers)=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',...headers}});
 function property(html,name){
  const matches=[];
  for(const [tag] of html.matchAll(/<meta\b[^>]*>/gi)){
@@ -94,13 +96,16 @@ async function readMetadata(fetcher,path,signal,parse){
   throw new SpotifyError(signal.aborted?'aborted':stage,stage==='upstream-response'?upstreamStatus:undefined);
  }
 }
-async function handleSpotify(request,release,load){
+async function handleSpotify(request,release,limiter,load){
  const url=new URL(request.url),match=(release?/^\/api\/spotify-track\/([A-Za-z0-9]{22})$/:/^\/api\/spotify-playlist\/([A-Za-z0-9]{22})$/).exec(url.pathname);
  if(!match||!ID.test(match[1])||url.search)return reply({error:'invalid-request'},400);
  if(request.method!=='GET')return reply({error:'method'},405);
  if((request.headers.get('Origin')&&request.headers.get('Origin')!==url.origin)||request.headers.get('Sec-Fetch-Site')==='cross-site')return reply({error:'origin'},403);
- try{return reply(await load(match[1]),200);}
- catch(error){return reply({error:'unavailable',reason:error instanceof SpotifyError?error.reason:'metadata-format',upstreamStatus:error.upstreamStatus},502);}
+ try{
+  if(await isRateLimited(limiter,clientIp(request)??'unknown'))return reply(rateLimitBody,429,rateLimitHeaders);
+  return reply(await load(match[1]),200);
+ }
+ catch(error){return reply({error:'unavailable',reason:error instanceof SpotifyError?error.reason:'metadata-format',upstreamStatus:error?.upstreamStatus},502);}
 }
 
 const metadataTtl=24*60*60*1000;
@@ -128,7 +133,7 @@ function metadataCache(maxEntries,clock){
 }
 export function createSpotifyTrackRelease({fetcher=fetch,clock=Date.now}={}){
  const tracks=metadataCache(512,clock),albums=metadataCache(64,clock);
- return (request,ctx)=>handleSpotify(request,true,id=>deadline(request.signal,async visitorSignal=>{
+ return (request,ctx,limiter)=>handleSpotify(request,true,limiter,id=>deadline(request.signal,async visitorSignal=>{
   if(visitorSignal.aborted)throw new SpotifyError('aborted');
   return tracks(id,async signal=>{
    const reference=await readMetadata(fetcher,'/track/'+id,signal,html=>spotifyReleaseReference(html,id));
@@ -140,6 +145,6 @@ export function createSpotifyTrackRelease({fetcher=fetch,clock=Date.now}={}){
  }));
 }
 const trackReleaseRouter=createSpotifyTrackRelease();
-export const spotifyPlaylist=(request,fetcher=fetch)=>handleSpotify(request,false,id=>
+export const spotifyPlaylist=(request,fetcher=fetch,limiter)=>handleSpotify(request,false,limiter,id=>
  deadline(request.signal,signal=>readMetadata(fetcher,'/embed/playlist/'+id,signal,parseSpotifyPlaylist)));
-export const spotifyTrackRelease=(request,fetcher,ctx)=>(fetcher?createSpotifyTrackRelease({fetcher}):trackReleaseRouter)(request,ctx);
+export const spotifyTrackRelease=(request,fetcher,ctx,limiter)=>(fetcher?createSpotifyTrackRelease({fetcher}):trackReleaseRouter)(request,ctx,limiter);

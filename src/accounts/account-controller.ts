@@ -1,3 +1,5 @@
+import {rateLimitedMessage} from '../http/rate-limit.mjs';
+
 export interface AccountUser { readonly id:string; readonly name:string; readonly email:string; readonly verified:boolean; readonly expiresAt?:number }
 export interface AccountProvider {
  session():Promise<AccountUser|null>;
@@ -11,7 +13,7 @@ export interface AccountProvider {
  resend(email:string):Promise<void>;
 }
 export type AccountStatus='initial'|'checking'|'disabled'|'signed-out'|'signed-in'|'offline'|'unavailable';
-export interface AccountState {readonly status:AccountStatus;readonly pending:boolean;readonly google:boolean;readonly user:AccountUser|null;readonly error:string|null}
+export interface AccountState {readonly status:AccountStatus;readonly pending:boolean;readonly google:boolean;readonly turnstileSiteKey?:string;readonly user:AccountUser|null;readonly error:string|null}
 export class AccountFailure extends Error {constructor(readonly code:string){super(code);}}
 export function accountError(error:unknown):string {
  // Neon throws HTTP errors as well as returning {error}; its nested .error
@@ -22,13 +24,16 @@ export function accountError(error:unknown):string {
  if(['INVALID_EMAIL_OR_PASSWORD','INVALID_PASSWORD','USER_NOT_FOUND','INVALID_CREDENTIALS'].includes(code))return 'El correo o la contraseña no son correctos.';
  if(code==='EMAIL_NOT_VERIFIED')return 'Verifica tu correo antes de iniciar sesión.';
  if(code==='USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL'||code==='USER_ALREADY_EXISTS')return 'No se pudo crear la cuenta con ese correo. Prueba iniciar sesión o recuperar tu contraseña.';
- if(code==='TOO_MANY_REQUESTS'||code==='TOO_MANY_ATTEMPTS')return 'Hay demasiados intentos. Espera unos minutos antes de volver a intentarlo.';
+ if(['RATE_LIMITED','TOO_MANY_REQUESTS','TOO_MANY_ATTEMPTS'].includes(code))return rateLimitedMessage;
+ if(code==='TURNSTILE_REQUIRED')return 'Completa la verificación de seguridad para continuar.';
+ if(code==='TURNSTILE_INVALID')return 'La verificación de seguridad ya no es válida. Completa una nueva.';
+ if(code==='TURNSTILE_UNAVAILABLE')return 'No pudimos comprobar la verificación de seguridad. Inténtalo de nuevo.';
  if(code==='INVALID_TOKEN'||code==='TOKEN_EXPIRED')return 'El enlace ya no es válido. Solicita otro para recuperar tu contraseña.';
  if(code==='INVALID_OTP')return 'El código no es válido o ha caducado.';
  if(code==='DISABLED')return 'El acceso a cuentas todavía no está habilitado.';
  return 'No pudimos completar la conexión. Comprueba tu conexión e inténtalo de nuevo.';
 }
-export interface AccountHost {config():Promise<{enabled:boolean;google:boolean}>;provider():Promise<AccountProvider>;offlineSession?():AccountUser|null;confirmed?(user:AccountUser|null):void}
+export interface AccountHost {config():Promise<{enabled:boolean;google:boolean;turnstileSiteKey?:string}>;provider():Promise<AccountProvider>;offlineSession?():AccountUser|null;confirmed?(user:AccountUser|null):void}
 /** Only public profile data lives here. Passwords, codes and tokens are never
  * persisted, logged or passed to the music/Telegram controllers. */
 export function createAccountController(host:AccountHost){
@@ -49,7 +54,7 @@ export function createAccountController(host:AccountHost){
    const config=await host.config();if(attempt!==generation)return;
    if(!config.enabled){publish({status:'disabled',pending:false,google:false,user:null,error:null});return;}
    provider??=await host.provider();const user=await provider.session();if(attempt!==generation)return;
-   confirmed(user);publish({status:user?'signed-in':'signed-out',pending:false,google:config.google,user,error:null});
+   confirmed(user);publish({status:user?'signed-in':'signed-out',pending:false,google:config.google,turnstileSiteKey:config.turnstileSiteKey,user,error:null});
   }catch(error){if(attempt===generation){let remembered:AccountUser|null=null;try{remembered=host.offlineSession?.()??null;}catch{/* Missing local hint. */}publish({...state,status:remembered?'offline':'unavailable',pending:false,user:remembered??state.user,error:remembered?null:accountError(error)});}}
   finally{loading=null;settled(attempt);}})();await loading;
  }

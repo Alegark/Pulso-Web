@@ -2,6 +2,8 @@ import {accountAuth} from './accounts.mjs';
 import {readBoundedJson} from '../../src/accounts/bounded-body.mjs';
 import {libraryUuid} from '../../src/accounts/library-document.mjs';
 
+import {isRateLimited,rateLimitBody,rateLimitHeaders} from './rate-limit.mjs';
+
 const headers={'Cache-Control':'no-store','Content-Type':'application/json','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
 const accountUuid=value=>typeof value==='string'&&libraryUuid(value.toLowerCase());
 const revision=value=>Number.isSafeInteger(value)&&value>0&&value<=2147483647;
@@ -49,8 +51,8 @@ export function createAccountDataRouter({
  return async(request,env)=>{
   const url=new URL(request.url);if(url.pathname!==path)return null;
   let cookies=[];
-  const respond=(body,status=200)=>{
-   const out=new Headers({...headers,...extraHeaders});
+  const respond=(body,status=200,additionalHeaders)=>{
+   const out=new Headers({...headers,...extraHeaders,...additionalHeaders});
    for(const cookie of cookies)out.append('Set-Cookie',cookie);
    return new Response(JSON.stringify(body),{status,headers:out});
   };
@@ -84,6 +86,9 @@ export function createAccountDataRouter({
    const subject=tokenSubject(token);
    if(!subject)return signIn();
    if(input&&input.accountId.toLowerCase()!==subject)return respond({code:'ACCOUNT_CHANGED'},409);
+   // The token came from the same-origin proxy's Neon session exchange, never
+   // from a visitor header. Check the subject before spending any write quota.
+   if(writing&&await isRateLimited(env.PULSO_ACCOUNT_WRITE_LIMIT,subject))return respond(rateLimitBody,429,rateLimitHeaders);
    if(signal.aborted)return unavailable();
    const result=await fetcher(target,dataRequest(target,column,subject,token,input,values,signal));
    if(!result.ok){

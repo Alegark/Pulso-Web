@@ -1,3 +1,4 @@
+import {RateLimited,rateLimitedMessage} from '../http/rate-limit.mjs';
 import {readBoundedJson} from './bounded-body.mjs';
 import {LibraryDocumentError,validateAccountLibrary,mergeAccountLibraries,type AccountLibraryDocument} from './library-document.mjs';
 export interface AccountLibraryRemote {accountId:string;revision:number|null;document:AccountLibraryDocument}
@@ -10,7 +11,7 @@ export interface LibrarySyncHost {
 }
 export class LibrarySyncConflict extends Error{}
 class UnrecognizedLibrary extends Error{}
-export const librarySyncMessage={idle:'Biblioteca guardada en este dispositivo.',syncing:'Sincronizando biblioteca…',saved:'Biblioteca sincronizada con tu cuenta.',pending:'Cambios guardados en este dispositivo. Se sincronizarán al recuperar la conexión.',conflict:'La biblioteca cambió en otro dispositivo. Pulsa Sincronizar para combinar los cambios.',unavailable:'No pudimos sincronizar. Tus datos locales se conservan.',tooLarge:'La biblioteca supera el límite de sincronización. Quita elementos de la biblioteca o de tus listas para volver a sincronizar.',invalid:'Algunos datos de la biblioteca no se pueden sincronizar. Tus cambios siguen guardados en este dispositivo.',reloadRequired:'Esta versión de Pulso no reconoce la biblioteca de tu cuenta. Recarga la app para volver a sincronizar.'};
+export const librarySyncMessage={idle:'Biblioteca guardada en este dispositivo.',syncing:'Sincronizando biblioteca…',saved:'Biblioteca sincronizada con tu cuenta.',pending:'Cambios guardados en este dispositivo. Se sincronizarán al recuperar la conexión.',conflict:'La biblioteca cambió en otro dispositivo. Pulsa Sincronizar para combinar los cambios.',unavailable:'No pudimos sincronizar. Tus datos locales se conservan.',rateLimited:rateLimitedMessage+' Tus cambios siguen guardados en este dispositivo.',tooLarge:'La biblioteca supera el límite de sincronización. Quita elementos de la biblioteca o de tus listas para volver a sincronizar.',invalid:'Algunos datos de la biblioteca no se pueden sincronizar. Tus cambios siguen guardados en este dispositivo.',reloadRequired:'Esta versión de Pulso no reconoce la biblioteca de tu cuenta. Recarga la app para volver a sincronizar.'};
 const pollMs=20*60_000,debounceMs=700;
 const offline=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
 const visible=()=>typeof document==='undefined'||document.visibilityState==='visible';
@@ -55,6 +56,8 @@ export function createLibrarySync(host:LibrarySyncHost){
     publish('reloadRequired');
    }else if(error instanceof LibraryDocumentError){
     publish(error.code==='LIBRARY_TOO_LARGE'?'tooLarge':'invalid');
+   }else if(error instanceof RateLimited){
+    retryAt=Date.now()+error.retryAfterMs;publish('rateLimited');
    }else if(offline()){
     retryAt=0;publish('pending');
    }else{
@@ -85,6 +88,7 @@ export async function accountLibraryRequest(id:string,signal:AbortSignal,update?
  const abort=new AbortController(),stop=()=>abort.abort();signal.addEventListener('abort',stop,{once:true});if(signal.aborted)stop();const timer=setTimeout(stop,18000);
  try{
   const response=await fetcher('/api/account-library',{method:update?'PUT':'GET',credentials:'same-origin',cache:'no-store',signal:abort.signal,headers:update?{'Content-Type':'application/json'}:undefined,body:update?JSON.stringify({accountId:id,...update}):undefined});
+  if(response.status===429)throw new RateLimited(response);
   if(response.status===409)throw new LibrarySyncConflict();
   if(response.status===400||response.status===422){
    const problem=await readBoundedJson(response,1024,abort.signal) as {code?:unknown}|null;

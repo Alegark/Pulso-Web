@@ -1,3 +1,4 @@
+import {RateLimited} from '../http/rate-limit.mjs';
 import {useEffect,useRef,useState} from 'react';
 import {registerUpdateBlocker} from '../service-worker/update-blockers';
 
@@ -10,6 +11,7 @@ function parse(value:unknown,accountId:string):TelegramPhonePreference{
 }
 export async function requestTelegramPhonePreference(accountId:string,signal:AbortSignal,value?:{phone:string;revision:number|null},fetcher:typeof fetch=fetch):Promise<TelegramPhonePreference>{
  const response=await fetcher('/api/account-profile',{method:value?'PUT':'GET',credentials:'same-origin',cache:'no-store',redirect:'error',signal,...(value?{headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId,telegramPhone:value.phone,revision:value.revision})}:{})});
+ if(response.status===429)throw new RateLimited(response);
  if(!response.ok)throw Error('profile');const text=await response.text();if(text.length>2048)throw Error('profile');return parse(JSON.parse(text),accountId);
 }
 /** The account captured at successful Telegram login remains the target even
@@ -35,7 +37,7 @@ export function useTelegramPhonePreference(accountId:string|undefined){
    const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),10000);const stop=()=>abort.abort();entry.abort.signal.addEventListener('abort',stop,{once:true});
    try{const next=await requestTelegramPhonePreference(entry.accountId,abort.signal,{phone,revision:value.revision});if(lifetime.current!==entry||entry.abort.signal.aborted)return false;entry.saved=next;setState({accountId:entry.accountId,phone:next.telegramPhone,notice:'Número guardado en tu cuenta de Pulso.'});return true;}
    finally{clearTimeout(timer);entry.abort.signal.removeEventListener('abort',stop);}
-  }catch{if(lifetime.current===entry&&!entry.abort.signal.aborted)setState(old=>({...old,notice:'Telegram está conectado, pero no pudimos actualizar el número guardado. No se repetirá automáticamente.'}));return false;}
+  }catch(error){if(lifetime.current===entry&&!entry.abort.signal.aborted)setState(old=>({...old,notice:error instanceof RateLimited?error.message+' Telegram sigue conectado.':'Telegram está conectado, pero no pudimos actualizar el número guardado. No se repetirá automáticamente.'}));return false;}
   finally{entry.writing=false;}
  }};
 }
