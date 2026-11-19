@@ -40,9 +40,9 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
    async readDocumentPart(_document,offset,limit){
     await report('read',{title,peer});
     if(title==='Pista 3'&&mode==='cooldown'&&!flooded){flooded=true;throw {errorMessage:'FLOOD_WAIT_2'};}
-    if(title==='Pista 3'&&!['autoheal','cooldown','ack-lost'].includes(mode))return new Uint8Array(0);
+    if(title==='Pista 3'&&!['autoheal','single','cooldown','ack-lost'].includes(mode))return new Uint8Array(0);
     // Real worker rejects the invalid header; the second bot offers good bytes.
-    if(title==='Pista 3'&&mode==='autoheal'&&peer===101)return new Uint8Array(Math.min(limit,bytes.length-offset));
+    if(title==='Pista 3'&&['autoheal','single'].includes(mode)&&peer===101)return new Uint8Array(Math.min(limit,bytes.length-offset));
     bytes[bytes.length-1]=Number(title.at(-1))+10;
     return bytes.slice(offset,offset+limit);
    },

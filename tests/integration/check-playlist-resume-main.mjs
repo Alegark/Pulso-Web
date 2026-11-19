@@ -32,9 +32,9 @@ try{
  for(const [engine,launcher] of [['chromium',chromium],['webkit',webkit]]){
   const browser=await launcher.launch(engine==='chromium'?{executablePath:'/usr/bin/chromium',headless:true}:{headless:true});
   report[engine]=browser.version();
-  try{for(const mode of ['autoheal','missing','invalid','cooldown','staging','parked','ack-lost','connected']){
+  try{for(const mode of ['autoheal','missing','invalid','cooldown','staging','parked','ack-lost','connected','single']){
    if(process.env.PLAYLIST_RESUME_ENGINE&&process.env.PLAYLIST_RESUME_ENGINE!==engine)continue;
-   const fresh=mode==='autoheal'||mode==='missing';
+   const fresh=['autoheal','missing','single'].includes(mode);
    const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
    const trace=[];let releaseRestore,holdRestore=false,page;
    const restoration=new Promise(resolve=>{releaseRestore=resolve;});
@@ -158,10 +158,10 @@ try{
      }
     }else{
      await page.locator('.bot-providers-list li').first().waitFor({state:'attached'});
-     await page.getByRole('button',{name:'Descargar playlist completa',exact:true}).click();
+     await page.getByRole('button',{name:mode==='single'?'Escuchar Pista 3':'Descargar playlist completa',exact:true}).click();
     }
     await page.waitForFunction(()=>document.body.textContent?.includes('Buscando canción'));
-    const allSaved=['autoheal','cooldown','ack-lost'].includes(mode);
+    const allSaved=['autoheal','cooldown','ack-lost','single'].includes(mode);
     const summary=allSaved?'Selección descargada en este dispositivo.':'Descarga parcial: revisa las canciones pendientes.';
     await page.getByText(summary,{exact:true}).waitFor({state:'attached',timeout:45000});
     if(!allSaved){
@@ -169,13 +169,13 @@ try{
      await page.getByText(mode==='parked'?'Pendiente en Almacenamiento':mode==='missing'?'No existe en tus bots':'Ningún bot entregó un archivo válido',{exact:true}).waitFor();
     }
     const searches=trace.filter(e=>e.kind==='search');
-    assert.deepEqual(searches.map(e=>e.title),mode==='parked'?['Pista 4']:mode==='ack-lost'?['Pista 3','Pista 4']:[...(fresh?['Pista 1','Pista 2']:[]),'Pista 3','Pista 3','Pista 4']);
+    assert.deepEqual(searches.map(e=>e.title),mode==='single'?['Pista 3','Pista 3']:mode==='parked'?['Pista 4']:mode==='ack-lost'?['Pista 3','Pista 4']:[...(fresh?['Pista 1','Pista 2']:[]),'Pista 3','Pista 3','Pista 4']);
     if(mode==='ack-lost'){
      const lost=await page.evaluate(()=>window.__TESTONLY_outcomes.filter(outcome=>outcome.type==='lost-ack'));
      assert.deepEqual(lost,[{type:'lost-ack',writeState:'published'}]);
     }
     if(mode==='missing')assert.equal(trace.some(e=>e.kind==='read'&&e.title==='Pista 3'),false);
-    if(mode==='autoheal')assert.deepEqual(trace.filter(e=>e.kind==='read'&&e.title==='Pista 3').map(e=>e.peer),[101,102]);
+    if(mode==='autoheal'||mode==='single')assert.deepEqual(trace.filter(e=>e.kind==='read'&&e.title==='Pista 3').map(e=>e.peer),[101,102]);
     if(mode==='cooldown')assert.ok(searches[1].at-trace.find(e=>e.kind==='read'&&e.title==='Pista 3').at>=1900);
     if(mode==='staging'||mode==='parked'){
      const staging=await page.evaluate(async operationId=>{
@@ -207,7 +207,8 @@ try{
      }));}finally{db.close();}
     },ids);
     const linked=copies.map(Boolean);
-    assert.deepEqual(linked,[true,true,allSaved,true]);
+    assert.deepEqual(linked,mode==='single'?[false,false,true,false]:[true,true,allSaved,true]);
+    if(mode==='single')assert.equal(await page.evaluate(({user,id})=>localStorage.getItem('pulso:library-download-held:v1:'+user+':'+id),{user,id:ids[2]}),null);
     assert.equal(new Set(copies.filter(Boolean).map(copy=>copy.id)).size,linked.filter(Boolean).length);
     report.cases.push({engine,mode,searches:searches.map(e=>e.title),linked,status:'PASS'});
    }catch(error){report.cases.push({engine,mode,status:'FAIL',error:String(error.stack??error),trace:trace.map(({kind,title})=>({kind,title})),outcomes:await page?.evaluate(()=>window.__TESTONLY_outcomes).catch(()=>[])});}
@@ -220,7 +221,7 @@ finally{
  if(server)await new Promise(resolve=>server.httpServer.close(resolve));
  if(oldTemp===undefined)delete process.env.TMPDIR;else process.env.TMPDIR=oldTemp;
  report.cleanup=await work.cleanup();
- report.status=report.cases.length===(process.env.PLAYLIST_RESUME_ENGINE?8:16)&&report.cases.every(c=>c.status==='PASS')&&!report.errors.length?'PASS':'FAIL';
+ report.status=report.cases.length===(process.env.PLAYLIST_RESUME_ENGINE?9:18)&&report.cases.every(c=>c.status==='PASS')&&!report.errors.length?'PASS':'FAIL';
  await writeFile(work.evidence+'/report.json',JSON.stringify(report,null,2));
  console.log(JSON.stringify({report:work.evidence+'/report.json',...report},null,2));
  if(report.status!=='PASS')process.exitCode=1;
