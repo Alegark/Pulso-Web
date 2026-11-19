@@ -40,11 +40,11 @@ test('confirmed terminal audio mismatch fails that row and continues the album w
  await acquireAlbum({detail,attempt:attempt(async()=>++looked===2?'verified-second':null),client:mock.client,provider:'provider',revision:1,management:()=>manager(async()=>true),signal:new AbortController().signal,current:()=>true,rows:initial(),uncertainTracks:uncertainty,update:v=>{result=v;}});
  assert.equal(looked,2);assert.equal(result?.rows[0].state,'failed');assert.equal(result?.rows[0].confirmed,false);assert.equal(result?.rows[1].confirmed,true);assert.equal(mock.searches,1);assert.equal(mock.downloads,1);assert.equal(uncertainty.size,0);assert.match(result!.message,/incompleto/);
 });
-test('unsettled, quarantined, foreign or still-compatible snapshots cannot be relabelled as confirmed no-match',async()=>{
+test('unsettled, quarantined, foreign or still-compatible snapshots cannot establish catalogue absence',async()=>{
  for(const patch of [{pending:true},{available:false},{delivery:'uncertain'},{queryId:'foreign'},{expectedTarget:{title:'Other',artist:'Artist',album:'Album',durationSeconds:60}},{rows:[{rowRef:'audio',kind:'audio',correlation:'reply',title:'Track 1',performer:'Artist',durationSeconds:60,mimeType:'audio/wav',bytes:100}]}]){
   addCurrent=async()=>true;const mock=noMatchingClient(patch);let looked=0,result:AlbumProgress|undefined;
   await acquireAlbum({detail,attempt:attempt(async()=>++looked===2?'must-not-add':null),client:mock.client,provider:'provider',revision:1,management:()=>manager(async()=>true),signal:new AbortController().signal,current:()=>true,rows:initial(),update:v=>{result=v;}});
-  assert.equal(looked,1);assert.equal(result?.rows[0].state,'uncertain');assert.equal(result?.rows[1].confirmed,false);assert.equal(mock.searches,1);assert.equal(mock.downloads,1);
+  assert.equal(looked,2);assert.notEqual(result?.rows[0].reason,'not-found');assert.equal(result?.rows[1].confirmed,true);assert.equal(mock.searches,1);assert.equal(mock.downloads,1);
  }
 });
 
@@ -52,6 +52,6 @@ test('terminal byte-validation failure continues only after settlement of the ex
  for(const unavailable of [false,true]){
   addCurrent=async()=>true;const mock=noMatchingClient({error:'file-invalid',...(unavailable?{available:false}:{})});let looked=0,result:AlbumProgress|undefined;
   await acquireAlbum({detail,attempt:attempt(async()=>++looked===2?'verified-second':null),client:mock.client,provider:'provider',revision:1,management:()=>manager(async()=>true),signal:new AbortController().signal,current:()=>true,rows:initial(),update:v=>{result=v;}});
-  assert.equal(looked,unavailable?1:2);assert.equal(result?.rows[0].state,unavailable?'uncertain':'failed');assert.equal(result?.rows[1].confirmed,!unavailable);assert.equal(mock.searches,1);assert.equal(mock.downloads,1);
+  assert.equal(looked,2);assert.notEqual(result?.rows[0].reason,'not-found');assert.equal(result?.rows[0].state,'failed');assert.equal(result?.rows[1].confirmed,true);assert.equal(mock.searches,1);assert.equal(mock.downloads,1);
  }
 });

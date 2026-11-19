@@ -85,8 +85,7 @@ export function LibraryDownloadController(props:{target?:HTMLElement|null;allowD
   if(phase==='blocked'){setNotice('El control de la pestaña o el acceso a Almacenamiento todavía impide continuar. El progreso se conserva.');return;}
   if(!p.client||phase!=='connected'){setNotice('Conecta Telegram y configura un bot para descargar en este dispositivo.');return;}
   if(!p.bots||!providers.length){setNotice('Telegram está conectado. Configura un bot de música compatible.');return;}
-  const autoRepair=!request.play&&!request.repair;
-  const attempt=(request.play?p.capturePlay:p.captureBatch??p.capture)?.(autoRepair&&!!restore);
+  const attempt=(request.play?p.capturePlay:p.captureBatch??p.capture)?.(!!restore);
   if(!attempt?.current()){setNotice('Biblioteca está ocupada. Revisa Almacenamiento si hay una copia pendiente y vuelve a continuar.');return;}
   const index=new Map(p.tracks.map(t=>[t.id,t]));
   const tracks=request.trackIds.map(id=>index.get(id)).filter((t):t is Track=>!!t);
@@ -135,13 +134,13 @@ export function LibraryDownloadController(props:{target?:HTMLElement|null;allowD
   albumCoordinator.notice=ownedNotice.current;
   notifyAlbumDownload(albumCoordinator);
   const current=()=>flight.current===abort&&latest.current.accountId===account&&attempt.current();
-  let readyId:string|null=null,finished=false;
+  let readyId:string|null=null,finished=false,preserveHeld=false;
   void downloadLibrarySelection({tracks,attempt,client:p.client,providers,revision:p.bots.revision,signal:abort.signal,current,
-   autoRepair,checkpoint,saveCheckpoint:account&&checkpoint?next=>{
+   checkpoint,saveCheckpoint:account&&checkpoint?next=>{
     if(!current())throw Error('Library download changed');
     if(request.repair||request.play){
      if(next.pending)writeHeldLibraryDownload(account,tracks[0].id,next.pending);
-     else clearHeldLibraryDownload(account,tracks[0].id);
+     else if(!preserveHeld)clearHeldLibraryDownload(account,tracks[0].id);
     }else{
      if(readLibraryDownloadCheckpoint(account)?.id!==next.id)throw Error('Library download changed');
      writeLibraryDownloadCheckpoint(account,next);
@@ -156,7 +155,7 @@ export function LibraryDownloadController(props:{target?:HTMLElement|null;allowD
      if(marker.kind==='network')return;
      throw Error('An earlier receipt is still pending');
     }
-    writeHeldLibraryDownload(account,id,marker);
+    writeHeldLibraryDownload(account,id,marker);preserveHeld=true;
    }:undefined,
    clearHeldDownload:account&&checkpoint?(id,expected)=>{
     if(current()&&sameHeldDownload(readHeldLibraryDownload(account,id),expected))clearHeldLibraryDownload(account,id);
@@ -164,7 +163,7 @@ export function LibraryDownloadController(props:{target?:HTMLElement|null;allowD
    update:(rows,message)=>{
     if(flight.current!==abort||latest.current.accountId!==account)return;
     readyId=rows.length===1&&rows[0].confirmed?rows[0].trackId:null;
-    ownedNotice.current={title:request.title,titles:tracks.map(t=>t.title),progress:{rows,message},...(!autoRepair?{reviewTrack:(index:number)=>{
+    ownedNotice.current={title:request.title,titles:tracks.map(t=>t.title),progress:{rows,message},...(rows.some(row=>row.reason==='parked')?{reviewTrack:(index:number)=>{
      const track=tracks[index];
      if(track&&latest.current.accountId===account)void reviewRef.current(track.id,track.title);
     }}:{})};

@@ -197,6 +197,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      const ack=botSearchAck(await rpc(ms=>dependency.sendQuery(approved.peer,query!,randomId,abort.signal,ms)),approved.botId,randomId);
      if(!ack||ack<=baseline)throw fail('uncertain');f.delivery='acknowledged';check();
      let lastCandidates:ReturnType<typeof projectBotSearchPage>|null=null,sawBotReply=false;
+     let rejectedFile:ReturnType<typeof projectBotSearchPage>['rejectedFile'];
      const searchResult=(page:ReturnType<typeof projectBotSearchPage>):BotSearchReply=>{
       retained=page.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={providerRef:c.providerRef,queryId:c.queryId,revision:c.providerRevision,baseline,outgoing:ack,target:c.target??null};check();
       return Object.freeze({...e,type:'bot-search.result',delivery:'acknowledged',rows:page.rows,expiresAt:retainedUntil,expectedTarget:c.target??null});
@@ -208,10 +209,16 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        lastCandidates=page;
        if(page.rows.some(row=>row.kind==='option')||!c.target?.artist||matchingSongRows(page.rows,c.target).length)return searchResult(page);
       }
+      // Only a closed, explicit reply can establish an empty result; generic
+      // text, history silence and unsupported menus remain inconclusive.
+      rejectedFile??=page.rejectedFile;
+      if(!lastCandidates&&!rejectedFile&&page.rows.some(row=>row.kind==='message'&&row.correlation==='reply'&&
+       /^(?:no (?:se )?encontraron resultados|no results found)[.!]?$/iu.test(row.text)))return searchResult(page);
       sawBotReply ||= page.unrecognized||page.rows.length>0;
       if(reads+1===B.reads||deadline-time.now()<=B.pollMs)break;
       await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},Math.min(B.pollMs,Math.max(0,deadline-time.now())));});check();
      }
+     if(rejectedFile)throw fail(rejectedFile);
      if(lastCandidates)return searchResult(lastCandidates);
      throw fail(sawBotReply?'unsupported':'timeout');
     }catch(error){

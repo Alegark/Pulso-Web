@@ -46,6 +46,7 @@ import {importOperations,importIssues,retainImportIssue,terminal,type ImportOper
 import {inspectLibraryTrackDownload,prepareBatchCopyReplacement,reconcileLibraryDownload,repairBatchLibraryDownload} from './library/library-download-recovery';
 import {readRecord,writeRecord,openExistingDatabase,admittedTransaction,request,closeDatabase,subscribeDatabaseLifecycle,registerDatabaseOpenGuard,registerDatabaseUseGuard,retireDatabaseRealm,type DatabaseLifecycleState} from './storage/database';
 import {transactionDone} from './storage/transaction-done';
+import {canParkImport} from './storage/import-operations';
 import {registerDatabaseRealmHost,beginWorkerAttempt,revokeDatabaseWorkerAttempts,activeDatabaseWorkerAttempts,type RealmAttempt} from './storage/database-realms';
 import {attachDatabaseTransportLifecycle,revalidateDatabaseTransport} from './playback/database-transport';
 import {prepareLocalSources,startLocalSourcePreparation,transportNotice} from './playback/transport';
@@ -220,12 +221,12 @@ const recover=(...args:Parameters<typeof recoverWork>)=>admitted('recover-import
 const retainProblem=(...args:Parameters<typeof retainProblemWork>)=>admitted('recover-import',retainProblemWork,...args);
 const act=(...args:Parameters<typeof actWork>)=>admitted('edit-organization',actWork,...args);
 const queue=(...args:Parameters<typeof queueWork>)=>replaceQueue(...args);
-const importRecoveryPending=()=>unverifiedImportResponses.size>0||operations.some(job=>!terminal(job))||importProblems.some(issue=>!issue.retained);
+const importRecoveryPending=(parked?:ReadonlySet<string>)=>[...unverifiedImportResponses].some(id=>!parked?.has(id))||operations.some(job=>!terminal(job)&&!parked?.has(job.operationId))||importProblems.some(issue=>!issue.retained);
 let botImportActive:object|null=null;
-const importsBlocked=()=>!!botImportActive||databaseState!=='ready'||importRecoveryPending()||metadataRescanBlocked||sourceReview.hasReservation();
+const importsBlocked=(parked?:ReadonlySet<string>)=>!!botImportActive||databaseState!=='ready'||importRecoveryPending(parked)||metadataRescanBlocked||sourceReview.hasReservation();
 let collectionGate:string|null=null;
 const collectionBlocked=()=>collectionGate===removalScopeKey();
-const copyRemovalBlocked=()=>importsBlocked()||copyRemovalPending||collectionBlocked();
+const copyRemovalBlocked=(parked?:ReadonlySet<string>)=>importsBlocked(parked)||copyRemovalPending||collectionBlocked();
 let copyRemovalPending=true;
 let copyRemovalStartup:{key:string;snapshot:CopyRemovalStartup}|null=null;
 let removalRecoveryEpoch=0;
@@ -344,9 +345,10 @@ type DomainTerminal=Exclude<WorkerResponse,{type:'progress'}>;
 interface DomainSettlement {response:DomainTerminal|null;outcome:OutcomeV1}
 /** Keep the exact request receiver until a terminal receipt or observed transport
  * failure, even if lifecycle already invalidated business publication. */
-async function invokeDomainWorker(kind:'recovery'|'import',exactWorker:Worker,request:RecoveryRequest|ImportRequest,current:()=>boolean,onProgress?:(bytes:number)=>void,signal?:AbortSignal):Promise<DomainSettlement>{
+async function invokeDomainWorker(kind:'recovery'|'import',exactWorker:Worker,request:RecoveryRequest|ImportRequest,current:()=>boolean,onProgress?:(bytes:number)=>void,signal?:AbortSignal,ackTimeoutMs?:number):Promise<DomainSettlement>{
  let bridge:RealmAttempt|null=null,sendAttempted=false;
  let detachTransport:()=>void=()=>{};
+ let ackTimer:ReturnType<typeof setTimeout>|undefined;
  const cancel=()=>{if(request.type==='import')try{exactWorker.postMessage({version:2,type:'cancel',operationId:request.operationId});}catch{/* Original terminal receiver remains owned. */}};
  if(request.type==='cancel')throw Error('unsupported');
  const id=request.operationId;
@@ -375,25 +377,30 @@ async function invokeDomainWorker(kind:'recovery'|'import',exactWorker:Worker,re
    if(!bridge!.current()){
     finish({response:null,outcome:makeOutcome({status:'failed',primary:makeFailure('admit','storage-unavailable','storage-unavailable','idb'),cleanup:null,reconcile:null,writeState:'not-started',closeState:'not-applicable',recoveryRequired:false})});return;
    }
+   if(ackTimeoutMs!==undefined)ackTimer=setTimeout(()=>{cancel();failed('worker-failed');},ackTimeoutMs);
    try{if(signal?.aborted){finish({response:null,outcome:workerFailureOutcome('worker-failed',false)});return;}sendAttempted=true;exactWorker.postMessage(request);signal?.addEventListener('abort',cancel,{once:true});if(signal?.aborted)cancel();}catch{failed('worker-failed');}
   });
  }catch(error){
   const failure=fromKnownError(error,{phase:null,backend:'unknown'});
   return settle({response:null,outcome:makeOutcome({status:sendAttempted?'uncertain':'failed',primary:failure.code==='unknown'?makeFailure(null,'internal','worker-failed','unknown'):failure,cleanup:null,reconcile:null,writeState:sendAttempted?'unknown':'not-started',closeState:sendAttempted?'unknown':'not-applicable',recoveryRequired:sendAttempted})});
  }finally{
+  clearTimeout(ackTimer);
   exactWorker.onmessage=null;exactWorker.onerror=null;exactWorker.onmessageerror=null;
   signal?.removeEventListener('abort',cancel);detachTransport();
   if(bridge)bridge.closeAfterSettlement();else exactWorker.terminate();
  }
 }
 /** A user-chosen Telegram file is an explicit personal LOCAL copy, not an auth side effect. */
-const songAdmissionIdle=()=>control.activity.resolved&&control.activity.count===queueSaveTokens;
-function captureBotAudioImport(libraryMode?:'cache'){
+const songStorageResolved=(parked?:ReadonlySet<string>)=>control.activity.resolved||
+ !!parked?.size&&control.activity.resolvedExcept('import-transport')&&[...unverifiedImportResponses].every(id=>parked.has(id));
+const songAdmissionIdle=(parked?:ReadonlySet<string>)=>songStorageResolved(parked)&&control.activity.count===queueSaveTokens;
+const parkedImportAdmissions=new WeakMap<()=>boolean,ReadonlySet<string>>();
+function captureBotAudioImport(libraryMode?:'cache',parked?:ReadonlySet<string>){
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();let used=false;
- const allowed=()=>admitted()&&raw()&&review()&&!busy&&!importRecoveryPending()&&!metadataRescanBlocked&&!copyRemovalPending&&!sourceReview.hasReservation()&&!queueForeignBlocked();
- if(!allowed()||botImportActive||!songAdmissionIdle())return null;
- return async(audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId:string=crypto.randomUUID()):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean}>=>{
-  if(used||!allowed()||botImportActive||!songAdmissionIdle()||signal.aborted)return {state:'failed',trackId:null};used=true;
+ const allowed=()=>admitted()&&raw()&&review()&&!busy&&!importRecoveryPending(parked)&&!metadataRescanBlocked&&!copyRemovalPending&&!sourceReview.hasReservation()&&!queueForeignBlocked();
+ if(!allowed()||botImportActive||!songAdmissionIdle(parked))return null;
+ return async(audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId:string=crypto.randomUUID()):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean;storageUnavailable?:boolean}>=>{
+  if(used||!allowed()||botImportActive||!songAdmissionIdle(parked)||signal.aborted)return {state:'failed',trackId:null};used=true;
   const operation=control.activity.begin();if(!operation)return {state:'failed',trackId:null};const own={};botImportActive=own;emit();
   const current=()=>admitted()&&raw()&&review()&&operation.current()&&botImportActive===own&&!sourceReview.hasReservation()&&!queueForeignBlocked();
   let outcome:OutcomeV1|undefined,confirmed=false;const diagnostic=beginDiagnostic('import-audio');
@@ -401,9 +408,10 @@ function captureBotAudioImport(libraryMode?:'cache'){
    if(!current()||signal.aborted)return {state:'failed',trackId:null};
    const suffix=audio.mime==='audio/mpeg'?'.mp3':audio.mime==='audio/mp4'?'.m4a':'.wav';
    const file=new File([audio.blob],audio.target.title.replace(/[\/\\]/g,' ').slice(0,160)+suffix,{type:audio.mime});
-   const request:ImportRequest={version:2,type:'import',operationId,file,expected:{sha256:audio.sha256,title:audio.target.title,artist:audio.target.artist,...(audio.target.album&&audio.target.durationSeconds!==null&&audio.target.durationSeconds>0?{recordingTitle:audio.recordingTitle??audio.target.title,album:audio.target.album,durationSeconds:audio.target.durationSeconds}:{})},...(libraryMode?{libraryMode}:{})};
+   if(parked?.size)parkedImportAdmissions.set(current,parked);
+   const request:ImportRequest={version:2,type:'import',operationId,file,expected:{sha256:audio.sha256,title:audio.target.title,artist:audio.target.artist,...(audio.target.album&&audio.target.durationSeconds!==null&&audio.target.durationSeconds>0?{recordingTitle:audio.recordingTitle??audio.target.title,album:audio.target.album,durationSeconds:audio.target.durationSeconds}:{})},...(libraryMode?{libraryMode}:{}),...(parked?.size?{parkedOperationIds:[...parked]}:{})};
    const worker=new Worker(new URL('./imports/import.worker.ts',import.meta.url),{type:'module'});
-   const settled=await invokeDomainWorker('import',worker,request,current,bytes=>{if(current()&&!signal.aborted)onProgress(bytes);},signal);outcome=settled.outcome;
+   const settled=await invokeDomainWorker('import',worker,request,current,bytes=>{if(current()&&!signal.aborted)onProgress(bytes);},signal,120_000);outcome=settled.outcome;
    confirmed=settled.response?.type==='complete'&&outcome.status==='confirmed'&&outcome.writeState==='published';outcomeDiagnostic(diagnostic,outcome);
    if(!current())return {state:confirmed||outcome.recoveryRequired?'uncertain':'failed',trackId:null};
    if(confirmed)verifiedResponse(operationId);else if(outcome.recoveryRequired)unverifiedResponse(operationId);
@@ -412,7 +420,8 @@ function captureBotAudioImport(libraryMode?:'cache'){
    status=confirmed?(libraryMode==='cache'?'':'Canción descargada, verificada y guardada en este navegador.'):outcome.recoveryRequired?'La copia requiere revisión antes de volver a descargar.':'No se pudo guardar la canción.';emit();
    return {state:confirmed?'saved':outcome.recoveryRequired?'uncertain':'failed',
     trackId:confirmed&&settled.response?.type==='complete'?settled.response.result.track.id:null,
-    ...(!confirmed&&!outcome.recoveryRequired&&['transaction-aborted','storage-unavailable'].includes(outcome.primary?.code??'')?{retryWrite:true}:{})};
+    ...(!confirmed&&['transaction-aborted','storage-unavailable'].includes(outcome.primary?.code??'')?{retryWrite:true}:{}),
+    ...(!confirmed&&['quota-exceeded','storage-denied','database-blocked'].includes(outcome.primary?.code??'')?{storageUnavailable:true}:{})};
   }catch{return {state:confirmed||outcome?.recoveryRequired?'uncertain':'failed',trackId:null};}
   finally{diagnostics.finish(diagnostic);if(botImportActive===own)botImportActive=null;operation.end();emit();}
  };
@@ -431,50 +440,64 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
   !recoverPending&&(copyRemovalBlocked()||!songAdmissionIdle()))return null;
  const intent=purpose==='playback'?++selectedSongIntent:selectedSongIntent;let queueing=false,playUsed=false,rememberedId:string|null=null,primaryArtist:string|null=null;
  const current=()=>(purpose!=='playback'||intent===selectedSongIntent)&&raw()&&review()&&(purpose==='batch'||queueing||admitted());
- const waitForDownload=(signal:AbortSignal)=>waitForSongAdmission({signal,
-  current:()=>current()&&!importRecoveryPending()&&!unverifiedImportResponses.size,
-  ready:()=>!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&songAdmissionIdle(),
+ const parked=new Set<string>();
+ const waitForDownload=(signal:AbortSignal)=>waitForSongAdmission({signal,timeoutMs:15_000,
+  current:()=>current()&&!importRecoveryPending(parked),
+  ready:()=>!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked()&&songAdmissionIdle(parked),
   subscribe:changed=>{listeners.add(changed);return()=>{listeners.delete(changed);};},
  });
- return Object.freeze({current,
-  ...(purpose==='batch'?{waitForDownload,async inspectDownload(trackId:string,signal:AbortSignal){
+ const reconcile=async(operationId:string,trackId:string|undefined,signal:AbortSignal,repair:boolean,choice?:SongChoice)=>{
+  const accountId=accountController.getSnapshot().user?.id;
+  const uncertain={state:'uncertain' as const,trackId:null};
+  if(!accountId)return uncertain;
+  const token=control.activity.begin();
+  if(!token)return uncertain;
+  const live=()=>current()&&token.current()&&!signal.aborted&&!busy&&!copyRemovalPending&&!collectionBlocked()&&!queueForeignBlocked();
+  try{
+   const receipt=await (repair?repairBatchLibraryDownload:reconcileLibraryDownload)(accountId,operationId,trackId,signal,live);
+   if(live()&&receipt.state!=='uncertain'){
+    if(choice&&receipt.state==='saved'&&receipt.trackId){
+     const track=await readRecord<Track>('tracks',receipt.trackId);
+     if(!live()||!track||!validAudioFingerprint(track.audioFingerprint))return uncertain;
+     await rememberSongAlias(choice,track.id,track.audioFingerprint.sha256,track.audioFingerprint.bytes,live);
+    }
+    if(repair)verifiedResponse(operationId);
+    if(repair||receipt.state==='saved')await refresh(false,false,null);
+   }
+   return receipt;
+  }finally{token.end();}
+ };
+ return Object.freeze({current,waitForDownload,
+  async inspectDownload(trackId:string,signal:AbortSignal){
    const account=accountController.getSnapshot().user?.id;
    if(!account)return null;
    const result=await inspectLibraryTrackDownload(account,trackId,undefined,signal,current);
    return result.state==='saved'?trackId:null;
-  },async reconcileDownload(operationId:string,trackId:string,signal:AbortSignal,repair=false){
+  },
+  reconcileDownload:(operationId:string,trackId:string,signal:AbortSignal,repair=false)=>reconcile(operationId,trackId,signal,repair),
+  reconcileSongDownload:(operationId:string,choice:SongChoice,signal:AbortSignal)=>reconcile(operationId,undefined,signal,true,choice),
+  async parkDownload(operationId:string,signal:AbortSignal){
    const accountId=accountController.getSnapshot().user?.id;
-   if(!accountId)return {state:'uncertain' as const,trackId:null};
-   const token=control.activity.begin();
-   if(!token)return {state:'uncertain' as const,trackId:null};
-   const live=()=>current()&&token.current()&&!signal.aborted&&!busy&&!copyRemovalPending&&!collectionBlocked()&&!queueForeignBlocked();
-   try{
-    const receipt=await (repair?repairBatchLibraryDownload:reconcileLibraryDownload)(accountId,operationId,trackId,signal,live);
-    if(live()&&receipt.state!=='uncertain'){
-     if(repair)verifiedResponse(operationId);
-     if(repair||receipt.state==='saved')await refresh(false,false,null);
-    }
-    return receipt;
-   }finally{token.end();}
-  }}:{}),
+   if(accountId&&parked.size<5000&&await canParkImport(operationId,accountId,signal,current))parked.add(operationId);
+  },
   async addToLibrary(trackId:string,caller:()=>boolean,signal:AbortSignal){
-   const live=()=>{try{return current()&&caller()===true&&!signal.aborted&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&!botImportActive&&control.activity.resolved;}catch{return false;}};
-   const admitted=await waitForSongAdmission({current:live,ready:songAdmissionIdle,signal,subscribe:changed=>{listeners.add(changed);return()=>{listeners.delete(changed);};}});
+   const live=()=>{try{return current()&&caller()===true&&!signal.aborted&&!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked()&&!botImportActive&&songStorageResolved(parked);}catch{return false;}};
+   const admitted=await waitForSongAdmission({current:live,ready:()=>songAdmissionIdle(parked),signal,subscribe:changed=>{listeners.add(changed);return()=>{listeners.delete(changed);};}});
    if(!admitted||!live())return false;
-   const management=captureSongManagement(trackId);
+   const management=captureSongManagement(trackId,parked);
    return management?.current()?management.add(live):false;
   },
   async lookup(choice:SongChoice,signal:AbortSignal,repair=false){
    const live=()=>current()&&!signal.aborted;
    primaryArtist=((choice.source==='itunes'||choice.source==='musicbrainz')?choice.searchArtist:choice.source==='lrclib'?choice.artist:null)?.trim()||null;
-   if(!live()||!songAdmissionIdle())throw Error('La biblioteca está ocupada.');const token=control.activity.begin();if(!token)throw Error('Sin control.');
+   if(!live()||!songAdmissionIdle(parked))throw Error('La biblioteca está ocupada.');const token=control.activity.begin();if(!token)throw Error('Sin control.');
    try{
     const id=await readSongAlias(choice,()=>live()&&token.current());if(!live())throw Error('cancelled');rememberedId=id;
     if(!id)return null;const track=await readRecord<Track>('tracks',id);if(!live())throw Error('cancelled');
     if(track&&track.id!==id)throw Error('La identidad de la ficha local ha cambiado.');
     if(!track||track.assetId===null)return null;
     const checked=await verifiedAssetDetailed(track.assetId,true);if(!live())throw Error('cancelled');
-    if(repair&&purpose==='batch'&&(checked.state==='missing'||checked.state==='corrupt')){
+    if(repair&&(checked.state==='missing'||checked.state==='corrupt')){
      const accountId=accountController.getSnapshot().user?.id;
      if(accountId&&await prepareBatchCopyReplacement(track,accountId,signal,()=>live()&&token.current()))return null;
      throw Error('No se pudo preparar la sustitución de esta copia de Biblioteca.');
@@ -487,7 +510,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
   },
   async save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(n:number)=>void,operationId?:string){
    if(!current()||signal.aborted)return {state:'failed' as const,trackId:null};
-   const save=captureBotAudioImport('cache');if(!save)return {state:'failed' as const,trackId:null};
+   const save=captureBotAudioImport('cache',parked);if(!save)return {state:'failed' as const,trackId:null};
    const result=await save(audio,signal,onProgress,operationId);if(result.state!=='saved'||!result.trackId)return result;
    // A matching restored fingerprint keeps the old Track and all its organization.
    const original=rememberedId?await readRecord<Track>('tracks',rememberedId):null;
@@ -535,15 +558,15 @@ function captureSongCopyInspection():SongCopyInspection|null {
   finally{token.end();}
  }});
 }
-function captureSongManagement(trackId:string):SongManagement|null {
+function captureSongManagement(trackId:string,parked?:ReadonlySet<string>):SongManagement|null {
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();
  const capturedLists=new Map(playlists.map(list=>[list.id,list.revision]));let used=false;
- const current=()=>admitted()&&raw()&&review()&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&songAdmissionIdle()&&tracks.some(t=>t.id===trackId);
+ const current=()=>admitted()&&raw()&&review()&&!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked()&&songAdmissionIdle(parked)&&tracks.some(t=>t.id===trackId);
  if(!current())return null;
  const run=async(work:(live:()=>boolean)=>Promise<unknown>,callerCurrent:()=>boolean=()=>true)=>{
   const callerLive=()=>{try{return callerCurrent()===true;}catch{return false;}};
   if(used||!current()||!callerLive())return false;used=true;const token=control.activity.begin();if(!token)return false;
-  const live=()=>admitted()&&raw()&&review()&&token.current()&&callerLive()&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked();
+  const live=()=>admitted()&&raw()&&review()&&token.current()&&callerLive()&&!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked();
   try{if(!live())return false;await work(live);await refresh(false,false,null);return live();}
   catch{return false;}finally{token.end();emit();}
  };
@@ -901,7 +924,7 @@ function applyDatabaseLifecycle(state:DatabaseLifecycleState){
 subscribeDatabaseLifecycle(applyDatabaseLifecycle);
 registerDatabaseRealmHost({
  capture(kind,callerCurrent){
-  if(!control.owner||databaseState!=='ready'||!callerCurrent()||((kind==='import'||kind==='batch')&&(importRecoveryPending()||metadataRescanBlocked||copyRemovalPending)))return null;
+  if(!control.owner||databaseState!=='ready'||!callerCurrent()||((kind==='import'||kind==='batch')&&(importRecoveryPending(parkedImportAdmissions.get(callerCurrent))||metadataRescanBlocked||copyRemovalPending)))return null;
   const resource=control.activity.begin();if(!resource)return null;
   const scope=scopeId,proof=control.proof;
   return {current:()=>scope===scopeId&&proof===control.proof&&control.owner&&databaseState==='ready'&&resource.current()&&callerCurrent(),onLifecycle:applyDatabaseLifecycle,end:()=>resource.end()};
