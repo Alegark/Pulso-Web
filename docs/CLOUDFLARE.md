@@ -72,7 +72,7 @@ Para iniciar la retención desde un manifiesto sin procedencia por asset, usar c
 
 El primer freeze con retención partió de `.local/test-evidence/download-notices-delivery/site-manifest.json`, SHA-256 `f23b03d6a428cc2fa807828bec4176918884fdf7b840053367d824c8f35102b9`, con entrada `/releases/bed8f65288828366.html` y fecha MCP `2026-11-19T01:01:19.783Z`. La simulación y el freeze conservaron todos los inmutables heredados, con cero retiradas. [Recibo de publicación](evidence-hardening-web.json).
 
-**Toda publicación posterior de Pulso, incluidas las de otros hilos, debe usar el preparador con retención y partir del manifiesto autoritativo más reciente.** Para la versión pública 49 está en `.local/test-evidence/playlist-auto-retry-delivery/site-manifest.json`, SHA-256 `4a3cb263d335b78145ecf4b85cc7c3d2d0ccc5e33fd1f640e743572cd4146de7`. Ya registra la procedencia y el conjunto heredado, así que el siguiente freeze omite los parámetros `--legacy-*`. Tras verificar cada publicación, promover su manifiesto y registrar la nueva ubicación y SHA-256.
+**Toda publicación posterior de Pulso, incluidas las de otros hilos, debe usar el preparador con retención y partir del manifiesto autoritativo más reciente.** Para la versión pública 50 está en `.local/test-evidence/playlist-recovery-ui-delivery/site-manifest.json`, SHA-256 `6cf7bc976292b974d3f759facf76a559c507b0468cf21eb7c77bbba18d8bf1db`. Ya registra la procedencia y el conjunto heredado, así que el siguiente freeze omite los parámetros `--legacy-*`. Tras verificar cada publicación, promover su manifiesto y registrar la nueva ubicación y SHA-256.
 
 ### Cambios en build-candidate, freeze y deploy
 
