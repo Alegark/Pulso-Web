@@ -56,8 +56,8 @@ export function validateAccountLibrary(value){
  const playlists=value.playlists.map(p=>{
   if(!object(p,['id','name','entries'])||!libraryUuid(p.id)||listIds.has(p.id)||!text(p.name,100,true)||!Array.isArray(p.entries))throw new LibraryDocumentError('library-playlist');
   if((entries+=p.entries.length)>LIBRARY_LIMITS.entries)throw tooLarge();
-  listIds.add(p.id);const seen=new Set(),seenTracks=new Set();
-  return {id:p.id,name:p.name,entries:p.entries.map(e=>{if(!object(e,['id','trackId'])||!libraryUuid(e.id)||seen.has(e.id)||!ids.has(e.trackId)||seenTracks.has(e.trackId))throw new LibraryDocumentError('library-entry');seen.add(e.id);seenTracks.add(e.trackId);return {id:e.id,trackId:e.trackId};})};
+  listIds.add(p.id);const seen=new Set();
+  return {id:p.id,name:p.name,entries:p.entries.map(e=>{if(!object(e,['id','trackId'])||!libraryUuid(e.id)||seen.has(e.id)||!ids.has(e.trackId))throw new LibraryDocumentError('library-entry');seen.add(e.id);return {id:e.id,trackId:e.trackId};})};
  });
  const result={version:1,tracks,playlists};if(jsonbTextBytes(result)>LIBRARY_LIMITS.bytes)throw tooLarge();return result;
 }
@@ -79,7 +79,7 @@ export function mergeAccountLibraries(base,local,remote){
   const next=mergeFields(b,l,r,['name']);const before=b?.entries??[];
   const merged=mergeRows(before,l.entries,r.entries,(_b,left)=>left);
   const order=equal(l.entries,before)?r.entries:l.entries;const ranks=new Map(order.map((e,i)=>[e.id,i]));merged.sort((a,b)=>(ranks.get(a.id)??1e9)-(ranks.get(b.id)??1e9));
-  const unique=new Set();next.entries=merged.filter(e=>!unique.has(e.trackId)&&unique.add(e.trackId));return next;
+  next.entries=merged;return next;
  });
  const known=new Set(tracks.map(t=>t.id));for(const p of playlists)p.entries=p.entries.filter(e=>known.has(e.trackId));
  return validateAccountLibrary({version:1,tracks,playlists});

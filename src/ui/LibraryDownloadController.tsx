@@ -227,8 +227,7 @@ export function LibraryDownloadController(props:{collection?:CollectionDownloadA
    complete={!pending&&collection.complete} onStart={()=>{
     const {trackIds,title}=collection.request;
     if(!pending){requestLibraryDownload(trackIds,title);return;}
-    const uniqueIds=[...new Set(trackIds)];
-    const sameSelection=pending.trackIds.length===uniqueIds.length&&pending.trackIds.every((id,index)=>id===uniqueIds[index]);
+    const sameSelection=pending.trackIds.length===trackIds.length&&pending.trackIds.every((id,index)=>id===trackIds[index]);
     start({id:pending.id,trackIds:pending.trackIds,title:sameSelection?title:'Selección de Biblioteca',play:false},pending);
    }}/>,collection.target)}
   {props.storageTarget&&pending&&!download.running&&createPortal(<button type="button" onClick={()=>{

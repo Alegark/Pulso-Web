@@ -12,7 +12,7 @@ const repairListeners=new Set<(trackId:string,title:string)=>void>();
 export function requestLibraryTrackReview(trackId:string,title:string){for(const listener of repairListeners)listener(trackId,title);}
 export function subscribeLibraryTrackReviews(listener:(trackId:string,title:string)=>void){repairListeners.add(listener);return()=>{repairListeners.delete(listener);};}
 const listeners=new Set<(request:LibraryDownloadRequest)=>void>();
-export function requestLibraryDownload(trackIds:readonly string[],title:string,play=false){if(trackIds.length>5000||!trackIds.length)return;const request={id:crypto.randomUUID(),trackIds:[...new Set(trackIds)],title,play:play&&trackIds.length===1};for(const fn of listeners)fn(request);}
+export function requestLibraryDownload(trackIds:readonly string[],title:string,play=false){if(trackIds.length>5000||!trackIds.length)return;const request={id:crypto.randomUUID(),trackIds:[...trackIds],title,play:play&&trackIds.length===1};for(const fn of listeners)fn(request);}
 export function subscribeLibraryDownloads(fn:(request:LibraryDownloadRequest)=>void){listeners.add(fn);return()=>{listeners.delete(fn);};}
 export async function downloadLibrarySelection(p:{
  tracks:readonly Track[];attempt:SongPlaybackAttempt;client:TelegramSessionClient;providers:readonly OrderedProvider[];
@@ -27,6 +27,7 @@ export async function downloadLibrarySelection(p:{
  const stop=(message='Descarga detenida. Las copias confirmadas se conservan.')=>{update(message);return 'stopped' as const;};
  let checkpoint=p.checkpoint;
  const start=checkpoint?.cursor??0,resuming=checkpoint?.pending;
+ const completed=new Map<string,AlbumRow>();
  const mark=(cursor:number,pending:PendingDownload|null)=>{
   if(!checkpoint)return;
   checkpoint={...checkpoint,cursor,pending};p.saveCheckpoint?.(checkpoint);
@@ -34,7 +35,17 @@ export async function downloadLibrarySelection(p:{
  try{
   for(let i=0;i<p.tracks.length;i++){
    if(!live())return stop();
-   const track=p.tracks[i],row=rows[i],choice:SongChoice={source:'local',id:'local:'+track.id,
+   const track=p.tracks[i],row=rows[i],earlier=completed.get(track.id);
+   // A pending receipt on resume still has to settle even if another entry
+   // for the same track appears before the cursor.
+   if(earlier&&!(i===start&&resuming)){
+    Object.assign(row,earlier);
+    if(earlier.confirmed)Object.assign(row,{state:'reused',message:'Ya descargada'});
+    if(i>=start)mark(i+1,null);
+    update(row.message);
+    continue;
+   }
+   const choice:SongChoice={source:'local',id:'local:'+track.id,
     title:track.manualOverrides.title??track.catalogChoice?.title??track.title,
     artist:'artist' in track.manualOverrides?track.manualOverrides.artist??null:track.catalogChoice?.artist??track.artist,
     album:'album' in track.manualOverrides?track.manualOverrides.album??null:track.catalogChoice?.album??track.album,
@@ -89,6 +100,7 @@ export async function downloadLibrarySelection(p:{
     }
     mark(i+1,null);
    }
+   if(row.confirmed||i>=start)completed.set(track.id,row);
    update(row.message);
   }
   if(!live())return stop();

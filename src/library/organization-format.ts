@@ -181,12 +181,11 @@ export function validateOrganization(input: unknown): OrganizationExport {
     const name = text(p.name, ORGANIZATION_LIMITS.playlistCharacters, true, `${path}.name`);
     const rawEntries = array(p.entries, ORGANIZATION_LIMITS.entries - totalEntries, `${path}.entries`);
     totalEntries += rawEntries.length;
-    const entryIds = new Set<string>(), entryTracks = new Set<string>();
+    const entryIds = new Set<string>();
     const entries = rawEntries.map((value, j) => {
       const ep = `${path}.entries[${j}]`, e = object(value, ['id', 'track'], [], ep);
       const id = uuid(e.id, `${ep}.id`), track = existing(e.track, `${ep}.track`);
       unique(entryIds, id, `${ep}.id`);
-      unique(entryTracks, key(track), `${ep}.track`);
       return { id, track };
     });
     return { ref: playlistRef, name, entries };

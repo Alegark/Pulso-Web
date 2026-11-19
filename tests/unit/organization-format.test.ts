@@ -170,11 +170,16 @@ test('all favorites and entries must refer to present tracks with unique scoped 
   bad(d => { d.favorites.push(ref(2)); }, 'relations');
   bad(d => { d.tracks.push(track()); }, 'relations');
   bad(d => { d.playlists.push(structuredClone(d.playlists[0])); }, 'relations');
-  bad(d => { d.playlists[0].entries.push({ id: id(6), track: ref(2) }); }, 'relations');
   bad(d => { d.tracks.push(track(6)); d.playlists[0].entries.push({ id: id(5), track: ref(6) }); }, 'relations');
   const dto = fixture();
   dto.playlists.push({ ref: ref(9), name: 'Otro', entries: [{ id: id(5), track: ref(2) }] });
   assert.doesNotThrow(() => validateOrganization(dto)); // Entry IDs scoped to playlist.
+});
+
+test('organization backup roundtrips distinct playlist occurrences of the same track', () => {
+  const dto = fixture();
+  dto.playlists[0].entries.push({ id: id(6), track: ref(2) });
+  assert.deepEqual(parseOrganization(serializeOrganization(dto)), dto);
 });
 
 test('required fields, primitive types, sparse/executable arrays fail closed', () => {

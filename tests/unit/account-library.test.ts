@@ -52,3 +52,18 @@ test('only an apply that changes local rows refreshes the library view',async()=
   changed=true;await controller.sync();assert.equal(notifications,1);
  }finally{controller.dispose();}
 });
+
+test('account playlist preserves repeated tracks as individually ordered entries',()=>{
+ const other=track(2),base=document();
+ base.playlists=[{id:uuid(9),name:'Lista',entries:[{id:uuid(10),trackId:uuid(1)}]}];
+ const local=structuredClone(base),remote=structuredClone(base);
+ local.playlists[0].entries.push({id:uuid(11),trackId:uuid(1)});
+ remote.tracks.push(other);
+ remote.playlists[0].entries.push({id:uuid(12),trackId:other.id});
+ assert.deepEqual(mergeAccountLibraries(base,local,remote).playlists[0].entries,[
+  ...local.playlists[0].entries,remote.playlists[0].entries[1],
+ ]);
+ const malformed=structuredClone(local);
+ malformed.playlists[0].entries[1].id=uuid(10);
+ assert.throws(()=>validateAccountLibrary(malformed));
+});

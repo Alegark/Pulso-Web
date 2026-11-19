@@ -196,3 +196,27 @@ test('missing receipt after an ambiguous save advances to the alternate within t
  assert.equal(await run.run(),'finished');assert.deepEqual(run.downloads,['row','alternate','row']);
  assert.deepEqual(run.queries,['bot','bot','bot']);assert.ok(run.rows.every(r=>r.confirmed));
 });
+
+test('repeated playlist entries share a lookup and work across a persisted cursor',async()=>{
+ const tracks=[track,{...track,id:crypto.randomUUID()},track],trackIds=tracks.map(t=>t.id);
+ for(const cursor of [0,2]){
+  const checkpoint=copyLibraryDownloadCheckpoint({id:crypto.randomUUID(),trackIds,cursor,pending:null});
+  assert.ok(checkpoint);
+  const looked:string[]=[],inspected:string[]=[];
+  const attempt:SongPlaybackAttempt={
+   current:()=>true,lookup:async choice=>{looked.push(choice.id);return choice.id.slice(6);},
+   inspectDownload:async id=>{inspected.push(id);return id;},
+   save:async()=>{throw Error('unexpected save');},addToLibrary:async()=>false,play:async()=>'failed',
+  };
+  let rows:AlbumRow[]=[],last=checkpoint;
+  assert.equal(await downloadLibrarySelection({tracks,attempt,checkpoint,saveCheckpoint:next=>{last=next;},
+   client:{captureBotsCurrent:()=>()=>true} as never,providers:[],revision:1,signal:new AbortController().signal,
+   current:()=>true,update:value=>{rows=value;},
+  }),'finished');
+  assert.deepEqual(rows.map(row=>row.trackId),trackIds);
+  assert.ok(rows.every(row=>row.confirmed));
+  assert.deepEqual(looked,cursor?[]:trackIds.slice(0,2).map(id=>'local:'+id));
+  assert.deepEqual(inspected,cursor?trackIds.slice(0,2):[]);
+  assert.equal(last.cursor,3);
+ }
+});
