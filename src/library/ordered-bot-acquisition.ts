@@ -91,7 +91,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
    // next captured provider. An acknowledged/uncertain callback still stops.
    if(after.error==='conflict'&&after.delivery==='not-dispatched'){reasons.push('selection-changed');retryAlternate();continue;}
    if(after.error==='file-too-large'&&after.delivery!=='uncertain'){reasons.push('file-too-large');retryAlternate();continue;}
-   if(after.delivery==='acknowledged'&&after.error==='file-invalid'){reasons.push('file-invalid');retryAlternate();continue;}
+   if(after.delivery!=='uncertain'&&after.error==='file-invalid'){reasons.push('file-invalid');retryAlternate();continue;}
    if(after.delivery==='acknowledged'&&after.error===null&&after.rows.some(r=>r.kind==='audio')&&!matchingSongRows(after.rows,target).length){reasons.push('returned-audio-mismatch');for(const row of after.rows)if(row.kind==='audio')for(const field of botAudioMismatchFields(row,target))reasons.push(`audio-${field}-mismatch`);retryAlternate();continue;}
    return {state:'uncertain'};
   }

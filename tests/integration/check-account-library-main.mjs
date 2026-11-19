@@ -38,13 +38,37 @@ try{
   const [a,b]=pages;for(const p of pages){await p.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();await p.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).waitFor();}
   report.cases.push({engine,test:'two actual app instances restore the same account library from metadata',status:'PASS'});
   await a.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).click();await a.getByRole('heading',{name:'Playlist de mi cuenta',exact:true}).waitFor();assert.equal(await a.locator('.library-detail .collection-track-main').count(),2);
-  await a.getByRole('button',{name:'Descargar playlist completa',exact:true}).click();await a.getByText('Conecta Telegram y configura un bot para descargar en este dispositivo.',{exact:true}).waitFor();await a.getByRole('button',{name:'Cerrar aviso',exact:true}).click();
+  await a.getByRole('button',{name:'Descargar playlist completa',exact:true}).click();await a.getByText('Conecta Telegram y configura un bot para descargar en este dispositivo.',{exact:true}).waitFor();assert.equal(await a.locator('.library-detail .library-download-hint').count(),1);assert.equal(await a.locator('.download-bubble').count(),0);
   for(const p of pages){const data=await p.evaluate(async()=>{const db=await new Promise((res,rej)=>{const r=indexedDB.open('pulso-web-local-v1');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(Error('open'));});try{const tx=db.transaction(['tracks','assets'],'readonly');const read=n=>new Promise(res=>{const r=tx.objectStore(n).getAll();r.onsuccess=()=>res(r.result);});const [tracks,assets]=await Promise.all([read('tracks'),read('assets')]);return {tracks:tracks.length,assets:assets.length,allMissing:tracks.every(t=>t.assetId===null),commands:window.__libraryCommands};}finally{db.close();}});assert.equal(data.assets,0);assert.equal(data.tracks,2);assert.equal(data.allMissing,true);assert.deepEqual(data.commands,{search:0,download:0});commands=data.commands;}
   report.cases.push({engine,test:'restoration has zero audio assets or bot commands; explicit download has visible connection guidance',status:'PASS',commands});
   await a.getByRole('button',{name:/Volver a Biblioteca/}).click();await a.getByText('Crear una playlist',{exact:true}).click();await a.getByLabel('Nueva playlist',{exact:true}).fill('Creada en dispositivo A');await a.locator('.create-playlist').getByRole('button',{name:'Crear playlist',exact:true}).click();
   await a.waitForFunction(()=>document.querySelector('.library-grid')?.textContent.includes('Creada en dispositivo A'));await a.getByRole('button',{name:'Configuración',exact:true}).click();await a.getByRole('button',{name:'Sincronizar biblioteca',exact:true}).click();await a.getByText('Biblioteca sincronizada con tu cuenta.',{exact:true}).waitFor();assert.ok(cloud.document.playlists.some(p=>p.name==='Creada en dispositivo A'));
   await b.evaluate(()=>window.dispatchEvent(new Event('focus')));await b.locator('.library-grid button').filter({hasText:'Creada en dispositivo A'}).waitFor();await b.reload();await b.locator('.shell-nav').waitFor();await b.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();await b.locator('.library-grid button').filter({hasText:'Creada en dispositivo A'}).waitFor();
   report.cases.push({engine,test:'playlist created through UI reaches another device and survives reload',status:'PASS'});
+  await a.setViewportSize({width:320,height:568});
+  await a.evaluate(({user,selection})=>localStorage.setItem('pulso:library-download:v1:'+user,JSON.stringify(selection)),
+   {user,selection:{id:id(69),trackIds:[id(11),id(12)],cursor:1,pending:null}});
+  await a.reload();await a.locator('.shell-nav').waitFor();
+  const continueButton=a.getByRole('button',{name:'Continuar descarga de Biblioteca',exact:true});
+  const discardButton=a.getByRole('button',{name:'Descartar selección pendiente',exact:true});
+  assert.equal(await continueButton.count(),0);
+  await a.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();
+  await a.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).click();
+  await a.locator('.library-detail').getByRole('button',{name:'Continuar descarga de Biblioteca',exact:true}).waitFor();
+  assert.equal(await discardButton.count(),0);
+  assert.equal(await a.getByRole('button',{name:'Descargar playlist completa',exact:true}).count(),0);
+  await a.getByRole('button',{name:'Volver a Biblioteca',exact:true}).click();
+  await a.getByRole('button',{name:'Configuración',exact:true}).click();
+  await a.getByRole('button',{name:'Gestionar descargas',exact:true}).click();
+  const storage=a.getByRole('region',{name:'Almacenamiento',exact:true});
+  await storage.getByRole('heading',{name:'Tus descargas',exact:true}).waitFor();
+  await storage.getByRole('button',{name:'Continuar descarga de Biblioteca',exact:true}).waitFor();
+  await discardButton.waitFor();
+  assert.equal(await a.locator('.download-bubble').count(),0);
+  assert.equal(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  assert.deepEqual(await a.evaluate(()=>window.__libraryCommands),{search:0,download:0});
+  report.cases.push({engine,test:'mobile current shell resumes from playlist or Descargas without a floating control',status:'PASS'});
+
  }catch(e){report.cases.push({engine,status:'FAIL',error:String(e.stack||e)});}finally{for(const c of contexts)await c.close();await browser?.close();}}
 }finally{if(server)await new Promise(r=>server.close(r));report.cleanup=await work.cleanup();report.status=report.cases.some(c=>c.status==='FAIL')||report.errors.length||report.external.length?'FAIL':'PASS';await writeFile(resolve(work.evidence,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({report:resolve(work.evidence,'report.json'),...report},null,2));}
 if(report.status!=='PASS')process.exitCode=1;

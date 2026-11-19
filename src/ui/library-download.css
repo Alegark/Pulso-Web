@@ -1,2 +1,11 @@
-.library-download-hint{position:fixed;z-index:95;inset-block-start:max(1rem,env(safe-area-inset-top));inset-inline:1rem;margin-inline:auto;width:min(28rem,calc(100% - 2rem));padding:1rem;border:1px solid var(--border,#3b4a60);border-radius:1rem;background:var(--surface,#1b2535);color:var(--text,#f4f6fc);box-shadow:0 .5rem 2rem #0004;overflow-wrap:anywhere}
-.library-download-hint p{margin:0 0 .5rem}.library-download-hint button{min-height:44px}
+.pulso-app .library-download-context { display:grid;gap:.65rem;min-inline-size:0;overflow-wrap:anywhere; }
+.library-download-context > button { justify-self:start; }
+.library-download-hint,.download-progress { border-block-start:1px solid var(--pulso-border);padding-block:.75rem; }
+.library-download-context p { margin:.3rem 0 .6rem; }
+.library-download-context button,.library-download-context summary { min-block-size:44px; }
+.library-download-context summary { cursor:pointer; }
+.download-progress progress { inline-size:100%;accent-color:var(--pulso-accent); }
+.download-progress ol { margin:.25rem 0;padding-inline-start:1.5rem; }
+.download-progress li { padding-block:.35rem; }
+.download-progress li span { display:block;color:var(--pulso-muted); }
+.library-download-context__actions { display:flex;flex-wrap:wrap;gap:.5rem;align-items:start; }

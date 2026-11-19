@@ -17,7 +17,7 @@ export function subscribeLibraryDownloads(fn:(request:LibraryDownloadRequest)=>v
 function safeNetworkLane(client:TelegramSessionClient){
  const state=client.searchSnapshot();
  return state.available&&!state.pending&&!state.cancelling&&!state.retryBlocked&&state.error!=='uncertain'&&
-  state.delivery!=='uncertain'&&(state.retryAt===null||state.retryAt<=Date.now());
+  state.delivery!=='uncertain';
 }
 export async function downloadLibrarySelection(p:{
  tracks:readonly Track[];attempt:SongPlaybackAttempt;client:TelegramSessionClient;providers:readonly OrderedProvider[];
@@ -28,6 +28,32 @@ export async function downloadLibrarySelection(p:{
  const rows:AlbumRow[]=p.tracks.map(()=>({state:'unattempted',trackId:null,confirmed:false,message:'En espera'}));
  const live=()=>p.current()&&p.attempt.current()&&!p.signal.aborted;
  const networkCurrent=p.client.captureBotsCurrent(),remoteClock={settledAt:0};
+ const waitForTelegram=()=>{
+  const deadline=Date.now()+60_000;
+  return new Promise<boolean>(resolve=>{
+   let settled=false,unsubscribe=()=>{};
+   let timer:ReturnType<typeof setTimeout>|undefined;
+   const finish=(allowed:boolean)=>{
+    if(settled)return;settled=true;clearTimeout(timer);unsubscribe();
+    p.signal.removeEventListener('abort',abort);resolve(allowed);
+   };
+   const abort=()=>finish(false);
+   const check=()=>{
+    clearTimeout(timer);
+    if(!live()||!networkCurrent())return finish(false);
+    const state=p.client.searchSnapshot(),now=Date.now();
+    if(!state.available||state.retryBlocked||state.error==='uncertain'||now>=deadline||state.retryAt!==null&&state.retryAt>=deadline)return finish(false);
+    if(!state.pending&&!state.cancelling&&(state.retryAt===null||now>=state.retryAt))return finish(true);
+    timer=setTimeout(check,Math.max(1,(state.retryAt&&state.retryAt>now?state.retryAt+1:deadline)-now));
+   };
+   check();if(settled)return;
+   const state=p.client.searchSnapshot();
+   update(state.retryAt!==null&&state.retryAt>Date.now()?'Telegram limitó temporalmente las consultas. El lote continuará al finalizar la espera.':
+    'Esperando a que Telegram termine la consulta anterior…');
+   unsubscribe=p.client.subscribeSearch(check);
+   p.signal.addEventListener('abort',abort,{once:true});check();
+  });
+ };
  const update=(message:string)=>p.update(rows.map(row=>({...row})),message);
  let checkpoint=p.checkpoint;
  const start=checkpoint?.cursor??0,resuming=checkpoint?.pending;
@@ -52,7 +78,9 @@ export async function downloadLibrarySelection(p:{
    artist:'artist' in track.manualOverrides?track.manualOverrides.artist??null:track.catalogChoice?.artist??track.artist,
    album:'album' in track.manualOverrides?track.manualOverrides.album??null:track.catalogChoice?.album??track.album,duration:track.catalogChoice?.duration??track.duration};
   if(p.autoRepair&&i<start&&p.attempt.inspectDownload){
-   const verified=await p.attempt.inspectDownload(track.id,p.signal);
+   const parked=p.heldDownload?.(track.id),receipt=parked?.kind==='save'?await checkReceipt(parked.operationId,track.id,true):undefined;
+   if(receipt&&receipt.state!=='uncertain'&&parked)p.clearHeldDownload?.(track.id,parked);
+   const verified=receipt?.state==='saved'?receipt.trackId:await p.attempt.inspectDownload(track.id,p.signal);
    if(!live())return stop('Descarga detenida. Las copias confirmadas se conservan.');
    if(verified===track.id)confirm(row,verified,'reused');
    else{row.state='failed';row.message='Procesada anteriormente y sin copia disponible.';}
@@ -130,6 +158,7 @@ export async function downloadLibrarySelection(p:{
    mark(i+1,null);update(row.message);continue;
   }
   while(true){
+   if(p.autoRepair&&!await waitForTelegram())return stop('Telegram no puede iniciar otra consulta ahora. El progreso se conserva.');
    const held={kind:'network' as const,index:i};
    mark(i,held);row.message=failedDigests.size?'Probando otra opción para esta canción…':'Buscando canción…';update(row.message);
    const result=await acquireFromOrderedBots({client:p.client,providers,revision:p.revision,target,

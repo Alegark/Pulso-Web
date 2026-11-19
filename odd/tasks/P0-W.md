@@ -2385,3 +2385,11 @@ T11-T12 registra la recuperación automática dentro de la playlist completa. El
 ### Recuperación automática de playlists publicada · 2026-11-19
 
 Cloudflare versión 49 sirve `/releases/62527cca789200d1.html`, deployment `ce095199-3d82-408e-9fac-0bd6347dbdf6`. Coincidieron 242/242 rutas estáticas y el módulo expone el progreso de alternativa automática. Chromium/WebKit locales verificaron continuación sin otro gesto, incluida una fila alternativa del mismo bot. Worker, bindings, límites y Turnstile coinciden con v48. La aceptación con Telegram real y el iPhone físico permanece pendiente. Detalle y manifiesto en T11-T12.
+
+## Biblioteca · continuar con la sesión de Telegram · 2026-11-19
+
+T11-T12 documenta la reproducción de la falsa indicación de reconectar durante la restauración. La app conserva el gesto de Continuar hasta que aparecen la sesión y los bots en la misma cuenta. La recuperación separa archivo inválido, espera finita de Telegram, recibo de Almacenamiento y entrega incierta. En Chromium y WebKit la app compilada emitió la consulta de la cuarta canción y guardó su copia tras el fallo de la tercera. SDK, cuenta y audio fueron sintéticos. La aceptación física en iPhone sigue pendiente y P0-W permanece abierto.
+
+### Progreso contextual y reanudación publicados · 2026-11-19
+
+Cloudflare versión 50 sirve `/releases/7e98694a928b640e.html`, deployment `5183744c-8076-4446-b7b0-1ce5adbc5c26`. Coincidieron 247/247 rutas estáticas. El shell compilado con transporte sintético confirmó ocho recorridos con la cuarta copia guardada, incluyendo Telegram restaurado y conectado. Chromium y WebKit de escritorio verificaron el control contextual a 320 px y texto al 200 %. Worker, bindings, límites y Turnstile coinciden con v49. Telegram real e iPhone físico continúan pendientes. Detalle, manifiesto y limpieza en T11-T12.
