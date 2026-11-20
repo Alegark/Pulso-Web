@@ -81,7 +81,7 @@ export function DownloadDock({message,review,onReviewStorage}:{message?:{text:st
    if(next){setFinished(null);setExpanded(false);}
    else if(run&&albumCoordinator.notice){
     if(card.current?.contains(document.activeElement))handle.current?.focus({preventScroll:true});
-    setFinished({notice:albumCoordinator.notice,stopped:run.abort.signal.aborted});
+    setFinished({notice:albumCoordinator.notice,stopped:run.abort.signal.aborted||!!albumCoordinator.notice.progress.waiting});
     setExpanded(false);
     timer=setTimeout(()=>setFinished(null),displayTime);
    }
@@ -133,7 +133,7 @@ export function DownloadDock({message,review,onReviewStorage}:{message?:{text:st
   ...(unavailable?[`${unavailable} no disponible${unavailable===1?'':'s'}`]:[]),
   ...(pending?[`${pending} pendiente${pending===1?'':'s'}`]:[]),
  ].join(' · ');
- const currentIndex=rows.findIndex(row=>!row.confirmed&&(row.state==='unattempted'||row.state==='ready'));
+ const currentIndex=rows.findIndex(row=>!row.confirmed&&!row.reason&&(row.state==='unattempted'||row.state==='ready'));
  const progressMessage=(running||finished?.stopped)?displayMessage(currentNotice?.progress.message):undefined;
 
  function clamp(point:Point):Point{
@@ -234,7 +234,7 @@ export function DownloadDock({message,review,onReviewStorage}:{message?:{text:st
       {!running&&onReviewStorage&&remaining.some(row=>row.reason==='parked')&&
        <button type="button" className="download-dock__storage" onClick={()=>{setFinished(null);onReviewStorage();}}>Revisar en Almacenamiento</button>}
      </div>}
-     {!expanded&&transient&&<p className="download-dock__message">{transient}</p>}
+     {!expanded&&(transient||currentNotice?.progress.waiting&&progressMessage)&&<p className="download-dock__message" role="status">{transient||progressMessage}</p>}
      {expanded&&running&&active&&<div className="download-dock__footer"><button type="button" onClick={()=>{if(albumCoordinator.active===active)active.abort.abort();}}>Detener</button></div>}
     </>:<p className="download-dock__message">{transient}</p>}
    </section>

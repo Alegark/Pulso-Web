@@ -1,3 +1,4 @@
+type DownloadNotificationKind='song'|'album'|'collection'|'test';
 export type NotificationSupport='ready'|'install-ios'|'unsupported';
 export interface NotificationHost {
  support:()=>NotificationSupport;permission:()=>NotificationPermission;
@@ -38,15 +39,15 @@ export function createDownloadNotifications(host:NotificationHost){
   }catch{if(token===epoch){error='No se pudieron guardar los avisos de descargas.';emit();}return false;}
  }
  function disable(){const token=++epoch;preferred=false;locallyDisabled=true;last.clear();error=null;try{host.write(false);locallyDisabled=false;}catch{error='Avisos desactivados por ahora. No se pudo guardar la preferencia.';}emit();void host.registration().then(async reg=>{for(const n of await reg?.getNotifications()??[])if(token===epoch&&n.tag.startsWith('pulso-download-'))n.close();}).catch(()=>{});}
- function dismiss(kind:'song'|'album'|'test',key:unknown){
+ function dismiss(kind:DownloadNotificationKind,key:unknown){
   if(last.get(kind)?.key!==key)return;
   last.delete(kind);const token=epoch;
-  void host.registration().then(async reg=>{for(const notification of await reg?.getNotifications()??[])if(token===epoch&&!last.has(kind)&&notification.tag===`pulso-download-${kind}`)notification.close();}).catch(()=>{});
+  work=work.catch(()=>{}).then(()=>host.registration()).then(async reg=>{for(const notification of await reg?.getNotifications()??[])if(token===epoch&&!last.has(kind)&&notification.tag===`pulso-download-${kind}`)notification.close();}).catch(()=>{});
  }
- function notify(kind:'song'|'album'|'test',key:unknown,title:string,body:string,terminal=false,current:()=>boolean=()=>true){
+ function notify(kind:DownloadNotificationKind,key:unknown,title:string,body:string,terminal=false,current:()=>boolean=()=>true,pause=false){
   if(!preferred||host.support()!=='ready'||host.permission()!=='granted'||!valid(current))return;
   const previous=last.get(kind),now=host.now();
-  if(previous&&previous.key===key&&(previous.terminal||previous.body===body||!terminal&&now-previous.at<15000))return;
+  if(previous&&previous.key===key&&(previous.terminal||!terminal&&(previous.body===body||!pause&&now-previous.at<15000)))return;
   const record={key,body,at:now,terminal};last.set(kind,record);const token=epoch;
   work=work.catch(()=>{}).then(async()=>{
    if(token!==epoch||!preferred||host.permission()!=='granted'||!valid(current)||last.get(kind)!==record)return;

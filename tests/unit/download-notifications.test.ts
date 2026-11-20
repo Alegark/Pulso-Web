@@ -59,3 +59,22 @@ test('A failed opt-out write still suppresses alerts after foreground refresh',a
  n.test();await n.settled();assert.equal(f.shown.length,0);
  assert.match(n.state().error!,/No se pudo guardar/);
 });
+
+
+test('Collection pause has its own tag and a terminal body identical to progress still publishes once',async()=>{
+ const f=fixture(),n=createDownloadNotifications(f.host);await n.enable();
+ n.notify('album','album','Álbum','Preparando');await n.settled();
+ n.notify('collection','playlist','Lista','1 de 2 guardadas');await n.settled();
+ n.notify('collection','playlist','Lista','Telegram pide esperar 5 min',false,()=>true,true);await n.settled();
+ n.notify('collection','playlist','Lista','2 de 2 guardadas');await n.settled();
+ f.tick();n.notify('collection','playlist','Lista','2 de 2 guardadas');await n.settled();
+ n.notify('collection','playlist','Lista','2 de 2 guardadas',true);await n.settled();
+ n.notify('collection','playlist','Lista','2 de 2 guardadas',true);await n.settled();
+ assert.deepEqual(f.shown.map(({options})=>[options.tag,options.body,options.silent]),[
+  ['pulso-download-album','Preparando',true],
+  ['pulso-download-collection','1 de 2 guardadas',true],
+  ['pulso-download-collection','Telegram pide esperar 5 min',true],
+  ['pulso-download-collection','2 de 2 guardadas',true],
+  ['pulso-download-collection','2 de 2 guardadas',false],
+ ]);
+});

@@ -12,6 +12,7 @@ import {copyBotSearchEnvelope,parseBotSearchCommand,parseBotSearchReply,type Bot
 import type {BotSearchDriver} from './bot-search-driver';
 import {isBotSearchCancelReply,type BotSearchBridgeReply} from './bot-search-bridge-protocol';
 import type {QrLoginChallenge} from './qr-login-protocol';
+import {cooldownDeadline} from './rpc-failure';
 declare const self:DedicatedWorkerGlobalScope;
 let session='',phase:SessionReply['phase']='disconnected',active=false,phone='';
 let codeDelivery:Delivery|null=null;
@@ -21,18 +22,21 @@ const abort=new AbortController();
 let sources:SourcesDriver|undefined,page:Promise<void>|null=null,control=false;
 let bots:BotProvidersDriver|undefined,botFlight:Promise<void>|null=null,botControl:Promise<void>|null=null;
 let search:BotSearchDriver|undefined,searchFlight:Promise<void>|null=null,searchControl:Promise<void>|null=null,searchCancelled=false;
-let retryAt:number|null=null,retryBlocked=false;
-const remoteAllowed=()=>!retryBlocked&&(retryAt===null||Date.now()>=retryAt);
-function observeRemote(reply:{type:string;retryAt?:number|null;retryBlocked?:boolean}){if(reply.type!=='bots.error'&&reply.type!=='sources.error'&&reply.type!=='bot-search.error')return;retryBlocked ||=!!reply.retryBlocked;if(reply.retryAt!=null)retryAt=Math.max(retryAt??0,reply.retryAt);}
+let retryAt:number|null=null;
+const remoteAllowed=()=>retryAt===null||Date.now()>=retryAt;
+function observeRemote(wait:{retryAt?:number|null;retryBlocked?:boolean}){
+ const until=cooldownDeadline(wait);
+ if(until)retryAt=Math.max(retryAt??0,until);
+}
 /** Optional only for historic synthetic SDK fixtures. Production factory implements this accessor. */
-function refreshCooldown(){const cooldown=client?.getAccountCooldown?.();if(cooldown){retryBlocked ||=cooldown.retryBlocked;if(cooldown.retryAt!==null)retryAt=Math.max(retryAt??0,cooldown.retryAt);}}
+function refreshCooldown(){const cooldown=client?.getAccountCooldown?.();if(cooldown)observeRemote(cooldown);}
 function closeLocal(){qrChallenge=null;abort.abort();search?.close();bots?.close();sources?.close();void client?.close().catch(()=>{});self.close();}
 async function searchCommand(command:BotSearchCommand){
  if(!client||phase!=='connected'||active||command.sessionId!==session||command.type!=='bot-search.cancel'&&(searchFlight||searchControl||botFlight||botControl||page||control)||command.type==='bot-search.cancel'&&searchControl){closeLocal();return;}
  const driver=client,binding=parseAccountBinding(driver.getAccountBinding());
  if(!binding||command.accountRef!==binding.accountRef||command.accountEpoch!==binding.accountEpoch){closeLocal();return;}
  const current=()=>!abort.signal.aborted&&client===driver&&driver.getAccountBinding()?.accountRef===binding.accountRef&&driver.getAccountBinding()?.accountEpoch===binding.accountEpoch;
- const post=(reply:BotSearchReply,sessionClosed:boolean)=>self.postMessage({protocol:'pulso-bot-search',version:1,reply,sessionClosed,retryAt,retryBlocked} satisfies BotSearchBridgeReply);
+ const post=(reply:BotSearchReply,sessionClosed:boolean)=>self.postMessage({protocol:'pulso-bot-search',version:1,reply,sessionClosed,retryAt,retryBlocked:false} satisfies BotSearchBridgeReply);
  if(command.type==='bot-search.cancel'&&(!search||!searchFlight)){
   post({...copyBotSearchEnvelope(command),type:'bot-search.error',error:'expired',delivery:'not-dispatched',retryAt:null,retryBlocked:false},false);return;
  }
@@ -40,14 +44,14 @@ async function searchCommand(command:BotSearchCommand){
  let terminal=false,sending=false,notice=false;
  const run=async()=>{try{
   refreshCooldown();let reply:BotSearchReply|null;
-  if(command.type!=='bot-search.cancel'&&(!core||!remoteAllowed()))reply={...copyBotSearchEnvelope(command),type:'bot-search.error',error:core?'rate-limit':'unsupported',delivery:'not-dispatched',retryAt:core?retryAt:null,retryBlocked:core?retryBlocked:false};
+  if(command.type!=='bot-search.cancel'&&(!core||!remoteAllowed()))reply={...copyBotSearchEnvelope(command),type:'bot-search.error',error:core?'rate-limit':'unsupported',delivery:'not-dispatched',retryAt:core?retryAt:null,retryBlocked:false};
   else reply=await core!.handle(command,{signal:abort.signal,current,publish:raw=>{
    if(terminal)return;const progress=parseBotSearchReply(raw,command);if(!progress||!['bot-search.sending','bot-search.download-progress','bot-search.provider-notice'].includes(progress.type)||command.type==='bot-search.cancel'||!current()){closeLocal();return;}
    if(progress.type==='bot-search.provider-notice'){if(command.type!=='bot-search.download'){closeLocal();return;}if(notice||searchCancelled)return;notice=true;}
    if(progress.type==='bot-search.sending'){if(sending)return;sending=true;}post(progress,false);
   }});
   const settled=command.type!=='bot-search.cancel'&&core?await core.whenSettled():true;
-  if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&!isBotSearchCancelReply(reply,command)){closeLocal();return;}observeRemote(reply);refreshCooldown();
+  if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&!isBotSearchCancelReply(reply,command)){closeLocal();return;}if('retryAt' in reply)observeRemote(reply);refreshCooldown();
   if(reply.type==='bot-search.cancelled')searchCancelled=true;
   const sessionClosed=!settled||!current()||!driver.getAccountBinding();post(reply,sessionClosed);if(sessionClosed)closeLocal();
  }catch{closeLocal();}};
@@ -61,11 +65,11 @@ async function botCommand(command:BotProvidersCommand){
  const current=()=>!abort.signal.aborted&&client===driver&&driver.getAccountBinding()?.accountRef===binding.accountRef&&driver.getAccountBinding()?.accountEpoch===binding.accountEpoch;
  const core=bots??=driver.createBotProviders(session);
  const run=async()=>{try{
-  refreshCooldown();let reply:BotProvidersReply|null=command.type==='bots.validate'&&!remoteAllowed()?{...copyBotEnvelope(command),type:'bots.error',error:'rate-limit',retryAt,retryBlocked}:await core.handle(command,{signal:abort.signal,current});
+  refreshCooldown();let reply:BotProvidersReply|null=command.type==='bots.validate'&&!remoteAllowed()?{...copyBotEnvelope(command),type:'bots.error',error:'rate-limit',retryAt,retryBlocked:false}:await core.handle(command,{signal:abort.signal,current});
   // Cancel ACK is control only. Terminal validation publication waits for the actual SDK settlement.
   const settled=command.type==='bots.validate'?await core.whenSettled():true;
-  if(abort.signal.aborted)return;if(!reply){closeLocal();return;}observeRemote(reply);refreshCooldown();
-  if(reply.type==='bots.error')reply={...reply,retryAt,retryBlocked};
+  if(abort.signal.aborted)return;if(!reply){closeLocal();return;}if('retryAt' in reply)observeRemote(reply);refreshCooldown();
+  if(reply.type==='bots.error')reply={...reply,retryAt,retryBlocked:false};
   const sessionClosed=!settled||!current()||!driver.getAccountBinding();
   self.postMessage({protocol:'pulso-bot-providers',version:1,reply,sessionClosed} satisfies BotProvidersBridgeReply);
   if(sessionClosed)closeLocal();
@@ -79,10 +83,10 @@ async function sourceCommand(command:SourcesCommand){
  if(!binding||command.accountRef!==binding.accountRef||command.accountEpoch!==binding.accountEpoch){closeLocal();return;}
  const current=()=>!abort.signal.aborted&&client===driver&&driver.getAccountBinding()?.accountRef===binding?.accountRef&&driver.getAccountBinding()?.accountEpoch===binding?.accountEpoch;
  const run=async()=>{
-  try{refreshCooldown();let reply=command.type==='sources.page'&&!remoteAllowed()?{protocol:'pulso-sources' as const,version:1 as const,sessionId:command.sessionId,accountRef:command.accountRef,accountEpoch:command.accountEpoch,listEpoch:command.listEpoch,operationId:command.operationId,requestId:command.requestId,type:'sources.error' as const,error:'rate-limit' as const,retryAt,retryBlocked}:await core.handle(command,{signal:abort.signal,current});
+  try{refreshCooldown();let reply=command.type==='sources.page'&&!remoteAllowed()?{protocol:'pulso-sources' as const,version:1 as const,sessionId:command.sessionId,accountRef:command.accountRef,accountEpoch:command.accountEpoch,listEpoch:command.listEpoch,operationId:command.operationId,requestId:command.requestId,type:'sources.error' as const,error:'rate-limit' as const,retryAt,retryBlocked:false}:await core.handle(command,{signal:abort.signal,current});
    const settled=command.type==='sources.page'?await core.whenSettled():true;
    if(abort.signal.aborted)return;if(!reply){closeLocal();return;}
-   observeRemote(reply);refreshCooldown();if(reply.type==='sources.error')reply={...reply,retryAt,retryBlocked};const sessionClosed=!settled||!current()||!driver.getAccountBinding();
+   if('retryAt' in reply)observeRemote(reply);refreshCooldown();if(reply.type==='sources.error'&&reply.error==='rate-limit')reply={...reply,retryAt,retryBlocked:false};const sessionClosed=!settled||!current()||!driver.getAccountBinding();
    self.postMessage({protocol:'pulso-sources',version:1,reply,sessionClosed,saved:sessionClosed?null:core.getSaved()} satisfies SourcesBridgeReply);
    if(sessionClosed)closeLocal();
   }catch{closeLocal();}
@@ -105,7 +109,7 @@ async function open(){
 }
 function reply(command:SessionCommand,error:SessionReply['error']=null,waitUntil:number|null=null,delivery:Delivery|null=phase==='code'?codeDelivery:null){
  const vaultGeneration=phase==='connected'?client?.getVaultGeneration?.():null;
- const offered=phase==='code'&&!retryBlocked?client?.getCodeResend?.():null;
+ const offered=phase==='code'?client?.getCodeResend?.():null;
  const codeResend=offered?{delivery:offered.delivery,availableAt:Math.max(offered.availableAt,retryAt??0)}:null;
  self.postMessage({version:2,session,request:command.request,phase,error,retryAt:waitUntil,delivery,binding:phase==='connected'?parseAccountBinding(client!.getAccountBinding()):null,saved:phase==='connected'?parseSaved(sources!.getSaved()):null,...(vaultGeneration?{vaultGeneration}:{}),...(phase==='code'?{codeResend}:{}),...(phase==='qr'&&qrChallenge?{qr:qrChallenge}:{}),...(phase==='connected'&&bots?{bots:bots.getSnapshot()!.providers}:{})} satisfies SessionReply);
 }
@@ -167,10 +171,11 @@ self.onmessage=event=>{
    phase='connected';phone='';qrChallenge=null;reply(command);
   }catch(error){
    const safe=sessionFailure(error);
+   if(safe.error==='rate-limit'){observeRemote({retryAt:safe.retryAt,retryBlocked:safe.retryAt===null});safe.retryAt=retryAt;}
    if(safe.passwordNeeded&&['code','begin','qr-begin','qr-check'].includes(command.type)){qrChallenge=null;phase='password';reply(command);return;}
-   if(command.type==='qr-check'&&safe.error==='rate-limit'&&qrChallenge){retryBlocked ||=safe.retryAt===null;if(safe.retryAt!==null)retryAt=Math.max(retryAt??0,safe.retryAt);phase='qr';reply(command,safe.error,safe.retryAt);return;}
+   if(command.type==='qr-check'&&safe.error==='rate-limit'&&qrChallenge){phase='qr';reply(command,safe.error,safe.retryAt);return;}
    const retryable=confirmingAuth&&(safe.error==='network'||safe.error==='timeout')||command.type==='code'&&safe.error==='code-invalid'||command.type==='password'&&safe.error==='password-invalid'||(command.type==='code'||command.type==='resend'||command.type==='password')&&safe.error==='rate-limit';
-   if(retryable){if(safe.error==='rate-limit'){retryBlocked ||=safe.retryAt===null;if(safe.retryAt!==null)retryAt=Math.max(retryAt??0,safe.retryAt);}phase=command.type==='password'?'password':'code';reply(command,safe.error,safe.retryAt);return;}
+   if(retryable){phase=command.type==='password'?'password':'code';reply(command,safe.error,safe.retryAt);return;}
    phase='error';phone='';reply(command,command.type==='logout'&&safe.error!=='session-storage'?'logout-unconfirmed':safe.error,safe.retryAt);
    abort.abort();await client?.close().catch(()=>{});self.close();
   }finally{active=false;}

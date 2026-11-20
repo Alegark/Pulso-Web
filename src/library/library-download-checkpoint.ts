@@ -7,18 +7,20 @@ function copyCandidates(value:unknown):SavedCandidate[]|null{
 }
 export type PendingDownload={kind:'network';index:number}|{kind:'save';index:number;operationId:string;attempts?:SavedCandidate[]};
 export interface LibraryDownloadCheckpoint {
- id:string;trackIds:string[];cursor:number;pending:PendingDownload|null;
+ id:string;trackIds:string[];cursor:number;pending:PendingDownload|null;telegramRetryAt?:number;
 }
 export function copyLibraryDownloadCheckpoint(value:unknown):LibraryDownloadCheckpoint|null{
  const row=value as LibraryDownloadCheckpoint|null;
  if(!row||!uuid(row.id)||!Array.isArray(row.trackIds)||!row.trackIds.length||row.trackIds.length>5000||
   !row.trackIds.every(uuid)||!Number.isInteger(row.cursor)||row.cursor<0||row.cursor>row.trackIds.length)return null;
+ const {telegramRetryAt}=row;
+ if(telegramRetryAt!==undefined&&(!Number.isSafeInteger(telegramRetryAt)||telegramRetryAt<=0||telegramRetryAt>8640000000000000))return null;
  const pending=row.pending;
  if(pending!==null&&(!pending||pending.index!==row.cursor||row.cursor>=row.trackIds.length||
   !(pending.kind==='network'||pending.kind==='save'&&uuid(pending.operationId))))return null;
  const attempts=pending?.kind==='save'&&pending.attempts!==undefined?copyCandidates(pending.attempts):undefined;
  if(attempts===null)return null;
- return {id:row.id,trackIds:[...row.trackIds],cursor:row.cursor,pending:pending===null?null:pending.kind==='network'?
+ return {id:row.id,trackIds:[...row.trackIds],cursor:row.cursor,...(telegramRetryAt?{telegramRetryAt}:{}),pending:pending===null?null:pending.kind==='network'?
   {kind:'network',index:pending.index}:{kind:'save',index:pending.index,operationId:pending.operationId,...(attempts?{attempts}:{})}};
 }
 const key=(accountId:string)=>'pulso:library-download:v1:'+accountId;

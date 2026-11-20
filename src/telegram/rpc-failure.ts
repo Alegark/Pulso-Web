@@ -15,6 +15,12 @@ const kinds:readonly [RegExp,ErrorKind][]=[
  [/Abort|cancelled/,'cancelled'],[/timeout|timed out/i,'timeout'],
 ];
 
+// An unquantified FLOOD gets one conservative five-minute cooldown.
+export const UNKNOWN_FLOOD_WAIT_MS=300_000;
+export function cooldownDeadline(wait:{retryAt?:number|null;retryBlocked?:boolean},now=Date.now()){
+ return Math.max(wait.retryAt??0,wait.retryBlocked?now+UNKNOWN_FLOOD_WAIT_MS:0);
+}
+
 /** Own data fields only. Never forward raw SDK text or execute an error accessor. */
 export function classifyTelegramFailure(error:unknown,now=Date.now()):RpcFailure {
  try{
