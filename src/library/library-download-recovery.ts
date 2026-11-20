@@ -8,7 +8,7 @@ import {validAudioFingerprint,verifiedAssetDetailed,type LocalAsset,type Track} 
 
 /** The receipt must belong to this account and its bytes must still verify
  * before binding them to the original playlist row. No Telegram operation. */
-export async function reconcileLibraryDownload(accountId:string,operationId:string,trackId:string,signal:AbortSignal,current:()=>boolean):Promise<{state:'saved'|'missing'|'uncertain';trackId:string|null}>{
+export async function reconcileLibraryDownload(accountId:string,operationId:string,trackId:string|undefined,signal:AbortSignal,current:()=>boolean):Promise<{state:'saved'|'missing'|'uncertain';trackId:string|null}>{
  const uncertain={state:'uncertain' as const,trackId:null},missing={state:'missing' as const,trackId:null};
  const live=()=>current()&&!signal.aborted;
  if(!live())return uncertain;
@@ -19,18 +19,19 @@ export async function reconcileLibraryDownload(accountId:string,operationId:stri
    return raw===undefined?undefined:await importOperation(operationId)??null;
   });
   if(!live()||receipt===null||receipt&&receipt.accountId!==accountId)return uncertain;
-  if(!receipt||receipt.state==='discarded')return missing;
-  if(receipt.state!=='sealed'||receipt.libraryMode!=='cache'||!receipt.result||!receipt.asset)return uncertain;
-  const target=await readRecord<Track>('tracks',trackId);
-  if(!live()||target?.accountId!==accountId)return uncertain;
-  const source=target.assetId===receipt.asset.id?target:await readRecord<Track>('tracks',receipt.result.track.id);
+  if(!receipt||receipt.state==='discarded'&&!receipt.result)return missing;
+  if(!terminal(receipt)||receipt.libraryMode!=='cache'||!receipt.result||!receipt.asset)return uncertain;
+  const target=trackId?await readRecord<Track>('tracks',trackId):undefined;
+  if(!live()||trackId&&target?.accountId!==accountId)return uncertain;
+  const source=target?.assetId===receipt.result.track.assetId?target:await readRecord<Track>('tracks',receipt.result.track.id);
   if(!live()||source?.accountId!==accountId)return uncertain;
-  if(source.assetId!==receipt.asset.id){
-   return source.id===target.id&&source.assetId===null&&await readRecord('assets',receipt.asset.id)===undefined&&live()?missing:uncertain;
+  if(source.assetId!==receipt.result.track.assetId){
+   return source.id===target?.id&&source.assetId===null&&await readRecord('assets',receipt.result.track.assetId)===undefined&&live()?missing:uncertain;
   }
   const verified=await verifiedAssetDetailed(source.assetId,true);
   if(live()&&verified.state==='missing')return missing;
-  if(!live()||verified.state!=='valid'||verified.asset.sha256!==receipt.asset.sha256||verified.asset.bytes!==receipt.asset.bytes)return uncertain;
+  if(!live()||verified.state!=='valid'||!matchesFingerprint(source,verified.asset)||verified.asset.sha256!==receipt.asset.sha256||verified.asset.bytes!==receipt.asset.bytes)return uncertain;
+  if(!trackId)return {state:'saved',trackId:source.id};
   const id=await attachRestoredAccountTrack(accountId,trackId,source.id,live,{assetId:source.assetId,revision:source.revision});
   return live()&&id===trackId?{state:'saved',trackId:id}:uncertain;
  }catch{return uncertain;}
@@ -94,18 +95,18 @@ export async function inspectLibraryTrackDownload(accountId:string,trackId:strin
 
 /** Recover exactly the cache operation recorded for this row. The storage
  * recovery transaction proves staging ownership and excludes published bytes. */
-export async function repairBatchLibraryDownload(accountId:string,operationId:string,trackId:string,signal:AbortSignal,current:()=>boolean){
+export async function repairBatchLibraryDownload(accountId:string,operationId:string,trackId:string|undefined,signal:AbortSignal,current:()=>boolean){
  const live=()=>current()&&!signal.aborted;
  const first=await reconcileLibraryDownload(accountId,operationId,trackId,signal,current);
  if(!live()||first.state!=='uncertain')return first;
  try{
-  const track=await readRecord<Track>('tracks',trackId);
+  const track=trackId?await readRecord<Track>('tracks',trackId):undefined;
   const job=await importOperation(operationId);
-  if(!live()||track?.accountId!==accountId||!job||job.accountId!==accountId||job.libraryMode!=='cache'||terminal(job))return first;
+  if(!live()||trackId&&track?.accountId!==accountId||!job||job.accountId!==accountId||job.libraryMode!=='cache'||terminal(job))return first;
   if(job.asset&&job.track){
    try{await recoverImportOperation(operationId,job.revision,'resume',live);}
    catch(error){
-    if(!live()||!['asset-missing','digest-mismatch','length-mismatch','local-corrupt'].includes(issuedFailure(error)?.code??''))return first;
+    if(!live()||!['asset-missing','digest-mismatch','length-mismatch','local-corrupt','transaction-aborted','quota-exceeded'].includes(issuedFailure(error)?.code??''))return first;
    }
   }
   const pending=await importOperation(operationId);

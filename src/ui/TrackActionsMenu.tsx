@@ -4,7 +4,9 @@ import type {Playlist} from '../library/library';
 
 interface TrackActionsMenuProps {
  title:string;
- artist:string;
+ artist?:string;
+ label?:string;
+ closeLabel?:string;
  artwork?:ReactNode;
  children:ReactNode;
  active:boolean;
@@ -12,11 +14,13 @@ interface TrackActionsMenuProps {
 
 /** Transfer panels must return to the visible row control, not a hidden menu action. */
 export function trackActionOpener(button:HTMLButtonElement):HTMLButtonElement {
+ const trigger=button.closest('dialog.track-actions-menu')?.previousElementSibling;
+ if(trigger instanceof HTMLButtonElement)return trigger;
  return button.closest('li')?.querySelector<HTMLButtonElement>('.track-actions-trigger')??button;
 }
 
 /** Presentation only. Actions and their admission checks remain with the caller. */
-export function TrackActionsMenu({title,artist,artwork,children,active}:TrackActionsMenuProps){
+export function TrackActionsMenu({title,artist,label=`Opciones de ${title}`,closeLabel='Cerrar opciones de canción',artwork,children,active}:TrackActionsMenuProps){
  const id=useId(),dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null);
  const releaseScroll=useRef<(()=>void)|null>(null);
  const [open,setOpen]=useState(false),[subpage,setSubpage]=useState(false);
@@ -72,7 +76,7 @@ export function TrackActionsMenu({title,artist,artwork,children,active}:TrackAct
   };
  },[]);
  return <>
-  <button ref={trigger} type="button" className="track-actions-trigger" aria-label={`Opciones de ${title}`} aria-haspopup="dialog" aria-expanded={open} aria-controls={id} onClick={show}>
+  <button ref={trigger} type="button" className="track-actions-trigger" aria-label={label} aria-haspopup="dialog" aria-expanded={open} aria-controls={id} onClick={show}>
    <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
   </button>
   <dialog ref={dialog} id={id} className="track-actions-menu" aria-labelledby={`${id}-title`} onKeyDown={event=>{
@@ -91,8 +95,8 @@ export function TrackActionsMenu({title,artist,artwork,children,active}:TrackAct
    {open&&<><div className="track-actions-menu__handle" aria-hidden="true"/>
    <header className="track-actions-menu__header">
     {artwork&&<div className="track-actions-menu__art">{artwork}</div>}
-    <div className="track-actions-menu__copy"><h2 id={`${id}-title`}>{title}</h2><p>{artist}</p></div>
-    <button type="button" className="track-actions-menu__close" aria-label="Cerrar opciones de canción" onClick={close} autoFocus><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    <div className="track-actions-menu__copy"><h2 id={`${id}-title`}>{title}</h2>{artist&&<p>{artist}</p>}</div>
+    <button type="button" className="track-actions-menu__close" aria-label={closeLabel} onClick={close} autoFocus><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
    </header>
    {subpage&&<button className="track-actions-menu__back" type="button" onClick={()=>back(true)}>← Todas las opciones</button>}
    <div className="track-actions-menu__content" data-subpage={subpage||undefined} onClickCapture={event=>{

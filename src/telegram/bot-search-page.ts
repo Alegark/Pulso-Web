@@ -63,7 +63,7 @@ export function botSearchAck(raw:unknown,botId:number,randomId:Long):number|null
  return ids[0];
 }
 export interface BotSearchPrivateRef {readonly messageId:number;readonly callbackData?:Uint8Array;readonly fingerprint?:string;readonly audioFingerprint?:string;readonly row?:BotSearchRow}
-export interface BotSearchPage {readonly rows:readonly BotSearchRow[];readonly refs:ReadonlyMap<string,BotSearchPrivateRef>;readonly concurrent:boolean;readonly unrecognized:boolean}
+export interface BotSearchPage {readonly rows:readonly BotSearchRow[];readonly refs:ReadonlyMap<string,BotSearchPrivateRef>;readonly concurrent:boolean;readonly unrecognized:boolean;readonly rejectedFile?:'file-too-large'|'file-invalid'}
 /** A callback can edit its original menu into audio. Include only that exact
  * message with a different document and messages newer than the pre-callback baseline; older neighbouring
  * recordings do not belong to this attempt. The raw window still has the same
@@ -73,7 +73,7 @@ export function projectBotCallbackPage(raw:unknown,botId:number,baseline:number,
  return projectBotSearchPage({_: 'messages.messages',messages,users:[],chats:[]},botId,Math.min(baseline,selectedMessage-1),outgoing,[selectedMessage],target);
 }
 export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,outgoing:number,additionalReplies:readonly number[]=[],target:BotSearchTarget|null=null):BotSearchPage {
- const messages=history(raw,botId,20),rows:BotSearchRow[]=[],refs=new Map<string,BotSearchPrivateRef>();let concurrent=false,unrecognized=false;
+ const messages=history(raw,botId,20),rows:BotSearchRow[]=[],refs=new Map<string,BotSearchPrivateRef>();let concurrent=false,unrecognized=false,rejectedFile:BotSearchPage['rejectedFile'];
  const add=(m:number,row:Omit<Extract<BotSearchRow,{kind:'option'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'message'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'audio'}>,'rowRef'>,data?:Uint8Array)=>{
   if(rows.length>=B.candidateRows)bad('limit','limit-candidates');const rowRef=crypto.randomUUID();rows.push(Object.freeze({...row,rowRef}));refs.set(rowRef,Object.freeze({messageId:m,...(data?{callbackData:data.slice()}: {})}));
  };
@@ -100,9 +100,15 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
   if(searchOwn(media,'_')==='messageMediaDocument'&&searchOwn(doc,'_')==='document'){
    const attrs=dataArray(searchOwn(doc,'attributes'),20);if(!attrs)bad('limit','limit-document-attributes');const audio=attrs.filter(a=>searchOwn(a,'_')==='documentAttributeAudio');
    const mime=searchOwn(doc,'mimeType'),size=searchOwn(doc,'size');
-   if(audio.length===1&&searchOwn(audio[0],'voice')!==true&&isBotDownloadMime(mime)&&typeof size==='number'){
-    const bytes=size,duration=searchOwn(audio[0],'duration');
-    if(Number.isSafeInteger(bytes)&&bytes>0&&bytes<=BOT_DOWNLOAD_MAX_BYTES&&typeof duration==='number'&&Number.isFinite(duration)&&duration>=0&&duration<=86400)add(id,{kind:'audio',correlation,title:botSearchText(searchOwn(audio[0],'title')),performer:botSearchText(searchOwn(audio[0],'performer')),durationSeconds:duration,mimeType:mime,bytes});
+   if(audio.length===1&&searchOwn(audio[0],'voice')!==true){
+    const duration=searchOwn(audio[0],'duration');
+    if(typeof duration==='number'&&Number.isFinite(duration)&&duration>=0&&duration<=86400){
+     const candidate={kind:'audio' as const,correlation,title:botSearchText(searchOwn(audio[0],'title')),performer:botSearchText(searchOwn(audio[0],'performer')),durationSeconds:duration};
+     if(isBotDownloadMime(mime)&&typeof size==='number'&&Number.isSafeInteger(size)&&size>0&&size<=BOT_DOWNLOAD_MAX_BYTES)
+      add(id,{...candidate,mimeType:mime,bytes:size});
+     else if(target&&matchingSongRows([{...candidate,rowRef:'',mimeType:'audio/wav',bytes:1}],target).length)
+      rejectedFile=typeof size==='number'&&size>BOT_DOWNLOAD_MAX_BYTES?'file-too-large':'file-invalid';
+    }
    }
   }
   const text=botSearchText(searchOwn(m,'message'),1000);if(text)add(id,{kind:'message',correlation,text});
@@ -117,7 +123,7 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
  const rank=(row:BotSearchRow)=>matched.get(row.rowRef)??(B.candidateRows+(row.kind==='audio'?1:row.kind==='option'?2:3));
  const selected=rows.map((row,index)=>({row,index})).sort((a,b)=>rank(a.row)-rank(b.row)||a.index-b.index).slice(0,B.rows).map(p=>p.row);
  const selectedRefs=new Map(selected.map(row=>[row.rowRef,refs.get(row.rowRef)!]));
- return Object.freeze({rows:Object.freeze(selected),refs:selectedRefs,concurrent,unrecognized});
+ return Object.freeze({rows:Object.freeze(selected),refs:selectedRefs,concurrent,unrecognized,...(rejectedFile?{rejectedFile}:{})});
 }
 
 /** Canonical own-data snapshot; no SDK toJSON/accessor invocation. Caller validates raw budget first.

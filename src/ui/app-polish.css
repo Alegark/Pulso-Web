@@ -46,7 +46,6 @@
 .album-page .album-tracks li>button { inline-size:100%;padding:.35rem 0; }
 .album-page .album-track-number { flex:0 0 24px;inline-size:24px;font-size:.8rem; }
 .album-page .album-track-badges { padding:0 0 0 2.25rem;background:transparent;color:var(--pulso-muted);font-size:.7rem;line-height:1.4; }
-.album-page .album-track-message { grid-column:1/-1;background:transparent;padding-inline-start:2.25rem;border-radius:0; }
 .artist-album-grid { grid-template-columns:repeat(auto-fill,minmax(min(100%,9rem),1fr)); }
 .artist-album-grid li { padding:0; }
 .album-page .artist-album-grid button { padding:0;align-items:stretch;text-align:start;justify-content:start; }

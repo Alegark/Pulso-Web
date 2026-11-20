@@ -71,6 +71,24 @@ test('album cancellation after dispatch quarantines the row before any retry',as
  assert.equal(result?.rows[0].state,'uncertain');assert.equal(uncertain.has(1),true);assert.deepEqual(f.searches,['one']);
 });
 
+test('album retries a network-only interruption once the delivery has settled',async()=>{
+ const first=fixture(['success']),next=fixture(['success']),abort=new AbortController();
+ const download=first.client.downloadBot.bind(first.client),snapshot=first.client.searchSnapshot.bind(first.client);
+ first.client.searchSnapshot=()=>({...snapshot(),delivery:'acknowledged'});
+ first.client.downloadBot=async(...args)=>{const audio=await download(...args);abort.abort();return audio;};
+ const attempt:SongPlaybackAttempt={current:()=>true,lookup:async()=>null,save:async()=>({state:'saved',trackId:'track'}),addToLibrary:async()=>true,play:async()=>'failed'};
+ const p={detail:{edition:{id:1,title:'Album',artist:'Artist',trackCount:1,releaseDate:null},tracks:[{releaseId:1,trackId:1,disc:1,position:1,title:'Song',artist:'Artist',durationMs:60000}]},attempt,
+  provider:'one',providers,revision:4,management:()=>null,current:()=>true,uncertainTracks:new Set<number>()};
+ let progress:AlbumProgress={rows:[{state:'unattempted',trackId:null,confirmed:false,message:''}],message:''};
+ const update=(value:AlbumProgress)=>{progress=value;};
+ await acquireAlbum({...p,client:first.client,signal:abort.signal,rows:progress.rows,update});
+ assert.deepEqual(first.searches,['one']);
+ assert.equal(p.uncertainTracks.size,0);
+ await acquireAlbum({...p,client:next.client,signal:new AbortController().signal,rows:progress.rows,update});
+ assert.deepEqual(next.searches,['one']);
+ assert.equal(progress.rows[0].confirmed,true);
+});
+
 test('collaboration matching requires the complete artist credit',()=>{
  const collaboration={...target,artist:'Artist & Guest'};
  const row=(performer:string)=>({kind:'audio' as const,rowRef:performer,correlation:'reply' as const,title:'Song',performer,durationSeconds:60,mimeType:'audio/wav',bytes:1});

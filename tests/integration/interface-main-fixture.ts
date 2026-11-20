@@ -4,9 +4,31 @@ import {importFileDetailed} from '../../src/imports/import-file';
 import {setManualLyrics} from '../../src/library/lyrics';
 import {createPlaylist,changePlaylist,editTrack} from '../../src/library/library';
 import {readArtwork,setManualArtwork} from '../../src/library/artwork';
+import {setSavedArtist} from '../../src/library/saved-artists';
+import {prepareAccountLibrary} from '../../src/accounts/library-local';
 import type {Playlist,Track} from '../../src/library/library';
 registerDatabaseRealmHost({capture:(_kind,current)=>current()?{current,onLifecycle:()=>{},end:()=>{}}:null});
-Object.assign(window,{setupCollectionFixture:async()=>{const db=await openDatabase();closeDatabase(db);const rows=[];for(let i=0;i<5;i++){const b=new Uint8Array(480044),v=new DataView(b.buffer);const text=(s:string,p:number)=>[...s].forEach((c,j)=>b[p+j]=c.charCodeAt(0));text('RIFF',0);v.setUint32(4,b.length-8,true);text('WAVEfmt ',8);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);text('data',36);v.setUint32(40,b.length-44,true);b[100]=i+1;const x=await importFileDetailed(new File([b],`Sintética ${i}.wav`,{type:'audio/wav'}),new AbortController().signal,()=>{},{backend:'idb',...(i===4?{libraryMode:'cache' as const}:{})});if(x.kind!=='confirmed')throw Error('fixture import');await editTrack(x.result.track.id,x.result.track.revision,{album:i<3?'Álbum sintético':'Otro álbum',artist:'Artista sintético',favorite:i===2,...(i===3?{title:'Título extraordinariamente largo sin espacios '+('Música'.repeat(20))}:{})});rows.push({track:x.result.track.id,asset:await readRecord('assets',x.result.track.assetId!)});}const plain=await setManualLyrics(rows[2].track,'Línea original de prueba\nSegunda línea propia','plain',0);const timed=await setManualLyrics(rows[4].track,'[00:00.00]Inicio de prueba\n[00:04.00]Segunda línea propia','lrc',0);if(plain.state!=='ready'||timed.state!=='ready')throw Error('synthetic lyrics setup');const list=await createPlaylist('Playlist protegida');await changePlaylist(list.id,1,{type:'add',trackId:rows[2].track});sessionStorage.setItem('test-own-fixture',JSON.stringify({rows,list:list.id}));}});
+const accountId='11111111-1111-4111-8111-111111111111';
+async function seedCompletedSetup(){
+ localStorage.setItem('pulso:setup:v1:'+accountId,'complete');
+ const db=await new Promise<IDBDatabase>((resolve,reject)=>{
+  const request=indexedDB.open('pulso-web-telegram-session-v1',1);
+  request.onupgradeneeded=()=>request.result.createObjectStore('authorization');
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error);
+ });
+ try{await new Promise<void>((resolve,reject)=>{
+  const tx=db.transaction('authorization','readwrite'),store=tx.objectStore('authorization');
+  store.put('TESTONLY_OFFLINE_SETUP','session');
+  store.put(crypto.randomUUID(),'epoch');
+  tx.oncomplete=()=>resolve();
+  tx.onabort=()=>reject(tx.error);
+ });}finally{db.close();}
+}
+Object.assign(window,{setupCollectionFixture:async()=>{await seedCompletedSetup();const db=await openDatabase();closeDatabase(db);const rows=[];for(let i=0;i<5;i++){const b=new Uint8Array(480044),v=new DataView(b.buffer);const text=(s:string,p:number)=>[...s].forEach((c,j)=>b[p+j]=c.charCodeAt(0));text('RIFF',0);v.setUint32(4,b.length-8,true);text('WAVEfmt ',8);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);text('data',36);v.setUint32(40,b.length-44,true);b[100]=i+1;const x=await importFileDetailed(new File([b],`Sintética ${i}.wav`,{type:'audio/wav'}),new AbortController().signal,()=>{},{backend:'idb',...(i===4?{libraryMode:'cache' as const}:{})});if(x.kind!=='confirmed')throw Error('fixture import');await editTrack(x.result.track.id,x.result.track.revision,{album:i<3?'Álbum sintético':'Otro álbum',artist:'Artista sintético',favorite:i===2,...(i===3?{title:'Título extraordinariamente largo sin espacios '+('Música'.repeat(20))}:{})});rows.push({track:x.result.track.id,asset:await readRecord('assets',x.result.track.assetId!)});}const plain=await setManualLyrics(rows[2].track,'Línea original de prueba\nSegunda línea propia','plain',0);const timed=await setManualLyrics(rows[4].track,'[00:00.00]Inicio de prueba\n[00:04.00]Segunda línea propia','lrc',0);if(plain.state!=='ready'||timed.state!=='ready')throw Error('synthetic lyrics setup');const list=await createPlaylist('Playlist protegida');await changePlaylist(list.id,1,{type:'add',trackId:rows[2].track});sessionStorage.setItem('test-own-fixture',JSON.stringify({rows,list:list.id}));
+ await prepareAccountLibrary(accountId,()=>true);
+ await setSavedArtist(accountId,{id:101,name:'Artista sintético'},true,()=>true);
+}});
 
 // Additional, opt-in playlist fixture; the original interface fixture is unchanged.
 Object.assign(window,{setupPlaylistDesignFixture:async()=>{

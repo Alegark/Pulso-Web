@@ -46,6 +46,7 @@ import {importOperations,importIssues,retainImportIssue,terminal,type ImportOper
 import {inspectLibraryTrackDownload,prepareBatchCopyReplacement,reconcileLibraryDownload,repairBatchLibraryDownload} from './library/library-download-recovery';
 import {readRecord,writeRecord,openExistingDatabase,admittedTransaction,request,closeDatabase,subscribeDatabaseLifecycle,registerDatabaseOpenGuard,registerDatabaseUseGuard,retireDatabaseRealm,type DatabaseLifecycleState} from './storage/database';
 import {transactionDone} from './storage/transaction-done';
+import {canParkImport} from './storage/import-operations';
 import {registerDatabaseRealmHost,beginWorkerAttempt,revokeDatabaseWorkerAttempts,activeDatabaseWorkerAttempts,type RealmAttempt} from './storage/database-realms';
 import {attachDatabaseTransportLifecycle,revalidateDatabaseTransport} from './playback/database-transport';
 import {prepareLocalSources,startLocalSourcePreparation,transportNotice} from './playback/transport';
@@ -220,12 +221,12 @@ const recover=(...args:Parameters<typeof recoverWork>)=>admitted('recover-import
 const retainProblem=(...args:Parameters<typeof retainProblemWork>)=>admitted('recover-import',retainProblemWork,...args);
 const act=(...args:Parameters<typeof actWork>)=>admitted('edit-organization',actWork,...args);
 const queue=(...args:Parameters<typeof queueWork>)=>replaceQueue(...args);
-const importRecoveryPending=()=>unverifiedImportResponses.size>0||operations.some(job=>!terminal(job))||importProblems.some(issue=>!issue.retained);
+const importRecoveryPending=(parked?:ReadonlySet<string>)=>[...unverifiedImportResponses].some(id=>!parked?.has(id))||operations.some(job=>!terminal(job)&&!parked?.has(job.operationId))||importProblems.some(issue=>!issue.retained);
 let botImportActive:object|null=null;
-const importsBlocked=()=>!!botImportActive||databaseState!=='ready'||importRecoveryPending()||metadataRescanBlocked||sourceReview.hasReservation();
+const importsBlocked=(parked?:ReadonlySet<string>)=>!!botImportActive||databaseState!=='ready'||importRecoveryPending(parked)||metadataRescanBlocked||sourceReview.hasReservation();
 let collectionGate:string|null=null;
 const collectionBlocked=()=>collectionGate===removalScopeKey();
-const copyRemovalBlocked=()=>importsBlocked()||copyRemovalPending||collectionBlocked();
+const copyRemovalBlocked=(parked?:ReadonlySet<string>)=>importsBlocked(parked)||copyRemovalPending||collectionBlocked();
 let copyRemovalPending=true;
 let copyRemovalStartup:{key:string;snapshot:CopyRemovalStartup}|null=null;
 let removalRecoveryEpoch=0;
@@ -344,9 +345,10 @@ type DomainTerminal=Exclude<WorkerResponse,{type:'progress'}>;
 interface DomainSettlement {response:DomainTerminal|null;outcome:OutcomeV1}
 /** Keep the exact request receiver until a terminal receipt or observed transport
  * failure, even if lifecycle already invalidated business publication. */
-async function invokeDomainWorker(kind:'recovery'|'import',exactWorker:Worker,request:RecoveryRequest|ImportRequest,current:()=>boolean,onProgress?:(bytes:number)=>void,signal?:AbortSignal):Promise<DomainSettlement>{
+async function invokeDomainWorker(kind:'recovery'|'import',exactWorker:Worker,request:RecoveryRequest|ImportRequest,current:()=>boolean,onProgress?:(bytes:number)=>void,signal?:AbortSignal,ackTimeoutMs?:number):Promise<DomainSettlement>{
  let bridge:RealmAttempt|null=null,sendAttempted=false;
  let detachTransport:()=>void=()=>{};
+ let ackTimer:ReturnType<typeof setTimeout>|undefined;
  const cancel=()=>{if(request.type==='import')try{exactWorker.postMessage({version:2,type:'cancel',operationId:request.operationId});}catch{/* Original terminal receiver remains owned. */}};
  if(request.type==='cancel')throw Error('unsupported');
  const id=request.operationId;
@@ -375,25 +377,30 @@ async function invokeDomainWorker(kind:'recovery'|'import',exactWorker:Worker,re
    if(!bridge!.current()){
     finish({response:null,outcome:makeOutcome({status:'failed',primary:makeFailure('admit','storage-unavailable','storage-unavailable','idb'),cleanup:null,reconcile:null,writeState:'not-started',closeState:'not-applicable',recoveryRequired:false})});return;
    }
+   if(ackTimeoutMs!==undefined)ackTimer=setTimeout(()=>{cancel();failed('worker-failed');},ackTimeoutMs);
    try{if(signal?.aborted){finish({response:null,outcome:workerFailureOutcome('worker-failed',false)});return;}sendAttempted=true;exactWorker.postMessage(request);signal?.addEventListener('abort',cancel,{once:true});if(signal?.aborted)cancel();}catch{failed('worker-failed');}
   });
  }catch(error){
   const failure=fromKnownError(error,{phase:null,backend:'unknown'});
   return settle({response:null,outcome:makeOutcome({status:sendAttempted?'uncertain':'failed',primary:failure.code==='unknown'?makeFailure(null,'internal','worker-failed','unknown'):failure,cleanup:null,reconcile:null,writeState:sendAttempted?'unknown':'not-started',closeState:sendAttempted?'unknown':'not-applicable',recoveryRequired:sendAttempted})});
  }finally{
+  clearTimeout(ackTimer);
   exactWorker.onmessage=null;exactWorker.onerror=null;exactWorker.onmessageerror=null;
   signal?.removeEventListener('abort',cancel);detachTransport();
   if(bridge)bridge.closeAfterSettlement();else exactWorker.terminate();
  }
 }
 /** A user-chosen Telegram file is an explicit personal LOCAL copy, not an auth side effect. */
-const songAdmissionIdle=()=>control.activity.resolved&&control.activity.count===queueSaveTokens;
-function captureBotAudioImport(libraryMode?:'cache'){
+const songStorageResolved=(parked?:ReadonlySet<string>)=>control.activity.resolved||
+ !!parked?.size&&control.activity.resolvedExcept('import-transport')&&[...unverifiedImportResponses].every(id=>parked.has(id));
+const songAdmissionIdle=(parked?:ReadonlySet<string>)=>songStorageResolved(parked)&&control.activity.count===queueSaveTokens;
+const parkedImportAdmissions=new WeakMap<()=>boolean,ReadonlySet<string>>();
+function captureBotAudioImport(libraryMode?:'cache',parked?:ReadonlySet<string>){
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();let used=false;
- const allowed=()=>admitted()&&raw()&&review()&&!busy&&!importRecoveryPending()&&!metadataRescanBlocked&&!copyRemovalPending&&!sourceReview.hasReservation()&&!queueForeignBlocked();
- if(!allowed()||botImportActive||!songAdmissionIdle())return null;
- return async(audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId:string=crypto.randomUUID()):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean}>=>{
-  if(used||!allowed()||botImportActive||!songAdmissionIdle()||signal.aborted)return {state:'failed',trackId:null};used=true;
+ const allowed=()=>admitted()&&raw()&&review()&&!busy&&!importRecoveryPending(parked)&&!metadataRescanBlocked&&!copyRemovalPending&&!sourceReview.hasReservation()&&!queueForeignBlocked();
+ if(!allowed()||botImportActive||!songAdmissionIdle(parked))return null;
+ return async(audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId:string=crypto.randomUUID()):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean;storageUnavailable?:boolean}>=>{
+  if(used||!allowed()||botImportActive||!songAdmissionIdle(parked)||signal.aborted)return {state:'failed',trackId:null};used=true;
   const operation=control.activity.begin();if(!operation)return {state:'failed',trackId:null};const own={};botImportActive=own;emit();
   const current=()=>admitted()&&raw()&&review()&&operation.current()&&botImportActive===own&&!sourceReview.hasReservation()&&!queueForeignBlocked();
   let outcome:OutcomeV1|undefined,confirmed=false;const diagnostic=beginDiagnostic('import-audio');
@@ -401,9 +408,10 @@ function captureBotAudioImport(libraryMode?:'cache'){
    if(!current()||signal.aborted)return {state:'failed',trackId:null};
    const suffix=audio.mime==='audio/mpeg'?'.mp3':audio.mime==='audio/mp4'?'.m4a':'.wav';
    const file=new File([audio.blob],audio.target.title.replace(/[\/\\]/g,' ').slice(0,160)+suffix,{type:audio.mime});
-   const request:ImportRequest={version:2,type:'import',operationId,file,expected:{sha256:audio.sha256,title:audio.target.title,artist:audio.target.artist,...(audio.target.album&&audio.target.durationSeconds!==null&&audio.target.durationSeconds>0?{recordingTitle:audio.recordingTitle??audio.target.title,album:audio.target.album,durationSeconds:audio.target.durationSeconds}:{})},...(libraryMode?{libraryMode}:{})};
+   if(parked?.size)parkedImportAdmissions.set(current,parked);
+   const request:ImportRequest={version:2,type:'import',operationId,file,expected:{sha256:audio.sha256,title:audio.target.title,artist:audio.target.artist,...(audio.target.album&&audio.target.durationSeconds!==null&&audio.target.durationSeconds>0?{recordingTitle:audio.recordingTitle??audio.target.title,album:audio.target.album,durationSeconds:audio.target.durationSeconds}:{})},...(libraryMode?{libraryMode}:{}),...(parked?.size?{parkedOperationIds:[...parked]}:{})};
    const worker=new Worker(new URL('./imports/import.worker.ts',import.meta.url),{type:'module'});
-   const settled=await invokeDomainWorker('import',worker,request,current,bytes=>{if(current()&&!signal.aborted)onProgress(bytes);},signal);outcome=settled.outcome;
+   const settled=await invokeDomainWorker('import',worker,request,current,bytes=>{if(current()&&!signal.aborted)onProgress(bytes);},signal,120_000);outcome=settled.outcome;
    confirmed=settled.response?.type==='complete'&&outcome.status==='confirmed'&&outcome.writeState==='published';outcomeDiagnostic(diagnostic,outcome);
    if(!current())return {state:confirmed||outcome.recoveryRequired?'uncertain':'failed',trackId:null};
    if(confirmed)verifiedResponse(operationId);else if(outcome.recoveryRequired)unverifiedResponse(operationId);
@@ -412,7 +420,8 @@ function captureBotAudioImport(libraryMode?:'cache'){
    status=confirmed?(libraryMode==='cache'?'':'Canción descargada, verificada y guardada en este navegador.'):outcome.recoveryRequired?'La copia requiere revisión antes de volver a descargar.':'No se pudo guardar la canción.';emit();
    return {state:confirmed?'saved':outcome.recoveryRequired?'uncertain':'failed',
     trackId:confirmed&&settled.response?.type==='complete'?settled.response.result.track.id:null,
-    ...(!confirmed&&!outcome.recoveryRequired&&['transaction-aborted','storage-unavailable'].includes(outcome.primary?.code??'')?{retryWrite:true}:{})};
+    ...(!confirmed&&['transaction-aborted','storage-unavailable'].includes(outcome.primary?.code??'')?{retryWrite:true}:{}),
+    ...(!confirmed&&['quota-exceeded','storage-denied','database-blocked'].includes(outcome.primary?.code??'')?{storageUnavailable:true}:{})};
   }catch{return {state:confirmed||outcome?.recoveryRequired?'uncertain':'failed',trackId:null};}
   finally{diagnostics.finish(diagnostic);if(botImportActive===own)botImportActive=null;operation.end();emit();}
  };
@@ -431,50 +440,64 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
   !recoverPending&&(copyRemovalBlocked()||!songAdmissionIdle()))return null;
  const intent=purpose==='playback'?++selectedSongIntent:selectedSongIntent;let queueing=false,playUsed=false,rememberedId:string|null=null,primaryArtist:string|null=null;
  const current=()=>(purpose!=='playback'||intent===selectedSongIntent)&&raw()&&review()&&(purpose==='batch'||queueing||admitted());
- const waitForDownload=(signal:AbortSignal)=>waitForSongAdmission({signal,
-  current:()=>current()&&!importRecoveryPending()&&!unverifiedImportResponses.size,
-  ready:()=>!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&songAdmissionIdle(),
+ const parked=new Set<string>();
+ const waitForDownload=(signal:AbortSignal)=>waitForSongAdmission({signal,timeoutMs:15_000,
+  current:()=>current()&&!importRecoveryPending(parked),
+  ready:()=>!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked()&&songAdmissionIdle(parked),
   subscribe:changed=>{listeners.add(changed);return()=>{listeners.delete(changed);};},
  });
- return Object.freeze({current,
-  ...(purpose==='batch'?{waitForDownload,async inspectDownload(trackId:string,signal:AbortSignal){
+ const reconcile=async(operationId:string,trackId:string|undefined,signal:AbortSignal,repair:boolean,choice?:SongChoice)=>{
+  const accountId=accountController.getSnapshot().user?.id;
+  const uncertain={state:'uncertain' as const,trackId:null};
+  if(!accountId)return uncertain;
+  const token=control.activity.begin();
+  if(!token)return uncertain;
+  const live=()=>current()&&token.current()&&!signal.aborted&&!busy&&!copyRemovalPending&&!collectionBlocked()&&!queueForeignBlocked();
+  try{
+   const receipt=await (repair?repairBatchLibraryDownload:reconcileLibraryDownload)(accountId,operationId,trackId,signal,live);
+   if(live()&&receipt.state!=='uncertain'){
+    if(choice&&receipt.state==='saved'&&receipt.trackId){
+     const track=await readRecord<Track>('tracks',receipt.trackId);
+     if(!live()||!track||!validAudioFingerprint(track.audioFingerprint))return uncertain;
+     await rememberSongAlias(choice,track.id,track.audioFingerprint.sha256,track.audioFingerprint.bytes,live);
+    }
+    if(repair)verifiedResponse(operationId);
+    if(repair||receipt.state==='saved')await refresh(false,false,null);
+   }
+   return receipt;
+  }finally{token.end();}
+ };
+ return Object.freeze({current,waitForDownload,
+  async inspectDownload(trackId:string,signal:AbortSignal){
    const account=accountController.getSnapshot().user?.id;
    if(!account)return null;
    const result=await inspectLibraryTrackDownload(account,trackId,undefined,signal,current);
    return result.state==='saved'?trackId:null;
-  },async reconcileDownload(operationId:string,trackId:string,signal:AbortSignal,repair=false){
+  },
+  reconcileDownload:(operationId:string,trackId:string,signal:AbortSignal,repair=false)=>reconcile(operationId,trackId,signal,repair),
+  reconcileSongDownload:(operationId:string,choice:SongChoice,signal:AbortSignal)=>reconcile(operationId,undefined,signal,true,choice),
+  async parkDownload(operationId:string,signal:AbortSignal){
    const accountId=accountController.getSnapshot().user?.id;
-   if(!accountId)return {state:'uncertain' as const,trackId:null};
-   const token=control.activity.begin();
-   if(!token)return {state:'uncertain' as const,trackId:null};
-   const live=()=>current()&&token.current()&&!signal.aborted&&!busy&&!copyRemovalPending&&!collectionBlocked()&&!queueForeignBlocked();
-   try{
-    const receipt=await (repair?repairBatchLibraryDownload:reconcileLibraryDownload)(accountId,operationId,trackId,signal,live);
-    if(live()&&receipt.state!=='uncertain'){
-     if(repair)verifiedResponse(operationId);
-     if(repair||receipt.state==='saved')await refresh(false,false,null);
-    }
-    return receipt;
-   }finally{token.end();}
-  }}:{}),
+   if(accountId&&parked.size<5000&&await canParkImport(operationId,accountId,signal,current))parked.add(operationId);
+  },
   async addToLibrary(trackId:string,caller:()=>boolean,signal:AbortSignal){
-   const live=()=>{try{return current()&&caller()===true&&!signal.aborted&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&!botImportActive&&control.activity.resolved;}catch{return false;}};
-   const admitted=await waitForSongAdmission({current:live,ready:songAdmissionIdle,signal,subscribe:changed=>{listeners.add(changed);return()=>{listeners.delete(changed);};}});
+   const live=()=>{try{return current()&&caller()===true&&!signal.aborted&&!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked()&&!botImportActive&&songStorageResolved(parked);}catch{return false;}};
+   const admitted=await waitForSongAdmission({current:live,ready:()=>songAdmissionIdle(parked),signal,subscribe:changed=>{listeners.add(changed);return()=>{listeners.delete(changed);};}});
    if(!admitted||!live())return false;
-   const management=captureSongManagement(trackId);
+   const management=captureSongManagement(trackId,parked);
    return management?.current()?management.add(live):false;
   },
   async lookup(choice:SongChoice,signal:AbortSignal,repair=false){
    const live=()=>current()&&!signal.aborted;
    primaryArtist=((choice.source==='itunes'||choice.source==='musicbrainz')?choice.searchArtist:choice.source==='lrclib'?choice.artist:null)?.trim()||null;
-   if(!live()||!songAdmissionIdle())throw Error('La biblioteca está ocupada.');const token=control.activity.begin();if(!token)throw Error('Sin control.');
+   if(!live()||!songAdmissionIdle(parked))throw Error('La biblioteca está ocupada.');const token=control.activity.begin();if(!token)throw Error('Sin control.');
    try{
     const id=await readSongAlias(choice,()=>live()&&token.current());if(!live())throw Error('cancelled');rememberedId=id;
     if(!id)return null;const track=await readRecord<Track>('tracks',id);if(!live())throw Error('cancelled');
     if(track&&track.id!==id)throw Error('La identidad de la ficha local ha cambiado.');
     if(!track||track.assetId===null)return null;
     const checked=await verifiedAssetDetailed(track.assetId,true);if(!live())throw Error('cancelled');
-    if(repair&&purpose==='batch'&&(checked.state==='missing'||checked.state==='corrupt')){
+    if(repair&&(checked.state==='missing'||checked.state==='corrupt')){
      const accountId=accountController.getSnapshot().user?.id;
      if(accountId&&await prepareBatchCopyReplacement(track,accountId,signal,()=>live()&&token.current()))return null;
      throw Error('No se pudo preparar la sustitución de esta copia de Biblioteca.');
@@ -487,7 +510,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
   },
   async save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(n:number)=>void,operationId?:string){
    if(!current()||signal.aborted)return {state:'failed' as const,trackId:null};
-   const save=captureBotAudioImport('cache');if(!save)return {state:'failed' as const,trackId:null};
+   const save=captureBotAudioImport('cache',parked);if(!save)return {state:'failed' as const,trackId:null};
    const result=await save(audio,signal,onProgress,operationId);if(result.state!=='saved'||!result.trackId)return result;
    // A matching restored fingerprint keeps the old Track and all its organization.
    const original=rememberedId?await readRecord<Track>('tracks',rememberedId):null;
@@ -535,15 +558,15 @@ function captureSongCopyInspection():SongCopyInspection|null {
   finally{token.end();}
  }});
 }
-function captureSongManagement(trackId:string):SongManagement|null {
+function captureSongManagement(trackId:string,parked?:ReadonlySet<string>):SongManagement|null {
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();
  const capturedLists=new Map(playlists.map(list=>[list.id,list.revision]));let used=false;
- const current=()=>admitted()&&raw()&&review()&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&songAdmissionIdle()&&tracks.some(t=>t.id===trackId);
+ const current=()=>admitted()&&raw()&&review()&&!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked()&&songAdmissionIdle(parked)&&tracks.some(t=>t.id===trackId);
  if(!current())return null;
  const run=async(work:(live:()=>boolean)=>Promise<unknown>,callerCurrent:()=>boolean=()=>true)=>{
   const callerLive=()=>{try{return callerCurrent()===true;}catch{return false;}};
   if(used||!current()||!callerLive())return false;used=true;const token=control.activity.begin();if(!token)return false;
-  const live=()=>admitted()&&raw()&&review()&&token.current()&&callerLive()&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked();
+  const live=()=>admitted()&&raw()&&review()&&token.current()&&callerLive()&&!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked();
   try{if(!live())return false;await work(live);await refresh(false,false,null);return live();}
   catch{return false;}finally{token.end();emit();}
  };
@@ -901,7 +924,7 @@ function applyDatabaseLifecycle(state:DatabaseLifecycleState){
 subscribeDatabaseLifecycle(applyDatabaseLifecycle);
 registerDatabaseRealmHost({
  capture(kind,callerCurrent){
-  if(!control.owner||databaseState!=='ready'||!callerCurrent()||((kind==='import'||kind==='batch')&&(importRecoveryPending()||metadataRescanBlocked||copyRemovalPending)))return null;
+  if(!control.owner||databaseState!=='ready'||!callerCurrent()||((kind==='import'||kind==='batch')&&(importRecoveryPending(parkedImportAdmissions.get(callerCurrent))||metadataRescanBlocked||copyRemovalPending)))return null;
   const resource=control.activity.begin();if(!resource)return null;
   const scope=scopeId,proof=control.proof;
   return {current:()=>scope===scopeId&&proof===control.proof&&control.owner&&databaseState==='ready'&&resource.current()&&callerCurrent(),onLifecycle:applyDatabaseLifecycle,end:()=>resource.end()};
@@ -1318,10 +1341,12 @@ function App(){
  for(const source of protectedCopies?.retainedSources??[])if(source.asset)protectedAssetIds.add(source.asset.id);
  const pendingTrackIds=new Set((protectedCopies?.pending??[]).flatMap(p=>p.trackIds));
  const canOrganize=owner&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked();
- const downloadStartAction=collectionDownloadVisible?<button type="button" disabled={!canOrganize||!(selected?.entries.length??visible.length)} onClick={()=>{
-  const ids=selected?selected.entries.map(entry=>entry.trackId).filter(id=>trackIndex.has(id)):visible.map(({track})=>track.id);
-  requestLibraryDownload(ids,selected?.name??activeGroup?.label??'Mi biblioteca');
- }}>{selected?'Descargar playlist completa':'Descargar esta selección en este dispositivo'}</button>:null;
+ const collectionTitle=selected?.name??(favorites?'Favoritos':activeGroup?.label??'Colección');
+ const collectionDownloadIds=React.useMemo(()=>selected?selected.entries.map(entry=>entry.trackId).filter(id=>trackIndex.has(id)):visible.map(({track})=>track.id),[selected,trackIndex,visible]);
+ const downloadCollection={target:collectionDownloadVisible?collectionDownloadTarget:null,
+  request:{trackIds:collectionDownloadIds,title:collectionTitle},
+  label:selected?'Descargar playlist completa':'Descargar esta selección en este dispositivo',
+  disabled:!canOrganize,complete:!!collectionDownloadIds.length&&collectionDownloadIds.every(id=>trackAvailability(trackIndex.get(id)!,availability)==='available')};
  const canSaveArtist=canOrganize&&databaseState==='ready'&&!collectionBlocked();
  const telegramLibraryPending=importRecoveryPending()||metadataRescanBlocked||copyRemovalPending;
  const telegramBlocked=telegramBlockReason({supported:control.supported,owner,acquiring:control.state==='adquiriendo',storageReady:databaseState==='ready',busy,reserved:sourceReview.hasReservation(),queuePending:queueForeignBlocked()});
@@ -1375,7 +1400,7 @@ function App(){
  }} onOpen={openSpotifyPlaylist}/>}
 <section className="settings-group settings-appearance"><h3>Apariencia</h3><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label></section><DownloadNotificationSettings/><section className="settings-group settings-app-update" aria-labelledby="app-update-heading"><h3 id="app-update-heading">Actualización de la app</h3><div className="settings-group__body"><p role="status">{manualReloadPending?'Esperando a que terminen las operaciones para recargar…':updateState==='checking'?'Comprobando versión…':updateState==='current'?'Actualizada':updateState==='available'?'Nueva versión disponible':'No se pudo comprobar si hay actualizaciones.'}</p><button type="button" disabled={manualReloadPending||updateNavigationLocked} onClick={()=>{player.pause();automaticUpdates?.reload();}}>Recargar app</button><p>Recarga Pulso y conserva tus datos. Si hay música sonando, se pausará.</p></div></section><section className="settings-group" aria-label="Sincronización de biblioteca"><h3>Biblioteca de tu cuenta</h3><div className="settings-group__body"><p role="status">{librarySyncMessage[librarySyncState]}</p><p>Playlists, favoritos y álbumes se conservan con tu cuenta. Los artistas guardados y las descargas se conservan en este dispositivo.</p><button type="button" disabled={!owner||busy||librarySyncState==='syncing'} onClick={()=>void librarySync.sync()}>Sincronizar biblioteca</button></div></section></div><div className="settings-groups">
 <section hidden={settingsSection!=='connections'} className="settings-group"><h3>Cuenta y fuentes</h3><div className="settings-group__body"><section aria-label="Música de Telegram"><details className="settings-help"><summary>Cómo buscar y escuchar</summary><p>En Buscar puedes consultar sugerencias musicales y las opciones del bot que elijas. Conecta tu cuenta de Telegram y configura tus bots para consultarlos. Al elegir una canción se comprueba tu copia local; si falta, se obtiene del bot para descargarla y escucharla. Límite por canción: {formatStorageMB(AUDIO_FILE_MAX_BYTES)}.</p></details></section>
- <TelegramPanel requiredSetup downloadTarget={storageOpen&&!playerOpen?storageDownloadTarget:collectionDownloadVisible?collectionDownloadTarget:null} downloadStartAction={downloadStartAction} downloadInStorage={storageOpen} onSetupReady={onSetupReady} accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureBatchDownload={captureBatchDownload} onReviewedDownload={operationId=>{if(operationId)verifiedResponse(operationId);void refresh(false,false,null).catch(()=>{});}} onReviewDownloadStorage={()=>{
+ <TelegramPanel requiredSetup downloadCollection={downloadCollection} downloadStorageTarget={storageOpen&&!playerOpen?storageDownloadTarget:null} onSetupReady={onSetupReady} accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureBatchDownload={captureBatchDownload} onReviewedDownload={operationId=>{if(operationId)verifiedResponse(operationId);void refresh(false,false,null).catch(()=>{});}} onReviewDownloadStorage={()=>{
   const target=document.getElementById('download-copy-recovery')??document.getElementById('download-response-recovery');
   if(target){setSettingsOpen(false);requestAnimationFrame(()=>{target.focus({preventScroll:true});target.scrollIntoView({block:'start'});});}
   else{setSettingsSection('general');setSettingsOpen(true);requestAnimationFrame(()=>settingsHeading.current?.focus());}
@@ -1403,32 +1428,37 @@ function App(){
    if(ok&&!save&&view())closeLibraryArtist();
    return ok;
   }}/>}
- <div hidden={!libraryDetail} className="library-detail"><BackButton className="collection-back" onClick={closeLibraryDetail}>Volver a Biblioteca</BackButton><CollectionHeader title={selected?.name??(favorites?'Favoritos':activeGroup?.label??'Colección')} kind={selected?'Playlist personal':favorites?'Playlist automática':activeGroup?.kind==='album'?'Álbum':'Colección'} count={visible.length} duration={visible.length&&visible.every(({track})=>Number.isFinite(track.duration)&&track.duration>0)?visible.reduce((sum,{track})=>sum+track.duration,0):null}
+ <div hidden={!libraryDetail} className="library-detail"><BackButton className="collection-back" onClick={closeLibraryDetail}>Volver a Biblioteca</BackButton><CollectionHeader title={collectionTitle} kind={selected?'Playlist personal':favorites?'Playlist automática':activeGroup?.kind==='album'?'Álbum':'Colección'} count={visible.length} duration={visible.length&&visible.every(({track})=>Number.isFinite(track.duration)&&track.duration>0)?visible.reduce((sum,{track})=>sum+track.duration,0):null}
   artwork={<CollectionCover trackIds={visible.map(({track})=>track.id)} favorite={!selected&&favorites} enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>}
   playing={owner&&collectionQueueMatches&&player.state==='playing'} canPlay={owner&&!busy&&databaseState==='ready'&&!copyRemovalBlocked()&&sourceReview.canPrepare()&&!!visible.length} busy={busy} onPlay={()=>void playCollection()}
-  shuffle={collectionQueueMatches&&!!player.shuffleOrder} canShuffle={owner&&!busy&&!collectionBlocked()&&collectionQueueMatches&&!!player.current} onShuffle={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked())player.setShuffle(!player.shuffleOrder);}}/>
- {selected&&<button type="button" disabled={!canOrganize} onClick={event=>openCollection({kind:'playlist',id:selected.id,revision:selected.revision},selected.name,event.currentTarget)}>Eliminar playlist</button>}
- {activeGroup?.kind==='album'&&!activeGroup.unknown&&libraryAlbums.some(group=>group.key===activeGroup.key&&!group.unknown)&&<button type="button" disabled={!canOrganize} onClick={event=>openCollection({kind:'album',scope:'global-library',key:activeGroup.key},activeGroup.label,event.currentTarget)}>Retirar álbum</button>}
- <div ref={setCollectionDownloadTarget}/>
- {selected&&<div className="playlist-catalog">
+  shuffle={collectionQueueMatches&&!!player.shuffleOrder} canShuffle={owner&&!busy&&!collectionBlocked()&&collectionQueueMatches&&!!player.current} onShuffle={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked())player.setShuffle(!player.shuffleOrder);}}
+  download={<div className="collection-download-slot" ref={setCollectionDownloadTarget}/>}
+  options={<TrackActionsMenu title={collectionTitle} label={selected?'Opciones de playlist':'Opciones de colección'}
+   closeLabel="Cerrar opciones de colección" active={collectionDownloadVisible}>
+ {page!=='buscar'&&selected&&<details><summary>Editar nombre</summary><form onSubmit={e=>{e.preventDefault();const value=new FormData(e.currentTarget).get('name');void viewAct(current=>changePlaylist(selected.id,selected.revision,{type:'rename',name:String(value)},current));}}><label>Nombre de playlist<input name="name" defaultValue={selected.name} key={selected.id+selected.revision} required maxLength={100}/></label><button disabled={!canOrganize}>Renombrar</button></form></details>}
+ {selected&&<>
   {spotifyCatalog?.id===selected.id&&<p role="status">{spotifyCatalog.state==='rateLimited'?rateLimitedMessage:spotifyCatalog.state==='failed'?'No se pudo terminar la búsqueda de álbumes y portadas.':
    spotifyCatalog.progress?.total===0?'Esta playlist no tiene pistas importadas de Spotify.':
    spotifyCatalog.progress?`${spotifyCatalog.progress.checked}/${spotifyCatalog.progress.total} revisadas · ${spotifyCatalog.progress.linked} con álbum · ${spotifyCatalog.progress.covers} con portada`:'Buscando álbumes y portadas…'}</p>}
   {spotifyCatalog?.id===selected.id&&spotifyCatalog.state==='running'?
    <button type="button" onClick={()=>catalogFlight.current?.controller.abort()}>Detener búsqueda de álbumes y portadas</button>:
    <button type="button" disabled={!canOrganize||spotifyCatalog?.state==='running'} onClick={()=>startSpotifyCatalog(selected.id)}>Actualizar álbumes y portadas de Spotify</button>}
- </div>}
- {selected&&playableCollection.length<visible.length&&<p>{visible.length-playableCollection.length} canciones sin copia local.</p>}
- <details className="collection-tools"><summary><span aria-hidden="true">⋯</span><span>{selected?'Opciones de playlist':'Opciones de colección'}</span></summary><div className="collection-tools__content"><details><summary>Filtros de canciones</summary><label>Buscar por título, artista o álbum<input value={query} onChange={e=>setQuery(e.target.value)} type="search"/></label>
+ </>}
+   <button disabled={!canAppend||!playableCollection.length} data-menu-dismiss-after="true" onClick={event=>addSelection(playableCollection,'next',event)}>Añadir selección a continuación ({playableCollection.length})</button>
+   <button disabled={!canAppend||!playableCollection.length} data-menu-dismiss-after="true" onClick={event=>addSelection(playableCollection,'end',event)}>Añadir selección al final ({playableCollection.length})</button>
+   <p>Estas acciones incluyen las otras páginas de la selección filtrada. {omittedCopies>0&&`${omittedCopies} sin copia se omitirán.`}</p>
+   <button disabled={!owner||busy||databaseState!=='ready'||copyRemovalBlocked()||!sourceReview.canPrepare()||!playableCollection.length} data-menu-dismiss-after="true" onClick={()=>void viewQueue(playableCollection.map(({track})=>track.id))}>Preparar cola de esta selección</button>
+
+<details><summary>Filtros de canciones</summary><label>Buscar por título, artista o álbum<input value={query} onChange={e=>setQuery(e.target.value)} type="search"/></label>
  <div hidden={page==='buscar'}><label>Solo favoritos<input type="checkbox" checked={favorites} onChange={e=>updateView({favorites:e.target.checked})}/></label><label>Solo copias presentes<input type="checkbox" checked={present} onChange={e=>updateView({present:e.target.checked})}/></label>
  <label>Vista<select aria-label="Vista" value={listId} onChange={e=>{setListId(e.target.value);}}><option value="">Todas las canciones</option>{playlists.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
  <label>Agrupar por<select aria-label="Agrupación de biblioteca" value={groupMode} onChange={e=>{setGroupMode(e.target.value as 'tracks'|'artists'|'albums');setGroupKey('');}}><option value="tracks">Canciones</option><option value="artists">Artistas</option><option value="albums">Álbumes</option></select></label>
  {groupMode!=='tracks'&&<div><label>{groupMode==='artists'?'Artista':'Álbum'}<select aria-label={groupMode==='artists'?'Grupo de artista':'Grupo de álbum'} value={activeGroup?.key??''} onChange={e=>setGroupKey(e.target.value)}><option value="">Todas las agrupaciones</option>{groups.map(group=><option key={group.key} value={group.key}>{group.label}{group.kind==='album'&&group.artist?` · ${group.artist}`:''} · {group.trackIds.length} pistas</option>)}</select></label><p>Agrupaciones por datos guardados, etiquetas o una edición identificada en catálogo. La completitud de los álbumes es desconocida.</p>{activeGroup&&<p>{activeGroup.unknown?'Sin metadatos suficientes para identificar esta agrupación.':`Datos: ${activeGroup.provenance.map(source=>source==='manual'?'correcciones manuales':source==='catalog'?'catálogo público':'etiquetas del archivo').join(' y ')||'desconocidos'}.`} {activeGroup.kind==='album'?'Completitud desconocida.':''}</p>}{activeGroup?.kind==='album'&&!activeGroup.unknown&&<p>{activeGroup.provenance.includes('catalog')?'Edición identificada en catálogo.':activeGroup.criterion==='albumArtist'?'Agrupación por artista del álbum declarado en el archivo.':'Agrupación por el artista disponible en la biblioteca.'} Orden por disco y número de pista declarados; los números desconocidos quedan al final.</p>}</div>}
  </details>
- <p>{visible.length} canciones · {libraryTracks.length} en biblioteca</p><div className="controls"><button disabled={!canAppend||!playableCollection.length} onClick={event=>addSelection(playableCollection,'next',event)}>Añadir selección a continuación ({playableCollection.length})</button><button disabled={!canAppend||!playableCollection.length} onClick={event=>addSelection(playableCollection,'end',event)}>Añadir selección al final ({playableCollection.length})</button></div><p>Estas acciones incluyen las otras páginas de la selección filtrada. {omittedCopies>0&&`${omittedCopies} sin copia se omitirán.`}</p><button disabled={!owner||busy||databaseState!=='ready'||(copyRemovalBlocked()||!sourceReview.canPrepare())||!playableCollection.length} onClick={()=>void viewQueue(playableCollection.map(({track})=>track.id))}>Preparar cola de esta selección</button>
- {page!=='buscar'&&selected&&<details><summary>Editar playlist</summary><form onSubmit={e=>{e.preventDefault();const value=new FormData(e.currentTarget).get('name');void viewAct(current=>changePlaylist(selected.id,selected.revision,{type:'rename',name:String(value)},current));}}><label>Nombre de playlist<input name="name" defaultValue={selected.name} key={selected.id+selected.revision} required maxLength={100}/></label><button disabled={!canOrganize}>Renombrar</button></form></details>}
  {page!=='buscar'&&selected&&filteredPlaylist&&<p>Para reordenar la playlist completa, quita los filtros de búsqueda, favoritos, copias y agrupación.</p>}
- </div></details>
+ {selected&&<button type="button" className="collection-menu-danger" data-menu-dismiss-after="true" disabled={!canOrganize} onClick={event=>openCollection({kind:'playlist',id:selected.id,revision:selected.revision},selected.name,trackActionOpener(event.currentTarget))}>Eliminar playlist</button>}
+ {activeGroup?.kind==='album'&&!activeGroup.unknown&&libraryAlbums.some(group=>group.key===activeGroup.key&&!group.unknown)&&<button type="button" className="collection-menu-danger" data-menu-dismiss-after="true" disabled={!canOrganize} onClick={event=>openCollection({kind:'album',scope:'global-library',key:activeGroup.key},activeGroup.label,trackActionOpener(event.currentTarget))}>Retirar álbum</button>}
+  </TrackActionsMenu>}/>
  {!visible.length&&<div className="collection-empty"><p>Esta colección todavía no tiene canciones.</p><button type="button" onClick={()=>navigate('buscar')}>Buscar canciones</button></div>}
  {pagination.pages>1&&<LibraryPagination {...pagination}/>}<ol className="tracks" start={pagination.start+1}>{pageRows.map(({track,key,playlistIndex})=>{const info=albumMetadata.get(track.id)!;return <li key={key}><CatalogArtwork key={control.proof+track.id} trackId={track.id} className="collection-track-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/><button className="collection-track-main" aria-label={`Escuchar ${track.title}`} aria-current={player.current?.trackId===track.id?'true':undefined} disabled={!owner||busy||databaseState!=='ready'||copyRemovalBlocked()||!sourceReview.canPrepare()} onClick={()=>{if(trackAvailability(track,availability)==='available')void playCollection(key);else requestLibraryDownload([track.id],track.title,true);}}><strong>{track.title}</strong><span>{track.artist??'Artista desconocido'}{displayTrackAlbum(track)&&` · ${displayTrackAlbum(track)}`}</span>{owner&&player.state==='playing'&&player.current?.trackId===track.id&&<PlaybackIndicator/>}</button>{((collectionPreparing?.view===collectionPlaybackViewKey&&collectionPreparing.trackId===track.id)||(player.current?.trackId===track.id&&(player.state==='loading'||player.state==='buffering')))&&<span className="collection-track-loading" role="status"><span>Preparando canción…</span><progress aria-label={`Carga de ${track.title}`}/></span>}<TrackActionsMenu title={track.title} artist={track.artist??'Artista desconocido'} active={page==='biblioteca'&&!settingsOpen&&libraryDetail&&!playerOpen} artwork={<CatalogArtwork trackId={track.id} className="track-actions-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>}>
  <button disabled={!canOrganize} aria-pressed={track.favorite} ref={button=>{if(button)favoriteButtons.current.set(key,button);else favoriteButtons.current.delete(key);}} onClick={event=>void toggleFavorite(track,key,event.currentTarget)}>{track.favorite?'Quitar favorito':'Favorito'}</button>

@@ -5,6 +5,7 @@
   --pulso-muted: #566479;
   --pulso-accent: #235ad7;
   --pulso-on-accent: #ffffff;
+  --pulso-danger: #a52633;
   --pulso-border: #d9e0ea;
   --pulso-control-border: #687991;
   --pulso-soft: #e8efff;
@@ -21,6 +22,7 @@ html[data-theme="dark"] {
   --pulso-muted: #b7c2d3;
   --pulso-accent: #a8c5ff;
   --pulso-on-accent: #10244c;
+  --pulso-danger: #ffabb1;
   --pulso-border: #3b495e;
   --pulso-control-border: #8697ae;
   --pulso-soft: #293d60;
@@ -34,6 +36,7 @@ html[data-theme="dark"] {
     --pulso-muted: #b7c2d3;
     --pulso-accent: #a8c5ff;
     --pulso-on-accent: #10244c;
+    --pulso-danger: #ffabb1;
     --pulso-border: #3b495e;
     --pulso-control-border: #8697ae;
     --pulso-soft: #293d60;

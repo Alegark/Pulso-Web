@@ -2,7 +2,7 @@ import {createElement,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {LibraryDownloadController} from '../../src/ui/LibraryDownloadController';
 import {TrackActionsMenu} from '../../src/ui/TrackActionsMenu';
-import {requestLibraryDownload,requestLibraryTrackReview} from '../../src/library/library-download';
+import {requestLibraryTrackReview} from '../../src/library/library-download';
 import type {SongPlaybackAttempt} from '../../src/library/selected-song';
 import type {TelegramSessionClient} from '../../src/telegram/session-client';
 import {reconcileLibraryDownload,inspectLibraryTrackDownload,prepareBatchCopyReplacement,repairBatchLibraryDownload} from '../../src/library/library-download-recovery';
@@ -111,10 +111,10 @@ const api={id,seed,rows,mutate,
    }} as unknown as TelegramSessionClient;
   const attempt:SongPlaybackAttempt={current:()=>true,lookup:async()=>null,
    save:async()=>{throw Error('Unexpected save');},addToLibrary:async()=>{throw Error('Unexpected membership change');},play:async()=>{throw Error('Unexpected playback');}};
-  const host=document.createElement('div'),target=document.createElement('div');document.body.append(host,target);createRoot(host).render(createElement('main',null,
+  const host=document.createElement('div');document.body.append(host);createRoot(host).render(createElement('main',null,
    ...tracks.map((t:Track)=>createElement('li',{key:t.id},createElement(TrackActionsMenu,{title:t.title,artist:t.artist??'',active:true,
     children:createElement('button',{'data-menu-dismiss-after':'true',onClick:()=>requestLibraryTrackReview(t.id,t.title)},'Revisar descarga de esta canción')}))),
-   createElement(LibraryDownloadController,{target,accountId:id(120),tracks,client,bots,connected:true,captureBatch:()=>attempt})));
+   createElement(LibraryDownloadController,{accountId:id(120),tracks,client,bots,connected:true,captureBatch:()=>attempt})));
   Object.assign(window,{trackReviewFixture:{queries,held:(n:number)=>readHeldLibraryDownload(id(120),id(n))}});
  },
  async mountAutomaticBatch(mode:'alternate'|'exhausted'|'same-provider'|'transient'|'resume',seedOnly=false){
@@ -189,9 +189,13 @@ const api={id,seed,rows,mutate,
    },
    reconcileDownload:(operationId,trackId,signal,repair)=>(repair?repairBatchLibraryDownload:reconcileLibraryDownload)(batchAccount,operationId,trackId,signal,()=>true),
    addToLibrary:async()=>{throw Error('Unexpected membership change');},play:async()=>{throw Error('Unexpected playback');}};
-  const host=document.createElement('div'),target=document.createElement('div');document.body.append(host,target);createRoot(host).render(createElement('main',null,
-   createElement('button',{onClick:()=>requestLibraryDownload(trackIds,'Playlist automática')},'Descargar playlist completa'),
-   createElement(LibraryDownloadController,{target,accountId:batchAccount,tracks,client,bots:bots as never,connected:true,captureBatch:()=>attempt})));
+  function Fixture(){
+   const [target,setTarget]=useState<HTMLDivElement|null>(null);
+   return createElement('main',null,createElement('div',{ref:setTarget}),
+    createElement(LibraryDownloadController,{collection:{target,request:{trackIds,title:'Playlist automática'},
+     label:'Descargar playlist completa',complete:false,disabled:false},accountId:batchAccount,tracks,client,bots:bots as never,connected:true,captureBatch:()=>attempt}));
+  }
+  const host=document.createElement('div');document.body.append(host);createRoot(host).render(createElement(Fixture));
   Object.assign(window,{automaticFixture:{requests,downloads,saves,receipt:async()=>staging?{state:(await importOperation(staging))?.state,
     chunks:await requestChunk(staging)}:null}});
  },
@@ -207,15 +211,14 @@ const api={id,seed,rows,mutate,
   function Fixture(){
    const [route,setRoute]=useState<'home'|'playlist'|'downloads'>('playlist');
    const [target,setTarget]=useState<HTMLDivElement|null>(null);
-   const startAction=route==='playlist'?createElement('button',
-    {onClick:()=>requestLibraryDownload(rows.map(row=>row.id),'Playlist de prueba')},'Descargar selección'):null;
    return createElement('main',{className:'pulso-app'},
     createElement('button',{onClick:()=>setRoute('home')},'Ir a Inicio'),
     createElement('button',{onClick:()=>setRoute('playlist')},'Abrir playlist'),
     createElement('button',{onClick:()=>setRoute('downloads')},'Gestionar descargas'),
     createElement('h2',null,route==='home'?'Inicio':route==='playlist'?'Playlist de prueba':'Tus descargas'),
-    route!=='home'&&createElement('div',{ref:setTarget,'data-surface':route}),
-    createElement(LibraryDownloadController,{target,startAction,allowDiscard:route==='downloads',accountId:id(120),tracks:rows,client,bots,connected:true,captureBatch:()=>attempt}));
+    createElement('div',{ref:setTarget,'data-surface':route}),
+    createElement(LibraryDownloadController,{collection:{target:route==='playlist'?target:null,label:'Descargar selección',complete:false,disabled:false,
+     request:{trackIds:rows.map(row=>row.id),title:'Playlist de prueba'}},storageTarget:route==='downloads'?target:null,accountId:id(120),tracks:rows,client,bots,connected:true,captureBatch:()=>attempt}));
   }
   const host=document.createElement('div');document.body.append(host);createRoot(host).render(createElement(Fixture));
   Object.assign(window,{batchFixture:{release,lookups:()=>lookups}});

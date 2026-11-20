@@ -60,3 +60,15 @@ test('renewable document reference is validated separately from exact immutable 
  let reads=0;const accessor={...doc};Object.defineProperty(accessor,'fileReference',{enumerable:true,get(){reads++;return new Uint8Array([1]);}});assert.throws(()=>botSearchMessageFingerprint(make(accessor)));assert.equal(reads,0);
  assert.notEqual(fingerprint({...make(),replyMarkup:{fileReference:new Uint8Array([1])}}),fingerprint({...make(),replyMarkup:{fileReference:new Uint8Array([2])}}),'Other paths remain exact');
 });
+
+test('a matching oversized Telegram document is classified without exposing a downloadable row',()=>{
+ const target={title:'Track',artist:'Artist',album:null,durationSeconds:60};
+ const doc={_:'document',size:101*1024*1024,mimeType:'audio/mpeg',attributes:[
+  {_:'documentAttributeAudio',duration:60,title:'Track',performer:'Artist'},
+ ]};
+ const raw=history([msg(12,{message:'',media:{_:'messageMediaDocument',document:doc}})]);
+ const matched=projectBotSearchPage(raw,bot,9,10,[],target);
+ assert.equal(matched.rejectedFile,'file-too-large');
+ assert.deepEqual(matched.rows,[]);
+ assert.equal(projectBotSearchPage(raw,bot,9,10,[],{...target,title:'Other'}).rejectedFile,undefined);
+});

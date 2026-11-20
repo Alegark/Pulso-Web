@@ -10,6 +10,7 @@ export class Activity {
   get admitted() { return this.accepting; }
   get idle() { return this.active.size === 0 && this.unresolved.size === 0; }
   get resolved() { return this.unresolved.size === 0; }
+  resolvedExcept(key: string) { return this.resolved || this.unresolved.size === 1 && this.unresolved.has(key); }
   scope() { const generation=this.generation; return () => generation===this.generation; }
   get count() { return this.active.size; }
   open() { ++this.generation; this.accepting = true; this.changed(); }

@@ -12,7 +12,7 @@ export interface LibraryDownloadCheckpoint {
 export function copyLibraryDownloadCheckpoint(value:unknown):LibraryDownloadCheckpoint|null{
  const row=value as LibraryDownloadCheckpoint|null;
  if(!row||!uuid(row.id)||!Array.isArray(row.trackIds)||!row.trackIds.length||row.trackIds.length>5000||
-  !row.trackIds.every(uuid)||new Set(row.trackIds).size!==row.trackIds.length||!Number.isInteger(row.cursor)||row.cursor<0||row.cursor>row.trackIds.length)return null;
+  !row.trackIds.every(uuid)||!Number.isInteger(row.cursor)||row.cursor<0||row.cursor>row.trackIds.length)return null;
  const pending=row.pending;
  if(pending!==null&&(!pending||pending.index!==row.cursor||row.cursor>=row.trackIds.length||
   !(pending.kind==='network'||pending.kind==='save'&&uuid(pending.operationId))))return null;
