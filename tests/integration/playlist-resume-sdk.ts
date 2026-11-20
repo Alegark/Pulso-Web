@@ -2,6 +2,7 @@
 import Long from 'long';
 import {openTemporaryTelegram as setupSdk} from './required-setup-sdk';
 import {loadTelegramSession} from '../../src/telegram/saved-session';
+import {BotSearchProjectionError} from '../../src/telegram/bot-search-page';
 import {createBotSearchDriver} from '../../src/telegram/bot-search-driver';
 
 function wav(){
@@ -37,20 +38,27 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
   const pool=base.createBotProviders(session);
   return createBotSearchDriver(base.getAccountBinding()!,session,{
    captureProvider:(ref,rev)=>pool.captureSearchProvider(ref,rev),resolveIdentity,
-   async readHistory(_peer,_min,limit){return limit===1?history():history([message()]);},
+   async readHistory(_peer,_min,limit){
+    if(limit===1)return history();
+    if(title==='Pista 3'&&peer===101){
+     if(mode==='bot-timeout')return history();
+     if(mode==='bot-unsupported')throw new BotSearchProjectionError('unsupported');
+    }
+    return history([message()]);
+   },
    async sendQuery(_peer,query){
-    const found=/Pista [1-4]/.exec(query);if(!found)throw Error('Unexpected fixture query');
+    const found=/Pista [1-4]|Consulta manual/.exec(query);if(!found)throw Error('Unexpected fixture query');
     title=found[0];const reply=await report('search',{title,peer});mode=reply.mode;
-    if(reply.timeout)throw Error('timeout');
     return {_:'updateShortSentMessage',out:true,id:10,date:1,pts:1,ptsCount:1};
    },
    async readKnown(){return history([message()]);},
    async readDocumentPart(_document,offset,limit){
     const reply=await report('read',{title,peer});
+    if(reply.network)throw Error('network');
     if(reply.flood==='unknown')throw {text:'FLOOD_WAIT'};
     if(reply.flood)throw {text:'FLOOD_WAIT',seconds:reply.flood};
     if(title==='Pista 3'&&mode==='cooldown'&&!flooded){flooded=true;throw {errorMessage:'FLOOD_WAIT_2'};}
-    if(title==='Pista 3'&&!['autoheal','single','cooldown','ack-lost','long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop'].includes(mode))return new Uint8Array(0);
+    if(title==='Pista 3'&&!['autoheal','single','cooldown','ack-lost','long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop','bot-timeout','bot-unsupported','manual-lane'].includes(mode))return new Uint8Array(0);
     // Real worker rejects the invalid header; the second bot offers good bytes.
     if(title==='Pista 3'&&['autoheal','single'].includes(mode)&&peer===101)return new Uint8Array(Math.min(limit,bytes.length-offset));
     bytes[bytes.length-1]=Number(title.at(-1))+10;

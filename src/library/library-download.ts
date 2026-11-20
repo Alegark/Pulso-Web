@@ -3,7 +3,7 @@ import {sameHeldDownload,type HeldDownload,type LibraryDownloadCheckpoint,type P
 import type {Track} from './library';
 import type {AlbumRow} from './album-acquisition';
 import type {SongPlaybackAttempt,SongChoice} from './selected-song';
-import {orderedProviders,type OrderedProvider} from './ordered-bot-acquisition';
+import {orderedProviders,type CollectionBotProgress,type OrderedProvider} from './ordered-bot-acquisition';
 import {downloadSong,parkedSong,parkSongDownload,reconcileSongDownload} from './download-song';
 import type {TelegramSessionClient} from '../telegram/session-client';
 export interface LibraryDownloadRequest {id:string;trackIds:readonly string[];title:string;play:boolean;repair?:boolean}
@@ -33,6 +33,14 @@ export async function downloadLibrarySelection(p:{
  const wait=collectionTelegramWait(p.client,p.signal,live,checkpoint?.telegramRetryAt??0,telegramRetryAt=>{
   if(checkpoint){checkpoint={...checkpoint,telegramRetryAt};p.saveCheckpoint?.(checkpoint);}
  });
+ const waitForDownload=p.attempt.waitForDownload?async(signal:AbortSignal)=>{
+  do{
+   await wait.waitWhileOccupied();
+   if(!live())return false;
+   if(await p.attempt.waitForDownload!(signal))return true;
+  }while(wait.occupied());
+  return false;
+ }:undefined;
  const start=checkpoint?.cursor??0,resuming=checkpoint?.pending;
  const completed=new Map<string,AlbumRow>();
  const attempts=new Map<string,SavedCandidate[]>();
@@ -99,7 +107,7 @@ export async function downloadLibrarySelection(p:{
    try{
     if(i<start&&p.attempt.inspectDownload)id=await p.attempt.inspectDownload(track.id,p.signal);
     if(!id){
-     if(!live()||p.attempt.waitForDownload&&!await p.attempt.waitForDownload(p.signal))return stop();
+     if(!live()||waitForDownload&&!await waitForDownload(p.signal))return stop();
      if(!live())return stop();
      id=await p.attempt.lookup(choice,p.signal,true);
     }
@@ -117,6 +125,7 @@ export async function downloadLibrarySelection(p:{
     Object.assign(row,parkedSong);
    }else{
     const pause=wait.pauseForTrack();
+    const collection:CollectionBotProgress={completed:new Set(),ambiguous:new Set(),responded:false,reasons:[]};
     let interrupted=false,suspended=false;
     const status=(message:string,waiting=false)=>{if(row.message!==message){row.message=message;update(message,waiting);}};
     while(live()){
@@ -133,9 +142,9 @@ export async function downloadLibrarySelection(p:{
      if(!providers.length||providers.length!==p.providers.length||!unchanged){
       status('La selección de bots cambió. Revisa Telegram y pulsa Continuar.',true);return 'paused';
      }
-     const result=await downloadSong({...p,providers,revision:bots.revision,collection:true,choice,trackId:track.id,index:i,current:live,
+     const result=await downloadSong({...p,providers,revision:bots.revision,collection,choice,trackId:track.id,index:i,current:live,
       networkCurrent:()=>captured()&&wait.foreground()&&wait.generation()===generation,remoteClock,
-      previousAttempts:attempts.get(track.id),onFailedCandidates:candidates=>attempts.set(track.id,candidates),
+      waitForDownload,previousAttempts:attempts.get(track.id),onFailedCandidates:candidates=>attempts.set(track.id,candidates),
       mark:value=>{pending=value;mark(i,value);},message:status,progress:()=>{}});
      if(result.state==='stopped'||!live())return stop();
      if(result.state!=='telegram'){

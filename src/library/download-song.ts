@@ -7,11 +7,12 @@ import {isBotSearchQuery,parseBotSearchTarget} from '../telegram/bot-search-prot
 export const parkedSong={state:'uncertain',reason:'parked',message:'Pendiente en Almacenamiento'} as const;
 
 export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBots>[0],'target'|'accept'|'excludedDigests'|'excludedRowKeys'>&{
- choice:SongChoice;attempt:SongPlaybackAttempt;trackId?:string;index:number;
+ choice:SongChoice;attempt:SongPlaybackAttempt;waitForDownload?:SongPlaybackAttempt['waitForDownload'];trackId?:string;index:number;
  previousAttempts?:readonly SavedCandidate[];onFailedCandidates?:(candidates:SavedCandidate[])=>void;
  mark:(pending:PendingDownload)=>void;message:(message:string)=>void;
 }):Promise<(Partial<AlbumRow>&{state:AlbumRow['state']}) | {state:'stopped'} | {state:'telegram'}>{
  const {choice,attempt,signal,current,trackId}=p;
+ const waitForDownload=p.waitForDownload??attempt.waitForDownload;
  const target=parseBotSearchTarget({title:choice.title,artist:choice.artist,album:choice.album,durationSeconds:choice.duration||null});
  if(!target?.artist||!isBotSearchQuery(target.title+' '+target.artist))return {state:'failed',reason:'missing-metadata',message:'Faltan datos para buscarla'};
  let savedId:string|null=null;
@@ -26,7 +27,7 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
   // One repeat of the same bytes for a transient write failure, after proving
   // that the previous operation published nothing. Every write has a new ID.
   for(let write=0;write<2;write++){
-   if(!current()||attempt.waitForDownload&&!await attempt.waitForDownload(signal)||!current())return 'stopped';
+   if(!current()||waitForDownload&&!await waitForDownload(signal)||!current())return 'stopped';
    const operationId=crypto.randomUUID();
    p.mark({kind:'save',index:p.index,operationId,attempts});
    p.message('Guardando copia…');

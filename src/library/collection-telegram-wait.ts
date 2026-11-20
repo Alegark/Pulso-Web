@@ -22,6 +22,11 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
   signal.addEventListener('abort',done,{once:true});
   if(signal.aborted)done();
  });
+ const occupied=()=>{
+  const state=client.searchSnapshot?.();
+  return !!state?.available&&(state.pending||state.cancelling);
+ };
+ const waitWhileOccupied=async()=>{while(live()&&occupied())await sleep(250);};
  const delayFor=(until:number)=>Math.min(Math.max(0,until-Date.now()),30_000);
  const duration=(ms:number)=>ms>=60_000?`${Math.ceil(ms/60_000)} min`:`${Math.ceil(ms/1000)} s`;
  const pauseForTrack=()=>{
@@ -63,6 +68,10 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
        session?.phase==='disconnected'){
      return 'Vuelve a conectar Telegram y pulsa Continuar. El progreso se conserva.';
     }
+    if(remote.available&&(remote.pending||remote.cancelling)){
+     await waitWhileOccupied();
+     continue;
+    }
     if(disruptions>RECONNECT_DELAYS.length)return 'Telegram sigue sin responder. Pulsa Continuar para volver a intentarlo.';
     if(remote.available&&!remote.pending&&!remote.cancelling&&(waitingForFlood||Date.now()>=reconnectAt)){
      // One renewal after repeated errors, or after a failed attempt crossed a suspension.
@@ -84,7 +93,7 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
    return '';
   };
  };
- return {foreground,generation:()=>generation,pauseForTrack,dispose(){
+ return {foreground,generation:()=>generation,pauseForTrack,occupied,waitWhileOccupied,dispose(){
   page?.removeEventListener('visibilitychange',changed);
   windowHost?.removeEventListener('pageshow',changed);
   windowHost?.removeEventListener('online',changed);

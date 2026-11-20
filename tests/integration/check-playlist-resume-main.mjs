@@ -26,6 +26,15 @@ const readyCopies=[1,2].map(n=>{
 });
 const fixture=()=>({name:'playlist-resume-sdk-test',enforce:'pre',resolveId(id){if(id==='./temporary-sdk')return resolve('tests/integration/playlist-resume-sdk.ts');},
  transform(code,id){
+  if(id.endsWith('/telegram/session-client.ts')){
+   return code+`
+const testSearchBot=TelegramSessionClient.prototype.searchBot;
+    TelegramSessionClient.prototype.searchBot=function(...args){
+     window.testSessionClient=this;
+     return testSearchBot.apply(this,args);
+    };
+`;
+  }
   if(!id.endsWith('/telegram/session.worker.ts'))return;
   return `let testClockOffset=0;const realNow=Date.now.bind(Date);
    Date.now=()=>realNow()+testClockOffset;
@@ -35,7 +44,8 @@ const fixture=()=>({name:'playlist-resume-sdk-test',enforce:'pre',resolveId(id){
    `+code;
  }});
 const channelModes=['long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop'];
-const allModes=[...channelModes,'autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
+const fallbackModes=['bot-timeout','bot-unsupported','manual-lane'];
+const allModes=[...channelModes,...fallbackModes,'autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
 const modes=process.env.PLAYLIST_RESUME_MODE?process.env.PLAYLIST_RESUME_MODE.split(','):allModes;
 assert.ok(modes.every(mode=>allModes.includes(mode)),'Unknown playlist resume test case');
 const reasons={
@@ -89,8 +99,8 @@ try{
   try{for(const mode of modes){
    const fresh=['autoheal','missing','missing-metadata','single','album'].includes(mode);
    const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
-   const trace=[];let floodAt=0,restores=0;const channel=channelModes.includes(mode);
-   let releaseRestore,releaseSearch,holdRestore=false,page;
+   const trace=[];let floodAt=0,restores=0;const channel=channelModes.includes(mode),fallback=fallbackModes.includes(mode);
+   let releaseRestore,releaseSearch,holdRestore=false,page,restoresBeforeResume=0;
    const restoration=new Promise(resolve=>{releaseRestore=resolve;});
    const searchGate=new Promise(resolve=>{releaseSearch=resolve;});
    try{
@@ -119,13 +129,15 @@ try{
       trace.push({...event,at:Date.now()});
       if(['missing','album'].includes(mode)&&event.kind==='search'&&event.title==='Pista 3')await searchGate;
       const thirdSearches=trace.filter(item=>item.kind==='search'&&item.title==='Pista 3').length;
+      if(event.kind==='search'&&event.title==='Pista 3'&&thirdSearches===1)restoresBeforeResume=restores;
       if(mode==='suspend'&&event.kind==='search'&&event.title==='Pista 3'&&thirdSearches===1)await searchGate;
       const limited=['long-cooldown','unknown-cooldown','notifications-off','stop'].includes(mode);
       const flood=event.kind==='read'&&event.title==='Pista 3'&&limited&&!floodAt
        ?(mode==='unknown-cooldown'?'unknown':300):null;
       if(flood)floodAt=event.workerAt;
-      const timeout=mode==='reconnect'&&event.kind==='search'&&event.title==='Pista 3'&&thirdSearches<=2;
-      return route.fulfill({json:{mode:mode==='album'?'missing':mode,flood,timeout}});
+      if(mode==='manual-lane'&&event.title==='Consulta manual')await searchGate;
+      const network=mode==='reconnect'&&event.kind==='read'&&event.title==='Pista 3'&&thirdSearches<=2;
+      return route.fulfill({json:{mode:mode==='album'?'missing':mode,flood,network}});
      }
      return route.fallback();
     });
@@ -140,10 +152,10 @@ try{
      }
      return route.fulfill({json:cloud});
     });
-    await context.addInitScript(({loseAck,channel,mode,user})=>{
+    await context.addInitScript(({loseAck,channel,fallback,mode,user})=>{
      let hidden=false,offset=-500;
      const workers=new Set();
-     if(channel){
+     if(channel||fallback){
       // Keep the synthetic Pulso configuration independent of WebKit's
       // canceled HTTP fetches when the test reloads or jumps the page clock.
       const fetchOriginal=window.fetch.bind(window);
@@ -187,7 +199,7 @@ try{
       }
       constructor(...args){
        super(...args);
-       if(channel&&String(args[0]).includes('session.worker')){
+       if((channel||mode==='manual-lane')&&String(args[0]).includes('session.worker')){
         workers.add(this);
         this.postMessage({testonlyClock:offset});
        }
@@ -205,9 +217,9 @@ try{
       }
       terminate(){workers.delete(this);super.terminate();}
      };
-    },{loseAck:mode==='ack-lost',channel,mode,user});
+    },{loseAck:mode==='ack-lost',channel,fallback,mode,user});
     page=await context.newPage();page.setDefaultTimeout(18000);
-    if(channel)await page.clock.install();
+    if(channel||mode==='manual-lane')await page.clock.install();
     const advance=async ms=>{await page.evaluate(value=>window.testAdvanceWorkers(value),ms);await page.clock.fastForward(ms);};
     const waitForWorker=async predicate=>{
      for(let i=0;i<100;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,50));}
@@ -335,6 +347,22 @@ try{
      assert.equal(await handle.getAttribute('aria-expanded'),'false');
      releaseSearch();
     }
+    if(mode==='manual-lane'){
+     await page.waitForFunction(()=>{
+      const client=window.testSessionClient,state=client?.searchSnapshot();
+      return state?.expectedTarget?.title==='Pista 3'&&!state.pending&&state.rows.length>0;
+     });
+     await page.evaluate(()=>{
+      const client=window.testSessionClient;
+      client.searchBot({providerRef:client.botsSnapshot().providers[0].providerRef,query:'Consulta manual',consent:true});
+     });
+     await waitForWorker(()=>trace.some(event=>event.title==='Consulta manual'));
+     await advance(4000);
+     assert.equal(trace.filter(event=>event.title==='Pista 3').length,1);
+     assert.equal(trace.some(event=>event.title==='Pista 4'),false);
+     assert.equal(await dock.getByText('Reconectando con Telegram…',{exact:true}).count(),0);
+     releaseSearch();
+    }
     if(channel){
      const thirdSearches=()=>trace.filter(event=>event.kind==='search'&&event.title==='Pista 3').length;
      if(mode==='suspend'){
@@ -371,7 +399,7 @@ try{
       await advance(25_000);
      }
     }
-    const allSaved=channel||['autoheal','cooldown','ack-lost','single'].includes(mode);
+    const allSaved=channel||fallback||['autoheal','cooldown','ack-lost','single'].includes(mode);
     const [reasonCount,reasonText]=reasons[mode]??reasons.invalid;
     const summary=mode==='single'?'1 de 1 guardadas':allSaved?'4 de 4 guardadas':`3 de 4 guardadas · ${reasonCount}`;
     await handle.getByText(summary,{exact:true}).waitFor({timeout:45000});
@@ -384,7 +412,7 @@ try{
      assert.equal(await page.getByRole('button',{name:label,exact:true}).count(),0);
     }
     assert.doesNotMatch(await panel.innerText(),/\[D\d+\]/);
-    if(channel)assert.equal(await panel.locator('li[data-failed=true]').count(),0);
+    if(channel||fallback)assert.equal(await panel.locator('li[data-failed=true]').count(),0);
     if(!allSaved){
      const failed=panel.locator(mode==='missing-metadata'?'li[data-failed=false]':'li[data-failed=true]').filter({hasText:'Pista 3'});
      await failed.getByText(reasonText,{exact:true}).waitFor();
@@ -406,7 +434,7 @@ try{
     if(channel){
      assert.deepEqual(searches.map(event=>event.title),[...Array(mode==='reconnect'?3:2).fill('Pista 3'),'Pista 4']);
      if(floodAt)assert.ok(searches[1].workerAt>=floodAt+300_000);
-     if(mode==='reconnect')assert.ok(restores>=2,'expected the worker to restore the saved session');
+     if(mode==='reconnect')assert.ok(restores>restoresBeforeResume,'expected the worker to restore the saved session');
      if(mode==='suspend'){
       assert.equal(await page.evaluate(()=>window.testNotifications.filter(notice=>!notice.silent).length),0);
       await page.evaluate(()=>{window.testVisibility(false);dispatchEvent(new Event('pageshow'));});
@@ -420,6 +448,14 @@ try{
       assert.deepEqual(notices.filter(notice=>!notice.silent).map(notice=>notice.body),['4 de 4 guardadas']);
       assert.ok(notices.every(notice=>notice.tag==='pulso-download-collection'));
      }
+    }else if(fallback){
+     assert.deepEqual(searches.map(({title,peer})=>[title,peer]),mode==='manual-lane'?
+      [['Pista 3',101],['Consulta manual',101],['Pista 3',101],['Pista 4',101]]:
+      [['Pista 3',101],['Pista 3',102],['Pista 4',101]]);
+     if(mode==='bot-timeout')assert.ok(searches[1].at-searches[0].at>=14_000,'the first bot stayed silent through its response deadline');
+     const notices=await page.evaluate(()=>window.testNotifications);
+     assert.ok(notices.every(notice=>!notice.body.includes('Reconectando')&&!notice.body.includes('Telegram pide esperar')));
+     assert.equal(restores,restoresBeforeResume,'healthy transport should not restore during an isolated bot failure');
     }else assert.deepEqual(searches.map(e=>e.title),mode==='single'?['Pista 3','Pista 3']:mode==='parked'?['Pista 4']:mode==='ack-lost'?['Pista 3','Pista 4']:mode==='missing-metadata'?['Pista 1','Pista 2','Pista 4']:[...(fresh?['Pista 1','Pista 2']:[]),'Pista 3','Pista 3','Pista 4']);
     if(mode==='ack-lost'){
      const lost=await page.evaluate(()=>window.__TESTONLY_outcomes.filter(outcome=>outcome.type==='lost-ack'));
