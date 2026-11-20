@@ -1,3 +1,4 @@
+import {cooldownDeadline} from './rpc-failure';
 import {assembleBotDownloadBytes,botDownloadTransferMs,BotDownloadBytesFailure} from './bot-download-bytes';
 import {recordingTitleCandidate} from '../library/recording-title';
 import Long from 'long';
@@ -72,7 +73,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    const query=c.type==='bot-search.search'?formatBotSearchQuery(c):null;if(c.type==='bot-search.search'&&!query)return response(e,fail('limit-query'),'not-dispatched');
    const shared=dependency.getAccountCooldown?.();
    if(shared)return response(e,{error:'rate-limit',...shared},'not-dispatched');
-   if(cooldown&&(cooldown.retryBlocked||cooldown.retryAt!==null&&time.now()<cooldown.retryAt))return response(e,cooldown,'not-dispatched');
+   if(cooldown&&cooldown.retryAt!==null&&time.now()<cooldown.retryAt)return response(e,cooldown,'not-dispatched');
    const duration=c.type==='bot-search.download'?B.downloadResolveMs:B.timeoutMs;
    const abort=new AbortController();let deadline=time.now()+duration;
    let wake!:(v:BotSearchReply)=>void;const stopped=new Promise<BotSearchReply>(r=>{wake=r;});
@@ -101,8 +102,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
     const cause=botProvidersFailure(error,time.now());
     if(cause.error==='session-expired'){if(!f.cause)f.cause=cause;invalidate();}
     if(cause.error==='rate-limit'){
-     const blocked=!!cooldown?.retryBlocked||cause.retryBlocked;
-     cooldown={error:'rate-limit',retryAt:blocked?null:Math.max(cooldown?.retryAt??0,cause.retryAt??0),retryBlocked:blocked};
+     cooldown={error:'rate-limit',retryAt:Math.max(cooldown?.retryAt??0,cooldownDeadline(cause,time.now())),retryBlocked:false};
+     return cooldown;
     }
     return cause.error==='network'&&f.delivery==='uncertain'?fail('uncertain'):cause;
    };

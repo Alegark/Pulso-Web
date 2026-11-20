@@ -1,4 +1,4 @@
-import {classifyTelegramFailure} from './rpc-failure';
+import {classifyTelegramFailure,cooldownDeadline} from './rpc-failure';
 import Long from 'long';
 import {parseSavedBots,type SavedBot} from './saved-session';
 import type {tl} from '@mtcute/core';
@@ -6,7 +6,7 @@ import {assertRawBudget} from './sources-page';
 import {dataArray,isUuid,parseAccountBinding,positive,sourceName,type AccountBinding} from './sources-protocol';
 import {BOT_PROVIDERS_BOUNDS as B,copyBotEnvelope,copyBotRow,parseBotProvidersCommand,parseBotUsername,type BotEnvelope,type BotProviderRow,type BotProvidersError,type BotProvidersReply,type BotProvidersSnapshot} from './bot-providers-protocol';
 /** Worker-private. This dependency cannot send, start, search, enumerate chats or read history. */
-export interface BotProvidersDependency {resolveIdentity(username:string,signal:AbortSignal):Promise<unknown>;invalidateSession():void;saveSelection?(bots:SavedBot[]):Promise<boolean>}
+export interface BotProvidersDependency {getAccountCooldown?():{retryAt:number|null;retryBlocked:boolean}|null;resolveIdentity(username:string,signal:AbortSignal):Promise<unknown>;invalidateSession():void;saveSelection?(bots:SavedBot[]):Promise<boolean>}
 export interface BotProvidersContext {readonly signal:AbortSignal;readonly current:()=>boolean}
 export interface BotProvidersClock {now():number;setTimeout(fn:()=>void,ms:number):ReturnType<typeof setTimeout>;clearTimeout(timer:ReturnType<typeof setTimeout>):void}
 /** Worker-private authority: never serialize this capture or expose it through session DTOs.
@@ -115,6 +115,8 @@ export function createBotProvidersDriver(bindingInput:AccountBinding,sessionId:s
     if(changed){if(!Number.isSafeInteger(revision+1)){invalidate();return response(e,fail('limit'));}revision++;selected=c.providerRefs.slice();for(const [ref,o] of offers){if(selected.includes(ref))o.revision=revision;else offers.delete(ref);}}
     return Object.freeze({...e,type:'bots.ordered',changed,...snapshot()});
    }
+   const shared=dependency.getAccountCooldown?.();
+   if(shared)return response(e,{error:'rate-limit',...shared});
    if(cooldown&&(cooldown.retryBlocked||cooldown.retryAt!==null&&time.now()<cooldown.retryAt))return response(e,cooldown);
    cooldown=null;
    if(offers.size>=B.offers||usernames.size>=B.offers)return response(e,fail('limit'));
@@ -131,7 +133,7 @@ export function createBotProvidersDriver(bindingInput:AccountBinding,sessionId:s
    const observe=(error:unknown)=>{
     const cause=botProvidersFailure(error,time.now());if(!f.cause)f.cause=cause;
     // Late revocation invalidates exact session even when cancellation won the UI result.
-    if(cause.error==='session-expired')invalidate();else if(!closed&&cause.error==='rate-limit')cooldown=cause;
+    if(cause.error==='session-expired')invalidate();else if(!closed&&cause.error==='rate-limit')cooldown={...cause,retryAt:cooldownDeadline(cause,time.now()),retryBlocked:false};
     return f.cause;
    };
    const rpc=Promise.resolve().then(async()=>{

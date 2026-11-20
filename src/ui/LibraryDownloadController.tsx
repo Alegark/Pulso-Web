@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState,type ReactNode} from 'react';
+import {downloadNotifications} from '../pwa/download-notifications';
 import {createPortal} from 'react-dom';
 import {CollectionDownloadButton,DownloadDock,useAlbumDownloadState} from './DownloadDock';
 import {registerUpdateBlocker} from '../service-worker/update-blockers';
@@ -23,6 +24,7 @@ export function LibraryDownloadController(props:{collection?:CollectionDownloadA
  const download=useAlbumDownloadState();
  const latest=useRef(props);latest.current=props;
  const flight=useRef<AbortController|null>(null);
+ const finalNotice=useRef<(()=>void)|null>(null);
  const ownedNotice=useRef<typeof albumCoordinator.notice>(undefined);
  const [notice,setNoticeMessage]=useState<{text:string}|null>(null);
  const setNotice=(text:string)=>setNoticeMessage(text?{text}:null);
@@ -122,6 +124,9 @@ export function LibraryDownloadController(props:{collection?:CollectionDownloadA
     checkpoint={id:request.id,trackIds:[...request.trackIds],cursor:0,pending:null};
    }
   }catch{setNotice('No se pudo conservar el progreso de la descarga. Comprueba el almacenamiento del navegador.');return;}
+  // Flush any completed run before starting another one with the same tag.
+  if(document.visibilityState!=='hidden')finalNotice.current?.();
+  finalNotice.current=null;
   const abort=new AbortController();
   flight.current=abort;setPending(null);setNotice('');setReview(null);albumCoordinator.running=true;
   const run={scope:'library',editionId:0,key:request.id,title:request.title,abort};albumCoordinator.active=run;
@@ -132,7 +137,13 @@ export function LibraryDownloadController(props:{collection?:CollectionDownloadA
   albumCoordinator.notice=ownedNotice.current;
   notifyAlbumDownload(albumCoordinator);
   const current=()=>flight.current===abort&&latest.current.accountId===account&&attempt.current();
-  let readyId:string|null=null,finished=false,preserveHeld=false;
+  const collection=!request.repair&&!request.play;
+  const noticeCurrent=()=>latest.current.accountId===account&&!abort.signal.aborted;
+  const dismiss=()=>downloadNotifications.dismiss('collection',run);
+  if(collection)abort.signal.addEventListener('abort',dismiss,{once:true});
+  let readyId:string|null=null,finished=false,preserveHeld=false,confirmed=0,wasWaiting=false;
+  const summary=()=>`${confirmed} de ${tracks.length} guardadas`;
+  const notify=(body:string,terminal=false,pause=false)=>downloadNotifications.notify('collection',run,run.title,body,terminal,noticeCurrent,pause);
   void downloadLibrarySelection({tracks,attempt,client:p.client,providers,revision:p.bots.revision,signal:abort.signal,current,
    checkpoint,saveCheckpoint:account&&checkpoint?next=>{
     if(!current())throw Error('Library download changed');
@@ -158,15 +169,25 @@ export function LibraryDownloadController(props:{collection?:CollectionDownloadA
    clearHeldDownload:account&&checkpoint?(id,expected)=>{
     if(current()&&sameHeldDownload(readHeldLibraryDownload(account,id),expected))clearHeldLibraryDownload(account,id);
    }:undefined,
-   update:(rows,message)=>{
+   update:(rows,message,waiting)=>{
     if(flight.current!==abort||latest.current.accountId!==account)return;
     readyId=rows.length===1&&rows[0].confirmed?rows[0].trackId:null;
-    ownedNotice.current={title:request.title,titles:tracks.map(t=>t.title),progress:{rows,message}};
+    confirmed=rows.filter(row=>row.confirmed).length;
+    const enteringWait=!!waiting&&!wasWaiting;wasWaiting=!!waiting;
+    if(collection&&!abort.signal.aborted)notify(waiting?`${summary()} · ${message}`:summary(),false,enteringWait);
+    ownedNotice.current={title:request.title,titles:tracks.map(t=>t.title),progress:{rows,message,waiting}};
     albumCoordinator.notice=ownedNotice.current;
     notifyAlbumDownload(albumCoordinator);
    },
   }).then(async outcome=>{
    finished=outcome==='finished';
+   if(collection&&finished&&noticeCurrent()){
+    const missing=tracks.length-confirmed;
+    const body=missing?`${summary()} · ${missing} sin copia`:summary();
+    const publish=()=>notify(body,true);
+    if(document.visibilityState==='hidden')finalNotice.current=publish;
+    else publish();
+   }
    if(request.play&&readyId&&current()&&!abort.signal.aborted){
     const result=await attempt.play(readyId,()=>current()&&!abort.signal.aborted,abort.signal);
     if(result==='gesture-required')setNotice('Copia guardada. Pulsa Reproducir para escucharla.');
@@ -193,14 +214,20 @@ export function LibraryDownloadController(props:{collection?:CollectionDownloadA
   const unsubscribe=subscribeLibraryDownloads(request=>startRef.current(request));
   const unsubscribeReview=subscribeLibraryTrackReviews((id,title)=>void reviewRef.current(id,title));
   const suspend=()=>{waiting.current=null;flight.current?.abort();checking.current?.abort();};
+  const foreground=()=>{
+   if(document.visibilityState==='hidden')return;
+   const publish=finalNotice.current;finalNotice.current=null;publish?.();
+  };
+  document.addEventListener('visibilitychange',foreground);
+  addEventListener('pageshow',foreground);
   addEventListener('pagehide',suspend);
-  return()=>{unsubscribe();unsubscribeReview();removeEventListener('pagehide',suspend);};
+  return()=>{unsubscribe();unsubscribeReview();removeEventListener('pagehide',suspend);removeEventListener('pageshow',foreground);document.removeEventListener('visibilitychange',foreground);};
  },[]);
  useEffect(()=>{
   waiting.current=null;setNotice('');setPending(null);setReview(null);
   if(props.accountId)try{setPending(readLibraryDownloadCheckpoint(props.accountId));}catch{setNotice('No se pudo leer el progreso guardado de la descarga.');}
   return()=>{
-   checking.current?.abort();checking.current=null;
+   finalNotice.current=null;checking.current?.abort();checking.current=null;
    const active=flight.current;flight.current=null;active?.abort();
    if(ownedNotice.current&&albumCoordinator.notice===ownedNotice.current){albumCoordinator.notice=undefined;notifyAlbumDownload(albumCoordinator);}
   };

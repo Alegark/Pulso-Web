@@ -39,7 +39,7 @@ type Result={state:'audio';audio:BotDownloadedAudio}|{state:'known-failure';reas
 function candidateIdentity(row:BotSearchRow):readonly unknown[]{
  return row.kind==='option'?[row.kind,row.label]:row.kind==='audio'?[row.kind,row.title,row.performer,row.durationSeconds,row.mimeType,row.bytes]:[row.kind,row.text];
 }
-export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;providers:readonly OrderedProvider[];revision:number;target:BotSearchTarget;signal:AbortSignal;current:()=>boolean;networkCurrent:()=>boolean;remoteClock?:{settledAt:number};accept?:(audio:BotDownloadedAudio,rowKey:string)=>Promise<CandidateDisposition|'saved'>;excludedDigests?:ReadonlySet<string>;excludedRowKeys?:ReadonlySet<string>;progress:(provider:OrderedProvider,index:number,queryId:string|null)=>void}):Promise<Result> {
+export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;providers:readonly OrderedProvider[];revision:number;target:BotSearchTarget;signal:AbortSignal;current:()=>boolean;networkCurrent:()=>boolean;remoteClock?:{settledAt:number};collection?:boolean;accept?:(audio:BotDownloadedAudio,rowKey:string)=>Promise<CandidateDisposition|'saved'>;excludedDigests?:ReadonlySet<string>;excludedRowKeys?:ReadonlySet<string>;progress:(provider:OrderedProvider,index:number,queryId:string|null)=>void}):Promise<Result> {
  const {client}=p,target={...p.target},network=p.networkCurrent,current=p.current,revision=p.revision,deadline=Date.now()+SONG_SEARCH_MS;
  const seen=new Set<string>(),providers=p.providers.filter(provider=>{if(seen.has(provider.providerRef))return false;seen.add(provider.providerRef);return true;}).slice(0,5).map(provider=>({...provider}));
  const reasons:AcquisitionFailureReason[]=[],excludedRows=new Set(p.excludedRowKeys);
@@ -63,6 +63,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
    if(state.retryBlocked||(state.retryAt??0)>=until)return false;
    if(network()&&client.botsSnapshot().revision!==revision)return false;
    if(live()&&state.available&&!state.pending&&!state.cancelling&&(state.retryAt??0)<=Date.now())return true;
+   if(p.collection)return false;
    await delay(state.retryAt&&state.retryAt>Date.now()?state.retryAt-Date.now():250);
   }
   return false;
@@ -102,9 +103,11 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     const found=client.searchSnapshot();
     if(!same(found,provider.providerRef,queryId)||found.error||found.delivery!=='acknowledged'||!live()){
      if(!p.accept)return {state:'uncertain'};
+     if(p.collection&&(!live()||found.retryBlocked||(found.retryAt??0)>Date.now()))return {state:'unavailable'};
      const ownReply=owned(found,provider.providerRef,queryId);
-     if((!queryId||ownReply&&transient(found))&&await retryTransient())continue;
+     if(!p.collection&&(!queryId||ownReply&&transient(found))&&await retryTransient())continue;
      if(ownReply&&found.delivery==='acknowledged'&&(found.error==='file-too-large'||found.error==='file-invalid'))reasons.push(found.error);
+     else if(p.collection)return {state:'unavailable'};
      else unavailable=true;
      break;
     }
@@ -125,6 +128,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     const prior=client.searchSnapshot(),allowed=client.captureSearchActionCurrent();
     if(!live()||!same(prior,provider.providerRef,queryId)||prior.error||prior.delivery!=='acknowledged'||!prior.rows.some(r=>r.rowRef===selected.row.rowRef)||!allowed()){
      if(!p.accept)return {state:'uncertain'};
+     if(p.collection)return {state:'unavailable'};
      if(await retryTransient())continue;
      unavailable=true;break;
     }
@@ -134,6 +138,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     const after=client.searchSnapshot();
     if(!admittedDownload||!live()||!same(after,provider.providerRef,queryId)){
      if(!p.accept)return {state:'uncertain'};
+     if(p.collection)return {state:'unavailable'};
      if((!admittedDownload||owned(after,provider.providerRef,queryId)&&transient(after)&&after.delivery!=='uncertain')&&await retryTransient())continue;
      reasons.push('file-invalid');
      break;
@@ -149,7 +154,10 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      if(disposition==='saved')return {state:'audio',audio};
      if(disposition!=='retry')return {state:disposition};
      reasons.push('file-invalid');
-    }else if(p.accept&&transient(after)&&after.delivery!=='uncertain'){
+    }else if(p.collection&&!audio&&(
+     after.delivery==='uncertain'||['busy','network','timeout','expired','session-expired','rate-limit','cancelled','uncertain'].includes(after.error??'')
+    ))return {state:'unavailable'};
+    else if(p.accept&&transient(after)&&after.delivery!=='uncertain'){
      if(await retryTransient())continue;
      reasons.push('file-invalid');
      break;
@@ -160,6 +168,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      reasons.push('returned-audio-mismatch');
      for(const row of after.rows)if(row.kind==='audio')for(const field of botAudioMismatchFields(row,target))reasons.push(`audio-${field}-mismatch`);
     }else if(!p.accept)return {state:'uncertain'};
+    else if(p.collection)return {state:'unavailable'};
     else if(after.delivery==='uncertain'){reasons.push('file-invalid');break;}
     else reasons.push('file-invalid');
 

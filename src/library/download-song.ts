@@ -8,9 +8,9 @@ export const parkedSong={state:'uncertain',reason:'parked',message:'Pendiente en
 
 export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBots>[0],'target'|'accept'|'excludedDigests'|'excludedRowKeys'>&{
  choice:SongChoice;attempt:SongPlaybackAttempt;trackId?:string;index:number;
- previousAttempts?:readonly SavedCandidate[];
+ previousAttempts?:readonly SavedCandidate[];onFailedCandidates?:(candidates:SavedCandidate[])=>void;
  mark:(pending:PendingDownload)=>void;message:(message:string)=>void;
-}):Promise<(Partial<AlbumRow>&{state:AlbumRow['state']}) | {state:'stopped'}>{
+}):Promise<(Partial<AlbumRow>&{state:AlbumRow['state']}) | {state:'stopped'} | {state:'telegram'}>{
  const {choice,attempt,signal,current,trackId}=p;
  const target=parseBotSearchTarget({title:choice.title,artist:choice.artist,album:choice.album,durationSeconds:choice.duration||null});
  if(!target?.artist||!isBotSearchQuery(target.title+' '+target.artist))return {state:'failed',reason:'missing-metadata',message:'Faltan datos para buscarla'};
@@ -52,6 +52,7 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
    if(!local.retryWrite)break;
   }
   previousAttempts=attempts;
+  p.onFailedCandidates?.(attempts);
   failedDigests.add(audio.sha256);
   network();
   p.message('Probando otra opción…');
@@ -60,7 +61,7 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
  if(result.state==='stopped'||!current())return {state:'stopped'};
  if(savedId)return {state:'downloaded',trackId:savedId,confirmed:true,message:'Descargada'};
  if(result.state==='parked')return parkedSong;
- if(result.state==='unavailable'||result.state==='uncertain')return {state:'failed',message:'Telegram no respondió a tiempo'};
+ if(result.state==='unavailable'||result.state==='uncertain')return p.collection?{state:'telegram'}:{state:'failed',message:'Telegram no respondió a tiempo'};
  if(result.state==='known-failure'&&(failedDigests.size||result.reasons.some(reason=>reason!=='no-compatible-row')))return {state:'failed',reason:'no-valid-file',message:'Ningún bot entregó un archivo válido'};
  if(result.state==='known-failure'&&result.reasons.length)return {state:'failed',reason:'not-found',message:'No existe en tus bots'};
  return {state:'failed',message:'No hay bots disponibles'};

@@ -602,3 +602,9 @@ El propietario observó en iPhone que «Continuar descarga» saltaba pistas sin 
 **iPhone físico.** Pendiente reproducir la continuación corregida con Telegram real. P0-W permanece abierto.
 
 El manifiesto autoritativo de 260 archivos se promovió con fecha MCP `2026-11-20T00:59:38.040Z` a `.local/test-evidence/stale-checkpoint-release/site-manifest.json`, SHA-256 `a0e1de5e633b0d4ad9d3d8643c583ff8f0e7ba798992fa8aea5e565d873328c4`. Se conservan ahí los recibos y resultados compactos de la publicación.
+
+### Esperas de Telegram durante una descarga de Biblioteca · 2026-11-20
+
+Las colecciones mantienen la canción en curso cuando Telegram limita la cuenta, se interrumpe la conexión o caduca un intento durante la suspensión. El checkpoint conserva el plazo absoluto de Telegram, incluso si se vuelve a pulsar Continuar. Un FLOOD sin plazo espera cinco minutos desde su observación. Las esperas superiores a quince minutos y las sesiones que necesitan autenticación dejan la selección pendiente. La reconexión automática usa la autorización guardada, comprueba que siga siendo la misma y conserva la selección de bots.
+
+La ventana muestra la espera mientras el lote está activo. Los avisos de colecciones usan una etiqueta distinta de álbumes, con progreso limitado a un aviso cada quince segundos, aviso de pausa y resumen final. Si el lote termina oculto, el resumen se entrega una vez al volver a la página. Los avisos requieren el permiso y la preferencia vigentes. La suspensión y las notificaciones de la PWA instalada siguen pendientes de comprobación en iPhone físico.

@@ -1,10 +1,11 @@
-import {classifyTelegramFailure} from './rpc-failure';
+import {classifyTelegramFailure,cooldownDeadline} from './rpc-failure';
 import type {tl} from '@mtcute/core';
 import {SOURCES_BOUNDS as B,copyEnvelope,isUuid,parseAccountBinding,parseSourcesCommand,parseSourcesReply,utf8Bytes,type AccountBinding,type Envelope,type Folder,type SourceRow,type SourcesError,type SourcesReply} from './sources-protocol';
 import {projectSourcesPage,ProjectionLimit,type PageAnchor,type ProjectedCandidate} from './sources-page';
 /** Worker-private, deliberately no generic call/resolve/search capability. */
 export interface DialogsRequest {readonly folderId:0|1;readonly excludePinned:boolean;readonly offsetId:number;readonly offsetDate:number;readonly offsetPeer:tl.TypeInputPeer;readonly limit:25}
-export interface SourcesDependency {getDialogs(request:DialogsRequest,signal:AbortSignal):Promise<unknown>;invalidateSession():void}
+export interface SourcesDependency {
+ getAccountCooldown?():{retryAt:number|null;retryBlocked:boolean}|null;getDialogs(request:DialogsRequest,signal:AbortSignal):Promise<unknown>;invalidateSession():void}
 export interface SourcesContext {readonly signal:AbortSignal;readonly current:()=>boolean}
 export interface SourcesDriver {
  getSaved():SourceRow|null;
@@ -90,6 +91,8 @@ export function createSourcesDriver(bindingInput:AccountBinding,sessionId:string
     selected=Object.freeze(command.peerRefs.slice());return Object.freeze({...e,type:'sources.selected',revision:++revision,peerRefs:selected});
    }
    if(command.type==='sources.clear'){selected=Object.freeze([]);return Object.freeze({...e,type:'sources.cleared',revision:++revision});}
+   const shared=dependency.getAccountCooldown?.();
+   if(shared)return response(e,{error:'rate-limit',...shared});
    if(cooldown&&(cooldown.retryBlocked||(cooldown.retryAt!==null&&cooldown.retryAt>time.now())))return response(e,cooldown);
    cooldown=null;
    let anchor:PageAnchor|null=null;
@@ -113,7 +116,7 @@ export function createSourcesDriver(bindingInput:AccountBinding,sessionId:string
     const cause=sourcesFailure(error,time.now());if(!f.cause)f.cause=cause;
     // Session lifecycle is independent of the first visible cause of this attempt.
     if(cause.error==='session-expired')invalidate();
-    else if(!closed&&cause.error==='rate-limit')cooldown=cause;
+    else if(!closed&&cause.error==='rate-limit')cooldown={...cause,retryAt:cooldownDeadline(cause,time.now()),retryBlocked:false};
     return f.cause;
    };
    // The RPC promise remains observed after cancellation. No second RPC before settlement.

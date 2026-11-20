@@ -13,7 +13,7 @@ export function albumTrackChoice(track:AlbumTrack,album:string):SongChoice {
 }
 export type AlbumRowState='unattempted'|'ready'|'reused'|'downloaded'|'failed'|'uncertain';
 export interface AlbumRow {state:AlbumRowState;trackId:string|null;confirmed:boolean;message:string;reason?:'not-found'|'no-valid-file'|'missing-metadata'|'parked'}
-export interface AlbumProgress {rows:AlbumRow[];message:string}
+export interface AlbumProgress {rows:AlbumRow[];message:string;waiting?:boolean}
 export interface AlbumAcquisition {
  detail:AlbumDetail;attempt:SongPlaybackAttempt;client:TelegramSessionClient|null;provider:string|null;providers?:readonly OrderedProvider[];revision:number|undefined;
  management:(id:string)=>SongManagement|null;signal:AbortSignal;current:()=>boolean;update:(value:AlbumProgress)=>void;rows:AlbumRow[];remoteClock?:{settledAt:number};uncertainTracks?:Set<CatalogId>;
@@ -49,7 +49,7 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
     let pending:PendingDownload|undefined;
     const result=await downloadSong({client:p.client,providers,revision:p.revision,signal:p.signal,current:live,networkCurrent,remoteClock,
      attempt:p.attempt,choice,index:i,mark:value=>{pending=value;},message:message=>{row.message=message;update(message);},progress:()=>{}});
-    if(result.state==='stopped'||!live()){
+    if(result.state==='stopped'||result.state==='telegram'||!live()){
      if(pending?.kind==='save')park();
      else if(pending?.kind==='network'){
       const remote=p.client.searchSnapshot();

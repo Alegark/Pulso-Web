@@ -25,15 +25,16 @@ import type {TelegramSessionClient} from '../../src/telegram/session-client';
 import type {BotSearchTarget} from '../../src/telegram/bot-search-protocol';
 const selection=Array.from({length:4},(_,i)=>({...track,id:`11111111-1111-4111-8111-11111111111${i+1}`,title:`Pista ${i+1}`}));
 const batch=():LibraryDownloadCheckpoint=>({id:crypto.randomUUID(),trackIds:selection.map(t=>t.id),cursor:0,pending:null});
-function fixture(checkpoint=batch(),options:{twoBots?:boolean;absent?:boolean;flood?:boolean;alternates?:boolean;tracks?:Track[];parked?:Map<string,HeldDownload>}={}){
+function fixture(checkpoint=batch(),options:{twoBots?:boolean;absent?:boolean;flood?:boolean|number;expired?:boolean;alternates?:boolean;tracks?:Track[];parked?:Map<string,HeldDownload>}={}){
  const requests:string[]=[],queries:string[]=[],downloads:string[]=[],abort=new AbortController();
  const parked=options.parked??new Map<string,HeldDownload>(),checkpoints:LibraryDownloadCheckpoint[]=[];
- let flooded=false;
+ let flooded=false,expired=false;
  let state={queryId:'',providerRef:'bot',providerRevision:1,expectedTarget:null,pending:false,cancelling:false,available:true,
   error:null,delivery:'acknowledged',retryBlocked:false,retryAt:null,rows:[]} as unknown as BotSearchSnapshot;
  const start=(started:(admission:{queryId:string;cancel():void})=>void)=>started({queryId:state.queryId!,cancel:()=>{}});
  const client={
-  botsSnapshot:()=>({revision:1}),searchSnapshot:()=>state,captureBotsCurrent:()=>()=>true,
+  botsSnapshot:()=>({revision:1}),searchSnapshot:()=>state,
+  snapshot:()=>({phase:expired?'error':'connected',error:expired?'session-expired':null,retryAt:null}),captureBotsCurrent:()=>()=>true,
   captureSearchActionCurrent:()=>()=>true,subscribeSearch:()=>()=>{},
   searchBot(input:{providerRef:string;target:BotSearchTarget},_allowed:unknown,started:Parameters<typeof start>[0]){
    assert.ok(!state.retryAt||Date.now()>=state.retryAt,'cannot query before retryAt');
@@ -47,24 +48,27 @@ function fixture(checkpoint=batch(),options:{twoBots?:boolean;absent?:boolean;fl
   },
   async downloadBot(row:string,_allowed:unknown,started:Parameters<typeof start>[0]){
    start(started);downloads.push(row);
+   if(options.expired&&state.expectedTarget?.title==='Pista 3'){
+    expired=true;state={...state,error:'session-expired',available:false};return null;
+   }
    if(options.flood&&!flooded&&state.expectedTarget?.title==='Pista 3'){
-    flooded=true;state={...state,error:'rate-limit',retryAt:Date.now()+1200};return null;
+    flooded=true;state={...state,error:'rate-limit',retryAt:Date.now()+(typeof options.flood==='number'?options.flood:1200)};return null;
    }
    const digest=state.providerRef==='bot'&&row==='row'?'a':'b';
    return {blob:new Blob(['x']),bytes:1,mime:'audio/wav',sha256:digest.repeat(64),target:state.expectedTarget};
   },
  } as unknown as TelegramSessionClient;
- let saved=checkpoint,rows:AlbumRow[]=[];
+ let saved=checkpoint,rows:AlbumRow[]=[];const messages:string[]=[];
  const attempt:SongPlaybackAttempt={current:()=>true,lookup:async c=>selection.slice(0,2).find(t=>'local:'+t.id===c.id)?.id??null,
   save:async(_a,c)=>({state:'saved',trackId:c.id.slice(6)}),addToLibrary:async()=>{throw Error('No membership change');},
   play:async()=>{throw Error('No autoplay');}};
  const providers=[{providerRef:'bot',label:'Bot'},...(options.twoBots?[{providerRef:'other',label:'Other'}]:[])];
- return {requests,queries,downloads,parked,attempt,abort,checkpoints,get checkpoint(){return saved;},get rows(){return rows;},
+ return {requests,queries,downloads,parked,attempt,abort,checkpoints,messages,get checkpoint(){return saved;},get rows(){return rows;},
   run:()=>downloadLibrarySelection({tracks:options.tracks??selection,attempt,client,providers,revision:1,signal:abort.signal,current:()=>true,
    checkpoint,saveCheckpoint:v=>{saved=v;checkpoints.push(v);},parkDownload:(id,pending)=>parked.set(id,pending),
    heldDownload:id=>parked.get(id)??null,clearHeldDownload:(id,expected)=>{
     if(sameHeldDownload(parked.get(id)??null,expected))parked.delete(id);
-   },update:v=>{rows=v;}}),
+   },update:(v,message)=>{rows=v;messages.push(message);}}),
  };
 }
 
@@ -312,4 +316,34 @@ test('repeated playlist entries share a lookup and work across a persisted curso
   assert.deepEqual(inspected,cursor?trackIds.slice(0,2):[]);
   assert.equal(last.cursor,3);
  }
+});
+
+
+test('a very long FLOOD preserves the exact deadline and track across Continuar',async()=>{
+ const since=Date.now(),delay=1_800_000,first=fixture(batch(),{flood:delay});
+ assert.equal(await first.run(),'paused');
+ assert.deepEqual(first.requests,['Pista 3']);
+ assert.equal(first.rows[2].state,'unattempted');
+ assert.equal(first.checkpoint.cursor,2);
+ assert.deepEqual(first.checkpoint.pending,{kind:'network',index:2});
+ assert.ok(first.checkpoint.telegramRetryAt!>=since+delay&&first.checkpoint.telegramRetryAt!<=Date.now()+delay);
+ const resumed=fixture(copyLibraryDownloadCheckpoint(JSON.parse(JSON.stringify(first.checkpoint)))!);
+ assert.equal(await resumed.run(),'paused');
+ assert.deepEqual(resumed.requests,[]);
+ assert.match(resumed.messages.at(-1)!,/Pulsa Continuar/);
+ const settled=fixture({...resumed.checkpoint,telegramRetryAt:Date.now()-1});
+ assert.equal(await settled.run(),'finished');
+ assert.deepEqual(settled.requests,['Pista 3','Pista 4']);
+ assert.ok(settled.rows.every(row=>row.confirmed));
+});
+
+
+test('an expired session preserves the current track and requires reconnecting before Continuar',async()=>{
+ const run=fixture(batch(),{expired:true});
+ assert.equal(await run.run(),'paused');
+ assert.deepEqual(run.requests,['Pista 3']);
+ assert.equal(run.rows[2].state,'unattempted');
+ assert.equal(run.checkpoint.cursor,2);
+ assert.deepEqual(run.checkpoint.pending,{kind:'network',index:2});
+ assert.match(run.messages.at(-1)!,/Vuelve a conectar Telegram.*Continuar/);
 });

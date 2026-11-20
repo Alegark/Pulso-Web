@@ -1,4 +1,4 @@
-import {classifyTelegramFailure} from './rpc-failure';
+import {classifyTelegramFailure,cooldownDeadline} from './rpc-failure';
 import {BaseTelegramClient} from '@mtcute/core/client.js';
 import {WebPlatform,WebSocketTransport,MemoryStorage} from '@mtcute/web';
 import {LogManager} from '@mtcute/core/utils.js';
@@ -83,13 +83,12 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  const observeAccountWait=(f:ReturnType<typeof classifyTelegramFailure>)=>{
   if(closed||signal.aborted||f.error!=='rate-limit')return;
   const previous=getAccountCooldown();
-  const retryBlocked=!!previous?.retryBlocked||f.retryBlocked;
-  accountCooldown=Object.freeze({retryAt:retryBlocked?null:Math.max(previous?.retryAt??0,f.retryAt??0),retryBlocked});
+  accountCooldown=Object.freeze({retryAt:Math.max(previous?.retryAt??0,cooldownDeadline(f)),retryBlocked:false});
  };
  const admitAccountRead=()=>{
   const wait=getAccountCooldown();if(!wait)return;
   // SDK-like data only; drivers retain their original first cause independently.
-  throw {text:'FLOOD_WAIT',seconds:wait.retryBlocked?undefined:Math.max(1,Math.ceil((wait.retryAt!-Date.now())/1000))};
+  throw {text:'FLOOD_WAIT',seconds:Math.ceil((wait.retryAt!-Date.now())/1000)};
  };
  const accountRead:typeof client.call=(message,params)=>client.call(message,params);
  const sourceLifetimeAbort=()=>{void close().catch(()=>{});};
@@ -149,6 +148,7 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
    sourcesSession=sessionId;
    signal.addEventListener('abort',sourceLifetimeAbort,{once:true});
    sources=createSourcesDriver(binding,sessionId,{
+    getAccountCooldown,
     async getDialogs(request,abort){
      current(abort);
      // No invocation at auth/accessor time. Fixed policy options are last.
@@ -165,6 +165,7 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
    botProvidersSession=sessionId;
    signal.addEventListener('abort',sourceLifetimeAbort,{once:true});
    botProviders=createBotProvidersDriver(binding,sessionId,{
+    getAccountCooldown,
     async resolveIdentity(username,abort){
      current(abort);
      const result=await accountRead({_: 'contacts.resolveUsername',username},{abortSignal:abort,timeout:15000,floodSleepThreshold:0,maxRetryCount:0});
