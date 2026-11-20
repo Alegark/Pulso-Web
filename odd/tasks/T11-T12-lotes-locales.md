@@ -588,3 +588,17 @@ Local. La evidencia previa registra tipos de app y pruebas, lint, 817 unitarias,
 HTTPS y navegador público. `latest.json` apunta a la nueva entrada. Coincidieron bytes y SHA-256 en 254/254 rutas estáticas públicas. Dos metadatos de despliegue quedan excluidos y `account-config.json` se verificó por separado con la configuración Turnstile y CSP. Chromium 154 y WebKit 27.2 abrieron la entrada, confirmaron la ausencia de ventana en reposo y verificaron los cuatro botones en una playlist sintética. La cuenta y los endpoints de prueba se simularon sólo dentro del navegador. WebKit emitió advertencias de viewport y de estilos inline bajo CSP. La comprobación en iPhone físico con Telegram real sigue pendiente.
 
 El manifiesto autoritativo de 257 archivos se promovió con fecha MCP `2026-11-19T23:56:45.869Z` a `.local/test-evidence/download-dock-release/site-manifest.json`, SHA-256 `41dcfaaf13543cefc5af3d00ce46bfff79de031cc2e2fea6203e53ed0ee0ca8e`. Allí quedan los recibos de despliegue, lectura, navegador y limpieza. Se retiraron ambos snapshots aislados, compilaciones, perfiles y temporales del candidato.
+
+### Reanudación desde un checkpoint antiguo publicada · 2026-11-20
+
+El propietario observó en iPhone que «Continuar descarga» saltaba pistas sin copia anteriores al cursor y mostraba «Procesada anteriormente sin copia». El incremento `91132a2f903b688eb7a75b162f724578dba670c6` reconcilia primero el recibo pendiente, reutiliza copias verificadas y aplica la recuperación automática a todas las pistas sin copia. En álbumes, permite reintentar tras resolverse una interrupción de red.
+
+**Local.** Pasaron tipos de aplicación y pruebas, lint, build y 821/821 unitarias en la validación previa. El snapshot exacto desde `git archive` pasó 73/73 de Cloudflare, build, dry-run de Wrangler y simulación de retención.
+
+**Navegador local.** En Chromium 154 y WebKit 27.2 pasaron por motor 4/4 de descarga completa, 11/11 de reanudación, 4/4 de progreso y 15/15 de biblioteca de cuenta. Con un checkpoint antiguo, un toque guardó 9 de 10 canciones con SHA verificado. Sólo la ausente mostró «No existe en tus bots». Evidencia sintética en `.local/test-evidence/playlist-stale-checkpoint/summary.json`.
+
+**Cloudflare y navegador público.** Workers Free, USD 0, sirve [la v52](https://pulso-web.pruebassoftware.workers.dev/releases/17532d32a861e539.html). Versión `70d3e14a-5202-4ae2-bd70-5bbaa042dd4a`, deployment `6c20b481-8b46-49b3-8db0-23a7596b2a7b` al 100 %. El MCP oficial confirmó el mismo Worker, los 13 bindings y la configuración de v51. Se conservaron cinco publicaciones previas y el conjunto heredado, sin retirar rutas. Se subieron siete archivos. `latest.json` apunta a la nueva entrada y coincidieron bytes y SHA-256 en 257/257 rutas estáticas públicas. Chromium 154 y WebKit 27.2 cargaron la entrada pública y comprobaron que la ventana de descargas estaba oculta en reposo en contextos anónimo y de cuenta sintética. Los perfiles se cerraron al terminar.
+
+**iPhone físico.** Pendiente reproducir la continuación corregida con Telegram real. P0-W permanece abierto.
+
+El manifiesto autoritativo de 260 archivos se promovió con fecha MCP `2026-11-20T00:59:38.040Z` a `.local/test-evidence/stale-checkpoint-release/site-manifest.json`, SHA-256 `a0e1de5e633b0d4ad9d3d8643c583ff8f0e7ba798992fa8aea5e565d873328c4`. Se conservan ahí los recibos y resultados compactos de la publicación.

@@ -2397,3 +2397,7 @@ Cloudflare versión 50 sirve `/releases/7e98694a928b640e.html`, deployment `5183
 ### Ventana flotante y recuperación por canción publicadas · 2026-11-19
 
 Cloudflare v51 sirve `/releases/4e40ed99fc572945.html`, deployment `dce085cc-3153-45e7-bda0-4c07d4a0b699`. HTTPS verificó 254/254 rutas estáticas. Chromium y WebKit públicos verificaron el arranque, la ventana oculta en reposo y los cuatro botones con una playlist sintética. Los runners locales verificaron descarga con un toque, recuperación por canción y continuación tras recarga. T11-T12 registra los resultados, regresiones preexistentes y manifiesto. Sigue abierta la aceptación en iPhone físico con Telegram real y P0-W permanece abierto.
+
+### Reanudación desde un checkpoint antiguo publicada · 2026-11-20
+
+Cloudflare v52 sirve `/releases/17532d32a861e539.html`, deployment `6c20b481-8b46-49b3-8db0-23a7596b2a7b`. En navegador local con datos sintéticos, un toque guardó 9 de 10 canciones con SHA-256 verificado y marcó únicamente la ausente. HTTPS verificó 257/257 rutas estáticas. Chromium y WebKit públicos cargaron el shell y confirmaron que la ventana de descargas permanecía oculta en reposo. T11-T12 registra el cambio, las pruebas locales y el manifiesto. La comprobación con Telegram real en iPhone físico sigue pendiente y P0-W permanece abierto.
