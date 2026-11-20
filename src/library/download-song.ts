@@ -38,7 +38,7 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
     savedId=local.trackId;
     return 'saved';
    }
-   const receipt=await reconcileSongDownload(attempt,operationId,trackId,choice,signal);
+   const receipt=await reconcileSongDownload(attempt,operationId,trackId??choice,signal);
    if(!current())return 'stopped';
    if(receipt?.state==='saved'&&receipt.trackId&&(!trackId||receipt.trackId===trackId)){
     savedId=receipt.trackId;
@@ -66,8 +66,8 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
  return {state:'failed',message:'No hay bots disponibles'};
 }
 
-export async function reconcileSongDownload(attempt:SongPlaybackAttempt,operationId:string,trackId:string|undefined,choice:SongChoice,signal:AbortSignal){
- try{return trackId?await attempt.reconcileDownload?.(operationId,trackId,signal,true):await attempt.reconcileSongDownload?.(operationId,choice,signal);}
+export async function reconcileSongDownload(attempt:SongPlaybackAttempt,operationId:string,track:string|SongChoice,signal:AbortSignal){
+ try{return typeof track==='string'?await attempt.reconcileDownload?.(operationId,track,signal,true):await attempt.reconcileSongDownload?.(operationId,track,signal);}
  catch{return {state:'uncertain' as const,trackId:null};}
 }
 

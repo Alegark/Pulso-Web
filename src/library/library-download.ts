@@ -1,4 +1,4 @@
-import {sameHeldDownload,type HeldDownload,type LibraryDownloadCheckpoint,type PendingDownload} from './library-download-checkpoint';
+import {sameHeldDownload,type HeldDownload,type LibraryDownloadCheckpoint,type PendingDownload,type SavedCandidate} from './library-download-checkpoint';
 import type {Track} from './library';
 import type {AlbumRow} from './album-acquisition';
 import type {SongPlaybackAttempt,SongChoice} from './selected-song';
@@ -28,20 +28,57 @@ export async function downloadLibrarySelection(p:{
  let checkpoint=p.checkpoint;
  const start=checkpoint?.cursor??0,resuming=checkpoint?.pending;
  const completed=new Map<string,AlbumRow>();
+ const attempts=new Map<string,SavedCandidate[]>();
  const mark=(cursor:number,pending:PendingDownload|null)=>{
   if(!checkpoint)return;
   checkpoint={...checkpoint,cursor,pending};p.saveCheckpoint?.(checkpoint);
  };
+ const reconcile=async(trackId:string,receipt:Extract<HeldDownload,{kind:'save'}>)=>{
+  const outcome=await reconcileSongDownload(p.attempt,receipt.operationId,trackId,p.signal);
+  if(!live())return false;
+  if(outcome?.state==='saved'&&outcome.trackId===trackId){
+   completed.set(trackId,{state:'reused',trackId,confirmed:true,message:'Ya descargada'});
+   uncertainSingleTracks.delete(trackId);
+  }else if(outcome?.state==='missing'){
+   if(receipt.attempts)attempts.set(trackId,receipt.attempts);
+  }else{
+   await parkSongDownload(p.attempt,receipt.operationId,p.signal);
+   if(!live())return false;
+   completed.set(trackId,{...parkedSong,trackId:null,confirmed:false});
+   return true;
+  }
+  const held=p.heldDownload?.(trackId);
+  if(held&&sameHeldDownload(held,receipt))p.clearHeldDownload?.(trackId,held);
+  return true;
+ };
  try{
+  // Settle the original receipt before a retry can move the cursor backwards.
+  if(!live())return stop();
+  const resumedTrack=resuming?.kind==='save'?p.tracks[start]:undefined;
+  if(resuming?.kind==='save'&&resumedTrack){
+   if(!await reconcile(resumedTrack.id,resuming))return stop();
+   if(completed.get(resumedTrack.id)?.reason==='parked'){
+    if(!p.parkDownload)return stop();
+    p.parkDownload(resumedTrack.id,resuming);
+   }
+   mark(start,null);
+  }
+  // A later row can already own a parked receipt from a previous run. Admit
+  // those receipts before earlier rows wait for storage or try to write.
+  for(const trackId of new Set(p.tracks.map(track=>track.id))){
+   if(!live())return stop();
+   const held=p.heldDownload?.(trackId);
+   if(held?.kind==='save'&&!(trackId===resumedTrack?.id&&sameHeldDownload(held,resuming??null))){
+    if(!await reconcile(trackId,held))return stop();
+   }
+  }
   for(let i=0;i<p.tracks.length;i++){
    if(!live())return stop();
    const track=p.tracks[i],row=rows[i],earlier=completed.get(track.id);
-   // A pending receipt on resume still has to settle even if another entry
-   // for the same track appears before the cursor.
-   if(earlier&&!(i===start&&resuming)){
+   if(earlier){
     Object.assign(row,earlier);
     if(earlier.confirmed)Object.assign(row,{state:'reused',message:'Ya descargada'});
-    if(i>=start)mark(i+1,null);
+    mark(i+1,null);
     update(row.message);
     continue;
    }
@@ -50,57 +87,41 @@ export async function downloadLibrarySelection(p:{
     artist:'artist' in track.manualOverrides?track.manualOverrides.artist??null:track.catalogChoice?.artist??track.artist,
     album:'album' in track.manualOverrides?track.manualOverrides.album??null:track.catalogChoice?.album??track.album,
     duration:track.catalogChoice?.duration??track.duration};
-   const held=p.heldDownload?.(track.id),previous=i===start&&resuming?resuming:held;
-   const clearPrevious=()=>{if(held&&previous&&sameHeldDownload(held,previous))p.clearHeldDownload?.(track.id,held);};
+   const held=p.heldDownload?.(track.id);
    let id:string|null=null,parked=false;
-   if(previous?.kind==='save'){
-    if(i>=start)mark(i,{...previous,index:i});
-    const receipt=await reconcileSongDownload(p.attempt,previous.operationId,track.id,choice,p.signal);
-    if(!live())return stop();
-    if(receipt?.state==='saved'&&receipt.trackId===track.id)id=track.id;
-    else if(receipt?.state!=='missing'){
-     parked=true;
-     await parkSongDownload(p.attempt,previous.operationId,p.signal);
+   try{
+    if(i<start&&p.attempt.inspectDownload)id=await p.attempt.inspectDownload(track.id,p.signal);
+    if(!id){
+     if(!live()||p.attempt.waitForDownload&&!await p.attempt.waitForDownload(p.signal))return stop();
+     if(!live())return stop();
+     id=await p.attempt.lookup(choice,p.signal,true);
     }
-    if(!parked)clearPrevious();
-   }
-   if(!id&&!parked){
-    try{
-     if(i<start&&p.attempt.inspectDownload)id=await p.attempt.inspectDownload(track.id,p.signal);
-     else{
-      if(p.attempt.waitForDownload&&!await p.attempt.waitForDownload(p.signal))return stop();
-      id=await p.attempt.lookup(choice,p.signal,true);
-     }
-    }catch{parked=true;}
-   }
+   }catch{parked=true;}
    if(!live())return stop();
    // A network marker precedes the first local write. It can be replayed once
    // the captured Telegram lane is ready, without guessing about a save.
-   if(previous?.kind==='network')clearPrevious();
-   let pending:HeldDownload|null=parked?previous??null:null;
+   if(held?.kind==='network')p.clearHeldDownload?.(track.id,held);
+   const networkMarker=i===start&&resuming?.kind==='network'?resuming:held?.kind==='network'?held:null;
+   let pending:HeldDownload|null=parked?networkMarker:null;
    if(id){
-    clearPrevious();
     uncertainSingleTracks.delete(track.id);
     Object.assign(row,{state:'reused',trackId:id,confirmed:true,message:'Ya descargada'});
    }else if(parked||uncertainSingleTracks.has(track.id)){
     Object.assign(row,parkedSong);
-   }else if(i<start){
-    Object.assign(row,{state:'failed',message:'Procesada anteriormente sin copia'});
    }else{
     const result=await downloadSong({...p,choice,trackId:track.id,index:i,current:live,networkCurrent,remoteClock,
-     previousAttempts:previous?.kind==='save'?previous.attempts:undefined,
+     previousAttempts:attempts.get(track.id),
      mark:value=>{pending=value;mark(i,value);},message:message=>{row.message=message;update(message);},progress:()=>{}});
     if(result.state==='stopped'||!live())return stop();
     Object.assign(row,result);
    }
-   if(i>=start){
-    if(row.reason==='parked'&&pending){
-     if(p.parkDownload)p.parkDownload(track.id,pending);
-     else if(!checkpoint)uncertainSingleTracks.add(track.id);
-    }
-    mark(i+1,null);
+   if(row.reason==='parked'&&pending){
+    if(p.parkDownload)p.parkDownload(track.id,pending);
+    else if(checkpoint)return stop();
+    else uncertainSingleTracks.add(track.id);
    }
-   if(row.confirmed||i>=start)completed.set(track.id,row);
+   mark(i+1,null);
+   completed.set(track.id,row);
    update(row.message);
   }
   if(!live())return stop();

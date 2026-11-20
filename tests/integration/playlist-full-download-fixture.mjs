@@ -54,7 +54,8 @@ function wav(seed,large=false){
 }
 
 export function playlistFixture(mode){
- const source=mode==='missing'?[...songs.slice(0,4),['Avenida de cristal','Iria Río','missing'],...songs.slice(5,10)]:songs;
+ const short=mode==='missing'||mode==='stale-checkpoint';
+ const source=short?[...songs.slice(0,4),['Avenida de cristal','Iria Río','missing'],...songs.slice(5,10)]:songs;
  const candidates=new Map(),replies=new Map();
  const tracks=source.map(([title,artist,scenario='normal'],index)=>{
   const track={id:uuid(index+1),title,artist,album:null,duration:2,favorite:false,inLibrary:true,
@@ -99,6 +100,6 @@ export function playlistFixture(mode){
   return {track,scenario,expected:scenario==='missing'?null:{bytes:bytes.length,sha256:digest(bytes),mime},goodKey:good.key};
  });
  const entries=tracks.map(({track})=>track.id);
- if(mode!=='missing')entries.splice(23,0,tracks[0].track.id);
+ if(!short)entries.splice(23,0,tracks[0].track.id);
  return {tracks,entries,replies,candidates};
 }

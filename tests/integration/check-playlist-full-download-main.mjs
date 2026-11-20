@@ -10,13 +10,13 @@ import {createTestWorkspace} from './test-workspace.mjs';
 import {installRequiredAccountFixture} from './required-account-fixture.mjs';
 import {accountId,bots,playlistFixture,uuid} from './playlist-full-download-fixture.mjs';
 
-const evidence=resolve('.local/test-evidence/playlist-full-download');
+const evidence=resolve(process.env.PULSO_TEST_EVIDENCE_DIR??'.local/test-evidence/playlist-full-download');
 await mkdir(evidence,{recursive:true});
 assert.equal(await realpath(evidence),evidence);
 process.env.PULSO_TEST_EVIDENCE_DIR=evidence;
 const work=await createTestWorkspace('playlist-full-download');
 const checkpointKey='pulso:library-download:v1:'+accountId;
-const modes=['full','resume','missing'];
+const modes=['full','resume','missing','stale-checkpoint'];
 const selectedMode=process.env.PLAYLIST_FULL_MODE;
 const selectedEngine=process.env.PLAYLIST_FULL_ENGINE;
 const repeatFrom=Number(process.env.PLAYLIST_FULL_REPEAT_FROM??'1');
@@ -38,7 +38,7 @@ const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
  if(id==='./temporary-sdk')return resolve('tests/integration/playlist-full-download-sdk.ts');
 }});
 
-async function seed(page,origin,preexisting){
+async function seed(page,origin,preexisting,oldCheckpoint){
  await page.goto(origin+'/testonly-seed');
  await page.evaluate(async ({accountId,bots})=>{
   localStorage.setItem('pulso:setup:v1:'+accountId,'complete');
@@ -77,6 +77,9 @@ async function seed(page,origin,preexisting){
    tx.oncomplete=ok;tx.onabort=()=>fail(tx.error);
   });}finally{db.close();}
  },preexisting);
+ if(oldCheckpoint)await page.evaluate(({key,checkpoint})=>{
+  localStorage.setItem(key,JSON.stringify({id:crypto.randomUUID(),...checkpoint}));
+ },{key:checkpointKey,checkpoint:oldCheckpoint});
  await page.reload();
  await openPlaylist(page);
 }
@@ -323,7 +326,15 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   page.setDefaultTimeout(15000);
   page.on('pageerror',error=>errors.push(String(error)));
   page.on('dialog',dialog=>{errors.push('Browser dialog: '+dialog.type());void dialog.dismiss();});
-  await seed(page,origin,preexisting);
+  const oldCheckpoint=mode==='stale-checkpoint'?{trackIds:entries,cursor:6,pending:null}:null;
+  await seed(page,origin,preexisting,oldCheckpoint);
+  if(oldCheckpoint){
+   const stored=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),checkpointKey);
+   assert.deepEqual({trackIds:stored.trackIds,cursor:stored.cursor,pending:stored.pending},oldCheckpoint);
+   const before=await inspect(page,entries);
+   verifyCopies(before,tracks,preexisting,index=>tracks[index]===ready?ready.expected:null);
+   receipt.legacyCheckpoint={cursor:stored.cursor,verifiedCopies:1};
+  }
   await page.locator('.bot-providers-list li').nth(2).waitFor({state:'attached'});
   const checkNoReview=async()=>assert.deepEqual(await page.evaluate(()=>({
    review:window.__playlistFull.review,dialogs:window.__playlistFull.dialogs,
@@ -334,8 +345,9 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   // Inspect the final rows after completion with an untrusted DOM click.
   const openDetails=()=>handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();});
   const downloadStart=performance.now();
-  await collection.getByRole('button',{name:startLabel,exact:true}).tap();
-  const activationLog=[startLabel];
+  const initialLabel=oldCheckpoint?resumeLabel:startLabel;
+  await collection.getByRole('button',{name:initialLabel,exact:true}).tap();
+  const activationLog=[initialLabel];
   if(mode==='resume'){
    let waitTimer;
    try{await Promise.race([blocked,new Promise((_,fail)=>{waitTimer=setTimeout(()=>fail(Error('Mid-batch read was never reached')),100000);})]);}
@@ -354,13 +366,15 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    await collection.getByRole('button',{name:resumeLabel,exact:true}).tap();
    activationLog.push(resumeLabel);
   }
-  const expectedSummary=mode==='missing'?'9 de 10 guardadas · 1 no existe':'30 de 30 guardadas';
+  const hasMissing=mode==='missing'||mode==='stale-checkpoint';
+  const expectedSummary=hasMissing?'9 de 10 guardadas · 1 no existe':'30 de 30 guardadas';
   await page.getByRole('status').filter({hasText:/^Descarga (finalizada|detenida) ·/}).waitFor({state:'attached',timeout:135000});
   assert.equal(await handle.getByText(expectedSummary,{exact:true}).count(),1,await handle.innerText());
   receipt.completedMs=elapsed(downloadStart);
   await openDetails();
   const rows=dock.locator('.download-dock__panel li');
   await rows.first().waitFor({state:'attached'});
+  assert.doesNotMatch(await dock.innerText(),/Procesada anteriormente/);
   const actual=await rows.evaluateAll(rows=>rows.map(row=>({
    title:row.querySelector('strong').textContent,icon:row.querySelector('.download-dock__row-icon').textContent,
    reason:row.dataset.failed==='true'?row.querySelector('div>span')?.textContent:null,
@@ -372,7 +386,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   await checkNoReview();
   assert.deepEqual(await page.evaluate(()=>window.__playlistFull.activations),activationLog.slice(-1));
   assert.equal(await page.evaluate(()=>window.__playlistFull.audio.currentTime),0,'Download must not start playback');
-  if(repetition===1&&(mode==='full'||mode==='missing'&&engine==='chromium')){
+  if(repetition===1&&(mode==='full'||mode==='missing'&&engine==='chromium'||mode==='stale-checkpoint')){
    await dock.screenshot({path:resolve(work.evidence,`${engine}-${mode}.png`)});
   }
   await dock.waitFor({state:'detached',timeout:6500});
@@ -402,7 +416,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   assert.deepEqual(after,before,'Bytes and asset links survive reload');
   receipt.reloadStorageVerified=true;
   const traceCount=trace.length;
-  const playable=[tracks[0],tracks.find(row=>row.scenario===(mode==='missing'?'empty-next-bot':'truncated-next-bot')),tracks.at(-1)];
+  const playable=[tracks[0],tracks.find(row=>row.scenario===(hasMissing?'empty-next-bot':'truncated-next-bot')),tracks.at(-1)];
   receipt.playback=[];
   for(const {track} of playable){
    const button=page.getByRole('button',{name:'Escuchar '+track.title,exact:true}).first();

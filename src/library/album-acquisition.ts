@@ -50,7 +50,11 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
     const result=await downloadSong({client:p.client,providers,revision:p.revision,signal:p.signal,current:live,networkCurrent,remoteClock,
      attempt:p.attempt,choice,index:i,mark:value=>{pending=value;},message:message=>{row.message=message;update(message);},progress:()=>{}});
     if(result.state==='stopped'||!live()){
-     if(pending)park();
+     if(pending?.kind==='save')park();
+     else if(pending?.kind==='network'){
+      const remote=p.client.searchSnapshot();
+      if(remote.pending||remote.cancelling||remote.retryBlocked||remote.delivery==='uncertain')park();
+     }
      storageStopped=live();
      break;
     }

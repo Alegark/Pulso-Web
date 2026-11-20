@@ -18,15 +18,16 @@ test('restored metadata uses its original catalogue credit for a later download'
  await downloadLibrarySelection({tracks:[selected],attempt,client:{captureBotsCurrent:()=>()=>true} as never,providers:[],revision:1,signal:new AbortController().signal,current:()=>true,update:()=>{}});assert.equal(artist,'Artista');
 });
 
-import {copyLibraryDownloadCheckpoint,discardLibraryDownloadCheckpoint,readHeldLibraryDownload,readLibraryDownloadCheckpoint,writeLibraryDownloadCheckpoint} from '../../src/library/library-download-checkpoint';
-import type {LibraryDownloadCheckpoint} from '../../src/library/library-download-checkpoint';
+import {copyLibraryDownloadCheckpoint,discardLibraryDownloadCheckpoint,readHeldLibraryDownload,readLibraryDownloadCheckpoint,sameHeldDownload,writeLibraryDownloadCheckpoint} from '../../src/library/library-download-checkpoint';
+import type {HeldDownload,LibraryDownloadCheckpoint} from '../../src/library/library-download-checkpoint';
 import type {AlbumRow} from '../../src/library/album-acquisition';
 import type {TelegramSessionClient} from '../../src/telegram/session-client';
 import type {BotSearchTarget} from '../../src/telegram/bot-search-protocol';
 const selection=Array.from({length:4},(_,i)=>({...track,id:`11111111-1111-4111-8111-11111111111${i+1}`,title:`Pista ${i+1}`}));
 const batch=():LibraryDownloadCheckpoint=>({id:crypto.randomUUID(),trackIds:selection.map(t=>t.id),cursor:0,pending:null});
-function fixture(checkpoint=batch(),options:{twoBots?:boolean;absent?:boolean;flood?:boolean;alternates?:boolean}={}){
- const requests:string[]=[],queries:string[]=[],downloads:string[]=[],parked=new Map(),abort=new AbortController();
+function fixture(checkpoint=batch(),options:{twoBots?:boolean;absent?:boolean;flood?:boolean;alternates?:boolean;tracks?:Track[];parked?:Map<string,HeldDownload>}={}){
+ const requests:string[]=[],queries:string[]=[],downloads:string[]=[],abort=new AbortController();
+ const parked=options.parked??new Map<string,HeldDownload>(),checkpoints:LibraryDownloadCheckpoint[]=[];
  let flooded=false;
  let state={queryId:'',providerRef:'bot',providerRevision:1,expectedTarget:null,pending:false,cancelling:false,available:true,
   error:null,delivery:'acknowledged',retryBlocked:false,retryAt:null,rows:[]} as unknown as BotSearchSnapshot;
@@ -58,9 +59,12 @@ function fixture(checkpoint=batch(),options:{twoBots?:boolean;absent?:boolean;fl
   save:async(_a,c)=>({state:'saved',trackId:c.id.slice(6)}),addToLibrary:async()=>{throw Error('No membership change');},
   play:async()=>{throw Error('No autoplay');}};
  const providers=[{providerRef:'bot',label:'Bot'},...(options.twoBots?[{providerRef:'other',label:'Other'}]:[])];
- return {requests,queries,downloads,parked,attempt,abort,get checkpoint(){return saved;},get rows(){return rows;},
-  run:()=>downloadLibrarySelection({tracks:selection,attempt,client,providers,revision:1,signal:abort.signal,current:()=>true,
-   checkpoint,saveCheckpoint:v=>{saved=v;},parkDownload:(id,pending)=>parked.set(id,pending),update:v=>{rows=v;}}),
+ return {requests,queries,downloads,parked,attempt,abort,checkpoints,get checkpoint(){return saved;},get rows(){return rows;},
+  run:()=>downloadLibrarySelection({tracks:options.tracks??selection,attempt,client,providers,revision:1,signal:abort.signal,current:()=>true,
+   checkpoint,saveCheckpoint:v=>{saved=v;checkpoints.push(v);},parkDownload:(id,pending)=>parked.set(id,pending),
+   heldDownload:id=>parked.get(id)??null,clearHeldDownload:(id,expected)=>{
+    if(sameHeldDownload(parked.get(id)??null,expected))parked.delete(id);
+   },update:v=>{rows=v;}}),
  };
 }
 
@@ -105,7 +109,7 @@ test('explicit cancel during save preserves its receipt and never starts the nex
  resumed.attempt.reconcileDownload=async()=>({state:'uncertain',trackId:null});
  assert.equal(await resumed.run(),'finished');
  assert.equal(resumed.rows[2].reason,'parked');
- assert.equal(resumed.parked.get(selection[2].id).kind,'save');
+ assert.equal(resumed.parked.get(selection[2].id)?.kind,'save');
  assert.deepEqual(resumed.requests,[selection[3].title]);
 });
 
@@ -134,6 +138,95 @@ test('a network-only checkpoint can resume without assuming a local write',async
  assert.equal(await resumed.run(),'finished');
  assert.deepEqual(resumed.requests,selection.slice(2).map(t=>t.title));
  assert.deepEqual(resumed.rows.map(r=>r.state),['reused','reused','downloaded','downloaded']);
+});
+
+const staleTracks=Array.from({length:6},(_,i)=>({...track,id:crypto.randomUUID(),title:`Pista ${i+1}`}));
+const staleBatch=():LibraryDownloadCheckpoint=>({...batch(),trackIds:staleTracks.map(t=>t.id),cursor:5});
+
+test('a legacy cursor at five retries every earlier track without a verified copy',async()=>{
+ const resumed=fixture(staleBatch(),{tracks:staleTracks});
+ resumed.attempt.inspectDownload=async()=>null;
+ assert.equal(await resumed.run(),'finished');
+ assert.deepEqual(resumed.requests,staleTracks.map(t=>t.title));
+ assert.deepEqual(resumed.rows.map(row=>row.state),staleTracks.map(()=> 'downloaded'));
+ assert.equal(resumed.checkpoint.cursor,6);
+});
+
+test('an ambiguous cursor receipt is reconciled and parked before any earlier track writes',async()=>{
+ const pending={kind:'save' as const,index:5,operationId:crypto.randomUUID()};
+ const resumed=fixture({...staleBatch(),pending},{tracks:staleTracks});
+ const reconciled:string[]=[],parkedByAttempt:string[]=[];
+ resumed.attempt.inspectDownload=async()=>null;
+ resumed.attempt.reconcileDownload=async(operationId,id)=>{
+  assert.equal(id,staleTracks[5].id);
+  assert.equal(resumed.checkpoint.pending,pending);
+  assert.deepEqual(resumed.requests,[]);
+  reconciled.push(operationId);
+  return {state:'uncertain',trackId:null};
+ };
+ resumed.attempt.parkDownload=async operationId=>{
+  assert.equal(resumed.checkpoint.pending,pending);
+  parkedByAttempt.push(operationId);
+ };
+ resumed.attempt.waitForDownload=async()=>sameHeldDownload(resumed.parked.get(staleTracks[5].id)??null,pending);
+ assert.equal(await resumed.run(),'finished');
+ assert.deepEqual(reconciled,[pending.operationId]);
+ assert.deepEqual(parkedByAttempt,[pending.operationId]);
+ assert.deepEqual(resumed.requests,staleTracks.slice(0,5).map(t=>t.title));
+ assert.deepEqual(resumed.rows.map(row=>row.state),['downloaded','downloaded','downloaded','downloaded','downloaded','uncertain']);
+ assert.equal(resumed.rows[5].message,'Pendiente en Almacenamiento');
+});
+
+test('interruption during an earlier save preserves both receipts and reuses published copies on resume',async()=>{
+ const later={kind:'save' as const,index:5,operationId:crypto.randomUUID()};
+ const copies=new Map<string,{operationId:string}>(),laterId=staleTracks[5].id,interruptedId=staleTracks[1].id;
+ const first=fixture({...staleBatch(),pending:later},{tracks:staleTracks});
+ const receipt:NonNullable<SongPlaybackAttempt['reconcileDownload']>=async(operationId,id)=>{
+  if(operationId===later.operationId&&id===laterId)return {state:'uncertain',trackId:null};
+  assert.equal(operationId,copies.get(id)?.operationId);
+  return {state:'saved',trackId:id};
+ };
+ const lookup:SongPlaybackAttempt['lookup']=async choice=>copies.has(choice.id.slice(6))?choice.id.slice(6):null;
+ const save:SongPlaybackAttempt['save']=async(_audio,choice,_signal,_progress,operationId)=>{
+  const id=choice.id.slice(6);
+  assert.ok(operationId);
+  assert.equal(copies.has(id),false,'must not publish a duplicate');
+  copies.set(id,{operationId});
+  return {state:'saved',trackId:id};
+ };
+ first.attempt.lookup=lookup;
+ first.attempt.reconcileDownload=receipt;
+ first.attempt.save=async(...args)=>{
+  const saved=await save(...args);
+  if(saved.trackId===interruptedId)first.abort.abort();
+  return saved;
+ };
+ assert.equal(await first.run(),'stopped');
+ const checkpoint=copyLibraryDownloadCheckpoint(JSON.parse(JSON.stringify(first.checkpoint)));
+ assert.ok(checkpoint);
+ assert.equal(checkpoint.cursor,1);
+ assert.deepEqual(first.requests,staleTracks.slice(0,2).map(t=>t.title));
+ assert.equal(checkpoint.pending?.kind,'save');
+ assert.equal(checkpoint.pending.operationId,copies.get(interruptedId)?.operationId);
+ assert.equal(first.parked.get(laterId)?.kind,'save');
+
+ const resumed=fixture(checkpoint,{tracks:staleTracks,parked:first.parked});
+ resumed.attempt.lookup=lookup;
+ resumed.attempt.inspectDownload=async id=>copies.has(id)?id:null;
+ const reconciled:string[]=[];
+ resumed.attempt.reconcileDownload=async(operationId,id,signal,repair)=>{
+  reconciled.push(id);
+  return receipt(operationId,id,signal,repair);
+ };
+ resumed.attempt.waitForDownload=async()=>reconciled.includes(laterId);
+ resumed.attempt.save=save;
+ assert.equal(await resumed.run(),'finished');
+ assert.deepEqual(reconciled,[interruptedId,laterId]);
+ assert.deepEqual(resumed.requests,staleTracks.slice(2,5).map(t=>t.title));
+ assert.deepEqual(resumed.rows.map(row=>row.state),['reused','reused','downloaded','downloaded','downloaded','uncertain']);
+ assert.equal(copies.size,5);
+ assert.equal(resumed.checkpoint.pending,null);
+ assert.ok([...first.checkpoints,...resumed.checkpoints].every(checkpoint=>copyLibraryDownloadCheckpoint(checkpoint)));
 });
 
 test('an invalid write checks and cleans its exact receipt, then the second bot saves',async()=>{
