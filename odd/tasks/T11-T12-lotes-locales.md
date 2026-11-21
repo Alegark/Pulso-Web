@@ -668,3 +668,21 @@ El límite de 60 segundos de inactividad se aplica también cuando Telegram deni
 La reserva de un traspaso de álbum se libera si se abandona su vista, se cancela la carga, hay un fallo de catálogo o el respaldo resuelve una edición distinta. La edición de respaldo queda disponible para una acción manual. Una playlist pendiente puede retomarse al siguiente despertar.
 
 Validación local con Telegram sintético. Tipos de app y tests, lint, 856/856 unitarias, 73/73 de servidor, 10/10 de Python, build y Wrangler dry-run pasaron. La matriz pasó 83/84 en la corrida conjunta y 84/84 contando la repetición aislada de `update-resume` tras un timeout al abrir el fixture de Chromium. En `e0e8789a` fallaron las dos unitarias nuevas y los cuatro recorridos nuevos de navegador (dos por motor). Siguen pendientes la suspensión real y la aceptación de Telegram y avisos en iPhone físico.
+
+### Continuidad de descargas en segundo plano publicada · 2026-11-21
+
+Cloudflare Workers Free, USD 0, sirve [la v55](https://pulso-web.pruebassoftware.workers.dev/releases/9ac1427f5ecba95c.html) desde `8683e084195a6db5eda5539e3adc97e122710dd1`. El MCP oficial confirmó la versión `05b785fb-0848-4090-b103-8b1d43e991e4` al 100 % en el despliegue `18d96528-f8de-45a3-98a8-46cd82c3cd43`. Coincidieron el SHA-256 del Worker, los 13 bindings, los límites y la configuración de ejecución. Se conservaron Turnstile y los secretos. El freeze retuvo ocho publicaciones anteriores y el inventario heredado, con cero rutas retiradas. Cloudflare solicitó 8 archivos. [PR #15](https://github.com/Alegark/Pulso-Web/pull/15), apilada sobre #14.
+
+Las descargas de playlists y colecciones siguen mientras JavaScript esté activo y conservan los audios que llegan con Pulso oculto. Tras una suspensión, Telegram reconecta con esperas de 5, 10, 20 y 40 segundos desde el final del intento anterior y la descarga se pausa si transcurren 60 segundos sin conexión. Tras recarga, descarte de iOS o `pagehide`, una descarga pendiente se retoma en modo solo guardar, con un máximo de tres intentos consecutivos sin progreso. «Detener» impide la reanudación automática. La ventana muestra el motivo y un solo botón «Continuar» desde cualquier pantalla. El aviso final llega con Pulso oculto y el aviso de pausa indica que se abra Pulso para continuar.
+
+Pasaron 856 unitarias, 73 de servidor, 10 de Python, tipos de aplicación y pruebas, lint, builds y dry-run de Wrangler. Pasaron 84/84 casos enfocados con Telegram sintético, en ejecuciones separadas de Chromium y WebKit.
+
+HTTPS confirmó `latest.json`, HTTP 307 a la ruta sin `.html` y HTTP 200 con el meta `pulso-release` igual a `9ac1427f5ecba95c`. Coincidieron bytes y SHA-256 en 268 rutas estáticas públicas. Las 49 entradas históricas, incluidas v54, v53 y v52, abrieron el bundle actual con cabeceras de navegación. Se conservaron `turnstileSiteKey` y `challenges.cloudflare.com` en la CSP. Perfil y biblioteca anónimos devolvieron HTTP 401.
+
+El manifiesto autoritativo de 271 archivos y 62304 bytes se promovió con fecha MCP `2026-11-21T22:56:38.441Z` a `.local/test-evidence/background-resume-release/site-manifest.json`, SHA-256 `27b408a39acdde68a44e512ec0c748cfb18b366c93c5a4a4f4012bef05b2d90b`. Los recibos compactos se conservan en el mismo directorio. P0-W sigue abierto.
+
+- Aceptación en iPhone físico con Telegram real. Comprobar segundo plano con y sin música, recarga y avisos.
+- Límite de iOS. Al salir sin música, la app se congela y la descarga sigue al volver.
+- Regresión de Chromium desde `ac89e5a` en `artwork`, `artwork-containers`, `opfs` y `library`.
+- Fallos del entorno WPE de WebKit en la batería general.
+- Riesgo residual menor. Si cambia el cliente de Telegram o la revisión de bots mientras un álbum traspasado por la actualización carga sus metadatos, Pulso libera el traspaso y el usuario tiene que volver a pulsar el álbum.
