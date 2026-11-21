@@ -56,7 +56,7 @@ function readPosition():Point|null{
  return null;
 }
 
-export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUpdate,pendingDownload}:{updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;pendingDownload?:{saved:number;total:number;title?:string;retaking:boolean;onContinue:()=>void};message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
+export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUpdate,pendingDownload}:{updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;pendingDownload?:{saved:number;total:number;title?:string;reason?:string;retaking:boolean;onContinue:()=>void};message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
  const {running,active,notice}=useAlbumDownloadState();
  const [finished,setFinished]=useState<{notice:NonNullable<AlbumCoordinator['notice']>;stopped:boolean}|null>(null);
  const [transient,setTransient]=useState('');
@@ -120,7 +120,9 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
  },[reviewing]);
 
  const pendingBatch=!running?pendingDownload:undefined;
+ useLayoutEffect(()=>{if(pendingBatch)setFinished(null);},[!!pendingBatch]);
  const pendingMessage=pendingBatch&&(pendingBatch.retaking?'Retomando…':`Descarga pendiente · ${pendingBatch.saved} de ${pendingBatch.total} guardadas`);
+ const pauseReason=displayMessage(pendingBatch?.reason);
  const visible=!!updateMessage||running||!!finished||!!transient||reviewing||!!pendingBatch;
  const currentNotice=running?notice:pendingBatch?undefined:finished?.notice;
  const rows=currentNotice?.progress.rows??[];
@@ -137,7 +139,8 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
   ...(pending?[`${pending} pendiente${pending===1?'':'s'}`]:[]),
  ].join(' · ');
  const currentIndex=rows.findIndex(row=>!row.confirmed&&!row.reason&&(row.state==='unattempted'||row.state==='ready'));
- const progressMessage=(running||finished?.stopped)?displayMessage((currentNotice??finished?.notice)?.progress.message):undefined;
+ const progressMessage=pauseReason??((running||finished?.stopped)?displayMessage(currentNotice?.progress.message):undefined);
+ const detailMessage=pauseReason&&transient?`${transient} ${pauseReason}`:transient||progressMessage;
 
  function clamp(point:Point):Point{
   const area=bounds.current,node=card.current;
@@ -207,10 +210,10 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
  },[visible]);
 
  return createPortal(<>
-  <div className="pulso-visually-hidden" role="status">{updateMessage||transient||pendingMessage||(running?`Descargando · ${summary}`:finished?`${finished.stopped?'Descarga detenida':'Descarga finalizada'} · ${summary}`:'')}</div>
+  <div className="pulso-visually-hidden" role="status">{updateMessage||(pendingMessage?[pendingMessage,transient,pauseReason].filter(Boolean).join(' · '):null)||transient||(running?`Descargando · ${summary}`:finished?`${finished.stopped?'Descarga detenida':'Descarga finalizada'} · ${summary}`:'')}</div>
   {visible&&<div ref={bounds} className="download-dock-area">
    <section ref={card} className="download-dock" aria-label={reviewing?'Revisión de descarga':'Descargas'} tabIndex={-1}
-    data-positioned={!!position} data-expanded={showingDetails} data-pending={!!pendingBatch&&!updateMessage&&!reviewing&&!showingDetails&&!transient}>
+    data-positioned={!!position} data-expanded={showingDetails} data-pending={!!pendingBatch&&!updateMessage&&!reviewing&&!showingDetails&&!transient&&!pauseReason}>
     {updateMessage?<p className="download-dock__message">{updateMessage}</p>:reviewing?review:pendingBatch||currentNotice||running?<><button ref={handle} type="button" className="download-dock__handle"
      aria-expanded={expanded} aria-controls={expanded?panelId:undefined} aria-describedby={hintId}
      aria-label={running?`${expanded?'Plegar':'Ver'} descargas · ${saved} de ${total} guardadas`:undefined}
@@ -225,7 +228,7 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
       <strong><bdi dir="auto">{pendingBatch?.title??currentNotice?.title??active?.title??'Selección de Biblioteca'}</bdi></strong>
       {!pendingBatch&&<p>{running?summary:finished?.stopped?'Descarga detenida':'Descarga finalizada'}</p>}
       {running&&currentIndex>=0&&<p><bdi dir="auto">{currentNotice?.titles?.[currentIndex]??`Canción ${currentIndex+1}`}</bdi></p>}
-      {(transient||progressMessage)&&<p>{transient||progressMessage}</p>}
+      {detailMessage&&<p>{detailMessage}</p>}
       {rows.length>0&&<ol>{rows.map((row,index)=>{
        const failed=!row.confirmed&&(row.state==='failed'||row.state==='uncertain');
        const reason=!row.confirmed&&row.reason?reasonLabels[row.reason].row:null;
@@ -237,7 +240,7 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
       {!running&&onReviewStorage&&remaining.some(row=>row.reason==='parked')&&
        <button type="button" className="download-dock__storage" onClick={()=>{setFinished(null);onReviewStorage();}}>Revisar en Almacenamiento</button>}
      </div>}
-     {!expanded&&(transient||currentNotice?.progress.waiting&&progressMessage)&&<p className="download-dock__message" role="status">{transient||progressMessage}</p>}
+     {!expanded&&(transient||pauseReason||currentNotice?.progress.waiting&&progressMessage)&&<p className="download-dock__message" role={pauseReason?undefined:'status'}>{detailMessage}</p>}
     </>:<p className="download-dock__message">{transient}</p>}
     {!updateMessage&&!reviewing&&pendingBatch&&!pendingBatch.retaking&&<div className="download-dock__footer"><button type="button" onClick={pendingBatch.onContinue}>Continuar</button></div>}
     {(updateMessage||!reviewing&&expanded&&running&&active)&&<div className="download-dock__footer"><button type="button" onClick={()=>{

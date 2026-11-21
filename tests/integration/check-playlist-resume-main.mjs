@@ -26,9 +26,14 @@ const readyCopies=[1,2].map(n=>{
 });
 const fixture=(release='old')=>({name:'playlist-resume-sdk-test',enforce:'pre',resolveId(id){if(id==='./temporary-sdk')return resolve('tests/integration/playlist-resume-sdk.ts');},
  transform(code,id){
-  if(id.endsWith('/src/main.tsx'))return code.replace('prepare:async manual=>{',
+  if(id.endsWith('/src/main.tsx'))return code.replace('function captureBatchDownload(recoverPending=false):SongPlaybackAttempt|null {',
+   'function captureBatchDownload(recoverPending=false):SongPlaybackAttempt|null {if(document.documentElement.dataset.testBusy==="true")return null;')
+   .replace('prepare:async manual=>{',
    'prepare:async manual=>{if (document.documentElement.dataset.testUpdateBlocked === "true") return false;')+`
-document.documentElement.dataset.testBuild=${JSON.stringify(release)};`;
+document.documentElement.dataset.testBuild=${JSON.stringify(release)};window.testEmit=emit;`;
+  if(id.endsWith('/src/ui/DownloadDock.tsx'))return code.replace('const displayTime=5000;', 'const displayTime=window.testDockTime??5000;');
+  if(id.endsWith('/src/ui/TelegramPanel.tsx'))return code.replace('tracks={localTracks} client={client.current}',
+   'tracks={document.documentElement.dataset.testHoldTracks==="true"?[]:localTracks} client={client.current}');
   if(id.endsWith('/tests/integration/required-setup-sdk.ts'))return code.replace("await fetch('/__setup-event?kind='+kind);",
    "if(!(await fetch('/__setup-event?kind='+kind)).ok)throw Error('network');");
   if(id.endsWith('/telegram/session-client.ts')){
@@ -48,10 +53,10 @@ const testSearchBot=TelegramSessionClient.prototype.searchBot;
    }});
    `+code;
  }});
-const backgroundModes=['background-alive','cold-resume','stop-reload','two-tabs','wake-restore','paused-hidden'];
+const backgroundModes=['background-alive','cold-resume','stop-reload','two-tabs','wake-restore','paused-hidden','hidden-rejection','orphan-idle'];
 const channelModes=['long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop',...backgroundModes];
 const fallbackModes=['bot-timeout','bot-unsupported','manual-lane'];
-const updateModes=['update-resume','update-offline','update-startup','update-single','update-album','update-timeout','update-stopped','update-attempted'];
+const updateModes=['update-resume','update-offline','update-startup','update-single','update-album','update-timeout','update-stopped','update-attempted','update-auto','update-auto-busy','update-priority-album','update-priority-song'];
 const allModes=[...updateModes,...channelModes,...fallbackModes,'autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
 const modes=process.env.PLAYLIST_RESUME_MODE?process.env.PLAYLIST_RESUME_MODE.split(','):allModes;
 assert.ok(modes.every(mode=>allModes.includes(mode)),'Unknown playlist resume test case');
@@ -115,13 +120,16 @@ try{
   report[engine]=browser.version();
   try{for(const mode of modes){
    const updating=updateModes.includes(mode),albumMode=mode==='album'||mode==='update-album',singleMode=mode==='single'||mode==='update-single';
-   const updateDownload=['update-resume','update-single','update-album'].includes(mode);
+   const priority=mode==='update-priority-album'||mode==='update-priority-song';
+   const autoUpdate=mode==='update-auto'||mode==='update-auto-busy';
+   const updateDownload=['update-resume','update-single','update-album','update-auto'].includes(mode);
    const deferUpdate=mode==='update-timeout'||mode==='update-stopped';
    const updateFallback=mode==='update-timeout'||mode==='update-attempted';
    const fresh=albumMode||singleMode||['autoheal','missing','missing-metadata'].includes(mode);
    const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
    const trace=[];let floodAt=0,restores=0,restoreFailures=0;const channel=channelModes.includes(mode),fallback=fallbackModes.includes(mode);
    let releaseRestore,releaseSearch,releaseStartupProbe,holdRestore=false,page,restoresBeforeResume=0;
+   let autoPointerAt=Infinity,gateProbes=0;
    let pointer=mode==='update-startup'?'new':'old',pointerChecks=0,startupProbeAt=0,startupNavigationAt=0;
    const navigations=[];
    const startupGate=new Promise(resolve=>{releaseStartupProbe=resolve;});
@@ -130,12 +138,13 @@ try{
    try{
     await context.route('**/*',async route=>{
      const url=new URL(route.request().url());
-     if(albumMode&&url.origin==='https://itunes.apple.com'){
+     if((albumMode||mode==='update-priority-album')&&url.origin==='https://itunes.apple.com'){
       const album={wrapperType:'collection',collectionType:'Album',collectionId:201,collectionName:'Álbum de prueba',
        artistName:'Artista prueba',trackCount:2};
       const tracks=[3,4].map((n,index)=>({wrapperType:'track',kind:'song',collectionId:201,trackId:300+n,
        discNumber:1,discCount:1,trackNumber:index+1,trackCount:2,trackName:`Pista ${n}`,artistName:'Artista prueba',trackTimeMillis:2000}));
       const results=url.pathname==='/lookup'?[album,...tracks]:[album];
+      if(mode==='update-priority-album'&&url.pathname==='/lookup'){gateProbes++;await searchGate;}
       return route.fulfill({headers:{'access-control-allow-origin':'*'},json:{resultCount:results.length,results}});
      }
      if(updating&&url.origin==='https://itunes.apple.com')return route.fulfill({headers:{'access-control-allow-origin':'*'},json:{resultCount:0,results:[]}});
@@ -144,6 +153,11 @@ try{
      if(updating&&url.pathname==='/latest.json'){
       pointerChecks++;
       if(mode==='update-startup'&&pointerChecks===1){await startupGate;startupProbeAt=Date.now();}
+      if(autoUpdate&&pointerChecks>=autoPointerAt){
+       gateProbes++;
+       if(mode==='update-auto-busy'&&gateProbes===1)await startupGate;
+       if(mode==='update-auto')return route.fulfill({json:{version:1,entry:next.entry}});
+      }
       if(pointer==='offline')return route.abort('internetdisconnected');
       return route.fulfill({json:{version:1,entry:pointer==='new'?next.entry:previous.entry}});
      }
@@ -185,8 +199,13 @@ try{
        if(mode==='paused-hidden')await page.evaluate(()=>window.testVisibility(true));
       }
       if(mode==='manual-lane'&&event.title==='Consulta manual')await searchGate;
+      if(mode==='hidden-rejection'&&event.kind==='read'&&event.title==='Pista 3'&&event.peer===101){
+       await page.evaluate(()=>window.testVisibility(true));
+       return route.fulfill({json:{reject:true}});
+      }
+      if(mode==='update-priority-song'&&event.kind==='read'){gateProbes++;await searchGate;}
       const network=event.kind==='read'&&event.title==='Pista 3'&&(mode==='reconnect'&&thirdSearches<=2||mode==='wake-restore'&&thirdSearches===1);
-      return route.fulfill({json:{mode:albumMode?'missing':singleMode?'single':updating?'autoheal':backgroundModes.includes(mode)?'suspend':mode,flood,network}});
+      return route.fulfill({json:{mode:albumMode||mode==='update-priority-album'?'missing':singleMode?'single':updating||mode==='hidden-rejection'?'autoheal':backgroundModes.includes(mode)?'suspend':mode,flood,network}});
      }
      return route.fallback();
     });
@@ -203,7 +222,13 @@ try{
     });
     await context.addInitScript(({loseAck,channel,fallback,mode,user,updating})=>{
      let hidden=false,offset=-500;
+     if(mode!=='missing'&&mode!=='paused-hidden')window.testDockTime=45000;
      if(updating){
+      const handoff=sessionStorage.getItem('pulso-shell:download-intent:v1');
+      if(handoff)sessionStorage.setItem('testonly-handoff',handoff);
+      if(sessionStorage.getItem('testonly-hold-tracks'))new MutationObserver((_,observer)=>{
+       if(document.documentElement){document.documentElement.dataset.testHoldTracks='true';observer.disconnect();}
+      }).observe(document,{childList:true});
       window.testUpdateNotices=[];
       const dockNotice=new MutationObserver(()=>{
        const text=document.querySelector('.download-dock__message')?.textContent;
@@ -212,7 +237,7 @@ try{
       });
       dockNotice.observe(document,{childList:true,characterData:true,subtree:true});
      }
-     if(mode==='update-resume'||mode==='update-single'||channel){
+     if(mode==='update-resume'||mode==='update-single'||mode.startsWith('update-auto')||mode.startsWith('update-priority')||channel){
       const play=HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play=function(...args){
        sessionStorage.setItem('testonly-plays',String(1+Number(sessionStorage.getItem('testonly-plays'))));
@@ -239,7 +264,7 @@ try{
      }
      if(channel||fallback){
       Object.defineProperty(document,'visibilityState',{get:()=>hidden?'hidden':'visible'});
-      window.testVisibility=value=>{hidden=value;document.dispatchEvent(new Event('visibilitychange'));};
+      window.testVisibility=value=>{if(hidden===value)return;hidden=value;document.dispatchEvent(new Event('visibilitychange'));};
       window.testAdvanceWorkers=ms=>{offset+=ms;for(const worker of workers)worker.postMessage({testonlyClock:offset});};
       window.testNotifications=[];
       window.testDismissed=[];
@@ -294,8 +319,9 @@ try{
     page=await context.newPage();page.setDefaultTimeout(18000);
     if(channel||mode==='manual-lane')await page.clock.install();
     const advance=async ms=>{await page.evaluate(value=>window.testAdvanceWorkers(value),ms);await page.clock.fastForward(ms);};
-    const waitForWorker=async predicate=>{
-     for(let i=0;i<100;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,50));}
+    const waitForWorker=async(predicate,timeout=5000)=>{
+     const until=Date.now()+timeout;
+     do{if(predicate())return;await new Promise(resolve=>setTimeout(resolve,50));}while(Date.now()<until);
      assert.fail('No llegó el evento del worker simulado');
     };
     page.on('pageerror',error=>report.errors.push(error.stack??String(error)));
@@ -313,6 +339,16 @@ try{
       tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);
      });}finally{db.close();}
     },{user,ids});
+    if(mode==='orphan-idle'){
+     await page.evaluate(account=>sessionStorage.setItem('testonly-orphan',JSON.stringify({
+      tag:'pulso-download-collection',silent:true,data:{account,terminal:false},
+     })),user);
+     await page.goto(origin,{waitUntil:'commit'});
+     await page.waitForFunction(()=>window.testDismissed.includes('pulso-download-collection'));
+     assert.equal(await page.locator('.download-dock').count(),0);
+     assert.equal(trace.length,0);
+     report.cases.push({engine,mode,status:'PASS'});continue;
+    }
     if(mode==='update-startup'){
      // The old shell stays in place while Pulso restores its synthetic account.
      // Reply to the startup probe as soon as the existing safety guards settle.
@@ -403,7 +439,52 @@ try{
      continue;
     }
     let fallbackDelayMs;
-    if(!fresh){
+    if(autoUpdate||priority){
+     const previousId=await page.evaluate(({user,ids,priority,bundle,mode})=>{
+      const key='pulso:library-download:v1:'+user,checkpoint=JSON.parse(localStorage.getItem(key));
+      Object.assign(checkpoint,priority?{trackIds:[ids[2]],cursor:0,saved:0}:{saved:2,autoAttempts:1},{autoResume:true,title:'Playlist pendiente'});
+      localStorage.setItem(key,JSON.stringify(checkpoint));
+      if(priority){
+       sessionStorage.setItem('testonly-hold-tracks','1');
+       const action=mode==='update-priority-album'?{kind:'album',editionId:201,title:'Álbum de prueba',artist:'Artista prueba'}:
+        {kind:'song',choice:{id:'local:'+ids[3],source:'local',title:'Pista 4',artist:'Artista prueba',album:null,duration:2}};
+       sessionStorage.setItem('pulso-shell:download-intent:v1',JSON.stringify({account:user,bundle,expires:Date.now()+90000,action}));
+      }
+      return checkpoint.id;
+     },{user,ids,priority,mode,bundle:previous.html.match(/src="(\/assets\/[^"]+\.js)"/)[1]});
+     autoPointerAt=pointerChecks+2;
+     await page.reload({waitUntil:'commit'});
+     await waitForWorker(()=>gateProbes>0);
+     if(priority){
+      await page.waitForFunction(()=>sessionStorage.getItem('pulso-shell:download-intent:v1')===null);
+      await page.evaluate(()=>{delete document.documentElement.dataset.testHoldTracks;document.dispatchEvent(new Event('visibilitychange'));window.testEmit();});
+      await dock.getByText('Descarga pendiente · 0 de 1 guardadas',{exact:true}).waitFor();
+      await page.waitForTimeout(400);
+      assert.equal(await page.evaluate(account=>JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)).id,user),previousId);
+      if(mode==='update-priority-album')assert.equal(trace.length,0);
+      else assert.deepEqual(trace.filter(e=>e.kind==='search').map(e=>e.title),['Pista 4']);
+      releaseSearch();
+      if(mode==='update-priority-album')await page.locator('.album-tracks li').filter({hasText:'Pista 4'}).getByText('Descargada',{exact:false}).waitFor();
+      else await page.getByText('Copia guardada. Pulsa Reproducir para escucharla.',{exact:false}).first().waitFor();
+      assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),0);
+      assert.equal(await page.evaluate(account=>JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)).id,user),previousId);
+      report.cases.push({engine,mode,status:'PASS'});continue;
+     }
+     if(mode==='update-auto-busy'){
+      await page.evaluate(()=>{document.documentElement.dataset.testBusy='true';window.testEmit();});
+      releaseStartupProbe();
+      await dock.getByText('Descarga pendiente · 2 de 4 guardadas',{exact:true}).waitFor();
+      assert.equal(await dock.getByText(/Biblioteca está ocupada/).count(),0);
+      assert.equal(trace.length,0);
+      await page.evaluate(()=>{delete document.documentElement.dataset.testBusy;window.testEmit();});
+     }else{
+      await page.waitForURL(origin+next.entry);
+      const handoff=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('testonly-handoff')));
+      assert.equal(handoff?.action.automatic,true);
+      assert.equal(handoff?.action.checkpointId,previousId);
+     }
+     await page.waitForFunction(()=>sessionStorage.getItem('pulso-shell:download-intent:v1')===null);
+    }else if(!fresh){
      holdRestore=true;
      await page.reload({waitUntil:'commit'});
      await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();
@@ -519,10 +600,8 @@ try{
       releaseSearch();
       if(mode==='wake-restore'){
        await dock.getByText('Reconectando con Telegram…',{exact:true}).first().waitFor();
-       await advance(6000);
-       await waitForWorker(()=>restoreFailures===1);
-       await advance(6000);
-       await waitForWorker(()=>restores>=4);
+       await waitForWorker(()=>restoreFailures===1,12_000);
+       await waitForWorker(()=>restores>=4,20_000);
       }
      }else if(mode==='cold-resume'||mode==='two-tabs'||mode==='stop-reload'){
       await waitForWorker(()=>trace.some(event=>event.kind==='read'&&event.title==='Pista 3'));
@@ -542,6 +621,8 @@ try{
        await other.goto(origin,{waitUntil:'commit'});
        await other.getByRole('button',{name:'Continuar',exact:true}).waitFor();
        assert.equal(await other.evaluate(()=>window.testNotifications.length),0);
+       await other.getByRole('button',{name:'Continuar',exact:true}).press('Enter');
+       await other.locator('.download-dock__message').getByText('Usa Pulso en esta pestaña para continuar la descarga.',{exact:true}).waitFor();
        assert.equal(thirdSearches(),1);
        await page.bringToFront();
       }
@@ -571,7 +652,15 @@ try{
       assert.equal(await page.evaluate(account=>JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)).autoResume,user),false);
       assert.equal(thirdSearches(),1);
       assert.equal(await page.evaluate(()=>document.visibilityState),'hidden');
+      await advance(6000);
+      assert.equal(await handle.getAttribute('aria-expanded'),'false');
+      await dock.getByText(/Telegram pide esperar 30 min.*Pulsa Continuar/).waitFor();
+      await page.getByRole('status').filter({hasText:/Descarga pendiente.*Telegram pide esperar 30 min/}).first().waitFor();
+      await page.reload({waitUntil:'commit'});
+      await dock.getByText(/Telegram pide esperar 30 min.*Pulsa Continuar/).waitFor();
       report.cases.push({engine,mode,status:'PASS'});continue;
+     }else if(mode==='hidden-rejection'){
+      await waitForWorker(()=>trace.some(e=>e.kind==='read'&&e.title==='Pista 3'));
      }else if(mode==='suspend'){
       await waitForWorker(()=>thirdSearches()===1);
       await page.evaluate(()=>window.testVisibility(true));
@@ -581,13 +670,11 @@ try{
       releaseSearch();
       await page.evaluate(()=>window.testVisibility(false));
       await dock.getByText('Reconectando con Telegram…',{exact:true}).first().waitFor();
-      await advance(6000);
+      await waitForWorker(()=>thirdSearches()>=2,12_000);
      }else if(mode==='reconnect'){
-      for(const ms of [6000,11000]){
-       await dock.getByText('Reconectando con Telegram…',{exact:true}).first().waitFor();
-       await advance(ms);
-       if(ms===6000)await waitForWorker(()=>thirdSearches()===2);
-      }
+      await dock.getByText('Reconectando con Telegram…',{exact:true}).first().waitFor();
+      await waitForWorker(()=>thirdSearches()>=2,12_000);
+      await waitForWorker(()=>thirdSearches()>=3,20_000);
      }else{
       await dock.getByText(/Telegram pide esperar 5 min/).first().waitFor();
       assert.equal(thirdSearches(),1);
@@ -611,7 +698,7 @@ try{
     const summary=singleMode?'1 de 1 guardadas':allSaved?'4 de 4 guardadas':`3 de 4 guardadas · ${reasonCount}`;
     await handle.getByText(summary,{exact:true}).waitFor({timeout:45000});
     assert.equal(await handle.getAttribute('aria-expanded'),'false');
-    await handle.click();
+    await handle.evaluate(button=>button.click());
     await panel.getByText('Descarga finalizada',{exact:true}).waitFor();
     assert.equal(await panel.locator('li').count(),singleMode?1:4);
     assert.equal(await page.locator('.library-detail .download-dock, .library-detail [aria-label="Revisión de descarga"]').count(),0);
@@ -644,8 +731,12 @@ try{
       await other.getByRole('button',{name:'Continuar',exact:true}).waitFor({state:'detached'});
       assert.equal(await other.evaluate(()=>window.testNotifications.length),0);
      }
-     if(cold||mode==='background-alive')assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),0);
+     if(cold||mode==='background-alive'||autoUpdate)assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),0);
      if(floodAt)assert.ok(searches[1].workerAt>=floodAt+300_000);
+     if(mode==='hidden-rejection'){
+      assert.equal(restores,restoresBeforeResume);
+      assert.deepEqual(searches.map(event=>event.peer),[101,102,101]);
+     }
      if(mode==='reconnect')assert.ok(restores>restoresBeforeResume,'expected the worker to restore the saved session');
      if(mode==='suspend'||mode==='background-alive')assert.equal(await page.evaluate(()=>document.visibilityState),'hidden');
      if(mode!=='notifications-off')await page.waitForFunction(()=>window.testNotifications.some(notice=>!notice.silent));
@@ -722,7 +813,7 @@ try{
     assert.deepEqual(copies.map((copy,index)=>copy?.digest??null),linked.map((saved,index)=>
      saved?digest(fixtureWav(!fresh&&index<2?index+1:index+11)):null));
     if(updating){
-     if(singleMode)assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),0);
+     if(singleMode||autoUpdate)assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),0);
      const opened=['/testonly-seed','/'];
      if(!fresh)opened.push('/');
      if(updateDownload)opened.push(next.entry);

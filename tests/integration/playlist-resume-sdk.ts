@@ -54,6 +54,7 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
    async readKnown(){return history([message()]);},
    async readDocumentPart(_document,offset,limit){
     const reply=await report('read',{title,peer});
+    if(reply.reject)return new Uint8Array(0);
     if(reply.network)throw Error('network');
     if(reply.flood==='unknown')throw {text:'FLOOD_WAIT'};
     if(reply.flood)throw {text:'FLOOD_WAIT',seconds:reply.flood};

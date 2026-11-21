@@ -53,7 +53,7 @@ export function createDownloadNotifications(host:NotificationHost){
    for(const notification of await reg?.getNotifications()??[])
     if(token===epoch&&valid(current)&&!last.has(kind)&&notification.tag===`pulso-download-${kind}`&&
      (!notification.data?.account||notification.data.account===account)&&
-     (notification.data?.terminal===false||notification.silent===true))notification.close();
+     notification.data?.terminal===false)notification.close();
   }).catch(()=>{});
  }
  function notify(kind:DownloadNotificationKind,key:unknown,title:string,body:string,terminal=false,current:()=>boolean=()=>true,pause=false,account?:string){

@@ -93,3 +93,12 @@ export function pendingDownloadAfterUpdate(account:string|undefined){
 export function takeDownloadAfterUpdate<K extends DownloadAction['kind']>(account:string|undefined,kind:K){
  return account?host?.store.take(account,kind):null;
 }
+
+// Consuming a song or album intent removes it from sessionStorage before its
+// metadata and local copies are ready. Keep its priority during that gap.
+const resolvingHandoffs=new Map<string,object>();
+export function reserveDownloadHandoff(account:string){
+ const token={};resolvingHandoffs.set(account,token);
+ return ()=>{if(resolvingHandoffs.get(account)===token)resolvingHandoffs.delete(account);};
+}
+export function downloadHandoffInProgress(account:string){return resolvingHandoffs.has(account);}

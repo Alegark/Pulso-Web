@@ -28,6 +28,7 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
   // that the previous operation published nothing. Every write has a new ID.
   for(let write=0;write<2;write++){
    if(!current()||waitForDownload&&!await waitForDownload(signal)||!current())return 'stopped';
+   if(p.audioCurrent?.()===false)return 'unavailable';
    const operationId=crypto.randomUUID();
    p.mark({kind:'save',index:p.index,operationId,attempts});
    p.message('Guardando copia…');

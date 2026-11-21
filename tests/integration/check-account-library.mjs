@@ -72,6 +72,13 @@ try{
   report.cases.push({engine,test:'mobile dock survives navigation, exposes one global resume and only storage discards',status:'PASS'});
   await b.evaluate(()=>window.libraryFixture.stageMissingBatch());await b.reload();
   await b.waitForFunction(()=>!!window.libraryFixture);await ui();
+  await button('Cambiar disponibilidad local').press('Enter');
+  await button('Continuar').press('Enter');
+  await progress.getByText('Reintenta la apertura de Almacenamiento antes de continuar la descarga.',{exact:true}).waitFor();
+  await button('Cambiar cuenta de prueba').press('Enter');
+  await progress.waitFor({state:'detached'});
+  await button('Cambiar cuenta de prueba').press('Enter');
+  await button('Cambiar disponibilidad local').press('Enter');
   await button('Continuar').press('Enter');
   await progress.getByText('La selección cambió. Vuelve a elegirla.',{exact:true}).waitFor();
   await button('Gestionar descargas').press('Enter');await button('Descartar selección pendiente').click();

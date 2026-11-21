@@ -96,7 +96,7 @@ test('orphan cleanup only closes collection progress from the current account',a
  const f=fixture(),closed:number[]=[];
  const notices=[
   {tag:'pulso-download-collection',data:{account:'a',terminal:false}},
-  {tag:'pulso-download-collection',data:{account:'a',terminal:true}},
+  {tag:'pulso-download-collection',silent:true,data:{account:'a',terminal:true}},
   {tag:'pulso-download-collection',data:{account:'b',terminal:false}},
   {tag:'pulso-download-collection',silent:true},
   {tag:'pulso-download-song',silent:true},
@@ -104,5 +104,5 @@ test('orphan cleanup only closes collection progress from the current account',a
  f.host.registration=async()=>({...f.reg,getNotifications:async()=>notices.map((notice,index)=>({...notice,close:()=>closed.push(index)}))});
  const n=createDownloadNotifications(f.host);
  n.clearProgress('collection','a',()=>false);await n.settled();assert.deepEqual(closed,[]);
- n.clearProgress('collection','a',()=>true);await n.settled();assert.deepEqual(closed,[0,3]);
+ n.clearProgress('collection','a',()=>true);await n.settled();assert.deepEqual(closed,[0]);
 });

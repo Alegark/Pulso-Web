@@ -3,7 +3,7 @@ import {bytesToHex} from '@noble/hashes/utils.js';
 import {formatStorageMB} from './storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {matchingSongRows} from './selected-song';
-import {botAudioMismatchFields,type BotSearchTarget,type BotDownloadedAudio,type BotSearchRow} from '../telegram/bot-search-protocol';
+import {botAudioMismatchFields,isBotSearchLimitError,type BotSearchTarget,type BotDownloadedAudio,type BotSearchRow} from '../telegram/bot-search-protocol';
 import type {BotsSnapshot,TelegramSessionClient} from '../telegram/session-client';
 
 export type OrderedProvider={providerRef:string;label:string};
@@ -33,7 +33,7 @@ const CANDIDATES_PER_BOT=5;
 const TRANSIENT_RETRIES_PER_BOT=2;
 const SONG_SEARCH_MS=180_000;
 const TELEGRAM_WAIT_MS=60_000;
-export type CandidateDisposition='retry'|'parked'|'stopped';
+export type CandidateDisposition='retry'|'parked'|'stopped'|'unavailable';
 export interface CollectionBotProgress {
  completed:Set<number>;
  ambiguous:Set<number>;
@@ -103,6 +103,10 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
   !!q&&s.queryId===q&&s.providerRef===provider&&s.providerRevision===revision&&JSON.stringify(s.expectedTarget)===JSON.stringify(target);
  const same=(s:ReturnType<TelegramSessionClient['searchSnapshot']>,provider:string,q:string|null)=>
   owned(s,provider,q)&&!s.pending&&s.available&&!s.retryBlocked&&(s.retryAt===null||s.retryAt<=Date.now());
+ const confirmedRejection=(s:ReturnType<TelegramSessionClient['searchSnapshot']>,own:boolean)=>
+  own&&(s.delivery!=='uncertain'&&(s.error==='file-too-large'||s.error==='file-invalid')||
+   s.delivery==='acknowledged'&&(['unsupported','needs-start','limit'].includes(s.error??'')||isBotSearchLimitError(s.error)||
+    s.error===null&&s.rows.some(row=>row.kind==='audio')&&!matchingSongRows(s.rows,target).length));
  try {
   providersLoop:for(let i=0;i<providers.length;i++){
    if(collection?.completed.has(i))continue;
@@ -137,7 +141,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      if(!p.accept)return {state:'uncertain'};
      const ownReply=owned(found,provider.providerRef,queryId);
      if(collection){
-      if(p.suspended?.()||channelDown(found,ownReply))return {state:'unavailable'};
+      if(channelDown(found,ownReply)||p.suspended?.()&&!confirmedRejection(found,ownReply))return {state:'unavailable'};
       if(!queryId&&(found.pending||found.cancelling))continue;
       if(!ownReply||found.error==='timeout'||found.error==='uncertain'||!found.error&&found.delivery==='uncertain'){
        collection.ambiguous.add(i);
@@ -191,9 +195,13 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     const after=client.searchSnapshot();
     // The admitted download already validates the worker reply against its
     // query. For a collection, received bytes only need the captured authority.
-    const received=collection&&audio&&admittedDownload&&current()&&!p.signal.aborted&&p.audioCurrent?.();
-    if(!received&&collection&&(p.suspended?.()||channelDown(after,owned(after,provider.providerRef,queryId))))return {state:'unavailable'};
-    if(!received&&(!admittedDownload||!live()||!same(after,provider.providerRef,queryId))){
+    const audioAuthorized=current()&&!p.signal.aborted&&(p.audioCurrent?.()??true);
+    if(collection&&audio&&!audioAuthorized)return {state:current()&&!p.signal.aborted?'unavailable':'stopped'};
+    const received=collection&&audio&&admittedDownload&&audioAuthorized&&!!p.audioCurrent;
+    const afterOwn=owned(after,provider.providerRef,queryId);
+    const rejected=collection&&admittedDownload&&confirmedRejection(after,afterOwn);
+    if(!received&&collection&&(channelDown(after,afterOwn)||p.suspended?.()&&!rejected))return {state:'unavailable'};
+    if(!received&&!rejected&&(!admittedDownload||!live()||!same(after,provider.providerRef,queryId))){
      if(!p.accept)return {state:'uncertain'};
      if(collection){
       if(!admittedDownload&&(after.pending||after.cancelling))continue;

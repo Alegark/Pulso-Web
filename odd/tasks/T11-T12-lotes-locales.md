@@ -652,3 +652,11 @@ Al salir con `pagehide`, Pulso aborta el lote y conserva el checkpoint. Inicio, 
 Pasaron tipos de aplicación y tests, lint, 847 unitarias, 73 de servidor, 10 de Python, build y dry-run de Wrangler. El shell compilado pasó 22/22 recorridos focales con Telegram sintético (11 por motor, frente a 10/10 compartidos en `559e4db`). Ambos motores verificaron cuatro assets con SHA-256 exacto, sin consultas ni lecturas duplicadas al ocultar la página. Pasaron también el reintento del traspaso y arranque en 8/8, Biblioteca de cuenta en 38/38 y la recarga de la playlist de 30 pistas en 2/2.
 
 La batería general en Chromium dio 11/16 frente a 12/16 en `559e4db`. Coincidieron los fallos de `library`, `opfs`, `artwork` y `artwork-containers`. El timeout adicional de `organization` pasó en aislamiento en ambas versiones. WebKit/WPE dio 4/16 en ambas versiones, con los mismos 12 grupos fallidos y los mismos timeouts de `metadata-rescan` y `blob-opfs`.
+
+#### Correcciones tras la revisión de la PR #15
+
+Al despertar, el reloj de reconexión vuelve a empezar sin consumir intentos. Cada espera de 5, 10, 20 y 40 segundos se mide después de que termine el intento anterior. Solo cuenta una restauración admitida. Una respuesta definitiva del bot conserva su clasificación y el guardado vuelve a verificar la autoridad sobre los bytes.
+
+La ventana plegada conserva y anuncia el motivo de una pausa, incluso tras una recarga. «Continuar» explica cuando falta control o se debe reabrir Almacenamiento. Un traspaso de canción o álbum conserva prioridad desde que se consume su intención hasta que se resuelve su admisión. Una ocupación transitoria permite volver a intentar el arranque automático. La pestaña propietaria limpia avisos huérfanos marcados como progreso aunque arranque sin checkpoint.
+
+Pasaron tipos, lint, 854/854 unitarias, 73/73 de servidor, 10/10 de Python, build y Wrangler dry-run. Chromium y WebKit pasaron 38/38 recorridos focales (19 por motor), 18/18 complementarios y 38/38 de Biblioteca de cuenta. El head previo `8289b726` reprodujo los seis defectos cubiertos por las pruebas de navegador en cada motor y falló 6 de las 9 unitarias focales, que pasaron 9/9 con la corrección. La suspensión, reconexión y avisos con iPhone físico y Telegram real siguen pendientes.
