@@ -620,3 +620,9 @@ Pasaron 827 unitarias, 73 de servidor, 10 de Python, tipos de aplicación y prue
 `latest.json` y la entrada actual respondieron HTTP 200. Las 261 rutas estáticas verificadas coincidieron por bytes y SHA-256. Las 47 entradas anteriores, incluida `/releases/17532d32a861e539.html`, devolvieron el HTML del bundle actual con cabeceras de navegación. `/account-config.json` conservó `turnstileSiteKey`, la CSP mantuvo `challenges.cloudflare.com` y la biblioteca anónima respondió 401. En la primera lectura un asset devolvió 404. La segunda lectura completa confirmó sus bytes y los del resto del candidato.
 
 El manifiesto autoritativo de 264 archivos y 58.892 bytes se promovió con fecha MCP `2026-11-20T22:38:59.901Z` a `.local/test-evidence/playlist-telegram-wait-release/site-manifest.json`, SHA-256 `ceba86af245801cedcc5e990f481312d7b6932224d7a35826c961e0d7fddb29c`. Los recibos compactos se conservan en el mismo directorio.
+
+### Comprobar la versión antes de descargar · 2026-11-21
+
+Una descarga solicita `latest.json` con un plazo de tres segundos. Si encuentra otro bundle, espera las operaciones protegidas, pausa el audio, guarda la cola y navega a la entrada publicada. La intención en `sessionStorage` caduca a los 90 segundos y sólo se consume una vez, en la misma cuenta y en el bundle de destino. Una selección pendiente usa su checkpoint existente. La reanudación guarda las copias sin iniciar audio. Si falla la comprobación, la descarga sigue en la versión cargada.
+
+La comprobación inicial empieza al abrir la app y omite la espera de inactividad si puede navegar con seguridad. Configuración muestra el identificador del HTML cargado, incluso cuando el service worker conserva en la barra una URL de otra versión. El control de intentos por sesión y la activación normal del service worker siguen vigentes.

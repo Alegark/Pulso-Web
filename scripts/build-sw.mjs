@@ -5,10 +5,15 @@ import {writeNoticeArtifacts,licenseGuard} from './third-party-notices.mjs';
 import {writeTelegramSources} from './telegram-source.mjs';
 writeNoticeArtifacts('dist');
 const noticeHash=writeTelegramSources('dist');
+const html=readFileSync('dist/index.html','utf8');
+const id=createHash('sha256').update(html).digest('hex').slice(0,16);
+// Stamp the built document before copying it to every shell URL. The address
+// can still refer to an older entry when a worker serves the current shell.
+if(!html.includes('<title>'))throw Error('Missing title in the built shell');
+writeFileSync('dist/index.html',html.replace('<title>',`<meta name="pulso-release" content="${id}"><title>`));
 copyFileSync('dist/index.html','dist/try.html');
 copyFileSync('dist/index.html','dist/listen.html');
 copyFileSync('dist/index.html','dist/web.html');
-const id = createHash('sha256').update(readFileSync('dist/index.html')).digest('hex').slice(0,16);
 mkdirSync('dist/releases',{recursive:true});
 copyFileSync('dist/index.html',`dist/releases/${id}.html`);
 // Keep launcher/pointer outside SHELL_FILES so an old controller cannot pin them.

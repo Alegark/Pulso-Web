@@ -91,3 +91,73 @@ test('unavailable session storage keeps the app usable with manual navigation',a
   f.core.reload();await flush();await f.core.tick();assert.deepEqual(f.nav,[entry]);
  }finally{f.core.stop();}
 });
+
+test('startup applies the release immediately when idle',async()=>{
+ const f=fixture();
+ try{await f.core.initialCheck();assert.deepEqual(f.nav,[entry]);}
+ finally{f.core.stop();}
+});
+
+test('startup with activity keeps the ordinary idle period after it settles',async()=>{
+ const f=fixture();
+ try{
+  f.setReady(false);
+  await f.core.initialCheck();
+  assert.deepEqual(f.nav,[]);
+  f.setReady(true);
+  await f.core.tick();
+  assert.deepEqual(f.nav,[]);
+  f.setTime(100);
+  await f.core.tick();
+  assert.deepEqual(f.nav,[entry]);
+ }finally{f.core.stop();}
+});
+
+test('download waits on ongoing work, prepares the queue and leaves a handoff before navigating',async()=>{
+ const f=fixture(),order:string[]=[];
+ try{
+  f.setReady(false);
+  f.setPrepare(async()=>{order.push('queue');return true;});
+  const allowed=f.core.beforeDownload(()=>true,target=>{
+   assert.deepEqual(target,{entry,bundle:'/assets/new.js'});
+   order.push('intent');
+   return ()=>order.push('cleared');
+  });
+  await flush();
+  assert.deepEqual(f.nav,[]);
+  assert.deepEqual(order,[]);
+  f.setReady(true);
+  await f.core.tick();
+  assert.equal(await allowed,false);
+  assert.deepEqual(f.nav,[entry]);
+  assert.deepEqual(order,['queue','intent']);
+ }finally{f.core.stop();}
+});
+
+test('a current, offline or timed out version probe admits the download',async()=>{
+ for(const mode of ['current','offline','timeout']){
+  const f=createAutomaticUpdater({origin:'https://pulso.example',bundle:'/assets/current.js',timeoutMs:15,
+   fetcher:async input=>{
+    if(mode==='offline')throw Error('offline');
+    if(mode==='timeout')return new Promise(()=>{});
+    return String(input).endsWith('/latest.json')?Response.json({version:1,entry}):new Response(html('/assets/current.js'));
+   },
+   ready:()=>true,prepare:async()=>assert.fail('unexpected prepare'),enter:()=>()=>{},
+   navigate:()=>assert.fail('unexpected navigation'),reload:()=>{},pending:()=>{}});
+  try{assert.equal(await f.beforeDownload(()=>true,()=>assert.fail('unexpected intent')),true);}
+  finally{f.stop();}
+ }
+});
+
+test('an attempted entry never starts a download in the fallback shell or navigates in a loop',async()=>{
+ const items=new Map<string,string>();
+ const session={getItem:(key:string)=>items.get(key)??null,setItem:(key:string,value:string)=>{items.set(key,value);}};
+ const first=fixture(session),fallback=fixture(session);
+ try{
+  assert.equal(await first.core.beforeDownload(()=>true,()=>()=>{}),false);
+  assert.deepEqual(first.nav,[entry]);
+  assert.equal(await fallback.core.beforeDownload(()=>true,()=>assert.fail('unexpected second intent')),false);
+  await fallback.core.initialCheck();
+  assert.deepEqual(fallback.nav,[]);
+ }finally{first.core.stop();fallback.core.stop();}
+});
