@@ -3,7 +3,7 @@ import {resolveSearchSingle} from '../library/music-search-single';
 import type {CatalogId} from '../library/catalog-id';
 import {formatStorageMB} from '../library/storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
-import {downloadWithCurrentApp,pendingDownloadAfterUpdate,takeDownloadAfterUpdate} from '../service-worker/download-update';
+import {downloadWithCurrentApp,pendingDownloadAfterUpdate,reserveDownloadHandoff,takeDownloadAfterUpdate} from '../service-worker/download-update';
 import {registerUpdateBlocker} from '../service-worker/update-blockers';
 import {acquireFromOrderedBots,orderedProviders,acquisitionFailureText} from '../library/ordered-bot-acquisition';
 import {SelectedSongActions} from './SelectedSongActions';
@@ -71,7 +71,7 @@ export function BotProviderNotice({text}:{text:string}) {return <p role="status"
 interface SongFlight {key:string;choice:SongChoice;target:BotSearchTarget;attempt:SongPlaybackAttempt;abort:AbortController;scope:string;client:TelegramSessionClient|null;networkCurrent:(()=>boolean)|null;revision:number|undefined;queryId:string|null;trackId?:string;saveOnly:boolean;phase:'lookup'|'update'|'query'|'choice'|'download'|'saving'|'play'|'done'|'error'}
 export function MusicSearchController(props:Props){
  const [query,setQuery]=React.useState('');
- const [album,setAlbum]=React.useState<{title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;resume?:boolean}|null>(null);
+ const [album,setAlbum]=React.useState<{title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;resume?:(()=>void)}|null>(null);
  const [artist,setArtist]=React.useState<CatalogArtist|null>(null);
  const [editions,setEditions]=React.useState<readonly AlbumEdition[]>([]),[artists,setArtists]=React.useState<readonly CatalogArtist[]>([]),[catalogQuery,setCatalogQuery]=React.useState<string|null>(null),[catalogPending,setCatalogPending]=React.useState(false),[catalogError,setCatalogError]=React.useState<string|null>(null);
  const artistOpener=React.useRef<HTMLButtonElement|null>(null),albumOpener=React.useRef<HTMLButtonElement|null>(null);
@@ -302,14 +302,18 @@ export function MusicSearchController(props:Props){
   }catch(error){if(flightCurrent(f)){f.phase='error';setDownload(null);setNotice(error instanceof Error?error.message:'No se pudo comprobar la copia local.');pulse();}}
  }
  React.useEffect(()=>{
-  if(!current()||!ready||albumCoordinator.running||ownPending||localPending||flight.current&&!['done','error'].includes(flight.current.phase))return;
+  if(!props.accountId||!current()||!ready||albumCoordinator.running||ownPending||localPending||flight.current&&!['done','error'].includes(flight.current.phase))return;
   const pending=pendingDownloadAfterUpdate(props.accountId);
   if(pending?.kind==='song'&&!props.captureSongDownload?.()?.current())return;
   const song=takeDownloadAfterUpdate(props.accountId,'song');
-  if(song){void chooseChoice(song.choice,undefined,true);return;}
+  if(song){
+   const release=reserveDownloadHandoff(props.accountId);
+   void chooseChoice(song.choice,undefined,true).finally(release);return;
+  }
   const resume=takeDownloadAfterUpdate(props.accountId,'album');
-  if(resume)setAlbum({title:resume.title,artist:resume.artist,editionId:resume.editionId,resume:true});
+  if(resume)setAlbum({title:resume.title,artist:resume.artist,editionId:resume.editionId,resume:reserveDownloadHandoff(props.accountId)});
  });
+ React.useEffect(()=>album?.resume,[album?.resume]);
  function cancelSong(){if(!current())return;if(singleAttempt.current){singleAttempt.current.abort();singleAttempt.current=null;setResolvingSingle(false);setNotice('Comprobación detenida.');return;}const f=flight.current;if(!f||f!==selected||['done','error'].includes(f.phase))return;downloadNotifications.dismiss('song',f);f.abort.abort();if(f.phase!=='saving'){f.phase='error';setDownload(null);}setNotice('Operación detenida. Una copia ya confirmada se conserva; no se iniciará música.');pulse();}
  const selected=flight.current,management=selected?.trackId?props.captureSongManagement?.(selected.trackId):null;
  const manage=async(kind:'add'|'playlist'|'play',id?:string)=>{

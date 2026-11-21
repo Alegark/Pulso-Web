@@ -29,6 +29,9 @@
  font-size: .9rem;
 }
 .download-dock[data-positioned="true"] { right: auto; bottom: auto; max-block-size: min(27rem, 100%); }
+.download-dock[data-pending="true"] { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.download-dock[data-pending="true"] .download-dock__footer { padding: 0 .35rem 0 0; border: 0; }
+.download-dock[data-pending="true"] .download-dock__footer button { border-radius: 1.4rem; }
 .download-dock[data-expanded="true"] { inline-size: min(21rem, 100%); border-radius: var(--pulso-radius); }
 .download-dock button { min-block-size: 44px; min-inline-size: 44px; font: inherit; color: inherit; }
 .download-dock button:focus-visible { outline: 2px solid var(--pulso-accent); outline-offset: -3px; }

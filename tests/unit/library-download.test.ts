@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import type {BotSearchSnapshot} from '../../src/telegram/session-client';
 import type {BotSearchRow} from '../../src/telegram/bot-search-protocol';
+import {collectionTelegramWait} from '../../src/library/collection-telegram-wait';
 import {downloadLibrarySelection} from '../../src/library/library-download';
 import type {Track} from '../../src/library/library';
 import type {SongPlaybackAttempt} from '../../src/library/selected-song';
@@ -18,14 +19,14 @@ test('restored metadata uses its original catalogue credit for a later download'
  await downloadLibrarySelection({tracks:[selected],attempt,client:{captureBotsCurrent:()=>()=>true} as never,providers:[],revision:1,signal:new AbortController().signal,current:()=>true,update:()=>{}});assert.equal(artist,'Artista');
 });
 
-import {copyLibraryDownloadCheckpoint,discardLibraryDownloadCheckpoint,readHeldLibraryDownload,readLibraryDownloadCheckpoint,sameHeldDownload,writeLibraryDownloadCheckpoint} from '../../src/library/library-download-checkpoint';
+import {canAutoResumeLibraryDownload,claimLibraryDownload,stopAutomaticLibraryDownload,copyLibraryDownloadCheckpoint,discardLibraryDownloadCheckpoint,readHeldLibraryDownload,readLibraryDownloadCheckpoint,sameHeldDownload,writeLibraryDownloadCheckpoint} from '../../src/library/library-download-checkpoint';
 import type {HeldDownload,LibraryDownloadCheckpoint} from '../../src/library/library-download-checkpoint';
 import type {AlbumRow} from '../../src/library/album-acquisition';
 import type {TelegramSessionClient} from '../../src/telegram/session-client';
 import type {BotSearchTarget} from '../../src/telegram/bot-search-protocol';
 const selection=Array.from({length:4},(_,i)=>({...track,id:`11111111-1111-4111-8111-11111111111${i+1}`,title:`Pista ${i+1}`}));
 const batch=():LibraryDownloadCheckpoint=>({id:crypto.randomUUID(),trackIds:selection.map(t=>t.id),cursor:0,pending:null});
-function fixture(checkpoint=batch(),options:{twoBots?:boolean;absent?:boolean;flood?:boolean|number;expired?:boolean;alternates?:boolean;tracks?:Track[];parked?:Map<string,HeldDownload>}={}){
+function fixture(checkpoint=batch(),options:{onAudio?:()=>void;twoBots?:boolean;absent?:boolean;flood?:boolean|number;expired?:boolean;alternates?:boolean;tracks?:Track[];parked?:Map<string,HeldDownload>}={}){
  const requests:string[]=[],queries:string[]=[],downloads:string[]=[],abort=new AbortController();
  const parked=options.parked??new Map<string,HeldDownload>(),checkpoints:LibraryDownloadCheckpoint[]=[];
  let flooded=false,expired=false;
@@ -54,6 +55,7 @@ function fixture(checkpoint=batch(),options:{twoBots?:boolean;absent?:boolean;fl
    if(options.flood&&!flooded&&state.expectedTarget?.title==='Pista 3'){
     flooded=true;state={...state,error:'rate-limit',retryAt:Date.now()+(typeof options.flood==='number'?options.flood:1200)};return null;
    }
+   options.onAudio?.();
    const digest=state.providerRef==='bot'&&row==='row'?'a':'b';
    return {blob:new Blob(['x']),bytes:1,mime:'audio/wav',sha256:digest.repeat(64),target:state.expectedTarget};
   },
@@ -346,4 +348,205 @@ test('an expired session preserves the current track and requires reconnecting b
  assert.equal(run.checkpoint.cursor,2);
  assert.deepEqual(run.checkpoint.pending,{kind:'network',index:2});
  assert.match(run.messages.at(-1)!,/Vuelve a conectar Telegram.*Continuar/);
+});
+
+test('audio received after hiding is accepted with the captured authority',async t=>{
+ const page=Object.assign(new EventTarget(),{visibilityState:'visible'});
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'document');
+ Object.defineProperty(globalThis,'document',{value:page,configurable:true});
+ t.after(()=>{if(previous)Object.defineProperty(globalThis,'document',previous);else Reflect.deleteProperty(globalThis,'document');});
+ const run=fixture(batch(),{onAudio:()=>{
+  page.visibilityState='hidden';page.dispatchEvent(new Event('visibilitychange'));
+ }});
+ assert.equal(await run.run(),'finished');
+ assert.deepEqual(run.requests,['Pista 3','Pista 4']);
+ assert.deepEqual(run.downloads,['row','row']);
+ assert.ok(run.rows.every(row=>row.confirmed));
+});
+
+test('suspension recovery retries a transiently failed restore at the next backoff step',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:0});
+ const attempts:number[]=[];
+ let phase:'connected'|'error'='connected';
+ const client={
+  snapshot:()=>({phase,error:phase==='error'?'network':null}),
+  searchSnapshot:()=>({available:phase==='connected'}),
+  reconnectForDownload:()=>{attempts.push(Date.now());phase=attempts.length===1?'error':'connected';return true;},
+ } as unknown as TelegramSessionClient;
+ const wait=collectionTelegramWait(client,new AbortController().signal,()=>true,0,()=>{});
+ try{
+  const paused=wait.pauseForTrack()(()=>{},true,true);
+  for(let i=0;i<62;i++){t.mock.timers.tick(250);await Promise.resolve();await Promise.resolve();}
+  assert.equal(await paused,null);
+  assert.deepEqual(attempts,[5000,15250]);
+ }finally{wait.dispose();}
+});
+
+test('four slow restores get separate backoffs after a clock jump inside the wait',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:0});
+ const attempts:number[]=[],settled:number[]=[];
+ let phase='error',denied=0;
+ const client={
+  snapshot:()=>({phase,error:phase==='error'?'network':null}),
+  searchSnapshot:()=>({available:false}),
+  reconnectForDownload:()=>{
+   if(denied++<2)return false;
+   attempts.push(Date.now());phase='restoring';
+   setTimeout(()=>{settled.push(Date.now());phase='error';},45_000);
+   return true;
+  },
+ } as unknown as TelegramSessionClient;
+ const abort=new AbortController(),wait=collectionTelegramWait(client,abort.signal,()=>!abort.signal.aborted,0,()=>{});
+ let outcome:Awaited<ReturnType<ReturnType<typeof wait.pauseForTrack>>>|undefined;
+ try{
+  const task=wait.pauseForTrack()(()=>{},true,true).then(result=>{outcome=result;});
+  t.mock.timers.setTime(75_000);t.mock.timers.tick(0);await Promise.resolve();
+  for(let i=0;i<1100&&outcome===undefined;i++){t.mock.timers.tick(250);await Promise.resolve();await Promise.resolve();}
+  assert.deepEqual(attempts,[80_500,135_500,200_500,285_500]);
+  assert.deepEqual(settled,[125_500,180_500,245_500,330_500]);
+  assert.match(outcome?.message??'',/No se pudo reconectar/);
+  await task;
+ }finally{abort.abort();wait.dispose();}
+});
+
+for(const pending of [false,true])test(`the reconnect wait ends after 60 s with ${pending?'an occupied lane':'persistent admission denial'}`,async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:0});
+ const calls:number[]=[];
+ const client={
+  snapshot:()=>({phase:'error',error:'network'}),
+  searchSnapshot:()=>({available:false,pending}),
+  reconnectForDownload:()=>{calls.push(Date.now());return false;},
+ } as unknown as TelegramSessionClient;
+ const abort=new AbortController(),wait=collectionTelegramWait(client,abort.signal,()=>!abort.signal.aborted,0,()=>{});
+ let outcome:Awaited<ReturnType<ReturnType<typeof wait.pauseForTrack>>>|undefined;
+ const task=wait.pauseForTrack()(()=>{},true,true).then(result=>{outcome=result;});
+ const tick=async(count:number)=>{
+  for(let i=0;i<count;i++){t.mock.timers.tick(250);await Promise.resolve();await Promise.resolve();}
+ };
+ try{
+  await tick(80);
+  t.mock.timers.setTime(95_000);t.mock.timers.tick(0);
+  await Promise.resolve();await Promise.resolve();
+  await tick(239);
+  const result=()=>outcome;
+  assert.equal(result(),undefined);
+  await tick(1);await Promise.resolve();
+  assert.equal(result()?.automatic,true);
+  assert.match(result()?.message??'',/Pulsa Continuar/);
+  if(pending)assert.deepEqual(calls,[]);
+  else{
+   assert.equal(calls[0],5000);
+   assert.equal(calls.find(at=>at>=95_000),100_000);
+   assert.equal(calls.at(-1),154_750);
+  }
+ }finally{abort.abort();await task;wait.dispose();}
+});
+
+function useCheckpointStorage(t:import('node:test').TestContext){
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'localStorage'),values=new Map<string,string>();
+ Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{
+  getItem:(key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>values.set(key,value),removeItem:(key:string)=>values.delete(key),
+ }});
+ t.after(()=>{if(previous)Object.defineProperty(globalThis,'localStorage',previous);else Reflect.deleteProperty(globalThis,'localStorage');});
+}
+
+test('checkpoint retains the title and automatic state, and Detener makes it manual',t=>{
+ useCheckpointStorage(t);
+ const account=crypto.randomUUID(),legacy=batch();
+ writeLibraryDownloadCheckpoint(account,legacy);
+ assert.equal(canAutoResumeLibraryDownload(readLibraryDownloadCheckpoint(account)!),false);
+ const running=claimLibraryDownload(account,'Mi lista',legacy.trackIds,legacy.id)!;
+ assert.deepEqual(readLibraryDownloadCheckpoint(account),running);
+ assert.equal(running.title,'Mi lista');
+ assert.equal(running.autoResume,true);
+ stopAutomaticLibraryDownload(account,running.id);
+ assert.equal(readLibraryDownloadCheckpoint(account)?.autoResume,false);
+ assert.equal(claimLibraryDownload(account,running.title!,running.trackIds,running.id,true),null);
+});
+
+test('only the first start may claim the same checkpoint id',t=>{
+ useCheckpointStorage(t);
+ const account=crypto.randomUUID(),checkpoint=claimLibraryDownload(account,'Lista',batch().trackIds)!;
+ const first=claimLibraryDownload(account,'Lista',checkpoint.trackIds,checkpoint.id,true);
+ assert.ok(first);
+ assert.notEqual(first.id,checkpoint.id);
+ assert.equal(claimLibraryDownload(account,'Lista',checkpoint.trackIds,checkpoint.id,true),null);
+ assert.deepEqual(readLibraryDownloadCheckpoint(account),first);
+});
+
+test('a checkpoint cannot be resumed under a different account',t=>{
+ useCheckpointStorage(t);
+ const account=crypto.randomUUID(),other=crypto.randomUUID();
+ const checkpoint=claimLibraryDownload(account,'Lista',batch().trackIds)!;
+ assert.equal(readLibraryDownloadCheckpoint(other),null);
+ assert.equal(claimLibraryDownload(other,'Lista',checkpoint.trackIds,checkpoint.id,true),null);
+ assert.deepEqual(readLibraryDownloadCheckpoint(account),checkpoint);
+});
+
+test('three automatic starts without new copies exhaust the durable budget',async t=>{
+ useCheckpointStorage(t);
+ const account=crypto.randomUUID();
+ let previous=claimLibraryDownload(account,'Lista',batch().trackIds)!;
+ for(let i=1;i<=3;i++){
+  previous=claimLibraryDownload(account,'Lista',previous.trackIds,previous.id,true)!;
+  assert.equal(readLibraryDownloadCheckpoint(account)?.autoAttempts,i);
+ }
+ assert.equal(claimLibraryDownload(account,'Lista',previous.trackIds,previous.id,true),null);
+ const completed=fixture(previous);
+ assert.equal(await completed.run(),'finished');
+ assert.equal(completed.checkpoint.saved,4);
+ assert.equal(completed.checkpoint.autoAttempts,0);
+});
+
+import {acquireFromOrderedBots} from '../../src/library/ordered-bot-acquisition';
+const acquireFixture=()=>{
+ const target={title:'Propia',artist:'Artista',album:null,durationSeconds:null},abort=new AbortController();
+ const row={kind:'option',rowRef:'row',correlation:'reply',label:'Propia — Artista'} as const;
+ const state={queryId:'query',providerRef:'bot',providerRevision:1,expectedTarget:target,rows:[row],
+  available:true,pending:false,cancelling:false,delivery:'acknowledged',retryAt:null,error:null} as unknown as BotSearchSnapshot;
+ const admit=(started:(value:{queryId:string;cancel:()=>void})=>void)=>started({queryId:'query',cancel:()=>{}});
+ const audio={target,blob:new Blob(['audio']),sha256:'a'.repeat(64)};
+ let accepts=0;
+ const client={
+  botsSnapshot:()=>({revision:1}),searchSnapshot:()=>state,subscribeSearch:()=>()=>{},
+  captureSearchActionCurrent:()=>()=>true,searchBot:(_a:unknown,_b:unknown,started:Parameters<typeof admit>[0])=>admit(started),
+  async downloadBot(_a:unknown,_b:unknown,started:Parameters<typeof admit>[0]){admit(started);return audio;},
+ };
+ const run=(overrides:Partial<Parameters<typeof acquireFromOrderedBots>[0]>={})=>acquireFromOrderedBots({
+  client:client as unknown as TelegramSessionClient,target,providers:[{providerRef:'bot',label:'Bot'}],revision:1,
+  signal:abort.signal,current:()=>true,networkCurrent:()=>true,audioCurrent:()=>true,progress:()=>{},
+  collection:{completed:new Set(),ambiguous:new Set(),responded:false,reasons:[]},accept:async()=>{accepts++;return 'saved';},
+  ...overrides,
+ });
+ return {client,state,run,abort,audio,get accepts(){return accepts;}};
+};
+
+for(const stage of ['search','download'] as const)test(`an acknowledged ${stage} refusal across hiding remains a bot failure`,async()=>{
+ const f=acquireFixture();
+ let hidden=false;
+ const error=stage==='search'?'file-too-large':'file-invalid';
+ const reject=()=>{hidden=true;f.state.error=error;};
+ if(stage==='search'){
+  const search=f.client.searchBot;f.client.searchBot=(...args)=>{search(...args);reject();};
+ }else{
+  const download=f.client.downloadBot;f.client.downloadBot=async(...args)=>{await download(...args);reject();return null as never;};
+ }
+ assert.deepEqual(await f.run({suspended:()=>hidden}),{state:'known-failure',reasons:[error]});
+ assert.equal(f.accepts,0);
+});
+
+for(const revoked of ['session','account','bots','abort'] as const)test(`received audio cannot be accepted after revoking ${revoked}`,async()=>{
+ const f=acquireFixture(),download=f.client.downloadBot;
+ let current=true,audioCurrent=true;
+ f.client.downloadBot=async(...args)=>{
+  const audio=await download(...args);
+  if(revoked==='abort')f.abort.abort();
+  else if(revoked==='account')current=false;
+  else if(revoked==='bots')f.client.botsSnapshot=()=>({revision:2});
+  else audioCurrent=false;
+  return audio;
+ };
+ const result=await f.run({current:()=>current,audioCurrent:()=>audioCurrent&&f.client.botsSnapshot().revision===1});
+ assert.ok(['stopped','unavailable'].includes(result.state));
+ assert.equal(f.accepts,0);
 });

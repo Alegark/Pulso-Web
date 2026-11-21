@@ -214,17 +214,17 @@ export class TelegramSessionClient {
   return ()=>!this.stopped&&this.#knownGeneration===generation;
  }
  /** Renew the saved authorization only after the remote lane has settled. */
- reconnectForDownload(){
+ reconnectForDownload():boolean{
   const phase=this.state.phase;
-  if(!this.remoteAllowed()||this.searchSnapshot().pending||!this.captureCommandCurrent()())return;
+  if(!this.remoteAllowed()||this.searchSnapshot().pending||!this.captureCommandCurrent()())return false;
   if(phase==='connected'){
-   if(!this.current())return;
+   if(!this.current())return false;
    this.stop(null);
-  }
-  if(phase==='connected'||phase==='error'&&['network','timeout','cancelled','rate-limit'].includes(this.state.error??'')){
-   this.#recoveringGeneration=this.#knownGeneration;
-   this.restore();
-  }
+  }else if(phase!=='error'||!['network','timeout','cancelled','rate-limit'].includes(this.state.error??''))return false;
+  this.#recoveringGeneration=this.#knownGeneration;
+  this.restore();
+  if(phase==='connected'&&this.snapshot().phase==='disconnected')this.publish({...initialSessionState(),phase:'error',error:'network'});
+  return this.snapshot().phase==='restoring';
  }
  forgetSavedSession(){this.startAuthentication('forget','','disconnecting');}
  begin(phone:string){this.startAuthentication('begin',phone,'sending-code');}

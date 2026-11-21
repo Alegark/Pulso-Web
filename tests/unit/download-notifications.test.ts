@@ -78,3 +78,31 @@ test('Collection pause has its own tag and a terminal body identical to progress
   ['pulso-download-collection','2 de 2 guardadas',false],
  ]);
 });
+
+test('collection completion and pause publish immediately while the page is hidden',async t=>{
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'document');
+ Object.defineProperty(globalThis,'document',{configurable:true,value:{visibilityState:'hidden'}});
+ t.after(()=>{if(previous)Object.defineProperty(globalThis,'document',previous);else Reflect.deleteProperty(globalThis,'document');});
+ const f=fixture(),n=createDownloadNotifications(f.host);await n.enable();
+ n.collectionOutcome('finished','Lista','finished',4,4,()=>true,'a');await n.settled();
+ n.collectionOutcome('paused','Lista','paused',2,4,()=>true,'a');await n.settled();
+ n.collectionOutcome('stale','Lista','paused',2,4,()=>false,'b');await n.settled();
+ assert.deepEqual(f.shown.map(({options})=>[options.silent,options.body]),[
+  [false,'4 de 4 guardadas'],[false,'2 de 4 guardadas · abre Pulso para continuar'],
+ ]);
+});
+
+test('orphan cleanup only closes collection progress from the current account',async()=>{
+ const f=fixture(),closed:number[]=[];
+ const notices=[
+  {tag:'pulso-download-collection',data:{account:'a',terminal:false}},
+  {tag:'pulso-download-collection',silent:true,data:{account:'a',terminal:true}},
+  {tag:'pulso-download-collection',data:{account:'b',terminal:false}},
+  {tag:'pulso-download-collection',silent:true},
+  {tag:'pulso-download-song',silent:true},
+ ];
+ f.host.registration=async()=>({...f.reg,getNotifications:async()=>notices.map((notice,index)=>({...notice,close:()=>closed.push(index)}))});
+ const n=createDownloadNotifications(f.host);
+ n.clearProgress('collection','a',()=>false);await n.settled();assert.deepEqual(closed,[]);
+ n.clearProgress('collection','a',()=>true);await n.settled();assert.deepEqual(closed,[0]);
+});

@@ -210,15 +210,18 @@ const api={id,seed,rows,mutate,
   const bots={revision:1,providers:[{providerRef:'testonly',label:'KD',username:'kdmusic_bot'}]} as never;
   function Fixture(){
    const [route,setRoute]=useState<'home'|'playlist'|'downloads'>('playlist');
+   const [account,setAccount]=useState(120),[storageReady,setStorageReady]=useState(true);
    const [target,setTarget]=useState<HTMLDivElement|null>(null);
    return createElement('main',{className:'pulso-app'},
     createElement('button',{onClick:()=>setRoute('home')},'Ir a Inicio'),
     createElement('button',{onClick:()=>setRoute('playlist')},'Abrir playlist'),
     createElement('button',{onClick:()=>setRoute('downloads')},'Gestionar descargas'),
+    createElement('button',{onClick:()=>setAccount(value=>value===120?121:120)},'Cambiar cuenta de prueba'),
+    createElement('button',{onClick:()=>setStorageReady(value=>!value)},'Cambiar disponibilidad local'),
     createElement('h2',null,route==='home'?'Inicio':route==='playlist'?'Playlist de prueba':'Tus descargas'),
     createElement('div',{ref:setTarget,'data-surface':route}),
     createElement(LibraryDownloadController,{collection:{target:route==='playlist'?target:null,label:'Descargar selección',complete:false,disabled:false,
-     request:{trackIds:rows.map(row=>row.id),title:'Playlist de prueba'}},storageTarget:route==='downloads'?target:null,accountId:id(120),tracks:rows,client,bots,connected:true,captureBatch:()=>attempt}));
+     request:{trackIds:rows.map(row=>row.id),title:'Playlist de prueba'}},storageTarget:route==='downloads'?target:null,accountId:id(account),storageReady:()=>storageReady,tracks:rows,client,bots,connected:true,captureBatch:()=>attempt}));
   }
   const host=document.createElement('div');document.body.append(host);createRoot(host).render(createElement(Fixture));
   Object.assign(window,{batchFixture:{release,lookups:()=>lookups}});
