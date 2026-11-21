@@ -4,14 +4,15 @@ import {registerUpdateBlocker,updateWorkPending} from '../../src/service-worker/
 const entry='/releases/0123456789abcdef.html';
 const html=(bundle='/assets/new.js')=>`<!doctype html><html><script type="module" crossorigin src="${bundle}"></script><div id="root"></div></html>`;
 const flush=()=>new Promise<void>(resolve=>setImmediate(resolve));
-function fixture(session?:Pick<Storage,'getItem'|'setItem'>,initialEntry=entry){
+function fixture(session?:Pick<Storage,'getItem'|'setItem'>,initialEntry=entry,downloadTimeoutMs?:number){
  let time=0,ready=true,bundle='/assets/new.js',prepare=async()=>true;
  const nav:string[]=[],states:UpdateState[]=[],pending:boolean[]=[],manual:boolean[]=[],requests:{url:string;init?:RequestInit}[]=[];
- let entered=0,released=0,reloads=0;
- const core=createAutomaticUpdater({origin:'https://pulso.example',bundle:'/assets/current.js',now:()=>time,quietMs:100,session,
+ const statuses:string[]=[];
+ let entered=0,released=0,reloads=0,cancelled=0;
+ const core=createAutomaticUpdater({origin:'https://pulso.example',bundle:'/assets/current.js',now:()=>time,quietMs:100,session,downloadTimeoutMs,
   fetcher:async(input,init)=>{const url=String(input);requests.push({url,init});return url.endsWith('/latest.json')?Response.json({version:1,entry:initialEntry}):new Response(html(bundle));},
-  ready:()=>ready,prepare:()=>prepare(),enter:()=>{entered++;return()=>{released++;};},navigate:e=>nav.push(e),reload:()=>{reloads++;},pending:v=>pending.push(v),state:v=>states.push(v),manualPending:v=>manual.push(v)});
- return {core,nav,states,pending,manual,requests,setTime:(v:number)=>{time=v;},setReady:(v:boolean)=>{ready=v;},setBundle:(v:string)=>{bundle=v;},setPrepare:(v:()=>Promise<boolean>)=>{prepare=v;},stats:()=>({entered,released,reloads})};
+  ready:()=>ready,prepare:()=>prepare(),enter:()=>{entered++;return()=>{released++;};},navigate:e=>nav.push(e),reload:()=>{reloads++;},pending:v=>pending.push(v),state:v=>states.push(v),manualPending:v=>manual.push(v),downloadStatus:v=>statuses.push(v),cancelNavigation:()=>{cancelled++;}});
+ return {core,nav,states,pending,manual,requests,statuses,cancelled:()=>cancelled,setTime:(v:number)=>{time=v;},setReady:(v:boolean)=>{ready=v;},setBundle:(v:string)=>{bundle=v;},setPrepare:(v:()=>Promise<boolean>)=>{prepare=v;},stats:()=>({entered,released,reloads})};
 }
 test('update targets accept only immutable same-origin entries and one local module',()=>{
  assert.equal(updateEntry({version:1,entry}),entry);for(const e of ['https://evil.example'+entry,'//evil.example/a','javascript:alert(1)',entry+'?x=1',entry+'#a','/index.html'])assert.equal(updateEntry({version:1,entry:e}),null);
@@ -89,5 +90,143 @@ test('unavailable session storage keeps the app usable with manual navigation',a
   await f.core.check();await f.core.tick();f.setTime(1000);await f.core.tick();await f.core.tick();
   assert.deepEqual(f.nav,[]);assert.equal(f.stats().entered,0);assert.equal(f.pending.at(-1),false);
   f.core.reload();await flush();await f.core.tick();assert.deepEqual(f.nav,[entry]);
+ }finally{f.core.stop();}
+});
+
+test('startup applies the release immediately when idle',async()=>{
+ const f=fixture();
+ try{await f.core.initialCheck();assert.deepEqual(f.nav,[entry]);}
+ finally{f.core.stop();}
+});
+
+test('startup with activity keeps the ordinary idle period after it settles',async()=>{
+ const f=fixture();
+ try{
+  f.setReady(false);
+  await f.core.initialCheck();
+  assert.deepEqual(f.nav,[]);
+  f.setReady(true);
+  await f.core.tick();
+  assert.deepEqual(f.nav,[]);
+  f.setTime(100);
+  await f.core.tick();
+  assert.deepEqual(f.nav,[entry]);
+ }finally{f.core.stop();}
+});
+
+test('download waits on ongoing work, prepares the queue and leaves a handoff before navigating',async()=>{
+ const f=fixture(),order:string[]=[];
+ try{
+  f.setReady(false);
+  f.setPrepare(async()=>{order.push('queue');return true;});
+  const allowed=f.core.beforeDownload(()=>true,target=>{
+   assert.deepEqual(target,{entry,bundle:'/assets/new.js'});
+   order.push('intent');
+   return ()=>order.push('cleared');
+  });
+  await flush();
+  assert.deepEqual(f.nav,[]);
+  assert.deepEqual(order,[]);
+  f.setReady(true);
+  await f.core.tick();
+  assert.deepEqual(f.nav,[entry]);
+  f.core.leave();
+  assert.equal(await allowed,false);
+  assert.deepEqual(order,['queue','intent']);
+ }finally{f.core.stop();}
+});
+
+test('a current, offline or timed out version probe admits the download',async()=>{
+ for(const mode of ['current','offline','timeout']){
+  const f=createAutomaticUpdater({origin:'https://pulso.example',bundle:'/assets/current.js',timeoutMs:15,
+   fetcher:async input=>{
+    if(mode==='offline')throw Error('offline');
+    if(mode==='timeout')return new Promise(()=>{});
+    return String(input).endsWith('/latest.json')?Response.json({version:1,entry}):new Response(html('/assets/current.js'));
+   },
+   ready:()=>true,prepare:async()=>assert.fail('unexpected prepare'),enter:()=>()=>{},
+   navigate:()=>assert.fail('unexpected navigation'),reload:()=>{},pending:()=>{}});
+  try{assert.equal(await f.beforeDownload(()=>true,()=>assert.fail('unexpected intent')),true);}
+  finally{f.stop();}
+ }
+});
+
+test('an attempted entry allows downloads in the fallback shell without another automatic navigation',async()=>{
+ const items=new Map<string,string>();
+ const session={getItem:(key:string)=>items.get(key)??null,setItem:(key:string,value:string)=>{items.set(key,value);}};
+ const first=fixture(session),fallback=fixture(session);
+ try{
+  const handoff=first.core.beforeDownload(()=>true,()=>()=>{});
+  await flush();
+  assert.deepEqual(first.nav,[entry]);
+  first.core.leave();
+  assert.equal(await handoff,false);
+  const discarded:string[]=[];
+  assert.equal(await fallback.core.beforeDownload(()=>true,()=>assert.fail('unexpected second intent'),target=>discarded.push(target.entry)),true);
+  assert.deepEqual(discarded,[entry]);
+  assert.equal(fallback.statuses.at(-1),'fallback');
+  await fallback.core.initialCheck();
+  assert.deepEqual(fallback.nav,[]);
+  fallback.core.reload();
+  await flush();await fallback.core.tick();
+  assert.deepEqual(fallback.nav,[entry]);
+ }finally{first.core.stop();fallback.core.stop();}
+});
+
+test('a download starts in the loaded release if readiness stays blocked until its deadline',async()=>{
+ const f=fixture(undefined,entry,30);
+ try{
+  f.setReady(false);
+  let started=0;
+  await f.core.beforeDownload(()=>true,()=>assert.fail('unexpected intent')).then(allowed=>{if(allowed)started++;});
+  assert.equal(started,1);
+  assert.deepEqual(f.statuses,['checking','updating','fallback']);
+  f.setReady(true);
+  await f.core.tick();
+  f.setTime(500);await f.core.tick();
+  assert.deepEqual(f.nav,[]);
+ }finally{f.core.stop();}
+});
+
+test('a late queue save cannot navigate once the deadline has admitted the download',async()=>{
+ const f=fixture(undefined,entry,30);
+ try{
+  let saved!:(value:boolean)=>void;
+  f.setPrepare(()=>new Promise(resolve=>{saved=resolve;}));
+  const allowed=f.core.beforeDownload(()=>true,()=>assert.fail('unexpected intent'));
+  await flush();assert.equal(typeof saved,'function');
+  assert.equal(await allowed,true);
+  saved(true);await flush();
+  assert.deepEqual(f.nav,[]);
+ }finally{f.core.stop();}
+});
+
+test('stopping the wait cancels the gesture and prevents a late navigation',async()=>{
+ const f=fixture();
+ try{
+  let saved!:(value:boolean)=>void;
+  f.setPrepare(()=>new Promise(resolve=>{saved=resolve;}));
+  const allowed=f.core.beforeDownload(()=>true,()=>assert.fail('unexpected intent'));
+  await flush();
+  f.core.cancelDownload();
+  assert.equal(await allowed,false);
+  saved(true);await flush();
+  await f.core.tick();
+  f.setTime(500);await f.core.tick();
+  assert.deepEqual(f.nav,[]);
+  assert.deepEqual(f.statuses,['checking','updating','idle']);
+ }finally{f.core.stop();}
+});
+
+test('a navigation still pending at the deadline clears its handoff and releases admission',async()=>{
+ const f=fixture(undefined,entry,30);
+ try{
+  let intent=false;
+  const allowed=await f.core.beforeDownload(()=>true,()=>{intent=true;return()=>{intent=false;};});
+  assert.equal(allowed,true);
+  assert.deepEqual(f.nav,[entry]);
+  assert.equal(intent,false);
+  assert.equal(f.stats().released,1);
+  assert.equal(f.cancelled(),1);
  }finally{f.core.stop();}
 });

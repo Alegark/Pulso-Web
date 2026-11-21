@@ -620,3 +620,23 @@ Pasaron 827 unitarias, 73 de servidor, 10 de Python, tipos de aplicación y prue
 `latest.json` y la entrada actual respondieron HTTP 200. Las 261 rutas estáticas verificadas coincidieron por bytes y SHA-256. Las 47 entradas anteriores, incluida `/releases/17532d32a861e539.html`, devolvieron el HTML del bundle actual con cabeceras de navegación. `/account-config.json` conservó `turnstileSiteKey`, la CSP mantuvo `challenges.cloudflare.com` y la biblioteca anónima respondió 401. En la primera lectura un asset devolvió 404. La segunda lectura completa confirmó sus bytes y los del resto del candidato.
 
 El manifiesto autoritativo de 264 archivos y 58.892 bytes se promovió con fecha MCP `2026-11-20T22:38:59.901Z` a `.local/test-evidence/playlist-telegram-wait-release/site-manifest.json`, SHA-256 `ceba86af245801cedcc5e990f481312d7b6932224d7a35826c961e0d7fddb29c`. Los recibos compactos se conservan en el mismo directorio.
+
+### Comprobar la versión antes de descargar · 2026-11-21
+
+Una descarga solicita `latest.json` con un plazo de tres segundos. Si encuentra otro bundle, espera las operaciones protegidas, pausa el audio, guarda la cola y navega a la entrada publicada. La intención en `sessionStorage` caduca a los 90 segundos y sólo se consume una vez, en la misma cuenta y en el bundle de destino. Una selección pendiente usa su checkpoint existente. La reanudación guarda las copias sin iniciar audio. Si falla la comprobación, la descarga sigue en la versión cargada.
+
+La comprobación inicial empieza al abrir la app y omite la espera de inactividad si puede navegar con seguridad. Configuración muestra el identificador del HTML cargado, incluso cuando el service worker conserva en la barra una URL de otra versión. El control de intentos por sesión y la activación normal del service worker siguen vigentes.
+
+La espera de actualización tiene un máximo de diez segundos desde que se solicita la descarga. Si caduca o la versión ya se intentó abrir en esa sesión, Pulso libera la solicitud para descargar con la versión cargada y avisa en la ventana de descargas. «Detener» cancela la solicitud mientras espera. «Recargar app» conserva la opción de forzar el cambio de versión.
+
+### Actualización antes de descargar publicada · 2026-11-21
+
+Cloudflare Workers Free, USD 0, sirve [la v54](https://pulso-web.pruebassoftware.workers.dev/releases/b770a9a7981c0008.html) desde `8531692054269e7f901ddbcb3503e39ea2f3ccf9`. El MCP oficial confirmó la versión `ea75fb13-44b3-47b3-aa63-793474fd81ca` al 100 % en el deployment `a89fdfcd-6643-4378-8bd5-ddd49e2168ee`. Coincidieron el SHA-256 del Worker, los 13 bindings, los límites y la configuración de ejecución. Turnstile y los secretos se conservaron. El freeze retuvo siete publicaciones anteriores y el conjunto heredado, sin retirar rutas. Cloudflare solicitó siete archivos. [PR #14](https://github.com/Alegark/Pulso-Web/pull/14), apilada sobre #13.
+
+Pasaron 839 unitarias, 73 de servidor y 10 de Python, tipos de aplicación y pruebas, lint, builds y dry-run de Wrangler. La matriz local con Telegram sintético pasó 56/56 casos, 28 en Chromium y 28 en WebKit, incluidos los ocho modos de actualización en cada motor.
+
+`latest.json` apuntó a la entrada nueva, que redirigió con HTTP 307 a la ruta sin `.html` y respondió HTTP 200 con el meta `pulso-release` igual a `b770a9a7981c0008`. Las 264 rutas estáticas públicas coincidieron por bytes y SHA-256. Las 48 entradas históricas, incluidas v53 y v52, abrieron el bundle v54 con cabeceras de navegación. `/account-config.json` conservó `turnstileSiteKey`, la CSP mantuvo `challenges.cloudflare.com` en `script-src` y `frame-src`, y perfil y biblioteca anónimos respondieron HTTP 401.
+
+El manifiesto autoritativo de 267 archivos y 60517 bytes se promovió con fecha MCP `2026-11-21T00:54:42.911Z` a `.local/test-evidence/update-before-download-release/site-manifest.json`, SHA-256 `4101ec6f607d6535879ac94d08a4559cb542994df12af831a3763ca9b22d5f56`. Los recibos compactos se conservan en ese directorio.
+
+Continúa pendiente comprobar en iPhone físico el salto desde la caché histórica y reanudar la playlist de 72 canciones con Telegram real. Una instancia que sigue ejecutando v51 requiere una recarga manual. Siguen clasificadas aparte la regresión de Chromium desde `ac89e5a` y la limitación del entorno WPE. P0-W sigue abierto.

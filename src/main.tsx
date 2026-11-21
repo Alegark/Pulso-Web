@@ -25,7 +25,9 @@ import {reuseInstalledWindow} from './pwa/launch-reuse';
 import {accountController} from './accounts/neon-provider';
 import {formatStorageMB,formatStorageProgress} from './library/storage-format';
 import {AUDIO_FILE_MAX_BYTES,AUDIO_BLOB_TOTAL_MAX_BYTES} from './storage/audio-limits';
-import {startAutomaticUpdates,type UpdateState} from './service-worker/automatic-update';
+import {installDownloadUpdates,pendingDownloadAfterUpdate} from './service-worker/download-update';
+import {announceDownloadMessage} from './ui/DownloadDock';
+import {runningBundle,startAutomaticUpdates,type UpdateState} from './service-worker/automatic-update';
 import {updateWorkPending} from './service-worker/update-blockers';
 import {createCollectionRemovalController} from './ui/collection-removal-state';
 import {listeningCacheAssets,summarizeListeningCache} from './library/listening-cache';
@@ -202,7 +204,10 @@ let availabilityNotice='';
 let storedAssets:LocalAsset[]=[];
 let artworkRefreshToken=0;
 let updateReady=false;
+let downloadUpdateWait:'checking'|'updating'|null=null;
+const stopDownloadUpdate=()=>automaticUpdates?.cancelDownload();
 let updateState:UpdateState='checking',manualReloadPending=false;
+const runningVersion=document.querySelector<HTMLMetaElement>('meta[name="pulso-release"]')?.content.slice(0,8)??'local';
 let automaticUpdates:ReturnType<typeof startAutomaticUpdates>|null=null;
 if('serviceWorker'in navigator)void navigator.serviceWorker.register('/sw.js',{type:'module',updateViaCache:'none'}).catch(()=>{/* Optional shell cache; version detection stays independent. */});
 
@@ -1004,6 +1009,11 @@ function App(){
   if(accepted.kind==='rejected'){status=accepted.reason==='queue-limit'?'La cola completa admite hasta 1000 entradas. No se añadió la selección.':accepted.reason==='pending-limit'?'Hay demasiadas adiciones en espera. Espera a que terminen.':'No se puede añadir esta selección ahora. La cola se conserva.';emit();}
  }
  const [page,setPage]=React.useState<'inicio'|'buscar'|'biblioteca'>('inicio');
+ React.useEffect(()=>{
+  const pending=pendingDownloadAfterUpdate(account.user?.id);
+  if(pending?.kind==='song'||pending?.kind==='album')setPage('buscar');
+ },[account.user?.id]);
+
  const [settingsOpen,setSettingsOpen]=React.useState(false);
  const [settingsSection,setSettingsSection]=React.useState<'general'|'connections'|'tools'>('general');
  const [libraryTab,setLibraryTab]=React.useState<'playlists'|'albums'|'artists'|null>(null);
@@ -1398,9 +1408,9 @@ function App(){
   startSpotifyCatalog(saved.result.playlist.id);
   return {...saved.result,available};
  }} onOpen={openSpotifyPlaylist}/>}
-<section className="settings-group settings-appearance"><h3>Apariencia</h3><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label></section><DownloadNotificationSettings/><section className="settings-group settings-app-update" aria-labelledby="app-update-heading"><h3 id="app-update-heading">Actualización de la app</h3><div className="settings-group__body"><p role="status">{manualReloadPending?'Esperando a que terminen las operaciones para recargar…':updateState==='checking'?'Comprobando versión…':updateState==='current'?'Actualizada':updateState==='available'?'Nueva versión disponible':'No se pudo comprobar si hay actualizaciones.'}</p><button type="button" disabled={manualReloadPending||updateNavigationLocked} onClick={()=>{player.pause();automaticUpdates?.reload();}}>Recargar app</button><p>Recarga Pulso y conserva tus datos. Si hay música sonando, se pausará.</p></div></section><section className="settings-group" aria-label="Sincronización de biblioteca"><h3>Biblioteca de tu cuenta</h3><div className="settings-group__body"><p role="status">{librarySyncMessage[librarySyncState]}</p><p>Playlists, favoritos y álbumes se conservan con tu cuenta. Los artistas guardados y las descargas se conservan en este dispositivo.</p><button type="button" disabled={!owner||busy||librarySyncState==='syncing'} onClick={()=>void librarySync.sync()}>Sincronizar biblioteca</button></div></section></div><div className="settings-groups">
+<section className="settings-group settings-appearance"><h3>Apariencia</h3><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label></section><DownloadNotificationSettings/><section className="settings-group settings-app-update" aria-labelledby="app-update-heading"><h3 id="app-update-heading">Actualización de la app</h3><div className="settings-group__body"><p>Versión en ejecución: {runningVersion}</p><p role="status">{manualReloadPending?'Esperando a que terminen las operaciones para recargar…':updateState==='checking'?'Comprobando versión…':updateState==='current'?'Actualizada':updateState==='available'?'Nueva versión disponible':'No se pudo comprobar si hay actualizaciones.'}</p><button type="button" disabled={manualReloadPending||updateNavigationLocked} onClick={()=>{player.pause();automaticUpdates?.reload();}}>Recargar app</button><p>Recarga Pulso y conserva tus datos. Si hay música sonando, se pausará.</p></div></section><section className="settings-group" aria-label="Sincronización de biblioteca"><h3>Biblioteca de tu cuenta</h3><div className="settings-group__body"><p role="status">{librarySyncMessage[librarySyncState]}</p><p>Playlists, favoritos y álbumes se conservan con tu cuenta. Los artistas guardados y las descargas se conservan en este dispositivo.</p><button type="button" disabled={!owner||busy||librarySyncState==='syncing'} onClick={()=>void librarySync.sync()}>Sincronizar biblioteca</button></div></section></div><div className="settings-groups">
 <section hidden={settingsSection!=='connections'} className="settings-group"><h3>Cuenta y fuentes</h3><div className="settings-group__body"><section aria-label="Música de Telegram"><details className="settings-help"><summary>Cómo buscar y escuchar</summary><p>En Buscar puedes consultar sugerencias musicales y las opciones del bot que elijas. Conecta tu cuenta de Telegram y configura tus bots para consultarlos. Al elegir una canción se comprueba tu copia local; si falta, se obtiene del bot para descargarla y escucharla. Límite por canción: {formatStorageMB(AUDIO_FILE_MAX_BYTES)}.</p></details></section>
- <TelegramPanel requiredSetup downloadCollection={downloadCollection} downloadStorageTarget={storageOpen&&!playerOpen?storageDownloadTarget:null} onSetupReady={onSetupReady} accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureBatchDownload={captureBatchDownload} onReviewedDownload={operationId=>{if(operationId)verifiedResponse(operationId);void refresh(false,false,null).catch(()=>{});}} onReviewDownloadStorage={()=>{
+ <TelegramPanel requiredSetup downloadUpdateWait={downloadUpdateWait} onStopDownloadUpdate={stopDownloadUpdate} downloadCollection={downloadCollection} downloadStorageTarget={storageOpen&&!playerOpen?storageDownloadTarget:null} onSetupReady={onSetupReady} accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureBatchDownload={captureBatchDownload} onReviewedDownload={operationId=>{if(operationId)verifiedResponse(operationId);void refresh(false,false,null).catch(()=>{});}} onReviewDownloadStorage={()=>{
   const target=document.getElementById('download-copy-recovery')??document.getElementById('download-response-recovery');
   if(target){setSettingsOpen(false);requestAnimationFrame(()=>{target.focus({preventScroll:true});target.scrollIntoView({block:'start'});});}
   else{setSettingsSection('general');setSettingsOpen(true);requestAnimationFrame(()=>settingsHeading.current?.focus());}
@@ -1516,14 +1526,15 @@ createRoot(document.getElementById('root')!).render(<App/>);
 // Versioned navigation bypasses the old shell without activating a worker over
 // another tab's playing audio. All persistent data stays in the same origin.
 automaticUpdates=startAutomaticUpdates({
- ready:manual=>{
+ ready:(manual,download)=>{
   const focused=document.activeElement;
-  return !updateNavigationLocked&&databaseState==='ready'&&!busy&&!configuring&&control.activity.idle&&!queueForeignBlocked()&&!botImportActive&&!sourceReview.hasReservation()&&!updateWorkPending()&&
+  return document.visibilityState==='visible'&&!updateNavigationLocked&&(!download||control.owner)&&databaseState==='ready'&&!busy&&!configuring&&control.activity.idle&&!queueForeignBlocked()&&!botImportActive&&!sourceReview.hasReservation()&&!updateWorkPending()&&
    !['adquiriendo','cediendo'].includes(control.state)&&(!control.owner||!releaseBlocked())&&
    (manual||!['playing','loading','buffering'].includes(player.state)&&(audio.paused||audio.ended))&&
-   !(focused instanceof Element&&focused.matches('input,textarea,select,[contenteditable="true"]'));
+   !(focused instanceof Element&&focused.matches('input,textarea,select,[contenteditable="true"]')&&!(download&&focused.matches('input[type=search]')));
  },
- prepare:async manual=>{if(manual)player.pause();if(control.owner&&player.current)return await saveLatestQueue()==='saved';await writes;return true;},
+ settled:()=>audio.paused&&!['playing','loading','buffering'].includes(player.state),
+ prepare:async manual=>{if(manual&&(!audio.paused||['playing','loading','buffering'].includes(player.state)))player.pause();if(control.owner&&player.current)return await saveLatestQueue()==='saved';await writes;return true;},
  enter:()=>{
   const wasAdmitted=control.activity.admitted,scope=control.activity.scope(),proof=control.proof;
   updateNavigationLocked=true;if(wasAdmitted)control.activity.close();
@@ -1532,4 +1543,10 @@ automaticUpdates=startAutomaticUpdates({
  pending:value=>{if(updateReady!==value){updateReady=value;emit();}},
  state:value=>{if(updateState!==value){updateState=value;emit();}},
  manualPending:value=>{manualReloadPending=value;emit();},
+ downloadStatus:value=>{
+  const wait=value==='checking'||value==='updating'?value:null;
+  if(downloadUpdateWait!==wait){downloadUpdateWait=wait;emit();}
+  if(value==='fallback')announceDownloadMessage('No se pudo actualizar ahora. Descargando con esta versión.');
+ },
 });
+installDownloadUpdates(automaticUpdates.beforeDownload,runningBundle());

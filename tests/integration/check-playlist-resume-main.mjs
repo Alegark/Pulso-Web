@@ -1,7 +1,7 @@
 import {build,preview} from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import {chromium,webkit} from 'playwright-core';
-import {open,writeFile} from 'node:fs/promises';
+import {cp,open,readFile,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -24,8 +24,11 @@ const readyCopies=[1,2].map(n=>{
  const audio=fixtureWav(n);
  return {id:uuid(80+n),trackId:ids[n-1],sha256:digest(audio),audio:audio.toString('base64')};
 });
-const fixture=()=>({name:'playlist-resume-sdk-test',enforce:'pre',resolveId(id){if(id==='./temporary-sdk')return resolve('tests/integration/playlist-resume-sdk.ts');},
+const fixture=(release='old')=>({name:'playlist-resume-sdk-test',enforce:'pre',resolveId(id){if(id==='./temporary-sdk')return resolve('tests/integration/playlist-resume-sdk.ts');},
  transform(code,id){
+  if(id.endsWith('/src/main.tsx'))return code.replace('prepare:async manual=>{',
+   'prepare:async manual=>{if (document.documentElement.dataset.testUpdateBlocked === "true") return false;')+`
+document.documentElement.dataset.testBuild=${JSON.stringify(release)};`;
   if(id.endsWith('/telegram/session-client.ts')){
    return code+`
 const testSearchBot=TelegramSessionClient.prototype.searchBot;
@@ -45,7 +48,8 @@ const testSearchBot=TelegramSessionClient.prototype.searchBot;
  }});
 const channelModes=['long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop'];
 const fallbackModes=['bot-timeout','bot-unsupported','manual-lane'];
-const allModes=[...channelModes,...fallbackModes,'autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
+const updateModes=['update-resume','update-offline','update-startup','update-single','update-album','update-timeout','update-stopped','update-attempted'];
+const allModes=[...updateModes,...channelModes,...fallbackModes,'autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
 const modes=process.env.PLAYLIST_RESUME_MODE?process.env.PLAYLIST_RESUME_MODE.split(','):allModes;
 assert.ok(modes.every(mode=>allModes.includes(mode)),'Unknown playlist resume test case');
 const reasons={
@@ -80,6 +84,14 @@ async function checkHeader(page,header,engine,screenshots){
  await page.evaluate(()=>document.documentElement.style.removeProperty('font-size'));
 }
 
+async function buildRelease(outDir,release){
+ await build({configFile:false,plugins:[tailwindcss(),fixture(release)],worker:{plugins:()=>[fixture()]},logLevel:'error',build:{outDir}});
+ const html=await readFile(outDir+'/index.html','utf8');
+ const id=digest(html).slice(0,16);
+ assert.ok(html.includes('<title>'));
+ return {html:html.replace('<title>',`<meta name="pulso-release" content="${id}"><title>`),entry:`/releases/${id}.html`,id};
+}
+
 let server,tempDirectory;
 const oldTemp=process.env.TMPDIR;
 const screenshots=process.env.PULSO_TEST_EVIDENCE_DIR??work.evidence;
@@ -88,7 +100,9 @@ try{
  tempDirectory=await open(work.dir,'r');
  process.env.TMPDIR=`/proc/${process.pid}/fd/${tempDirectory.fd}`;
  const bundle=work.dir+'/bundle';
- await build({configFile:false,plugins:[tailwindcss(),fixture()],worker:{plugins:()=>[fixture()]},logLevel:'error',build:{outDir:bundle}});
+ const previous=await buildRelease(bundle,'old');
+ const next=modes.some(mode=>updateModes.includes(mode))?await buildRelease(work.dir+'/next','new'):null;
+ if(next)await cp(work.dir+'/next/assets',bundle+'/assets',{recursive:true,force:false});
  await writeFile(bundle+'/telegram-config.json',JSON.stringify({api_id:12345,api_hash:'0'.repeat(32)}));
  server=await preview({configFile:false,build:{outDir:bundle},preview:{host:'127.0.0.1',port:0}});
  const origin='http://127.0.0.1:'+server.httpServer.address().port;
@@ -97,16 +111,23 @@ try{
   const browser=await launcher.launch(engine==='chromium'?{executablePath:'/usr/bin/chromium',headless:true}:{headless:true});
   report[engine]=browser.version();
   try{for(const mode of modes){
-   const fresh=['autoheal','missing','missing-metadata','single','album'].includes(mode);
+   const updating=updateModes.includes(mode),albumMode=mode==='album'||mode==='update-album',singleMode=mode==='single'||mode==='update-single';
+   const updateDownload=['update-resume','update-single','update-album'].includes(mode);
+   const deferUpdate=mode==='update-timeout'||mode==='update-stopped';
+   const updateFallback=mode==='update-timeout'||mode==='update-attempted';
+   const fresh=albumMode||singleMode||['autoheal','missing','missing-metadata'].includes(mode);
    const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
    const trace=[];let floodAt=0,restores=0;const channel=channelModes.includes(mode),fallback=fallbackModes.includes(mode);
-   let releaseRestore,releaseSearch,holdRestore=false,page,restoresBeforeResume=0;
+   let releaseRestore,releaseSearch,releaseStartupProbe,holdRestore=false,page,restoresBeforeResume=0;
+   let pointer=mode==='update-startup'?'new':'old',pointerChecks=0,startupProbeAt=0,startupNavigationAt=0;
+   const navigations=[];
+   const startupGate=new Promise(resolve=>{releaseStartupProbe=resolve;});
    const restoration=new Promise(resolve=>{releaseRestore=resolve;});
    const searchGate=new Promise(resolve=>{releaseSearch=resolve;});
    try{
     await context.route('**/*',async route=>{
      const url=new URL(route.request().url());
-     if(mode==='album'&&url.origin==='https://itunes.apple.com'){
+     if(albumMode&&url.origin==='https://itunes.apple.com'){
       const album={wrapperType:'collection',collectionType:'Album',collectionId:201,collectionName:'Álbum de prueba',
        artistName:'Artista prueba',trackCount:2};
       const tracks=[3,4].map((n,index)=>({wrapperType:'track',kind:'song',collectionId:201,trackId:300+n,
@@ -114,9 +135,29 @@ try{
       const results=url.pathname==='/lookup'?[album,...tracks]:[album];
       return route.fulfill({headers:{'access-control-allow-origin':'*'},json:{resultCount:results.length,results}});
      }
-     if(mode==='album'&&url.origin==='https://lrclib.net')return route.fulfill({headers:{'access-control-allow-origin':'*'},json:[]});
+     if(updating&&url.origin==='https://itunes.apple.com')return route.fulfill({headers:{'access-control-allow-origin':'*'},json:{resultCount:0,results:[]}});
+     if((albumMode||updating)&&url.origin==='https://lrclib.net')return route.fulfill({headers:{'access-control-allow-origin':'*'},json:[]});
      if(url.origin!==origin){report.external.push(url.origin);return route.abort();}
-     if(url.pathname==='/testonly-seed')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>seed</title>'});
+     if(updating&&url.pathname==='/latest.json'){
+      pointerChecks++;
+      if(mode==='update-startup'&&pointerChecks===1){await startupGate;startupProbeAt=Date.now();}
+      if(pointer==='offline')return route.abort('internetdisconnected');
+      return route.fulfill({json:{version:1,entry:pointer==='new'?next.entry:previous.entry}});
+     }
+     if(updating&&(url.pathname==='/'||url.pathname===previous.entry||url.pathname===next.entry)){
+      if(route.request().isNavigationRequest()){
+       navigations.push(url.pathname);
+       if(url.pathname===next.entry){
+        startupNavigationAt||=Date.now();
+        if(updateDownload)assert.equal(trace.length,0,'download started before the new shell');
+       }
+      }
+      return route.fulfill({contentType:'text/html',body:url.pathname===next.entry?next.html:previous.html});
+     }
+     if(url.pathname==='/testonly-seed'){
+      if(updating&&route.request().isNavigationRequest())navigations.push(url.pathname);
+      return route.fulfill({contentType:'text/html',body:'<!doctype html><title>seed</title>'});
+     }
      if(url.pathname==='/__setup-event'){
       if(url.searchParams.get('kind')==='restore'){
        restores++;
@@ -127,7 +168,7 @@ try{
      if(url.pathname==='/__playlist-event'){
       const event=route.request().postDataJSON();
       trace.push({...event,at:Date.now()});
-      if(['missing','album'].includes(mode)&&event.kind==='search'&&event.title==='Pista 3')await searchGate;
+      if((mode==='missing'||albumMode&&!updating)&&event.kind==='search'&&event.title==='Pista 3')await searchGate;
       const thirdSearches=trace.filter(item=>item.kind==='search'&&item.title==='Pista 3').length;
       if(event.kind==='search'&&event.title==='Pista 3'&&thirdSearches===1)restoresBeforeResume=restores;
       if(mode==='suspend'&&event.kind==='search'&&event.title==='Pista 3'&&thirdSearches===1)await searchGate;
@@ -137,7 +178,7 @@ try{
       if(flood)floodAt=event.workerAt;
       if(mode==='manual-lane'&&event.title==='Consulta manual')await searchGate;
       const network=mode==='reconnect'&&event.kind==='read'&&event.title==='Pista 3'&&thirdSearches<=2;
-      return route.fulfill({json:{mode:mode==='album'?'missing':mode,flood,network}});
+      return route.fulfill({json:{mode:albumMode?'missing':singleMode?'single':updating?'autoheal':mode,flood,network}});
      }
      return route.fallback();
     });
@@ -152,10 +193,26 @@ try{
      }
      return route.fulfill({json:cloud});
     });
-    await context.addInitScript(({loseAck,channel,fallback,mode,user})=>{
+    await context.addInitScript(({loseAck,channel,fallback,mode,user,updating})=>{
      let hidden=false,offset=-500;
+     if(updating){
+      window.testUpdateNotices=[];
+      const dockNotice=new MutationObserver(()=>{
+       const text=document.querySelector('.download-dock__message')?.textContent;
+       if(text&&window.testUpdateNotices.at(-1)!==text)window.testUpdateNotices.push(text);
+       if(text?.includes('Actualizando Pulso antes de descargar…'))sessionStorage.setItem('testonly-update-notice','shown');
+      });
+      dockNotice.observe(document,{childList:true,characterData:true,subtree:true});
+     }
+     if(mode==='update-resume'||mode==='update-single'){
+      const play=HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play=function(...args){
+       sessionStorage.setItem('testonly-plays',String(1+Number(sessionStorage.getItem('testonly-plays'))));
+       return play.apply(this,args);
+      };
+     }
      const workers=new Set();
-     if(channel||fallback){
+     if(channel||fallback||updating){
       // Keep the synthetic Pulso configuration independent of WebKit's
       // canceled HTTP fetches when the test reloads or jumps the page clock.
       const fetchOriginal=window.fetch.bind(window);
@@ -171,6 +228,8 @@ try{
        }
        return fetchOriginal(input,init);
       };
+     }
+     if(channel||fallback){
       Object.defineProperty(document,'visibilityState',{get:()=>hidden?'hidden':'visible'});
       window.testVisibility=value=>{hidden=value;document.dispatchEvent(new Event('visibilitychange'));};
       window.testAdvanceWorkers=ms=>{offset+=ms;for(const worker of workers)worker.postMessage({testonlyClock:offset});};
@@ -217,7 +276,7 @@ try{
       }
       terminate(){workers.delete(this);super.terminate();}
      };
-    },{loseAck:mode==='ack-lost',channel,fallback,mode,user});
+    },{loseAck:mode==='ack-lost',channel,fallback,mode,user,updating});
     page=await context.newPage();page.setDefaultTimeout(18000);
     if(channel||mode==='manual-lane')await page.clock.install();
     const advance=async ms=>{await page.evaluate(value=>window.testAdvanceWorkers(value),ms);await page.clock.fastForward(ms);};
@@ -240,6 +299,20 @@ try{
       tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);
      });}finally{db.close();}
     },{user,ids});
+    if(mode==='update-startup'){
+     // The old shell stays in place while Pulso restores its synthetic account.
+     // Reply to the startup probe as soon as the existing safety guards settle.
+     await page.goto(origin,{waitUntil:'commit'});
+     await page.locator('.bot-providers-list li').first().waitFor({state:'attached'});
+     assert.equal(pointerChecks,1);
+     releaseStartupProbe();
+     await page.waitForURL(origin+next.entry,{timeout:10000});
+     assert.ok(startupProbeAt>0&&startupNavigationAt-startupProbeAt<3000,'startup waited for the idle window');
+     assert.equal(await page.locator('html').getAttribute('data-test-build'),'new');
+     assert.deepEqual(navigations,['/testonly-seed','/',next.entry]);
+     report.cases.push({engine,mode,status:'PASS'});
+     continue;
+    }
     await page.goto(origin);
     await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();
     await page.locator('.library-grid button').filter({hasText:'Playlist pendiente'}).click();
@@ -276,19 +349,25 @@ try{
     const dock=page.getByRole('region',{name:'Descargas',exact:true});
     const handle=dock.locator('.download-dock__handle');
     const panel=dock.locator('.download-dock__panel');
-    if(mode==='album'){
+    if(albumMode){
      await page.locator('.bot-providers-list li').first().waitFor({state:'attached'});
      await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).click();
      const input=page.getByRole('searchbox',{name:'Canción, álbum o artista'});
      await input.fill('Álbum de prueba');
      await input.press('Enter');
      await page.locator('[data-catalog-kind="album"]').filter({hasText:'Álbum de prueba'}).first().click();
+     if(updating)pointer='new';
      await page.getByRole('button',{name:'Añadir álbum',exact:true}).click();
-     await handle.getByText('0/2',{exact:true}).waitFor();
-     await page.locator('.album-actions').getByRole('button',{name:/Ver descargas/}).click();
-     await dock.getByRole('button',{name:'Detener',exact:true}).waitFor();
-     await panel.getByText('Álbum de prueba',{exact:true}).waitFor();
-     releaseSearch();
+     if(updating){
+      await page.waitForURL(origin+next.entry);
+      assert.deepEqual(navigations,['/testonly-seed','/',next.entry]);
+     }else{
+      await handle.getByText('0/2',{exact:true}).waitFor();
+      await page.locator('.album-actions').getByRole('button',{name:/Ver descargas/}).click();
+      await dock.getByRole('button',{name:'Detener',exact:true}).waitFor();
+      await panel.getByText('Álbum de prueba',{exact:true}).waitFor();
+      releaseSearch();
+     }
      await handle.getByText('1 de 2 guardadas · 1 no existe',{exact:true}).waitFor();
      await handle.click();
      await panel.locator('li[data-failed=true]').getByText('No existe en tus bots',{exact:true}).waitFor();
@@ -309,18 +388,68 @@ try{
      report.cases.push({engine,mode,status:'PASS'});
      continue;
     }
+    let fallbackDelayMs;
     if(!fresh){
      holdRestore=true;
      await page.reload();
      await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();
      await page.locator('.library-grid button').filter({hasText:'Playlist pendiente'}).click();
-     if(mode==='connected'){
+     if(mode==='connected'||updating){
       releaseRestore();
       await page.getByText('Cuenta autenticada en esta pestaña.',{exact:false}).waitFor({state:'attached'});
       await page.locator('.bot-providers-list li').first().waitFor({state:'attached'});
      }
+     let playsBefore=0;
+     if(updating){
+      await page.waitForFunction(id=>document.querySelector('meta[name="pulso-release"]')?.content===id,previous.id);
+      assert.ok(pointerChecks>=2,'expected a startup probe on each old document');
+      if(mode==='update-resume'){
+       await page.getByRole('button',{name:'Escuchar Pista 1',exact:true}).click();
+       await page.getByRole('button',{name:'Pausar desde minirreproductor'}).waitFor();
+       playsBefore=await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays')));
+       assert.ok(playsBefore>0);
+      }
+      if(deferUpdate)await page.evaluate(()=>{document.documentElement.dataset.testUpdateBlocked='true';});
+      if(mode==='update-attempted')await page.evaluate(({entry,bundle,user})=>{
+       sessionStorage.setItem('pulso-shell:automatic-attempt:'+entry,'1');
+       sessionStorage.setItem('pulso-shell:download-intent:v1',JSON.stringify({account:user,bundle,expires:Date.now()+90000,
+        action:{kind:'library',request:{id:crypto.randomUUID(),trackIds:['00000001-1111-4111-8111-111111111111'],title:'Intento anterior',play:false}}}));
+      },{entry:next.entry,bundle:next.html.match(/src="(\/assets\/[^"]+\.js)"/)[1],user});
+      pointer=mode==='update-offline'?'offline':'new';
+     }
+     const clickedAt=Date.now();
      await header.getByRole('button',{name:'Continuar descarga',exact:true}).click();
-     if(mode!=='connected'){
+     if(deferUpdate){
+      await dock.getByText('Actualizando Pulso antes de descargar…',{exact:true}).waitFor();
+      assert.equal(trace.length,0);
+     }
+     if(mode==='update-stopped'){
+      await dock.getByRole('button',{name:'Detener',exact:true}).click();
+      await dock.getByText('Actualizando Pulso antes de descargar…',{exact:true}).waitFor({state:'detached'});
+      await new Promise(resolve=>setTimeout(resolve,Math.max(0,clickedAt+10500-Date.now())));
+      assert.equal(trace.length,0);
+      assert.deepEqual(navigations,['/testonly-seed','/','/']);
+      assert.equal(await page.evaluate(()=>sessionStorage.getItem('pulso-shell:download-intent:v1')),null);
+      report.cases.push({engine,mode,status:'PASS'});
+      continue;
+     }
+     if(updateFallback){
+      await page.waitForFunction(()=>window.testUpdateNotices.includes('No se pudo actualizar ahora. Descargando con esta versión.'));
+      await waitForWorker(()=>trace.some(event=>event.kind==='search'));
+      fallbackDelayMs=trace.find(event=>event.kind==='search').at-clickedAt;
+      if(deferUpdate)assert.ok(fallbackDelayMs>=9500&&fallbackDelayMs<14000,`fallback after ${fallbackDelayMs} ms`);
+      else assert.ok(fallbackDelayMs<9500,`attempted release took ${fallbackDelayMs} ms`);
+      assert.equal(await page.evaluate(()=>sessionStorage.getItem('pulso-shell:download-intent:v1')),null);
+     }
+     if(mode==='update-resume'){
+      await page.waitForURL(origin+next.entry);
+      assert.equal(await page.evaluate(()=>sessionStorage.getItem('testonly-update-notice')),'shown');
+      await page.locator('.mini-player__title').filter({hasText:/^Pista [12]$/}).waitFor();
+      assert.equal(await page.getByRole('button',{name:'Pausar desde minirreproductor'}).count(),0);
+      assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),playsBefore);
+      await page.waitForFunction(()=>sessionStorage.getItem('pulso-shell:download-intent:v1')===null);
+     }
+     if(mode!=='connected'&&!updating){
       await dock.locator('.download-dock__message').getByText('Esperando a que Telegram termine de preparar tus bots…',{exact:true}).waitFor();
       assert.equal(trace.length,0);
       releaseRestore();
@@ -331,9 +460,11 @@ try{
       assert.equal(await dock.count(),0);
       await checkHeader(page,header,engine,screenshots);
      }
-     const start=mode==='single'?page.getByRole('button',{name:'Escuchar Pista 3',exact:true}):
+     const start=singleMode?page.getByRole('button',{name:'Escuchar Pista 3',exact:true}):
       header.getByRole('button',{name:'Descargar playlist completa',exact:true});
+     if(updating)pointer='new';
      await start.click();
+     if(updating)await page.waitForURL(origin+next.entry);
     }
     if(mode==='missing'){
      await handle.getByText('2/4',{exact:true}).waitFor();
@@ -399,14 +530,14 @@ try{
       await advance(25_000);
      }
     }
-    const allSaved=channel||fallback||['autoheal','cooldown','ack-lost','single'].includes(mode);
+    const allSaved=channel||fallback||updating||['autoheal','cooldown','ack-lost','single'].includes(mode);
     const [reasonCount,reasonText]=reasons[mode]??reasons.invalid;
-    const summary=mode==='single'?'1 de 1 guardadas':allSaved?'4 de 4 guardadas':`3 de 4 guardadas · ${reasonCount}`;
+    const summary=singleMode?'1 de 1 guardadas':allSaved?'4 de 4 guardadas':`3 de 4 guardadas · ${reasonCount}`;
     await handle.getByText(summary,{exact:true}).waitFor({timeout:45000});
     assert.equal(await handle.getAttribute('aria-expanded'),'false');
     await handle.click();
     await panel.getByText('Descarga finalizada',{exact:true}).waitFor();
-    assert.equal(await panel.locator('li').count(),mode==='single'?1:4);
+    assert.equal(await panel.locator('li').count(),singleMode?1:4);
     assert.equal(await page.locator('.library-detail .download-dock, .library-detail [aria-label="Revisión de descarga"]').count(),0);
     for(const label of ['Ver canciones','Continuar descarga de Biblioteca']){
      assert.equal(await page.getByRole('button',{name:label,exact:true}).count(),0);
@@ -456,13 +587,13 @@ try{
      const notices=await page.evaluate(()=>window.testNotifications);
      assert.ok(notices.every(notice=>!notice.body.includes('Reconectando')&&!notice.body.includes('Telegram pide esperar')));
      assert.equal(restores,restoresBeforeResume,'healthy transport should not restore during an isolated bot failure');
-    }else assert.deepEqual(searches.map(e=>e.title),mode==='single'?['Pista 3','Pista 3']:mode==='parked'?['Pista 4']:mode==='ack-lost'?['Pista 3','Pista 4']:mode==='missing-metadata'?['Pista 1','Pista 2','Pista 4']:[...(fresh?['Pista 1','Pista 2']:[]),'Pista 3','Pista 3','Pista 4']);
+    }else assert.deepEqual(searches.map(e=>e.title),singleMode?['Pista 3','Pista 3']:mode==='parked'?['Pista 4']:mode==='ack-lost'?['Pista 3','Pista 4']:mode==='missing-metadata'?['Pista 1','Pista 2','Pista 4']:[...(fresh?['Pista 1','Pista 2']:[]),'Pista 3','Pista 3','Pista 4']);
     if(mode==='ack-lost'){
      const lost=await page.evaluate(()=>window.__TESTONLY_outcomes.filter(outcome=>outcome.type==='lost-ack'));
      assert.deepEqual(lost,[{type:'lost-ack',writeState:'published'}]);
     }
     if(mode==='missing')assert.equal(trace.some(e=>e.kind==='read'&&e.title==='Pista 3'),false);
-    if(mode==='autoheal'||mode==='single')assert.deepEqual(trace.filter(e=>e.kind==='read'&&e.title==='Pista 3').map(e=>e.peer),[101,102]);
+    if(mode==='autoheal'||singleMode)assert.deepEqual(trace.filter(e=>e.kind==='read'&&e.title==='Pista 3').map(e=>e.peer),[101,102]);
     if(mode==='cooldown')assert.ok(searches[1].at-trace.find(e=>e.kind==='read'&&e.title==='Pista 3').at>=1900);
     if(mode==='staging'||mode==='parked'){
      const staging=await page.evaluate(async operationId=>{
@@ -494,14 +625,33 @@ try{
      }));}finally{db.close();}
     },ids);
     const linked=copies.map(Boolean);
-    assert.deepEqual(linked,mode==='single'?[false,false,true,false]:[true,true,allSaved,true]);
-    if(mode==='single')assert.equal(await page.evaluate(({user,id})=>localStorage.getItem('pulso:library-download-held:v1:'+user+':'+id),{user,id:ids[2]}),null);
+    assert.deepEqual(linked,singleMode?[false,false,true,false]:[true,true,allSaved,true]);
+    if(singleMode)assert.equal(await page.evaluate(({user,id})=>localStorage.getItem('pulso:library-download-held:v1:'+user+':'+id),{user,id:ids[2]}),null);
     assert.equal(new Set(copies.filter(Boolean).map(copy=>copy.id)).size,linked.filter(Boolean).length);
     assert.deepEqual(copies.map((copy,index)=>copy?.digest??null),linked.map((saved,index)=>
      saved?digest(fixtureWav(!fresh&&index<2?index+1:index+11)):null));
-    report.cases.push({engine,mode,searches:searches.map(e=>e.title),linked,status:'PASS'});
-   }catch(error){report.cases.push({engine,mode,status:'FAIL',error:String(error.stack??error),trace:trace.map(({kind,title,workerAt})=>({kind,title,workerAt})),dock:await page?.locator('.download-dock').textContent({timeout:500}).catch(()=>null),outcomes:await page?.evaluate(()=>window.__TESTONLY_outcomes).catch(()=>[])});}
-   finally{releaseRestore();releaseSearch();await context.close();}
+    if(updating){
+     if(singleMode)assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),0);
+     const opened=['/testonly-seed','/'];
+     if(!fresh)opened.push('/');
+     if(updateDownload)opened.push(next.entry);
+     assert.deepEqual(navigations,opened);
+     assert.equal(await page.locator('html').getAttribute('data-test-build'),updateDownload?'new':'old');
+     if(updateDownload){
+      await page.getByRole('button',{name:'Configuración',exact:true}).click();
+      await page.getByText('Versión en ejecución: '+next.id.slice(0,8),{exact:true}).waitFor();
+     }
+    }
+    report.cases.push({engine,mode,searches:searches.map(e=>e.title),linked,fallbackDelayMs,status:'PASS'});
+   }catch(error){releaseStartupProbe();report.cases.push({engine,mode,status:'FAIL',error:String(error.stack??error),trace:trace.map(({kind,title,workerAt})=>({kind,title,workerAt})),dock:await page?.locator('.download-dock').textContent({timeout:500}).catch(()=>null),outcomes:await page?.evaluate(()=>window.__TESTONLY_outcomes).catch(()=>[]),notices:await page?.evaluate(()=>window.testUpdateNotices).catch(()=>[])});}
+   finally{
+    const result=report.cases.at(-1);
+    if(result?.engine===engine&&result.mode===mode){
+     console.log(`${engine} ${mode} ${result.status}`);
+     if(result.error)console.log(JSON.stringify(result));
+    }
+    releaseRestore();releaseSearch();releaseStartupProbe();await context.close();
+   }
   }}finally{await browser.close();}
  }
  assert.equal(report.external.length,0);
