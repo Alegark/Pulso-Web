@@ -56,7 +56,7 @@ function readPosition():Point|null{
  return null;
 }
 
-export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUpdate}:{updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
+export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUpdate,pendingDownload}:{updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;pendingDownload?:{saved:number;total:number;title?:string;retaking:boolean;onContinue:()=>void};message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
  const {running,active,notice}=useAlbumDownloadState();
  const [finished,setFinished]=useState<{notice:NonNullable<AlbumCoordinator['notice']>;stopped:boolean}|null>(null);
  const [transient,setTransient]=useState('');
@@ -68,7 +68,7 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
  const ignoreClick=useRef(false);
  const opener=useRef<HTMLElement|null>(null);
  const panelId=useId(),hintId=useId();
- const updateMessage=updateWait==='updating'?'Actualizando Pulso antes de descargar…':updateWait==='checking'?'Comprobando la versión antes de descargar…':null;
+ const updateMessage=updateWait==='updating'?'Actualizando Pulso antes de descargar…':updateWait==='checking'?(pendingDownload?.retaking?'Retomando…':'Comprobando la versión antes de descargar…'):null;
  const reviewing=!!review&&!running&&!updateMessage;
  const showingDetails=reviewing||expanded;
 
@@ -119,8 +119,10 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
   }
  },[reviewing]);
 
- const visible=!!updateMessage||running||!!finished||!!transient||reviewing;
- const currentNotice=running?notice:finished?.notice;
+ const pendingBatch=!running?pendingDownload:undefined;
+ const pendingMessage=pendingBatch&&(pendingBatch.retaking?'Retomando…':`Descarga pendiente · ${pendingBatch.saved} de ${pendingBatch.total} guardadas`);
+ const visible=!!updateMessage||running||!!finished||!!transient||reviewing||!!pendingBatch;
+ const currentNotice=running?notice:pendingBatch?undefined:finished?.notice;
  const rows=currentNotice?.progress.rows??[];
  const {saved,total}=downloadCounts(currentNotice);
  const remaining=rows.filter(row=>!row.confirmed);
@@ -135,7 +137,7 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
   ...(pending?[`${pending} pendiente${pending===1?'':'s'}`]:[]),
  ].join(' · ');
  const currentIndex=rows.findIndex(row=>!row.confirmed&&!row.reason&&(row.state==='unattempted'||row.state==='ready'));
- const progressMessage=(running||finished?.stopped)?displayMessage(currentNotice?.progress.message):undefined;
+ const progressMessage=(running||finished?.stopped)?displayMessage((currentNotice??finished?.notice)?.progress.message):undefined;
 
  function clamp(point:Point):Point{
   const area=bounds.current,node=card.current;
@@ -205,41 +207,42 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
  },[visible]);
 
  return createPortal(<>
-  <div className="pulso-visually-hidden" role="status">{updateMessage||transient||(running?`Descargando · ${summary}`:finished?`${finished.stopped?'Descarga detenida':'Descarga finalizada'} · ${summary}`:'')}</div>
+  <div className="pulso-visually-hidden" role="status">{updateMessage||transient||pendingMessage||(running?`Descargando · ${summary}`:finished?`${finished.stopped?'Descarga detenida':'Descarga finalizada'} · ${summary}`:'')}</div>
   {visible&&<div ref={bounds} className="download-dock-area">
    <section ref={card} className="download-dock" aria-label={reviewing?'Revisión de descarga':'Descargas'} tabIndex={-1}
-    data-positioned={!!position} data-expanded={showingDetails}>
-    {updateMessage?<p className="download-dock__message">{updateMessage}</p>:reviewing?review:currentNotice||running?<><button ref={handle} type="button" className="download-dock__handle"
+    data-positioned={!!position} data-expanded={showingDetails} data-pending={!!pendingBatch&&!updateMessage&&!reviewing&&!showingDetails&&!transient}>
+    {updateMessage?<p className="download-dock__message">{updateMessage}</p>:reviewing?review:pendingBatch||currentNotice||running?<><button ref={handle} type="button" className="download-dock__handle"
      aria-expanded={expanded} aria-controls={expanded?panelId:undefined} aria-describedby={hintId}
      aria-label={running?`${expanded?'Plegar':'Ver'} descargas · ${saved} de ${total} guardadas`:undefined}
      onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={endPointer} onPointerCancel={endPointer} onLostPointerCapture={endPointer}
      onKeyDown={moveWithKey} onClick={event=>{if(event.detail&&ignoreClick.current){ignoreClick.current=false;return;}setExpanded(value=>!value);}}>
-      <DownloadIcon done={!running&&saved===total}/>
-      {running?<><span>{saved}/{total}</span><progress aria-hidden="true" value={saved} max={Math.max(1,total)}/></>:<span>{summary}</span>}
+      <DownloadIcon done={!pendingBatch&&!running&&saved===total}/>
+      {running?<><span>{saved}/{total}</span><progress aria-hidden="true" value={saved} max={Math.max(1,total)}/></>:<span>{pendingMessage??summary}</span>}
       <span className="download-dock__chevron" aria-hidden="true">{expanded?'⌃':'⌄'}</span>
      </button>
      <span id={hintId} className="pulso-visually-hidden">Usa las flechas para mover la ventana.</span>
      {expanded&&<div id={panelId} className="download-dock__panel">
-      <strong><bdi dir="auto">{currentNotice?.title??active?.title}</bdi></strong>
-      <p>{running?summary:finished?.stopped?'Descarga detenida':'Descarga finalizada'}</p>
+      <strong><bdi dir="auto">{pendingBatch?.title??currentNotice?.title??active?.title??'Selección de Biblioteca'}</bdi></strong>
+      {!pendingBatch&&<p>{running?summary:finished?.stopped?'Descarga detenida':'Descarga finalizada'}</p>}
       {running&&currentIndex>=0&&<p><bdi dir="auto">{currentNotice?.titles?.[currentIndex]??`Canción ${currentIndex+1}`}</bdi></p>}
       {(transient||progressMessage)&&<p>{transient||progressMessage}</p>}
-      <ol>{rows.map((row,index)=>{
+      {rows.length>0&&<ol>{rows.map((row,index)=>{
        const failed=!row.confirmed&&(row.state==='failed'||row.state==='uncertain');
        const reason=!row.confirmed&&row.reason?reasonLabels[row.reason].row:null;
        const message=reason??displayMessage(row.message);
        const state=row.confirmed?'Guardada':reason?null:row.state==='failed'?'No disponible':row.state==='uncertain'?'Por comprobar':'Pendiente';
        return <li key={index} data-failed={failed}>{state&&<span className="pulso-visually-hidden">{state}</span>}<span className="download-dock__row-icon" aria-hidden="true">{row.confirmed?'✓':failed?'⚠':'·'}</span>
         <div><strong><bdi dir="auto">{currentNotice?.titles?.[index]??`Canción ${index+1}`}</bdi></strong>{message&&<span>{message}</span>}</div></li>;
-      })}</ol>
+      })}</ol>}
       {!running&&onReviewStorage&&remaining.some(row=>row.reason==='parked')&&
        <button type="button" className="download-dock__storage" onClick={()=>{setFinished(null);onReviewStorage();}}>Revisar en Almacenamiento</button>}
      </div>}
      {!expanded&&(transient||currentNotice?.progress.waiting&&progressMessage)&&<p className="download-dock__message" role="status">{transient||progressMessage}</p>}
     </>:<p className="download-dock__message">{transient}</p>}
+    {!updateMessage&&!reviewing&&pendingBatch&&!pendingBatch.retaking&&<div className="download-dock__footer"><button type="button" onClick={pendingBatch.onContinue}>Continuar</button></div>}
     {(updateMessage||!reviewing&&expanded&&running&&active)&&<div className="download-dock__footer"><button type="button" onClick={()=>{
      if(updateMessage)onStopUpdate?.();
-     else if(active&&albumCoordinator.active===active)active.abort.abort();
+     else if(active&&albumCoordinator.active===active){if(active.stop)active.stop();else active.abort.abort();}
     }}>Detener</button></div>}
    </section>
   </div>}

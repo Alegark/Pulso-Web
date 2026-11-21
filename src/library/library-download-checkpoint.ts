@@ -8,19 +8,26 @@ function copyCandidates(value:unknown):SavedCandidate[]|null{
 export type PendingDownload={kind:'network';index:number}|{kind:'save';index:number;operationId:string;attempts?:SavedCandidate[]};
 export interface LibraryDownloadCheckpoint {
  id:string;trackIds:string[];cursor:number;pending:PendingDownload|null;telegramRetryAt?:number;
+ title?:string;autoResume?:boolean;autoAttempts?:number;saved?:number;
 }
 export function copyLibraryDownloadCheckpoint(value:unknown):LibraryDownloadCheckpoint|null{
  const row=value as LibraryDownloadCheckpoint|null;
  if(!row||!uuid(row.id)||!Array.isArray(row.trackIds)||!row.trackIds.length||row.trackIds.length>5000||
   !row.trackIds.every(uuid)||!Number.isInteger(row.cursor)||row.cursor<0||row.cursor>row.trackIds.length)return null;
- const {telegramRetryAt}=row;
+ const {telegramRetryAt,title,autoResume,autoAttempts,saved}=row;
+ if(title!==undefined&&(typeof title!=='string'||!title.length||title.length>640)||
+  autoResume!==undefined&&typeof autoResume!=='boolean'||
+  autoAttempts!==undefined&&(!Number.isInteger(autoAttempts)||autoAttempts<0||autoAttempts>3)||
+  saved!==undefined&&(!Number.isInteger(saved)||saved<0||saved>row.trackIds.length))return null;
  if(telegramRetryAt!==undefined&&(!Number.isSafeInteger(telegramRetryAt)||telegramRetryAt<=0||telegramRetryAt>8640000000000000))return null;
  const pending=row.pending;
  if(pending!==null&&(!pending||pending.index!==row.cursor||row.cursor>=row.trackIds.length||
   !(pending.kind==='network'||pending.kind==='save'&&uuid(pending.operationId))))return null;
  const attempts=pending?.kind==='save'&&pending.attempts!==undefined?copyCandidates(pending.attempts):undefined;
  if(attempts===null)return null;
- return {id:row.id,trackIds:[...row.trackIds],cursor:row.cursor,...(telegramRetryAt?{telegramRetryAt}:{}),pending:pending===null?null:pending.kind==='network'?
+ return {id:row.id,trackIds:[...row.trackIds],cursor:row.cursor,
+  ...(title!==undefined?{title}:{}),...(autoResume!==undefined?{autoResume}:{}),
+  ...(autoAttempts!==undefined?{autoAttempts}:{}),...(saved!==undefined?{saved}:{}),...(telegramRetryAt?{telegramRetryAt}:{}),pending:pending===null?null:pending.kind==='network'?
   {kind:'network',index:pending.index}:{kind:'save',index:pending.index,operationId:pending.operationId,...(attempts?{attempts}:{})}};
 }
 const key=(accountId:string)=>'pulso:library-download:v1:'+accountId;
@@ -37,6 +44,32 @@ export function writeLibraryDownloadCheckpoint(accountId:string,checkpoint:Libra
  if(!uuid(accountId))throw Error('Invalid library account');
  if(checkpoint)localStorage.setItem(key(accountId),JSON.stringify(checkpoint));
  else localStorage.removeItem(key(accountId));
+}
+
+export function canAutoResumeLibraryDownload(checkpoint:LibraryDownloadCheckpoint){
+ return checkpoint.autoResume===true&&(checkpoint.autoAttempts??0)<3;
+}
+
+// The playback owner serializes writes across tabs. Rotate the pointer to
+// reject stale handoffs and starts that passed the same asynchronous gate.
+export function claimLibraryDownload(accountId:string,title:string,trackIds:readonly string[],expectedId?:string,automatic=false){
+ const previous=readLibraryDownloadCheckpoint(accountId);
+ if(previous?.id!==expectedId||automatic&&(!previous||!canAutoResumeLibraryDownload(previous)))return null;
+ const checkpoint={
+  ...(previous??{trackIds:[...trackIds],cursor:0,pending:null}),
+  title:title.slice(0,640)||'Selección de Biblioteca',id:crypto.randomUUID(),autoResume:true,
+  autoAttempts:automatic?(previous?.autoAttempts??0)+1:0,
+ };
+ writeLibraryDownloadCheckpoint(accountId,checkpoint);
+ return checkpoint;
+}
+
+export function stopAutomaticLibraryDownload(accountId:string,id:string){
+ const checkpoint=readLibraryDownloadCheckpoint(accountId);
+ if(checkpoint?.id!==id||!checkpoint.autoResume)return checkpoint;
+ const stopped={...checkpoint,autoResume:false};
+ writeLibraryDownloadCheckpoint(accountId,stopped);
+ return stopped;
 }
 
 export type HeldDownload={kind:'network'}|{kind:'save';operationId:string;attempts?:SavedCandidate[]};

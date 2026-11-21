@@ -6,7 +6,7 @@ import type {SongChoice} from '../library/selected-song';
 import type {UpdateTarget} from './automatic-update';
 
 type DownloadAction=
- | {kind:'library';request:LibraryDownloadRequest;checkpointId?:string}
+ | {kind:'library';request:LibraryDownloadRequest;checkpointId?:string;automatic?:boolean}
  | {kind:'repair';trackId:string;title:string;retry:'safe'|'preserve'}
  | {kind:'song';choice:SongChoice}
  | {kind:'album';editionId:CatalogId;title:string;artist:string};
@@ -22,6 +22,7 @@ function validAction(action:DownloadAction):boolean{
    return !!request&&title(request.title)&&typeof request.play==='boolean'&&request.repair===undefined&&
     !!copyLibraryDownloadCheckpoint({...request,cursor:0,pending:null})&&
     (!request.play||request.trackIds.length===1)&&
+    (action.automatic===undefined||action.automatic===true&&!!action.checkpointId)&&
     (action.checkpointId===undefined||!request.play&&isId(action.checkpointId));
   }
   case 'repair':return isId(action.trackId)&&title(action.title)&&['safe','preserve'].includes(action.retry);

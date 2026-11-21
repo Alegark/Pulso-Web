@@ -640,3 +640,15 @@ Pasaron 839 unitarias, 73 de servidor y 10 de Python, tipos de aplicación y pru
 El manifiesto autoritativo de 267 archivos y 60517 bytes se promovió con fecha MCP `2026-11-21T00:54:42.911Z` a `.local/test-evidence/update-before-download-release/site-manifest.json`, SHA-256 `4101ec6f607d6535879ac94d08a4559cb542994df12af831a3763ca9b22d5f56`. Los recibos compactos se conservan en ese directorio.
 
 Continúa pendiente comprobar en iPhone físico el salto desde la caché histórica y reanudar la playlist de 72 canciones con Telegram real. Una instancia que sigue ejecutando v51 requiere una recarga manual. Siguen clasificadas aparte la regresión de Chromium desde `ac89e5a` y la limitación del entorno WPE. P0-W sigue abierto.
+
+### Descargas de colección en segundo plano y al reabrir · 2026-11-21
+
+En v54, ocultar la página invalidaba la operación de Telegram incluso si JavaScript seguía activo. También podía perderse un audio ya recibido, y un relanzamiento dejaba el checkpoint accesible únicamente desde el detalle de Biblioteca.
+
+La visibilidad sirve para reconocer fallos que cruzan una suspensión. Mientras la página ejecuta JavaScript, la descarga continúa con la sesión y los bots capturados. La recuperación espera que se libere la operación anterior, conserva el plazo de Telegram y permite hasta cuatro restauraciones escalonadas ante fallos transitorios. El checkpoint conserva título, copias confirmadas y un máximo de tres reanudaciones automáticas consecutivas sin progreso. La pestaña con control vuelve a leer el ID antes de reclamarlo, después de pasar por la comprobación de versión. La reanudación solo guarda. Los checkpoints antiguos y las pausas que requieren intervención quedan en modo manual, igual que tras «Detener».
+
+Al salir con `pagehide`, Pulso aborta el lote y conserva el checkpoint. Inicio, Buscar y Biblioteca comparten «Continuar» en la ventana flotante. La pestaña propietaria publica el resultado aunque la página siga oculta y limpia avisos de progreso huérfanos de la cuenta activa. Siguen pendientes la suspensión real, los avisos en iPhone físico y Telegram real. P0-W continúa abierto.
+
+Pasaron tipos de aplicación y tests, lint, 847 unitarias, 73 de servidor, 10 de Python, build y dry-run de Wrangler. El shell compilado pasó 22/22 recorridos focales con Telegram sintético (11 por motor, frente a 10/10 compartidos en `559e4db`). Ambos motores verificaron cuatro assets con SHA-256 exacto, sin consultas ni lecturas duplicadas al ocultar la página. Pasaron también el reintento del traspaso y arranque en 8/8, Biblioteca de cuenta en 38/38 y la recarga de la playlist de 30 pistas en 2/2.
+
+La batería general en Chromium dio 11/16 frente a 12/16 en `559e4db`. Coincidieron los fallos de `library`, `opfs`, `artwork` y `artwork-containers`. El timeout adicional de `organization` pasó en aislamiento en ambas versiones. WebKit/WPE dio 4/16 en ambas versiones, con los mismos 12 grupos fallidos y los mismos timeouts de `metadata-rescan` y `blob-opfs`.

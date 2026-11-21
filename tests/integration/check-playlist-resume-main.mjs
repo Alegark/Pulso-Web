@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {createTestWorkspace} from './test-workspace.mjs';
 import {installRequiredAccountFixture} from './required-account-fixture.mjs';
 
-const work=await createTestWorkspace('download-autoheal');
+const work=await createTestWorkspace('background-resume');
 const report={cases:[],external:[],errors:[],limits:'Compiled app, real TelegramSessionClient and worker/driver, synthetic SDK and account. Desktop browser engines.'};
 const uuid=n=>String(n).padStart(8,'0')+'-1111-4111-8111-111111111111';
 const user='11111111-1111-4111-8111-111111111111',ids=[1,2,3,4].map(uuid);
@@ -29,6 +29,8 @@ const fixture=(release='old')=>({name:'playlist-resume-sdk-test',enforce:'pre',r
   if(id.endsWith('/src/main.tsx'))return code.replace('prepare:async manual=>{',
    'prepare:async manual=>{if (document.documentElement.dataset.testUpdateBlocked === "true") return false;')+`
 document.documentElement.dataset.testBuild=${JSON.stringify(release)};`;
+  if(id.endsWith('/tests/integration/required-setup-sdk.ts'))return code.replace("await fetch('/__setup-event?kind='+kind);",
+   "if(!(await fetch('/__setup-event?kind='+kind)).ok)throw Error('network');");
   if(id.endsWith('/telegram/session-client.ts')){
    return code+`
 const testSearchBot=TelegramSessionClient.prototype.searchBot;
@@ -46,7 +48,8 @@ const testSearchBot=TelegramSessionClient.prototype.searchBot;
    }});
    `+code;
  }});
-const channelModes=['long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop'];
+const backgroundModes=['background-alive','cold-resume','stop-reload','two-tabs','wake-restore','paused-hidden'];
+const channelModes=['long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop',...backgroundModes];
 const fallbackModes=['bot-timeout','bot-unsupported','manual-lane'];
 const updateModes=['update-resume','update-offline','update-startup','update-single','update-album','update-timeout','update-stopped','update-attempted'];
 const allModes=[...updateModes,...channelModes,...fallbackModes,'autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
@@ -117,7 +120,7 @@ try{
    const updateFallback=mode==='update-timeout'||mode==='update-attempted';
    const fresh=albumMode||singleMode||['autoheal','missing','missing-metadata'].includes(mode);
    const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
-   const trace=[];let floodAt=0,restores=0;const channel=channelModes.includes(mode),fallback=fallbackModes.includes(mode);
+   const trace=[];let floodAt=0,restores=0,restoreFailures=0;const channel=channelModes.includes(mode),fallback=fallbackModes.includes(mode);
    let releaseRestore,releaseSearch,releaseStartupProbe,holdRestore=false,page,restoresBeforeResume=0;
    let pointer=mode==='update-startup'?'new':'old',pointerChecks=0,startupProbeAt=0,startupNavigationAt=0;
    const navigations=[];
@@ -162,6 +165,7 @@ try{
       if(url.searchParams.get('kind')==='restore'){
        restores++;
        if(holdRestore)await restoration;
+       if(mode==='wake-restore'&&restores===3){restoreFailures++;return route.fulfill({status:503});}
       }
       return route.fulfill({json:{}});
      }
@@ -171,14 +175,18 @@ try{
       if((mode==='missing'||albumMode&&!updating)&&event.kind==='search'&&event.title==='Pista 3')await searchGate;
       const thirdSearches=trace.filter(item=>item.kind==='search'&&item.title==='Pista 3').length;
       if(event.kind==='search'&&event.title==='Pista 3'&&thirdSearches===1)restoresBeforeResume=restores;
+      if(['background-alive','cold-resume','stop-reload','two-tabs','wake-restore'].includes(mode)&&event.kind==='read'&&event.title==='Pista 3'&&thirdSearches===1)await searchGate;
       if(mode==='suspend'&&event.kind==='search'&&event.title==='Pista 3'&&thirdSearches===1)await searchGate;
-      const limited=['long-cooldown','unknown-cooldown','notifications-off','stop'].includes(mode);
+      const limited=['long-cooldown','unknown-cooldown','notifications-off','stop','paused-hidden'].includes(mode);
       const flood=event.kind==='read'&&event.title==='Pista 3'&&limited&&!floodAt
-       ?(mode==='unknown-cooldown'?'unknown':300):null;
-      if(flood)floodAt=event.workerAt;
+       ?(mode==='unknown-cooldown'?'unknown':mode==='paused-hidden'?1800:300):null;
+      if(flood){
+       floodAt=event.workerAt;
+       if(mode==='paused-hidden')await page.evaluate(()=>window.testVisibility(true));
+      }
       if(mode==='manual-lane'&&event.title==='Consulta manual')await searchGate;
-      const network=mode==='reconnect'&&event.kind==='read'&&event.title==='Pista 3'&&thirdSearches<=2;
-      return route.fulfill({json:{mode:albumMode?'missing':singleMode?'single':updating?'autoheal':mode,flood,network}});
+      const network=event.kind==='read'&&event.title==='Pista 3'&&(mode==='reconnect'&&thirdSearches<=2||mode==='wake-restore'&&thirdSearches===1);
+      return route.fulfill({json:{mode:albumMode?'missing':singleMode?'single':updating?'autoheal':backgroundModes.includes(mode)?'suspend':mode,flood,network}});
      }
      return route.fallback();
     });
@@ -204,7 +212,7 @@ try{
       });
       dockNotice.observe(document,{childList:true,characterData:true,subtree:true});
      }
-     if(mode==='update-resume'||mode==='update-single'){
+     if(mode==='update-resume'||mode==='update-single'||channel){
       const play=HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play=function(...args){
        sessionStorage.setItem('testonly-plays',String(1+Number(sessionStorage.getItem('testonly-plays'))));
@@ -240,7 +248,13 @@ try{
       window.ServiceWorkerRegistration.prototype.showNotification=async(title,options)=>window.testNotifications.push({title,...options});
       Object.defineProperty(navigator.serviceWorker,'getRegistration',{value:async()=>({
        active:true,showNotification:window.ServiceWorkerRegistration.prototype.showNotification,
-       getNotifications:async()=>window.testNotifications.slice(-1).map(({tag})=>({tag,close:()=>window.testDismissed.push(tag)})),
+       getNotifications:async()=>{
+        const stored=sessionStorage.getItem('testonly-orphan');
+        const recent=window.testNotifications.at(-1);
+        return [recent,stored?JSON.parse(stored):null].filter(Boolean).map(({tag,data,silent})=>({tag,data,silent,close:()=>{
+         window.testDismissed.push(tag);sessionStorage.removeItem('testonly-orphan');
+        }}));
+       },
       })});
       localStorage.setItem('pulso:download-notifications:v1',mode==='notifications-off'?'disabled':'enabled');
      }
@@ -285,7 +299,7 @@ try{
      assert.fail('No llegó el evento del worker simulado');
     };
     page.on('pageerror',error=>report.errors.push(error.stack??String(error)));
-    await page.goto(origin+'/testonly-seed');
+    await page.goto(origin+'/testonly-seed',{waitUntil:'domcontentloaded'});
     await page.evaluate(async ({user,ids})=>{
      localStorage.setItem('pulso:setup:v1:'+user,'complete');
      const db=await new Promise((resolve,reject)=>{
@@ -313,7 +327,7 @@ try{
      report.cases.push({engine,mode,status:'PASS'});
      continue;
     }
-    await page.goto(origin);
+    await page.goto(origin,{waitUntil:'commit'});
     await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();
     await page.locator('.library-grid button').filter({hasText:'Playlist pendiente'}).click();
     await page.getByRole('heading',{name:'Playlist pendiente',exact:true}).waitFor();
@@ -391,7 +405,7 @@ try{
     let fallbackDelayMs;
     if(!fresh){
      holdRestore=true;
-     await page.reload();
+     await page.reload({waitUntil:'commit'});
      await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();
      await page.locator('.library-grid button').filter({hasText:'Playlist pendiente'}).click();
      if(mode==='connected'||updating){
@@ -418,7 +432,8 @@ try{
       pointer=mode==='update-offline'?'offline':'new';
      }
      const clickedAt=Date.now();
-     await header.getByRole('button',{name:'Continuar descarga',exact:true}).click();
+     const continueButton=dock.getByRole('button',{name:'Continuar',exact:true});
+     await continueButton.click();
      if(deferUpdate){
       await dock.getByText('Actualizando Pulso antes de descargar…',{exact:true}).waitFor();
       assert.equal(trace.length,0);
@@ -494,16 +509,77 @@ try{
      assert.equal(await dock.getByText('Reconectando con Telegram…',{exact:true}).count(),0);
      releaseSearch();
     }
+    let cold=false,other;
     if(channel){
      const thirdSearches=()=>trace.filter(event=>event.kind==='search'&&event.title==='Pista 3').length;
-     if(mode==='suspend'){
+     if(mode==='background-alive'||mode==='wake-restore'){
+      await waitForWorker(()=>trace.some(event=>event.kind==='read'&&event.title==='Pista 3'));
+      await page.evaluate(()=>window.testVisibility(true));
+      if(mode==='wake-restore')await page.evaluate(()=>window.testVisibility(false));
+      releaseSearch();
+      if(mode==='wake-restore'){
+       await dock.getByText('Reconectando con Telegram…',{exact:true}).first().waitFor();
+       await advance(6000);
+       await waitForWorker(()=>restoreFailures===1);
+       await advance(6000);
+       await waitForWorker(()=>restores>=4);
+      }
+     }else if(mode==='cold-resume'||mode==='two-tabs'||mode==='stop-reload'){
+      await waitForWorker(()=>trace.some(event=>event.kind==='read'&&event.title==='Pista 3'));
+      if(mode==='stop-reload'){
+       await handle.click();
+       await dock.getByRole('button',{name:'Detener',exact:true}).click();
+       await dock.getByText('Descarga pendiente · 2 de 4 guardadas',{exact:true}).waitFor();
+      }
+      const stored=await page.evaluate(account=>JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)),user);
+      assert.equal(stored.autoResume,mode!=='stop-reload');
+      assert.equal(stored.title,'Playlist pendiente');
+      if(mode!=='stop-reload')await page.evaluate(account=>sessionStorage.setItem('testonly-orphan',JSON.stringify({
+       tag:'pulso-download-collection',silent:true,data:{account,terminal:false},
+      })),user);
+      if(mode==='two-tabs'){
+       other=await context.newPage();
+       await other.goto(origin,{waitUntil:'commit'});
+       await other.getByRole('button',{name:'Continuar',exact:true}).waitFor();
+       assert.equal(await other.evaluate(()=>window.testNotifications.length),0);
+       assert.equal(thirdSearches(),1);
+       await page.bringToFront();
+      }
+      await page.reload({waitUntil:'commit'});
+      releaseSearch();cold=true;
+      await page.locator('.shell-nav').waitFor();
+      assert.equal(await page.getByRole('heading',{name:'Playlist pendiente'}).count(),0);
+      if(mode==='stop-reload'){
+       await dock.getByText('Descarga pendiente · 2 de 4 guardadas',{exact:true}).waitFor();
+       await dock.getByRole('button',{name:'Continuar',exact:true}).waitFor();
+       assert.equal(await page.getByRole('button',{name:'Continuar',exact:true}).count(),1);
+       await page.locator('.bot-providers-list li').first().waitFor({state:'attached'});
+       for(const tab of ['Buscar','Biblioteca']){
+        await page.locator('.shell-nav').getByRole('button',{name:tab,exact:true}).click();
+        assert.equal(await dock.getByRole('button',{name:'Continuar',exact:true}).count(),1);
+       }
+       assert.equal(thirdSearches(),1);
+       assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),0);
+       assert.equal(await page.evaluate(()=>window.testNotifications.length),0);
+       report.cases.push({engine,mode,status:'PASS'});continue;
+      }
+      await page.waitForFunction(()=>window.testDismissed.includes('pulso-download-collection'));
+     }else if(mode==='paused-hidden'){
+      await page.waitForFunction(()=>window.testNotifications.some(notice=>!notice.silent));
+      assert.deepEqual(await page.evaluate(()=>window.testNotifications.filter(n=>!n.silent).map(n=>n.body)),
+       ['2 de 4 guardadas · abre Pulso para continuar']);
+      assert.equal(await page.evaluate(account=>JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)).autoResume,user),false);
+      assert.equal(thirdSearches(),1);
+      assert.equal(await page.evaluate(()=>document.visibilityState),'hidden');
+      report.cases.push({engine,mode,status:'PASS'});continue;
+     }else if(mode==='suspend'){
       await waitForWorker(()=>thirdSearches()===1);
       await page.evaluate(()=>window.testVisibility(true));
       await advance(240_000);
       assert.equal(thirdSearches(),1);
       assert.equal(trace.some(event=>event.title==='Pista 4'),false);
       releaseSearch();
-      await page.evaluate(()=>{window.testVisibility(false);dispatchEvent(new Event('pageshow'));dispatchEvent(new Event('online'));});
+      await page.evaluate(()=>window.testVisibility(false));
       await dock.getByText('Reconectando con Telegram…',{exact:true}).first().waitFor();
       await advance(6000);
      }else if(mode==='reconnect'){
@@ -518,7 +594,7 @@ try{
       if(mode==='stop'){
        await handle.click();
        await dock.getByRole('button',{name:'Detener',exact:true}).click();
-       await header.getByRole('button',{name:'Continuar descarga',exact:true}).waitFor();
+       await dock.getByRole('button',{name:'Continuar',exact:true}).waitFor();
        await page.waitForFunction(()=>window.testDismissed.includes('pulso-download-collection'));
        assert.equal(thirdSearches(),1);
        assert.equal(await page.evaluate(()=>window.testNotifications.some(notice=>!notice.silent)),false);
@@ -563,19 +639,22 @@ try{
     }
     const searches=trace.filter(e=>e.kind==='search');
     if(channel){
-     assert.deepEqual(searches.map(event=>event.title),[...Array(mode==='reconnect'?3:2).fill('Pista 3'),'Pista 4']);
+     assert.deepEqual(searches.map(event=>event.title),[...Array(mode==='reconnect'?3:mode==='background-alive'?1:2).fill('Pista 3'),'Pista 4']);
+     if(other){
+      await other.getByRole('button',{name:'Continuar',exact:true}).waitFor({state:'detached'});
+      assert.equal(await other.evaluate(()=>window.testNotifications.length),0);
+     }
+     if(cold||mode==='background-alive')assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),0);
      if(floodAt)assert.ok(searches[1].workerAt>=floodAt+300_000);
      if(mode==='reconnect')assert.ok(restores>restoresBeforeResume,'expected the worker to restore the saved session');
-     if(mode==='suspend'){
-      assert.equal(await page.evaluate(()=>window.testNotifications.filter(notice=>!notice.silent).length),0);
-      await page.evaluate(()=>{window.testVisibility(false);dispatchEvent(new Event('pageshow'));});
-     }
+     if(mode==='suspend'||mode==='background-alive')assert.equal(await page.evaluate(()=>document.visibilityState),'hidden');
      if(mode!=='notifications-off')await page.waitForFunction(()=>window.testNotifications.some(notice=>!notice.silent));
      const notices=await page.evaluate(()=>window.testNotifications);
      if(mode==='notifications-off')assert.equal(notices.length,0);
      else{
       assert.ok(notices.some(notice=>notice.silent&&notice.body.includes('guardadas')));
-      assert.ok(notices.some(notice=>notice.body.includes(mode==='reconnect'||mode==='suspend'?'Reconectando':'Telegram pide esperar')));
+      if(!backgroundModes.includes(mode)||mode==='wake-restore')
+       assert.ok(notices.some(notice=>notice.body.includes(['reconnect','suspend','wake-restore'].includes(mode)?'Reconectando':'Telegram pide esperar')));
       assert.deepEqual(notices.filter(notice=>!notice.silent).map(notice=>notice.body),['4 de 4 guardadas']);
       assert.ok(notices.every(notice=>notice.tag==='pulso-download-collection'));
      }
@@ -624,6 +703,18 @@ try{
       return {id:asset.id,digest};
      }));}finally{db.close();}
     },ids);
+    if(mode==='background-alive'){
+     assert.deepEqual(trace.filter(e=>e.kind==='read').map(e=>e.title),['Pista 3','Pista 4']);
+     const complete=await page.evaluate(()=>new Promise((resolve,reject)=>{
+      const q=indexedDB.open('pulso-web-local-v1');
+      q.onerror=()=>reject(q.error);q.onsuccess=()=>{
+       const db=q.result,assets=db.transaction('assets').objectStore('assets').getAll();
+       assets.onsuccess=()=>{db.close();resolve(assets.result.filter(asset=>asset.state==='complete').length);};
+       assets.onerror=()=>{db.close();reject(assets.error);};
+      };
+     }));
+     assert.equal(complete,4);
+    }
     const linked=copies.map(Boolean);
     assert.deepEqual(linked,singleMode?[false,false,true,false]:[true,true,allSaved,true]);
     if(singleMode)assert.equal(await page.evaluate(({user,id})=>localStorage.getItem('pulso:library-download-held:v1:'+user+':'+id),{user,id:ids[2]}),null);

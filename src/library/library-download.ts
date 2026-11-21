@@ -18,7 +18,7 @@ export function subscribeLibraryDownloads(fn:(request:LibraryDownloadRequest)=>v
 export async function downloadLibrarySelection(p:{
  tracks:readonly Track[];attempt:SongPlaybackAttempt;client:TelegramSessionClient;providers:readonly OrderedProvider[];
  revision:number;signal:AbortSignal;current:()=>boolean;update:(rows:AlbumRow[],message:string,waiting?:boolean)=>void;
- checkpoint?:LibraryDownloadCheckpoint;saveCheckpoint?:(checkpoint:LibraryDownloadCheckpoint)=>void;
+ onManualPause?:()=>void;checkpoint?:LibraryDownloadCheckpoint;saveCheckpoint?:(checkpoint:LibraryDownloadCheckpoint)=>void;
  heldDownload?:(trackId:string)=>HeldDownload|null;clearHeldDownload?:(trackId:string,expected:HeldDownload)=>void;parkDownload?:(trackId:string,pending:HeldDownload)=>void;
 }):Promise<'finished'|'stopped'|'paused'>{
  const rows:AlbumRow[]=p.tracks.map(()=>({state:'unattempted',trackId:null,confirmed:false,message:'En espera'}));
@@ -41,12 +41,17 @@ export async function downloadLibrarySelection(p:{
   }while(wait.occupied());
   return false;
  }:undefined;
+ const storagePause=()=>{p.onManualPause?.();update('No se pudo continuar con el almacenamiento actual. Revisa Almacenamiento y pulsa Continuar.',true);return 'paused' as const;};
  const start=checkpoint?.cursor??0,resuming=checkpoint?.pending;
  const completed=new Map<string,AlbumRow>();
  const attempts=new Map<string,SavedCandidate[]>();
+ let confirmed=0;
  const mark=(cursor:number,pending:PendingDownload|null)=>{
   if(!checkpoint)return;
-  checkpoint={...checkpoint,cursor,pending};p.saveCheckpoint?.(checkpoint);
+  const saved=confirmed;
+  const progressed=saved>(checkpoint.saved??0);
+  checkpoint={...checkpoint,cursor,pending,...(checkpoint.autoResume!==undefined&&progressed?{saved,autoAttempts:0}:{})};
+  p.saveCheckpoint?.(checkpoint);
  };
  const reconcile=async(trackId:string,receipt:Extract<HeldDownload,{kind:'save'}>)=>{
   const outcome=await reconcileSongDownload(p.attempt,receipt.operationId,trackId,p.signal);
@@ -93,6 +98,7 @@ export async function downloadLibrarySelection(p:{
    if(earlier){
     Object.assign(row,earlier);
     if(earlier.confirmed)Object.assign(row,{state:'reused',message:'Ya descargada'});
+    if(row.confirmed)confirmed++;
     mark(i+1,null);
     update(row.message);
     continue;
@@ -126,13 +132,15 @@ export async function downloadLibrarySelection(p:{
    }else{
     const pause=wait.pauseForTrack();
     const collection:CollectionBotProgress={completed:new Set(),ambiguous:new Set(),responded:false,reasons:[]};
-    let interrupted=false,suspended=false;
+    let interrupted=false,suspended=false,lastSuspension=-1;
     const status=(message:string,waiting=false)=>{if(row.message!==message){row.message=message;update(message,waiting);}};
     while(live()){
      const pauseReason=await pause(message=>status(message,true),interrupted,suspended);
      if(!live())return stop();
      if(pauseReason){
-      mark(i,{kind:'network',index:i});status(pauseReason,true);return 'paused';
+      mark(i,{kind:'network',index:i});
+      if(!pauseReason.automatic)p.onManualPause?.();
+      status(pauseReason.message,true);return 'paused';
      }
      const bots=p.client.botsSnapshot(),captured=p.client.captureBotsCurrent(),generation=wait.generation();
      const sameSession=bots.scopeKey===initialBots?.scopeKey;
@@ -140,19 +148,24 @@ export async function downloadLibrarySelection(p:{
      const unchanged=sameSession?bots.revision===p.revision:
       providers.every((provider,index)=>bots.providers.find(row=>row.providerRef===provider.providerRef)?.username===providerNames[index]);
      if(!providers.length||providers.length!==p.providers.length||!unchanged){
+      p.onManualPause?.();
       status('La selección de bots cambió. Revisa Telegram y pulsa Continuar.',true);return 'paused';
      }
+     const audioCurrent=()=>captured()&&p.client.botsSnapshot().revision===bots.revision;
+     const crossedSuspension=()=>wait.generation()!==generation&&wait.generation()!==lastSuspension;
      const result=await downloadSong({...p,providers,revision:bots.revision,collection,choice,trackId:track.id,index:i,current:live,
-      networkCurrent:()=>captured()&&wait.foreground()&&wait.generation()===generation,remoteClock,
+      networkCurrent:()=>audioCurrent()&&wait.online(),audioCurrent,suspended:crossedSuspension,remoteClock,
       waitForDownload,previousAttempts:attempts.get(track.id),onFailedCandidates:candidates=>attempts.set(track.id,candidates),
       mark:value=>{pending=value;mark(i,value);},message:status,progress:()=>{}});
-     if(result.state==='stopped'||!live())return stop();
+     if(!live())return stop();
+     if(result.state==='stopped')return storagePause();
      if(result.state!=='telegram'){
       Object.assign(row,result);
       if(result.reason==='missing-metadata')row.state='unattempted';
       break;
      }
-     interrupted=true;suspended=wait.generation()!==generation||!wait.foreground();
+     interrupted=true;suspended=crossedSuspension();
+     if(suspended)lastSuspension=wait.generation();
     }
     if(!live())return stop();
    }
@@ -161,6 +174,7 @@ export async function downloadLibrarySelection(p:{
     else if(checkpoint)return stop();
     else uncertainSingleTracks.add(track.id);
    }
+   if(row.confirmed)confirmed++;
    mark(i+1,null);
    completed.set(track.id,row);
    update(row.message);
@@ -168,5 +182,5 @@ export async function downloadLibrarySelection(p:{
   if(!live())return stop();
   update(rows.every(row=>row.confirmed)?'Selección descargada en este dispositivo.':'Descarga parcial: revisa las canciones pendientes.');
   return 'finished';
- }catch{return stop('No se pudo continuar con el almacenamiento actual.');}finally{wait.dispose();}
+ }catch{return live()?storagePause():stop();}finally{wait.dispose();}
 }

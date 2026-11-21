@@ -46,7 +46,7 @@ type Result={state:'audio';audio:BotDownloadedAudio}|{state:'known-failure';reas
 function candidateIdentity(row:BotSearchRow):readonly unknown[]{
  return row.kind==='option'?[row.kind,row.label]:row.kind==='audio'?[row.kind,row.title,row.performer,row.durationSeconds,row.mimeType,row.bytes]:[row.kind,row.text];
 }
-export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;providers:readonly OrderedProvider[];revision:number;target:BotSearchTarget;signal:AbortSignal;current:()=>boolean;networkCurrent:()=>boolean;remoteClock?:{settledAt:number};collection?:CollectionBotProgress;accept?:(audio:BotDownloadedAudio,rowKey:string)=>Promise<CandidateDisposition|'saved'>;excludedDigests?:ReadonlySet<string>;excludedRowKeys?:ReadonlySet<string>;progress:(provider:OrderedProvider,index:number,queryId:string|null)=>void}):Promise<Result> {
+export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;providers:readonly OrderedProvider[];revision:number;target:BotSearchTarget;signal:AbortSignal;current:()=>boolean;networkCurrent:()=>boolean;audioCurrent?:()=>boolean;suspended?:()=>boolean;remoteClock?:{settledAt:number};collection?:CollectionBotProgress;accept?:(audio:BotDownloadedAudio,rowKey:string)=>Promise<CandidateDisposition|'saved'>;excludedDigests?:ReadonlySet<string>;excludedRowKeys?:ReadonlySet<string>;progress:(provider:OrderedProvider,index:number,queryId:string|null)=>void}):Promise<Result> {
  const {client}=p,target={...p.target},network=p.networkCurrent,current=p.current,revision=p.revision,collection=p.collection;
  let deadline=Date.now()+SONG_SEARCH_MS;
  const seen=new Set<string>(),providers=p.providers.filter(provider=>{if(seen.has(provider.providerRef))return false;seen.add(provider.providerRef);return true;}).slice(0,5).map(provider=>({...provider}));
@@ -112,7 +112,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     await wait();
     if(p.accept){
      if(!await waitForLane()){
-      if(collection&&expired&&!channelDown(client.searchSnapshot()))break providersLoop;
+      if(collection&&expired&&!p.suspended?.()&&!channelDown(client.searchSnapshot()))break providersLoop;
       return {state:current()&&!p.signal.aborted?'unavailable':'stopped'};
      }
     }else if(!live())return {state:'uncertain'};
@@ -137,7 +137,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      if(!p.accept)return {state:'uncertain'};
      const ownReply=owned(found,provider.providerRef,queryId);
      if(collection){
-      if(channelDown(found,ownReply))return {state:'unavailable'};
+      if(p.suspended?.()||channelDown(found,ownReply))return {state:'unavailable'};
       if(!queryId&&(found.pending||found.cancelling))continue;
       if(!ownReply||found.error==='timeout'||found.error==='uncertain'||!found.error&&found.delivery==='uncertain'){
        collection.ambiguous.add(i);
@@ -168,14 +168,14 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     const hasAlternate=matches.some(candidate=>candidate.key!==selected.key);
     await wait();
     if(p.accept&&!await waitForLane()){
-     if(collection&&expired&&!channelDown(client.searchSnapshot()))break providersLoop;
+     if(collection&&expired&&!p.suspended?.()&&!channelDown(client.searchSnapshot()))break providersLoop;
      return {state:current()&&!p.signal.aborted?'unavailable':'stopped'};
     }
     const prior=client.searchSnapshot(),allowed=client.captureSearchActionCurrent();
     if(!live()||!same(prior,provider.providerRef,queryId)||prior.error||prior.delivery!=='acknowledged'||!prior.rows.some(r=>r.rowRef===selected.row.rowRef)||!allowed()){
      if(!p.accept)return {state:'uncertain'};
      if(collection){
-      if(channelDown(prior,owned(prior,provider.providerRef,queryId)))return {state:'unavailable'};
+      if(p.suspended?.()||channelDown(prior,owned(prior,provider.providerRef,queryId)))return {state:'unavailable'};
       // A manual search may replace the selected row. Get a fresh selection once.
       if(!same(prior,provider.providerRef,queryId)&&!selectionRetried&&live()){
        selectionRetried=true;continue;
@@ -189,8 +189,11 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     const downloading=client.downloadBot(selected.row.rowRef,allowed,admission=>{if(admission.queryId===queryId){admittedDownload=true;ownedCancel=admission.cancel;if(expired||p.signal.aborted)cancel();}});
     const audio=await downloading;ownedCancel=undefined;settled();
     const after=client.searchSnapshot();
-    if(collection&&channelDown(after,owned(after,provider.providerRef,queryId)))return {state:'unavailable'};
-    if(!admittedDownload||!live()||!same(after,provider.providerRef,queryId)){
+    // The admitted download already validates the worker reply against its
+    // query. For a collection, received bytes only need the captured authority.
+    const received=collection&&audio&&admittedDownload&&current()&&!p.signal.aborted&&p.audioCurrent?.();
+    if(!received&&collection&&(p.suspended?.()||channelDown(after,owned(after,provider.providerRef,queryId))))return {state:'unavailable'};
+    if(!received&&(!admittedDownload||!live()||!same(after,provider.providerRef,queryId))){
      if(!p.accept)return {state:'uncertain'};
      if(collection){
       if(!admittedDownload&&(after.pending||after.cancelling))continue;

@@ -20,12 +20,14 @@ function fixture(){
 
 test('only the matching account and actual new bundle can resume a checkpoint once',()=>{
  const f=fixture();
- f.old.save(account,action,target);
- assert.equal(f.old.take(account,'library'),null);
- assert.equal(f.next.take(other,'library'),null);
- assert.equal(f.next.take(account,'song'),null);
- assert.deepEqual(f.next.take(account,'library'),action);
- assert.equal(f.next.take(account,'library'),null);
+ for(const handoff of [action,{...action,automatic:true}]){
+  f.old.save(account,handoff,target);
+  assert.equal(f.old.take(account,'library'),null);
+  assert.equal(f.next.take(other,'library'),null);
+  assert.equal(f.next.take(account,'song'),null);
+  assert.deepEqual(f.next.take(account,'library'),handoff);
+  assert.equal(f.next.take(account,'library'),null);
+ }
 });
 
 test('expired and cancelled intents cannot start a download',()=>{

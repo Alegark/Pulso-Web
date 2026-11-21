@@ -31,7 +31,7 @@ const elapsed=start=>Math.round(performance.now()-start);
 const runStart=performance.now();
 const playlistName='Luces de noviembre';
 const startLabel='Descargar playlist completa';
-const resumeLabel='Continuar descarga';
+const resumeLabel='Continuar';
 const reviewButtons='[aria-label="Revisión de descarga"], .download-dock__storage, .download-dock__review, [role="dialog"], dialog[open]';
 
 const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
@@ -292,7 +292,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   await context.addInitScript(({startLabel,resumeLabel,reviewButtons})=>{
    const data=window.__playlistFull={activations:[],review:[],dialogs:[],imports:[],finishedAt:null,closedAt:null,audio:null};
    addEventListener('click',event=>{
-    const label=event.target.closest?.('button')?.getAttribute('aria-label');
+    const button=event.target.closest?.('button'),label=button?.getAttribute('aria-label')??button?.textContent;
     if(event.isTrusted&&[startLabel,resumeLabel].includes(label))data.activations.push(label);
    },true);
    for(const method of ['alert','confirm','prompt']){
@@ -311,13 +311,14 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     }
    };
    new MutationObserver(()=>{
-    if(!data.activations.length||data.closedAt!==null)return;
+    const dock=document.querySelector('[role="region"][aria-label="Descargas"], section[aria-label="Descargas"]');
+    data.started||=!!dock?.querySelector('progress');
+    if(!data.activations.length&&!data.started||data.closedAt!==null)return;
     for(const element of document.querySelectorAll(reviewButtons)){
      if(!element.getClientRects().length||getComputedStyle(element).visibility!=='visible')continue;
      const label=element.getAttribute('aria-label')??element.className;
      if(!data.review.includes(label))data.review.push(label);
     }
-    const dock=document.querySelector('[role="region"][aria-label="Descargas"], section[aria-label="Descargas"]');
     if(dock&&Array.from(document.querySelectorAll('[role="status"]')).some(status=>status.textContent.startsWith('Descarga finalizada ·')))data.finishedAt??=performance.now();
     if(data.finishedAt!==null&&!dock)data.closedAt??=performance.now();
    }).observe(document,{childList:true,subtree:true,characterData:true,attributes:true});
@@ -346,7 +347,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   const openDetails=()=>handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();});
   const downloadStart=performance.now();
   const initialLabel=oldCheckpoint?resumeLabel:startLabel;
-  await collection.getByRole('button',{name:initialLabel,exact:true}).tap();
+  await (oldCheckpoint?dock:collection).getByRole('button',{name:initialLabel,exact:true}).tap();
   const activationLog=[initialLabel];
   if(mode==='resume'){
    let waitTimer;
@@ -362,9 +363,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    assert.deepEqual(await page.evaluate(()=>window.__playlistFull.activations),[startLabel]);
    await page.reload();
    unblockRead();
-   await openPlaylist(page);
-   await collection.getByRole('button',{name:resumeLabel,exact:true}).tap();
-   activationLog.push(resumeLabel);
+   await page.locator('.shell-nav').waitFor();
   }
   const hasMissing=mode==='missing'||mode==='stale-checkpoint';
   const expectedSummary=hasMissing?'9 de 10 guardadas · 1 no existe':'30 de 30 guardadas';
@@ -384,7 +383,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    return {title:track.title,icon:expected?'✓':'⚠',reason:expected?null:'No existe en tus bots'};
   }));
   await checkNoReview();
-  assert.deepEqual(await page.evaluate(()=>window.__playlistFull.activations),activationLog.slice(-1));
+  assert.deepEqual(await page.evaluate(()=>window.__playlistFull.activations),mode==='resume'?[]:activationLog);
   assert.equal(await page.evaluate(()=>window.__playlistFull.audio.currentTime),0,'Download must not start playback');
   if(repetition===1&&(mode==='full'||mode==='missing'&&engine==='chromium'||mode==='stale-checkpoint')){
    await dock.screenshot({path:resolve(work.evidence,`${engine}-${mode}.png`)});

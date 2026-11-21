@@ -1,6 +1,6 @@
 import type {CatalogId} from './catalog-id';
 import type {AlbumRow,AlbumProgress} from './album-acquisition';
-export interface AlbumDownloadRun {scope:string;editionId:CatalogId;key:string;title:string;abort:AbortController}
+export interface AlbumDownloadRun {scope:string;editionId:CatalogId;key:string;title:string;abort:AbortController;stop?:()=>void}
 export interface AlbumCoordinator {
  running:boolean;uncertainTracks:Set<CatalogId>;remoteClock:{settledAt:number};
  rows:Map<CatalogId,{key:string;rows:AlbumRow[];message?:string}>;listeners:Set<()=>void>;

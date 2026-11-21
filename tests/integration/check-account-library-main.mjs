@@ -49,12 +49,17 @@ try{
   await a.evaluate(({user,selection})=>localStorage.setItem('pulso:library-download:v1:'+user,JSON.stringify(selection)),
    {user,selection:{id:id(69),trackIds:[id(11),id(12)],cursor:1,pending:null}});
   await a.reload();await a.locator('.shell-nav').waitFor();
-  const continueButton=a.getByRole('button',{name:'Continuar descarga',exact:true});
+  const continueButton=a.getByRole('button',{name:'Continuar',exact:true});
   const discardButton=a.getByRole('button',{name:'Descartar selección pendiente',exact:true});
-  assert.equal(await continueButton.count(),0);
+  await continueButton.waitFor();
+  for(const tab of ['Buscar','Inicio']){
+   await a.locator('.shell-nav').getByRole('button',{name:tab,exact:true}).click();
+   await continueButton.waitFor();
+  }
   await a.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();
   await a.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).click();
-  await a.locator('.library-detail').getByRole('button',{name:'Continuar descarga',exact:true}).waitFor();
+  await continueButton.waitFor();
+  assert.equal(await continueButton.count(),1);
   assert.equal(await discardButton.count(),0);
   assert.equal(await a.getByRole('button',{name:'Descargar playlist completa',exact:true}).count(),0);
   await a.getByRole('button',{name:'Volver a Biblioteca',exact:true}).click();
@@ -62,12 +67,12 @@ try{
   await a.getByRole('button',{name:'Gestionar descargas',exact:true}).click();
   const storage=a.getByRole('region',{name:'Almacenamiento',exact:true});
   await storage.getByRole('heading',{name:'Tus descargas',exact:true}).waitFor();
-  assert.equal(await storage.getByRole('button',{name:'Continuar descarga',exact:true}).count(),0);
+  assert.equal(await storage.getByRole('button',{name:'Continuar',exact:true}).count(),0);
   await discardButton.waitFor();
-  assert.equal(await a.locator('.download-dock').count(),0);
+  assert.equal(await a.locator('.download-dock').count(),1);
   assert.equal(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   assert.deepEqual(await a.evaluate(()=>window.__libraryCommands),{search:0,download:0});
-  report.cases.push({engine,test:'mobile shell offers resume in the playlist and discard in Almacenamiento',status:'PASS'});
+  report.cases.push({engine,test:'mobile shell offers one global resume and discard in Almacenamiento',status:'PASS'});
 
  }catch(e){report.cases.push({engine,status:'FAIL',error:String(e.stack||e)});}finally{for(const c of contexts)await c.close();await browser?.close();}}
 }finally{if(server)await new Promise(r=>server.close(r));report.cleanup=await work.cleanup();report.status=report.cases.some(c=>c.status==='FAIL')||report.errors.length||report.external.length?'FAIL':'PASS';await writeFile(resolve(work.evidence,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({report:resolve(work.evidence,'report.json'),...report},null,2));}

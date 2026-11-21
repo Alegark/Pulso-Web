@@ -3,7 +3,7 @@ export type NotificationSupport='ready'|'install-ios'|'unsupported';
 export interface NotificationHost {
  support:()=>NotificationSupport;permission:()=>NotificationPermission;
  request:()=>Promise<NotificationPermission>;
- registration:()=>Promise<{active:unknown;showNotification:(title:string,options:NotificationOptions)=>Promise<void>;getNotifications:()=>Promise<{tag:string;close:()=>void}[]>}|undefined>;
+ registration:()=>Promise<{active:unknown;showNotification:(title:string,options:NotificationOptions)=>Promise<void>;getNotifications:()=>Promise<{tag:string;data?:{account?:string;terminal?:boolean};silent?:boolean|null;close:()=>void}[]>}|undefined>;
  read:()=>boolean;write:(enabled:boolean)=>void;now:()=>number;
 }
 export function createDownloadNotifications(host:NotificationHost){
@@ -39,12 +39,24 @@ export function createDownloadNotifications(host:NotificationHost){
   }catch{if(token===epoch){error='No se pudieron guardar los avisos de descargas.';emit();}return false;}
  }
  function disable(){const token=++epoch;preferred=false;locallyDisabled=true;last.clear();error=null;try{host.write(false);locallyDisabled=false;}catch{error='Avisos desactivados por ahora. No se pudo guardar la preferencia.';}emit();void host.registration().then(async reg=>{for(const n of await reg?.getNotifications()??[])if(token===epoch&&n.tag.startsWith('pulso-download-'))n.close();}).catch(()=>{});}
- function dismiss(kind:DownloadNotificationKind,key:unknown){
+ function dismiss(kind:DownloadNotificationKind,key:unknown,current:()=>boolean=()=>true){
   if(last.get(kind)?.key!==key)return;
   last.delete(kind);const token=epoch;
-  work=work.catch(()=>{}).then(()=>host.registration()).then(async reg=>{for(const notification of await reg?.getNotifications()??[])if(token===epoch&&!last.has(kind)&&notification.tag===`pulso-download-${kind}`)notification.close();}).catch(()=>{});
+  work=work.catch(()=>{}).then(()=>host.registration()).then(async reg=>{for(const notification of await reg?.getNotifications()??[])if(token===epoch&&valid(current)&&!last.has(kind)&&notification.tag===`pulso-download-${kind}`)notification.close();}).catch(()=>{});
  }
- function notify(kind:DownloadNotificationKind,key:unknown,title:string,body:string,terminal=false,current:()=>boolean=()=>true,pause=false){
+ function clearProgress(kind:DownloadNotificationKind,account:string,current:()=>boolean){
+  if(host.support()!=='ready'||!valid(current)||last.has(kind))return;
+  const token=epoch;
+  work=work.catch(()=>{}).then(async()=>{
+   if(token!==epoch||!valid(current)||last.has(kind))return;
+   const reg=await host.registration();
+   for(const notification of await reg?.getNotifications()??[])
+    if(token===epoch&&valid(current)&&!last.has(kind)&&notification.tag===`pulso-download-${kind}`&&
+     (!notification.data?.account||notification.data.account===account)&&
+     (notification.data?.terminal===false||notification.silent===true))notification.close();
+  }).catch(()=>{});
+ }
+ function notify(kind:DownloadNotificationKind,key:unknown,title:string,body:string,terminal=false,current:()=>boolean=()=>true,pause=false,account?:string){
   if(!preferred||host.support()!=='ready'||host.permission()!=='granted'||!valid(current))return;
   const previous=last.get(kind),now=host.now();
   if(previous&&previous.key===key&&(previous.terminal||!terminal&&(previous.body===body||!pause&&now-previous.at<15000)))return;
@@ -52,11 +64,16 @@ export function createDownloadNotifications(host:NotificationHost){
   work=work.catch(()=>{}).then(async()=>{
    if(token!==epoch||!preferred||host.permission()!=='granted'||!valid(current)||last.get(kind)!==record)return;
    try{const reg=await host.registration();if(!reg?.active){if(token===epoch){worker='waiting';emit();}if(last.get(kind)===record)last.delete(kind);return;}if(token!==epoch||!preferred||host.permission()!=='granted'||!valid(current)||last.get(kind)!==record)return;
-    await reg.showNotification(title.slice(0,160),{body:body.slice(0,300),tag:`pulso-download-${kind}`,icon:'/icons/pulso-192.png',badge:'/icons/pulso-192.png',data:{kind:'pulso-download',version:1},silent:!terminal});
+    await reg.showNotification(title.slice(0,160),{body:body.slice(0,300),tag:`pulso-download-${kind}`,icon:'/icons/pulso-192.png',badge:'/icons/pulso-192.png',data:{kind:'pulso-download',version:1,...(account?{account,terminal}:{})},silent:!terminal});
    }catch{if(token!==epoch||last.get(kind)!==record)return;last.delete(kind);error='El navegador no pudo mostrar el aviso. Puedes seguir las descargas dentro de Pulso.';emit();}
   });
  }
- return {state,refresh,enable,disable,notify,dismiss,settled:()=>work,subscribe:(fn:()=>void)=>{listeners.add(fn);return()=>{listeners.delete(fn);};},test:()=>notify('test',{},'Pulso','Las notificaciones de descargas están listas.',true)};
+ function collectionOutcome(key:unknown,title:string,outcome:'finished'|'paused',saved:number,total:number,current:()=>boolean,account?:string){
+  const summary=`${saved} de ${total} guardadas`;
+  const detail=outcome==='paused'?' · abre Pulso para continuar':saved<total?` · ${total-saved} sin copia`:'';
+  notify('collection',key,title,summary+detail,true,current,false,account);
+ }
+ return {state,refresh,enable,disable,notify,dismiss,clearProgress,collectionOutcome,settled:()=>work,subscribe:(fn:()=>void)=>{listeners.add(fn);return()=>{listeners.delete(fn);};},test:()=>notify('test',{},'Pulso','Las notificaciones de descargas están listas.',true)};
 }
 const preference='pulso:download-notifications:v1';
 export const downloadNotifications=createDownloadNotifications({
