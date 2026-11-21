@@ -409,6 +409,39 @@ test('four slow restores get separate backoffs after a clock jump inside the wai
  }finally{abort.abort();wait.dispose();}
 });
 
+for(const pending of [false,true])test(`the reconnect wait ends after 60 s with ${pending?'an occupied lane':'persistent admission denial'}`,async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout'],now:0});
+ const calls:number[]=[];
+ const client={
+  snapshot:()=>({phase:'error',error:'network'}),
+  searchSnapshot:()=>({available:false,pending}),
+  reconnectForDownload:()=>{calls.push(Date.now());return false;},
+ } as unknown as TelegramSessionClient;
+ const abort=new AbortController(),wait=collectionTelegramWait(client,abort.signal,()=>!abort.signal.aborted,0,()=>{});
+ let outcome:Awaited<ReturnType<ReturnType<typeof wait.pauseForTrack>>>|undefined;
+ const task=wait.pauseForTrack()(()=>{},true,true).then(result=>{outcome=result;});
+ const tick=async(count:number)=>{
+  for(let i=0;i<count;i++){t.mock.timers.tick(250);await Promise.resolve();await Promise.resolve();}
+ };
+ try{
+  await tick(80);
+  t.mock.timers.setTime(95_000);t.mock.timers.tick(0);
+  await Promise.resolve();await Promise.resolve();
+  await tick(239);
+  const result=()=>outcome;
+  assert.equal(result(),undefined);
+  await tick(1);await Promise.resolve();
+  assert.equal(result()?.automatic,true);
+  assert.match(result()?.message??'',/Pulsa Continuar/);
+  if(pending)assert.deepEqual(calls,[]);
+  else{
+   assert.equal(calls[0],5000);
+   assert.equal(calls.find(at=>at>=95_000),100_000);
+   assert.equal(calls.at(-1),154_750);
+  }
+ }finally{abort.abort();await task;wait.dispose();}
+});
+
 function useCheckpointStorage(t:import('node:test').TestContext){
  const previous=Object.getOwnPropertyDescriptor(globalThis,'localStorage'),values=new Map<string,string>();
  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{

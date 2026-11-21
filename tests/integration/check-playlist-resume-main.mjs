@@ -56,7 +56,7 @@ const testSearchBot=TelegramSessionClient.prototype.searchBot;
 const backgroundModes=['background-alive','cold-resume','stop-reload','two-tabs','wake-restore','paused-hidden','hidden-rejection','orphan-idle'];
 const channelModes=['long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop',...backgroundModes];
 const fallbackModes=['bot-timeout','bot-unsupported','manual-lane'];
-const updateModes=['update-resume','update-offline','update-startup','update-single','update-album','update-timeout','update-stopped','update-attempted','update-auto','update-auto-busy','update-priority-album','update-priority-song'];
+const updateModes=['update-resume','update-offline','update-startup','update-single','update-album','update-timeout','update-stopped','update-attempted','update-auto','update-auto-busy','update-priority-album','update-priority-song','update-album-cancelled','update-album-other-edition'];
 const allModes=[...updateModes,...channelModes,...fallbackModes,'autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
 const modes=process.env.PLAYLIST_RESUME_MODE?process.env.PLAYLIST_RESUME_MODE.split(','):allModes;
 assert.ok(modes.every(mode=>allModes.includes(mode)),'Unknown playlist resume test case');
@@ -120,7 +120,9 @@ try{
   report[engine]=browser.version();
   try{for(const mode of modes){
    const updating=updateModes.includes(mode),albumMode=mode==='album'||mode==='update-album',singleMode=mode==='single'||mode==='update-single';
-   const priority=mode==='update-priority-album'||mode==='update-priority-song';
+   const abandonedAlbum=mode==='update-album-cancelled'||mode==='update-album-other-edition';
+   const albumHandoff=mode==='update-priority-album'||abandonedAlbum;
+   const priority=albumHandoff||mode==='update-priority-song';
    const autoUpdate=mode==='update-auto'||mode==='update-auto-busy';
    const updateDownload=['update-resume','update-single','update-album','update-auto'].includes(mode);
    const deferUpdate=mode==='update-timeout'||mode==='update-stopped';
@@ -138,14 +140,27 @@ try{
    try{
     await context.route('**/*',async route=>{
      const url=new URL(route.request().url());
-     if((albumMode||mode==='update-priority-album')&&url.origin==='https://itunes.apple.com'){
+     if((albumMode||albumHandoff)&&url.origin==='https://itunes.apple.com'){
       const album={wrapperType:'collection',collectionType:'Album',collectionId:201,collectionName:'Álbum de prueba',
        artistName:'Artista prueba',trackCount:2};
       const tracks=[3,4].map((n,index)=>({wrapperType:'track',kind:'song',collectionId:201,trackId:300+n,
        discNumber:1,discCount:1,trackNumber:index+1,trackCount:2,trackName:`Pista ${n}`,artistName:'Artista prueba',trackTimeMillis:2000}));
       const results=url.pathname==='/lookup'?[album,...tracks]:[album];
-      if(mode==='update-priority-album'&&url.pathname==='/lookup'){gateProbes++;await searchGate;}
+      if(albumHandoff&&url.pathname==='/lookup'){
+       gateProbes++;await searchGate;
+       if(mode==='update-album-other-edition')return route.fulfill({status:502,headers:{'access-control-allow-origin':'*'},json:{}});
+      }
       return route.fulfill({headers:{'access-control-allow-origin':'*'},json:{resultCount:results.length,results}});
+     }
+     if(mode==='update-album-other-edition'&&url.origin===origin){
+      if(url.pathname==='/catalog-config.json')return route.fulfill({json:{version:1,itunes:false,musicbrainz:true,artwork:false}});
+      if(url.pathname.startsWith('/catalog/musicbrainz/')){
+       const credit=[{name:'Artista prueba',joinphrase:'',artist:{id:uuid(211)}}];
+       const edition={id:uuid(201),title:'Álbum de prueba','artist-credit':credit,media:[{position:1,'track-count':1,
+        tracks:[{position:1,title:'Pista del respaldo',length:2000,'artist-credit':credit,recording:{id:uuid(212)}}]}]};
+       if(url.pathname.endsWith('/search'))return route.fulfill({json:{releases:[edition]}});
+       if(url.pathname.endsWith('/release'))return route.fulfill({json:edition});
+      }
      }
      if(updating&&url.origin==='https://itunes.apple.com')return route.fulfill({headers:{'access-control-allow-origin':'*'},json:{resultCount:0,results:[]}});
      if((albumMode||updating)&&url.origin==='https://lrclib.net')return route.fulfill({headers:{'access-control-allow-origin':'*'},json:[]});
@@ -237,7 +252,7 @@ try{
       });
       dockNotice.observe(document,{childList:true,characterData:true,subtree:true});
      }
-     if(mode==='update-resume'||mode==='update-single'||mode.startsWith('update-auto')||mode.startsWith('update-priority')||channel){
+     if(mode==='update-resume'||mode==='update-single'||mode.startsWith('update-auto')||mode.startsWith('update-priority')||mode.startsWith('update-album-')||channel){
       const play=HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play=function(...args){
        sessionStorage.setItem('testonly-plays',String(1+Number(sessionStorage.getItem('testonly-plays'))));
@@ -440,18 +455,18 @@ try{
     }
     let fallbackDelayMs;
     if(autoUpdate||priority){
-     const previousId=await page.evaluate(({user,ids,priority,bundle,mode})=>{
+     const previousId=await page.evaluate(({user,ids,priority,bundle,albumHandoff})=>{
       const key='pulso:library-download:v1:'+user,checkpoint=JSON.parse(localStorage.getItem(key));
       Object.assign(checkpoint,priority?{trackIds:[ids[2]],cursor:0,saved:0}:{saved:2,autoAttempts:1},{autoResume:true,title:'Playlist pendiente'});
       localStorage.setItem(key,JSON.stringify(checkpoint));
       if(priority){
        sessionStorage.setItem('testonly-hold-tracks','1');
-       const action=mode==='update-priority-album'?{kind:'album',editionId:201,title:'Álbum de prueba',artist:'Artista prueba'}:
+       const action=albumHandoff?{kind:'album',editionId:201,title:'Álbum de prueba',artist:'Artista prueba'}:
         {kind:'song',choice:{id:'local:'+ids[3],source:'local',title:'Pista 4',artist:'Artista prueba',album:null,duration:2}};
        sessionStorage.setItem('pulso-shell:download-intent:v1',JSON.stringify({account:user,bundle,expires:Date.now()+90000,action}));
       }
       return checkpoint.id;
-     },{user,ids,priority,mode,bundle:previous.html.match(/src="(\/assets\/[^"]+\.js)"/)[1]});
+     },{user,ids,priority,albumHandoff,bundle:previous.html.match(/src="(\/assets\/[^"]+\.js)"/)[1]});
      autoPointerAt=pointerChecks+2;
      await page.reload({waitUntil:'commit'});
      await waitForWorker(()=>gateProbes>0);
@@ -461,9 +476,22 @@ try{
       await dock.getByText('Descarga pendiente · 0 de 1 guardadas',{exact:true}).waitFor();
       await page.waitForTimeout(400);
       assert.equal(await page.evaluate(account=>JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)).id,user),previousId);
-      if(mode==='update-priority-album')assert.equal(trace.length,0);
+      if(albumHandoff)assert.equal(trace.length,0);
       else assert.deepEqual(trace.filter(e=>e.kind==='search').map(e=>e.title),['Pista 4']);
+      if(mode==='update-album-cancelled'){
+       await page.locator('.shell-nav').getByRole('button',{name:'Inicio',exact:true}).click();
+       await page.locator('.album-page').waitFor({state:'hidden'});
+      }
       releaseSearch();
+      if(abandonedAlbum){
+       if(mode==='update-album-other-edition')await page.locator('.album-tracks').getByText('Pista del respaldo',{exact:true}).waitFor();
+       await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+       await handle.getByText('1 de 1 guardadas',{exact:true}).waitFor();
+       assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.title),['Pista 3','Pista 3']);
+       assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),0);
+       assert.equal(await page.evaluate(account=>localStorage.getItem('pulso:library-download:v1:'+account),user),null);
+       report.cases.push({engine,mode,status:'PASS'});continue;
+      }
       if(mode==='update-priority-album')await page.locator('.album-tracks li').filter({hasText:'Pista 4'}).getByText('Descargada',{exact:false}).waitFor();
       else await page.getByText('Copia guardada. Pulsa Reproducir para escucharla.',{exact:false}).first().waitFor();
       assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),0);

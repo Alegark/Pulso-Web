@@ -82,11 +82,13 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
      reset();if(waitingForFlood)retryAt=Date.now();
      wasOffline=false;waitingForFlood=false;
     }
-    // Even an unavailable channel can still own a pending operation.
-    if(remote.pending||remote.cancelling){await sleepUntilWake(250);continue;}
     if(disruptions>RECONNECT_DELAYS.length)return pause('Telegram sigue sin responder. Pulsa Continuar para volver a intentarlo.',true);
     const ready=remote.available&&(!session||session.phase==='connected');
-    if(ready&&!renew&&Date.now()>=retryAt)return null;
+    const inUse=remote.pending||remote.cancelling;
+    if(!inUse&&ready&&!renew&&Date.now()>=retryAt)return null;
+    if(Date.now()-idleSince>=60_000)return networkPause();
+    // Give the previous operation its lane until it settles or the wait expires.
+    if(inUse){await sleepUntilWake(250);continue;}
     report('Reconectando con Telegram…');
     if((renew&&ready||session?.phase==='error')&&client.reconnectForDownload){
      if(attempts===RECONNECT_DELAYS.length)return networkPause();
@@ -95,7 +97,7 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
        attempts++;renew=false;restoring=true;
       }
      }
-    }else if(Date.now()-idleSince>=60_000)return networkPause();
+    }
     await sleepUntilWake(250);
    }
    return null;

@@ -55,7 +55,12 @@ export function AlbumPageController(props:Props){
  React.useLayoutEffect(()=>{latest.current=props;committed.current=renderToken;return()=>{if(committed.current===renderToken)committed.current=null;};});
  const active=()=>mounted.current&&committed.current===renderToken&&props.visible;
  const stop=()=>{op.current?.abort();};
- React.useEffect(()=>()=>{metadata.current?.abort();},[props.scope,props.client,props.revision,props.visible]);
+ const resumed=React.useRef(false);
+ const cancelResume=()=>{
+  if(!props.resumeDownload||resumed.current)return;
+  resumed.current=true;props.resumeDownload();
+ };
+ React.useEffect(()=>()=>{metadata.current?.abort();cancelResume();},[props.scope,props.client,props.revision,props.visible]);
  React.useEffect(()=>{
   if(!props.visible)return;
   const identity=metadataIdentity(props);
@@ -111,7 +116,6 @@ export function AlbumPageController(props:Props){
   void task.finally(()=>{if(!abort.signal.aborted&&mounted.current){finishedInspection.current=detail;setInspecting(false);}});
   return()=>abort.abort();
  },[detail,props.scope,props.visible,props.metadataOnly,props.selectedKey,inspectionRevision]);
- const resumed=React.useRef(false);
  async function addAlbum(){
   if(!active()||flight.current||props.coordinator.running||inspecting||!detail)return;
   const metadataOperation=metadata.current;
@@ -138,8 +142,9 @@ export function AlbumPageController(props:Props){
   }}).finally(()=>{unsubscribe?.();if(coordinator.active===run){const confirmed=(coordinator.rows.get(snapshot.edition.id)?.rows??[]).filter(row=>row.confirmed).length;downloadNotifications.notify('album',run,run.title,confirmed===snapshot.tracks.length?'Álbum guardado.':`Descarga detenida: ${confirmed} de ${snapshot.tracks.length} canciones guardadas.`,true,()=>attempt.current()&&(!coordinator.active||coordinator.active===run)&&(!boundSession||boundSession()));coordinator.active=undefined;coordinator.running=false;notifyAlbumDownload(coordinator);}if(flight.current===identity){op.current=null;flight.current=null;if(mounted.current){setBusy(false);inspectedEdition.current=null;bumpInspection();}}});
  }
  React.useEffect(()=>{
-  if(props.resumeDownload&&retryTarget!==undefined)props.resumeDownload();
-  if(!props.resumeDownload||resumed.current||!detail||finishedInspection.current!==detail||detail.edition.id!==props.editionId||inspecting||!active()||props.coordinator.running)return;
+  if(!props.resumeDownload||resumed.current)return;
+  if(!props.visible||retryTarget!==undefined||detail&&detail.edition.id!==props.editionId){cancelResume();return;}
+  if(!detail||finishedInspection.current!==detail||inspecting||!active()||props.coordinator.running)return;
   resumed.current=true;
   void addAlbum().finally(props.resumeDownload);
  });

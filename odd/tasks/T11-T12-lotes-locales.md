@@ -660,3 +660,11 @@ Al despertar, el reloj de reconexión vuelve a empezar sin consumir intentos. Ca
 La ventana plegada conserva y anuncia el motivo de una pausa, incluso tras una recarga. «Continuar» explica cuando falta control o se debe reabrir Almacenamiento. Un traspaso de canción o álbum conserva prioridad desde que se consume su intención hasta que se resuelve su admisión. Una ocupación transitoria permite volver a intentar el arranque automático. La pestaña propietaria limpia avisos huérfanos marcados como progreso aunque arranque sin checkpoint.
 
 Pasaron tipos, lint, 854/854 unitarias, 73/73 de servidor, 10/10 de Python, build y Wrangler dry-run. Chromium y WebKit pasaron 38/38 recorridos focales (19 por motor), 18/18 complementarios y 38/38 de Biblioteca de cuenta. El head previo `8289b726` reprodujo los seis defectos cubiertos por las pruebas de navegador en cada motor y falló 6 de las 9 unitarias focales, que pasaron 9/9 con la corrección. La suspensión, reconexión y avisos con iPhone físico y Telegram real siguen pendientes.
+
+#### Correcciones tras la segunda revisión de la PR #15
+
+El límite de 60 segundos de inactividad se aplica también cuando Telegram deniega la admisión de forma persistente o el carril sigue ocupado. Una suspensión reinicia ese plazo. Una restauración admitida conserva su propio plazo y los escalones de reintento.
+
+La reserva de un traspaso de álbum se libera si se abandona su vista, se cancela la carga, hay un fallo de catálogo o el respaldo resuelve una edición distinta. La edición de respaldo queda disponible para una acción manual. Una playlist pendiente puede retomarse al siguiente despertar.
+
+Validación local con Telegram sintético. Tipos de app y tests, lint, 856/856 unitarias, 73/73 de servidor, 10/10 de Python, build y Wrangler dry-run pasaron. La matriz pasó 83/84 en la corrida conjunta y 84/84 contando la repetición aislada de `update-resume` tras un timeout al abrir el fixture de Chromium. En `e0e8789a` fallaron las dos unitarias nuevas y los cuatro recorridos nuevos de navegador (dos por motor). Siguen pendientes la suspensión real y la aceptación de Telegram y avisos en iPhone físico.
