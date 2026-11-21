@@ -44,6 +44,14 @@ export function createDownloadIntentStore(session:Pick<Storage,'getItem'|'setIte
   session.setItem(key,raw);
   return ()=>{try{if(session.getItem(key)===raw)session.removeItem(key);}catch{/* The intent expires on its own. */}};
  }
+ function discard(account:string,target:UpdateTarget){
+  try{
+   const raw=session.getItem(key);
+   if(!raw||raw.length>200_000)return;
+   const item=JSON.parse(raw);
+   if(item?.account===account&&item.bundle===target.bundle)session.removeItem(key);
+  }catch{/* Storage can be unavailable. */}
+ }
  function read(account:string){
   try{
    const raw=session.getItem(key);
@@ -61,10 +69,10 @@ export function createDownloadIntentStore(session:Pick<Storage,'getItem'|'setIte
   try{session.removeItem(key);return action as Extract<DownloadAction,{kind:K}>;}
   catch{return null;}
  }
- return {save,read,take};
+ return {save,discard,read,take};
 }
 
-type BeforeDownload=(current:()=>boolean,remember:(target:UpdateTarget)=>()=>void)=>Promise<boolean>;
+type BeforeDownload=(current:()=>boolean,remember:(target:UpdateTarget)=>()=>void,discard:(target:UpdateTarget)=>void)=>Promise<boolean>;
 let host:{beforeDownload:BeforeDownload;store:ReturnType<typeof createDownloadIntentStore>}|undefined;
 export function installDownloadUpdates(beforeDownload:BeforeDownload,bundle:string){
  host={beforeDownload,store:createDownloadIntentStore({
@@ -76,7 +84,7 @@ export async function downloadWithCurrentApp(account:string|undefined,action:Dow
  if(!host)return true;
  if(!account)return false;
  const {beforeDownload,store}=host;
- return await beforeDownload(current,target=>store.save(account,action,target))&&current();
+ return await beforeDownload(current,target=>store.save(account,action,target),target=>store.discard(account,target))&&current();
 }
 export function pendingDownloadAfterUpdate(account:string|undefined){
  return account?host?.store.read(account):null;

@@ -56,7 +56,7 @@ function readPosition():Point|null{
  return null;
 }
 
-export function DownloadDock({message,review,onReviewStorage}:{message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
+export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUpdate}:{updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
  const {running,active,notice}=useAlbumDownloadState();
  const [finished,setFinished]=useState<{notice:NonNullable<AlbumCoordinator['notice']>;stopped:boolean}|null>(null);
  const [transient,setTransient]=useState('');
@@ -68,7 +68,8 @@ export function DownloadDock({message,review,onReviewStorage}:{message?:{text:st
  const ignoreClick=useRef(false);
  const opener=useRef<HTMLElement|null>(null);
  const panelId=useId(),hintId=useId();
- const reviewing=!!review&&!running;
+ const updateMessage=updateWait==='updating'?'Actualizando Pulso antes de descargar…':updateWait==='checking'?'Comprobando la versión antes de descargar…':null;
+ const reviewing=!!review&&!running&&!updateMessage;
  const showingDetails=reviewing||expanded;
 
  useLayoutEffect(()=>{
@@ -118,7 +119,7 @@ export function DownloadDock({message,review,onReviewStorage}:{message?:{text:st
   }
  },[reviewing]);
 
- const visible=running||!!finished||!!transient||reviewing;
+ const visible=!!updateMessage||running||!!finished||!!transient||reviewing;
  const currentNotice=running?notice:finished?.notice;
  const rows=currentNotice?.progress.rows??[];
  const {saved,total}=downloadCounts(currentNotice);
@@ -204,11 +205,11 @@ export function DownloadDock({message,review,onReviewStorage}:{message?:{text:st
  },[visible]);
 
  return createPortal(<>
-  <div className="pulso-visually-hidden" role="status">{transient||(running?`Descargando · ${summary}`:finished?`${finished.stopped?'Descarga detenida':'Descarga finalizada'} · ${summary}`:'')}</div>
+  <div className="pulso-visually-hidden" role="status">{updateMessage||transient||(running?`Descargando · ${summary}`:finished?`${finished.stopped?'Descarga detenida':'Descarga finalizada'} · ${summary}`:'')}</div>
   {visible&&<div ref={bounds} className="download-dock-area">
    <section ref={card} className="download-dock" aria-label={reviewing?'Revisión de descarga':'Descargas'} tabIndex={-1}
     data-positioned={!!position} data-expanded={showingDetails}>
-    {reviewing?review:currentNotice||running?<><button ref={handle} type="button" className="download-dock__handle"
+    {updateMessage?<p className="download-dock__message">{updateMessage}</p>:reviewing?review:currentNotice||running?<><button ref={handle} type="button" className="download-dock__handle"
      aria-expanded={expanded} aria-controls={expanded?panelId:undefined} aria-describedby={hintId}
      aria-label={running?`${expanded?'Plegar':'Ver'} descargas · ${saved} de ${total} guardadas`:undefined}
      onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={endPointer} onPointerCancel={endPointer} onLostPointerCapture={endPointer}
@@ -235,8 +236,11 @@ export function DownloadDock({message,review,onReviewStorage}:{message?:{text:st
        <button type="button" className="download-dock__storage" onClick={()=>{setFinished(null);onReviewStorage();}}>Revisar en Almacenamiento</button>}
      </div>}
      {!expanded&&(transient||currentNotice?.progress.waiting&&progressMessage)&&<p className="download-dock__message" role="status">{transient||progressMessage}</p>}
-     {expanded&&running&&active&&<div className="download-dock__footer"><button type="button" onClick={()=>{if(albumCoordinator.active===active)active.abort.abort();}}>Detener</button></div>}
     </>:<p className="download-dock__message">{transient}</p>}
+    {(updateMessage||!reviewing&&expanded&&running&&active)&&<div className="download-dock__footer"><button type="button" onClick={()=>{
+     if(updateMessage)onStopUpdate?.();
+     else if(active&&albumCoordinator.active===active)active.abort.abort();
+    }}>Detener</button></div>}
    </section>
   </div>}
  </>,document.body);

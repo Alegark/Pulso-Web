@@ -21,7 +21,7 @@ export interface CollectionDownloadAction {
  disabled:boolean;
 }
 
-export function LibraryDownloadController(props:{collection?:CollectionDownloadAction;storageTarget?:HTMLElement|null;accountId?:string;captureLifetime?:()=>()=>boolean;onReviewStorage?:()=>void;onReviewed?:(operationId?:string)=>void;tracks:readonly Track[];client:TelegramSessionClient|null;bots:BotsSnapshot|null;connected:boolean;connectionPhase?:'initializing'|'connected'|'disconnected'|'blocked';capture?:()=>SongPlaybackAttempt|null;capturePlay?:()=>SongPlaybackAttempt|null;captureBatch?:(recoverPending?:boolean)=>SongPlaybackAttempt|null}){
+export function LibraryDownloadController(props:{updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;collection?:CollectionDownloadAction;storageTarget?:HTMLElement|null;accountId?:string;captureLifetime?:()=>()=>boolean;onReviewStorage?:()=>void;onReviewed?:(operationId?:string)=>void;tracks:readonly Track[];client:TelegramSessionClient|null;bots:BotsSnapshot|null;connected:boolean;connectionPhase?:'initializing'|'connected'|'disconnected'|'blocked';capture?:()=>SongPlaybackAttempt|null;capturePlay?:()=>SongPlaybackAttempt|null;captureBatch?:(recoverPending?:boolean)=>SongPlaybackAttempt|null}){
  const download=useAlbumDownloadState();
  const latest=useRef(props);latest.current=props;
  const flight=useRef<AbortController|null>(null);
@@ -282,7 +282,7 @@ export function LibraryDownloadController(props:{collection?:CollectionDownloadA
    <button type="button" onClick={()=>{checking.current?.abort();setReview(null);}}>Cerrar revisión</button>
  </div>;
  return <>
-  <DownloadDock key={props.accountId} message={notice} review={reviewContent} onReviewStorage={props.onReviewStorage}/>
+  <DownloadDock key={props.accountId} updateWait={props.updateWait} onStopUpdate={props.onStopUpdate} message={notice} review={reviewContent} onReviewStorage={props.onReviewStorage}/>
   {collection?.target&&createPortal(<CollectionDownloadButton label={pending?'Continuar descarga':collection.label}
    disabled={!!waiting.current||(!pending&&(collection.disabled||!collection.request.trackIds.length))}
    complete={!pending&&collection.complete} onStart={()=>{

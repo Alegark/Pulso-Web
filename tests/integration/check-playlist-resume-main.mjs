@@ -26,7 +26,8 @@ const readyCopies=[1,2].map(n=>{
 });
 const fixture=(release='old')=>({name:'playlist-resume-sdk-test',enforce:'pre',resolveId(id){if(id==='./temporary-sdk')return resolve('tests/integration/playlist-resume-sdk.ts');},
  transform(code,id){
-  if(id.endsWith('/src/main.tsx'))return code+`
+  if(id.endsWith('/src/main.tsx'))return code.replace('prepare:async manual=>{',
+   'prepare:async manual=>{if (document.documentElement.dataset.testUpdateBlocked === "true") return false;')+`
 document.documentElement.dataset.testBuild=${JSON.stringify(release)};`;
   if(id.endsWith('/telegram/session-client.ts')){
    return code+`
@@ -47,7 +48,7 @@ const testSearchBot=TelegramSessionClient.prototype.searchBot;
  }});
 const channelModes=['long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop'];
 const fallbackModes=['bot-timeout','bot-unsupported','manual-lane'];
-const updateModes=['update-resume','update-offline','update-startup','update-single','update-album'];
+const updateModes=['update-resume','update-offline','update-startup','update-single','update-album','update-timeout','update-stopped','update-attempted'];
 const allModes=[...updateModes,...channelModes,...fallbackModes,'autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
 const modes=process.env.PLAYLIST_RESUME_MODE?process.env.PLAYLIST_RESUME_MODE.split(','):allModes;
 assert.ok(modes.every(mode=>allModes.includes(mode)),'Unknown playlist resume test case');
@@ -112,6 +113,8 @@ try{
   try{for(const mode of modes){
    const updating=updateModes.includes(mode),albumMode=mode==='album'||mode==='update-album',singleMode=mode==='single'||mode==='update-single';
    const updateDownload=['update-resume','update-single','update-album'].includes(mode);
+   const deferUpdate=mode==='update-timeout'||mode==='update-stopped';
+   const updateFallback=mode==='update-timeout'||mode==='update-attempted';
    const fresh=albumMode||singleMode||['autoheal','missing','missing-metadata'].includes(mode);
    const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
    const trace=[];let floodAt=0,restores=0;const channel=channelModes.includes(mode),fallback=fallbackModes.includes(mode);
@@ -385,6 +388,7 @@ try{
      report.cases.push({engine,mode,status:'PASS'});
      continue;
     }
+    let fallbackDelayMs;
     if(!fresh){
      holdRestore=true;
      await page.reload();
@@ -405,9 +409,38 @@ try{
        playsBefore=await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays')));
        assert.ok(playsBefore>0);
       }
-      pointer=mode==='update-resume'?'new':'offline';
+      if(deferUpdate)await page.evaluate(()=>{document.documentElement.dataset.testUpdateBlocked='true';});
+      if(mode==='update-attempted')await page.evaluate(({entry,bundle,user})=>{
+       sessionStorage.setItem('pulso-shell:automatic-attempt:'+entry,'1');
+       sessionStorage.setItem('pulso-shell:download-intent:v1',JSON.stringify({account:user,bundle,expires:Date.now()+90000,
+        action:{kind:'library',request:{id:crypto.randomUUID(),trackIds:['00000001-1111-4111-8111-111111111111'],title:'Intento anterior',play:false}}}));
+      },{entry:next.entry,bundle:next.html.match(/src="(\/assets\/[^"]+\.js)"/)[1],user});
+      pointer=mode==='update-offline'?'offline':'new';
      }
+     const clickedAt=Date.now();
      await header.getByRole('button',{name:'Continuar descarga',exact:true}).click();
+     if(deferUpdate){
+      await dock.getByText('Actualizando Pulso antes de descargar…',{exact:true}).waitFor();
+      assert.equal(trace.length,0);
+     }
+     if(mode==='update-stopped'){
+      await dock.getByRole('button',{name:'Detener',exact:true}).click();
+      await dock.getByText('Actualizando Pulso antes de descargar…',{exact:true}).waitFor({state:'detached'});
+      await new Promise(resolve=>setTimeout(resolve,Math.max(0,clickedAt+10500-Date.now())));
+      assert.equal(trace.length,0);
+      assert.deepEqual(navigations,['/testonly-seed','/','/']);
+      assert.equal(await page.evaluate(()=>sessionStorage.getItem('pulso-shell:download-intent:v1')),null);
+      report.cases.push({engine,mode,status:'PASS'});
+      continue;
+     }
+     if(updateFallback){
+      await page.waitForFunction(()=>window.testUpdateNotices.includes('No se pudo actualizar ahora. Descargando con esta versión.'));
+      await waitForWorker(()=>trace.some(event=>event.kind==='search'));
+      fallbackDelayMs=trace.find(event=>event.kind==='search').at-clickedAt;
+      if(deferUpdate)assert.ok(fallbackDelayMs>=9500&&fallbackDelayMs<14000,`fallback after ${fallbackDelayMs} ms`);
+      else assert.ok(fallbackDelayMs<9500,`attempted release took ${fallbackDelayMs} ms`);
+      assert.equal(await page.evaluate(()=>sessionStorage.getItem('pulso-shell:download-intent:v1')),null);
+     }
      if(mode==='update-resume'){
       await page.waitForURL(origin+next.entry);
       assert.equal(await page.evaluate(()=>sessionStorage.getItem('testonly-update-notice')),'shown');
@@ -609,7 +642,7 @@ try{
       await page.getByText('Versión en ejecución: '+next.id.slice(0,8),{exact:true}).waitFor();
      }
     }
-    report.cases.push({engine,mode,searches:searches.map(e=>e.title),linked,status:'PASS'});
+    report.cases.push({engine,mode,searches:searches.map(e=>e.title),linked,fallbackDelayMs,status:'PASS'});
    }catch(error){releaseStartupProbe();report.cases.push({engine,mode,status:'FAIL',error:String(error.stack??error),trace:trace.map(({kind,title,workerAt})=>({kind,title,workerAt})),dock:await page?.locator('.download-dock').textContent({timeout:500}).catch(()=>null),outcomes:await page?.evaluate(()=>window.__TESTONLY_outcomes).catch(()=>[]),notices:await page?.evaluate(()=>window.testUpdateNotices).catch(()=>[])});}
    finally{
     const result=report.cases.at(-1);

@@ -37,3 +37,13 @@ test('expired and cancelled intents cannot start a download',()=>{
  clear();
  assert.equal(f.next.take(account,'library'),null);
 });
+
+test('discard removes only the handoff for the failed account and target bundle',()=>{
+ const f=fixture();
+ f.old.save(account,action,target);
+ f.old.discard(other,target);
+ f.old.discard(account,{...target,bundle:'/assets/different.js'});
+ assert.deepEqual(f.next.read(account),action);
+ f.old.discard(account,target);
+ assert.equal(f.next.take(account,'library'),null);
+});
