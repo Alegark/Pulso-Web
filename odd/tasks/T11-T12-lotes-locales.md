@@ -742,3 +742,21 @@ La colección vuelve a buscar en el mismo bot una sola vez si una operación man
 Contra `d3334cb` fallaron los dos casos unitarios del callback tardío y la variante de búsqueda manual ya liquidada en ambos motores. Con la corrección pasaron los cuatro. En Chromium y WebKit, la variante vuelve al bot 101. Se conserva la evidencia del benchmark anterior porque la ruta de transferencia de bytes permanece igual. Siguen pendientes iPhone físico, Telegram real y publicación tras revisión.
 
 Validación del candidato corregido. Tipos de app y tests, lint, 872 unitarias, 73 de servidor, 10 de Python de servidor, build y Wrangler dry-run pasaron. La matriz enfocada pasó 86/86, 43 en Chromium y 43 en WebKit.
+
+### Descargas de canciones más rápidas publicadas · 2026-11-22
+
+Cloudflare Workers Free, USD 0, sirve [v56](https://pulso-web.pruebassoftware.workers.dev/releases/a6a68cf5ce5f4fc7.html) desde `f68f36f637ca4af8ef9eefaa5a5d31f6e2c34f81`, sobre v55. El MCP oficial confirmó la versión `8d074ab6-2184-4cb8-8305-aa2e250f9b5a` al 100 % en el despliegue `e4676450-4f86-43e6-b199-c0cf8f62ce64` a las `2026-11-22T10:15:31.118Z`. Coincidieron los bytes y el SHA-256 del Worker, los 13 bindings, los límites y la configuración de ejecución. Se conservaron Turnstile y los secretos. El freeze retuvo 9 publicaciones anteriores y el inventario heredado, sin retirar rutas. Cloudflare solicitó 13 archivos. [PR #16](https://github.com/Alegark/Pulso-Web/pull/16), apilada sobre #15.
+
+En el benchmark sintético ya registrado, con MP3 de 8 MiB y 200 ms por RPC, el tiempo medio por canción bajó entre un 26 % y un 75 % frente a v55.
+
+Pasaron 872 pruebas unitarias, 73 de servidor, 10 de Python, tipos de app y pruebas, lint, build, simulación de Wrangler y 86/86 casos enfocados con Telegram sintético, 43 en Chromium y 43 en WebKit.
+
+HTTPS confirmó `latest.json`, el HTTP 307 a la ruta sin `.html`, el HTTP 200 y el meta `pulso-release` con valor `a6a68cf5ce5f4fc7`. Coincidieron bytes y SHA-256 en 277/277 rutas estáticas públicas, incluido `sw.js`. Las 50 entradas históricas, incluidas v55, v54 y v53, sirvieron el bundle actual con cabeceras de navegación. Se conservaron `turnstileSiteKey` y `challenges.cloudflare.com` en la CSP. Perfil y biblioteca anónimos devolvieron HTTP 401.
+
+El manifiesto autoritativo de 280 archivos y 64962 bytes se promovió a `.local/test-evidence/faster-downloads-release/site-manifest.json`, SHA-256 `f0087b3147053882f5ca4b5bfba07503bbf3c6017d12b53e484f08720d7bec14`, con fecha MCP `2026-11-22T10:15:31.118Z`. Los recibos compactos quedan en el mismo directorio. P0-W sigue abierto.
+
+- Medir latencia y memoria en iPhone físico con Telegram real.
+- Verificar OPFS en WebKit. WPE no pudo abrir un escritor OPFS y el benchmark usó IndexedDB.
+- Evaluar updates MTProto como señal para despertar, solapar la importación con la búsqueda de la siguiente canción, revisar `inactivityTimeout` y reutilizar el import worker.
+- Investigar las regresiones de Chromium desde `ac89e5a` en `artwork`, `artwork-containers`, `opfs` y `library`.
+- Resolver los fallos del entorno WPE en la batería general.
