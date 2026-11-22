@@ -40,7 +40,16 @@ document.documentElement.dataset.testBuild=${JSON.stringify(release)};window.tes
    return code+`
 const testSearchBot=TelegramSessionClient.prototype.searchBot;
     TelegramSessionClient.prototype.searchBot=function(...args){
-     window.testSessionClient=this;
+     if(window.testStartManualLane&&args[0].target?.title==='Pista 3'){
+      window.testStartManualLane=false;
+      // Admit the competing search synchronously at settlement. The product
+      // no longer waits a second before admitting the selected download.
+      const stop=this.subscribeSearch(state=>{
+       if(state.expectedTarget?.title!=='Pista 3'||state.pending||!state.rows.length)return;
+       stop();
+       testSearchBot.call(this,{providerRef:this.botsSnapshot().providers[0].providerRef,query:'Consulta manual',consent:true});
+      });
+     }
      return testSearchBot.apply(this,args);
     };
 `;
@@ -236,6 +245,7 @@ try{
      return route.fulfill({json:cloud});
     });
     await context.addInitScript(({loseAck,channel,fallback,mode,user,updating})=>{
+     if(mode==='manual-lane')window.testStartManualLane=true;
      let hidden=false,offset=-500;
      if(mode!=='missing'&&mode!=='paused-hidden')window.testDockTime=45000;
      if(updating){
@@ -603,14 +613,6 @@ try{
      releaseSearch();
     }
     if(mode==='manual-lane'){
-     await page.waitForFunction(()=>{
-      const client=window.testSessionClient,state=client?.searchSnapshot();
-      return state?.expectedTarget?.title==='Pista 3'&&!state.pending&&state.rows.length>0;
-     });
-     await page.evaluate(()=>{
-      const client=window.testSessionClient;
-      client.searchBot({providerRef:client.botsSnapshot().providers[0].providerRef,query:'Consulta manual',consent:true});
-     });
      await waitForWorker(()=>trace.some(event=>event.title==='Consulta manual'));
      await advance(4000);
      assert.equal(trace.filter(event=>event.title==='Pista 3').length,1);

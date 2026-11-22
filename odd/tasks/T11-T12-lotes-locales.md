@@ -686,3 +686,28 @@ El manifiesto autoritativo de 271 archivos y 62304 bytes se promovió con fecha 
 - Regresión de Chromium desde `ac89e5a` en `artwork`, `artwork-containers`, `opfs` y `library`.
 - Fallos del entorno WPE de WebKit en la batería general.
 - Riesgo residual menor. Si cambia el cliente de Telegram o la revisión de bots mientras un álbum traspasado por la actualización carga sus metadatos, Pulso libera el traspaso y el usuario tiene que volver a pulsar el álbum.
+
+### Menor latencia por canción · 2026-11-22
+
+La v55 pedía cada parte por separado, esperaba un segundo antes de descargar y sondeaba el bot cada segundo. La importación actualizaba el journal por cada 64 KiB y volvía a leer los bytes de copias IDB al refrescar la biblioteca.
+
+Pulso mantiene hasta cuatro partes de 512 KiB en vuelo y entrega los bytes ordenados al Blob y al hash. Si falla o se cancela una parte, el carril espera las llamadas despachadas y aplica la cuarentena si vence el plazo de liquidación. La descarga sucede inmediatamente tras la búsqueda. Se conserva el espaciado entre búsquedas. El sondeo usa 250, 250, 400, 700 y luego 1000 ms, con topes de 19 y 63 lecturas y los plazos de comando anteriores. El worker reutiliza la resolución por sesión, referencia y revisión, y valida la identidad en cada comando y la huella del documento tras recibirlo.
+
+El journal confirma cada MiB en OPFS y cada lote de 512 KiB en IDB. Pulso reabre la generación y verifica su SHA-256 antes de publicarla. Al actualizar la biblioteca se reutiliza la disponibilidad de las generaciones conocidas. Las nuevas comprobaciones de presencia IDB cuentan claves sin leer los fragmentos. Diagnóstico de sesión conserva hasta 50 intentos en RAM, sin contenido ni identificadores.
+
+**Benchmark de loopback.** `PLAYLIST_FULL_MODE=benchmark INSTABOX_HEADLESS=1 node tests/integration/check-playlist-full-download-main.mjs`. Para la base, usar el código de producción de `7632d3b` con el mismo runner, `playlist-full-download-sdk.ts` y `playlist-benchmark-audio.mjs`. Playlist de dos MP3 distintos de 8.388.372 bytes, 200 ms por RPC, menú y callback con el mismo retardo sintético. Media en segundos por canción desde el inicio hasta confirmación en la ventana, con SHA verificado después en ambos assets.
+
+| Motor | Almacenamiento observado | Bot | v55 | Candidato |
+|---|---|---:|---:|---:|
+| Chromium 154 | OPFS | 400 ms | 17,308 | 8,300 |
+| Chromium 154 | OPFS | 1.200 ms | 14,250 | 9,552 |
+| Chromium 154 | IDB forzado | 400 ms | 20,346 | 7,550 |
+| Chromium 154 | IDB forzado | 1.200 ms | 21,250 | 9,440 |
+| WebKit 27.2 | IDB automático | 400 ms | 25,744 | 6,041 |
+| WebKit 27.2 | IDB automático | 1.200 ms | 21,455 | 8,498 |
+| WebKit 27.2 | IDB forzado | 400 ms | 19,450 | 6,450 |
+| WebKit 27.2 | IDB forzado | 1.200 ms | 22,690 | 7,903 |
+
+El entorno WPE no abrió un escritor OPFS. Los tiempos incluyen la variación del entorno de escritorio y no acreditan latencia ni memoria en iPhone. Pasaron tipos de app y tests, lint, 863 unitarias, 73 de servidor, 10 de Python, build y Wrangler dry-run. Pasaron las tres pruebas focales de almacenamiento en cada motor, con OPFS e IDB en Chromium y con IDB en WebKit. En la batería general Chromium dio 10/16 frente a 8/16 de la base y WebKit 4/16 en ambas. Los seis grupos fallidos de Chromium en el candidato también fallaron en la base. WebKit falló en los mismos doce grupos.
+
+**Pendientes.** Aceptación de latencia y memoria en iPhone físico y con Telegram real. Evaluar updates MTProto como señal, solapar la importación con la búsqueda siguiente, revisar `inactivityTimeout` y reutilizar el import worker. Publicación en Cloudflare tras revisión. P0-W continúa abierto.

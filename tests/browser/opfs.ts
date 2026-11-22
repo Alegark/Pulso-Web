@@ -12,13 +12,21 @@ function wav(seed:number,pcmBytes=196608){const data=new Uint8Array(pcmBytes+44)
 async function rejects(fn:()=>Promise<unknown>){try{await fn();return false;}catch{return true;}}
 async function missing(key:string){try{await(await assetDirectory()).getFileHandle(key);return false;}catch(e){return e instanceof DOMException&&e.name==='NotFoundError';}}
 let originalAsset:LocalAsset;let originalTrack:Track;
-await check('progreso agrupado y descarte tras un corte entre checkpoints',async()=>{
- for(const backend of ['idb','opfs'] as const){
-  const file=wav(51,1536*1024),operationId=crypto.randomUUID(),written:number[]=[];
+const downloadBackends:('idb'|'opfs')[]=['idb'];
+try{
+ const root=await navigator.storage.getDirectory(),key=crypto.randomUUID();
+ try{
+  const writer=await(await root.getFileHandle(key,{create:true})).createWritable();
+  await writer.close();downloadBackends.push('opfs');
+ }finally{await root.removeEntry(key).catch(()=>{});}
+}catch{/* This engine cannot open a native OPFS writer. IDB remains under test. */}
+await check(`progreso agrupado y descarte tras un corte entre checkpoints (${downloadBackends.join(', ')})`,async()=>{
+ for(const backend of downloadBackends){
+  const file=wav(51,1536*1024),operationId=crypto.randomUUID(),checkpoints:number[]=[];
   const put=IDBObjectStore.prototype.put;
   IDBObjectStore.prototype.put=function(...args:Parameters<IDBObjectStore['put']>){
    const job=args[0] as ImportOperation;
-   if(this.name==='jobs'&&job.state==='writing'&&job.operationId===operationId)written.push(job.bytes);
+   if(this.name==='jobs'&&job.state==='writing'&&job.operationId===operationId)checkpoints.push(job.bytes);
    return put.apply(this,args);
   };
   let outcome;
@@ -29,7 +37,7 @@ await check('progreso agrupado y descarte tras un corte entre checkpoints',async
   }finally{IDBObjectStore.prototype.put=put;}
   const job=await importOperation(operationId);
   const checkpoint=(backend==='idb'?512:1024)*1024;
-  assert(written.join()===`0,${checkpoint}`,'progreso por trozo o falsa confirmación');
+  assert(checkpoints.join()===String(checkpoint),'progreso por trozo o falsa confirmación');
   assert(outcome.kind==='failed'&&job?.state==='uncertain'&&job.bytes===checkpoint&&!job.asset,'staging incoherente');
   assert(await rejects(()=>recoverImportOperation(operationId,job.revision,'resume')),'publicó bytes parciales');
   if(backend==='idb')assert(await readRecord('chunks',[job.storageKey,7]),'primer lote no era durable');
@@ -53,19 +61,19 @@ await check('presencia en IDB usa solo claves y distingue copias ausentes',async
   IDBObjectStore.prototype.get=get;IDBObjectStore.prototype.count=count;await writeRecord('assets',asset.id,asset);
  }
 });
-await check('SHA esperado se contrasta con la generación persistida antes de publicar',async()=>{
- for(const backend of ['idb','opfs'] as const){
+await check(`SHA esperado se contrasta con la generación persistida antes de publicar (${downloadBackends.join(', ')})`,async()=>{
+ for(const backend of downloadBackends){
   const file=wav(53,1024*1024),operationId=crypto.randomUUID();
   const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer())),b=>b.toString(16).padStart(2,'0')).join('');
-  const put=IDBObjectStore.prototype.put,write=FileSystemWritableFileStream.prototype.write;
+  const put=IDBObjectStore.prototype.put,write=globalThis.FileSystemWritableFileStream?.prototype.write;
   const corrupt=(input:Uint8Array)=>{const copy=input.slice();copy[100]^=1;return copy;};
   if(backend==='idb')IDBObjectStore.prototype.put=function(...args:Parameters<IDBObjectStore['put']>){
    if(this.name==='chunks')args[0]=corrupt(args[0]);return put.apply(this,args);
   };
-  else FileSystemWritableFileStream.prototype.write=function(data){return write.call(this,corrupt(data as Uint8Array));};
+  else FileSystemWritableFileStream.prototype.write=function(data){return write!.call(this,corrupt(data as Uint8Array));};
   let outcome;
   try{outcome=await importFileDetailed(file,signal(),()=>{},{backend,operationId,expected:{sha256:digest,title:'Sintético',artist:null}});}
-  finally{IDBObjectStore.prototype.put=put;FileSystemWritableFileStream.prototype.write=write;}
+  finally{IDBObjectStore.prototype.put=put;if(write)FileSystemWritableFileStream.prototype.write=write;}
   assert(outcome.kind==='failed'&&outcome.outcome.primary?.code==='digest-mismatch','aceptó bytes alterados tras la escritura');
   const job=await importOperation(operationId);assert(job?.asset&&!job.result,'staging ausente o publicado');
   assert(await rejects(()=>recoverImportOperation(operationId,job.revision,'resume')),'recuperación publicó bytes alterados');
