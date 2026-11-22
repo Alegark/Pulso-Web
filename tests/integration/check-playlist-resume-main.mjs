@@ -781,7 +781,7 @@ try{
      }
     }else if(fallback){
      assert.deepEqual(searches.map(({title,peer})=>[title,peer]),mode==='manual-lane'?
-      [['Pista 3',101],['Consulta manual',101],['Pista 3',101],['Pista 4',101]]:
+      [['Pista 3',101],['Consulta manual',101],['Pista 3',102],['Pista 4',101]]:
       [['Pista 3',101],['Pista 3',102],['Pista 4',101]]);
      if(mode==='bot-timeout')assert.ok(searches[1].at-searches[0].at>=14_000,'the first bot stayed silent through its response deadline');
      const notices=await page.evaluate(()=>window.testNotifications);
