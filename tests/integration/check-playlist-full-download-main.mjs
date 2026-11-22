@@ -653,7 +653,7 @@ async function checkTurnaround(browser,engine,origin,scenario){
    if(!baseline){
     assert.equal(songs[0].candidatesDownloaded,compound?1:3);
     assert.equal(songs[0].winningBotSlot,compound?0:1);
-    assert.equal(songs[0].rejections['import-tag-mismatch']??0,compound?0:2);
+    assert.deepEqual(songs[0].rejections,compound?{}:{'import-tag-mismatch':2});
     assert.ok(samplesMs[0]<15000,'The reserve must allow the backup to run promptly');
    }
   }else if(scenario==='muted'){

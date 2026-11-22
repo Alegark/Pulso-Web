@@ -281,7 +281,9 @@ test('callback waits beyond four reads for the first audio',async()=>{
 for(const expired of [false,true])test(expired?'retained menu expires at the original TTL':'same menu accepts a second option without a new search',async()=>{
  let now=1000,clicks=0;
  const time:BotProvidersClock={now:()=>now,setTimeout:(fn,ms)=>setTimeout(()=>{if(ms<=1000)now+=ms;fn();},ms<=1000?1:ms),clearTimeout:timer=>clearTimeout(timer)};
- const original=msg(),menu={...original,replyMarkup:{...original.replyMarkup,rows:[...original.replyMarkup!.rows,...structuredClone(original.replyMarkup!.rows)]}};
+ const original=msg();
+ assert.ok('replyMarkup' in original&&original.replyMarkup);
+ const markup=original.replyMarkup,menu={...original,replyMarkup:{...markup,rows:[...markup.rows,...structuredClone(markup.rows)]}};
  const wrong={...doc(),id:new Long(88,3),attributes:[{_:'documentAttributeAudio',duration:80,title:target.title,performer:target.artist}]};
  const first={...msg(wrong),id:13},second={...msg(doc()),id:14};
  const s=await setup(true,(r,v)=>{
