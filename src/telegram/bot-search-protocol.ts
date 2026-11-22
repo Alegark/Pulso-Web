@@ -143,6 +143,15 @@ export function botAudioMismatchFields(row:Extract<BotSearchRow,{kind:'audio'}>,
  return fields;
 }
 
+const optionNumber=/^\s*(?:#\d{1,3}\s+|\d{1,3}\s*[.)]\s*)/u;
+const optionDuration=/\s*(?:\((\d{1,2}):([0-5]\d)\)|\[(\d{1,2}):([0-5]\d)\])\s*$/u;
+const matchesOptionLabel=(label:string,target:BotSearchTarget,artist:string)=>label.split(/\s+[–—−-]\s+/u).some((_,i,parts)=>{
+ if(i>=parts.length-1)return false;
+ const left=parts.slice(0,i+1).join(' - '),right=parts.slice(i+1).join(' - ');
+ return recordingTitleCandidate(left,target.title,target.album,target.durationSeconds)&&musicIdentityText(right)===artist||
+  musicIdentityText(left)===artist&&recordingTitleCandidate(right,target.title,target.album,target.durationSeconds);
+ });
+
 /** Rank compatible recordings, then keep the bot's order for an equal score.
  * Only presentation decoration is ignored; title, performer and version words
  * still have to match. Raw callback data never contributes to the score. */
@@ -159,17 +168,11 @@ export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTa
    return delta<=tolerance?(fileCheck?3000:4000)-Math.round(delta*100)+correlation:0;
   }
   if(row.kind!=='option')return 0;
-  const matches=(label:string)=>label.split(/\s+[–—−-]\s+/u).some((_,i,parts)=>{
-   if(i>=parts.length-1)return false;
-   const left=parts.slice(0,i+1).join(' - '),right=parts.slice(i+1).join(' - ');
-   return recordingTitleCandidate(left,target.title,target.album,target.durationSeconds)&&musicIdentityText(right)===artist||
-    musicIdentityText(left)===artist&&recordingTitleCandidate(right,target.title,target.album,target.durationSeconds);
-  });
-  if(matches(row.label))return 2000+correlation;
+  if(matchesOptionLabel(row.label,target,artist))return 2000+correlation;
   // Numbered results and an optional displayed duration are formatting only.
   // Do not strip live/remix/cover/version text or words from the performer.
-  const clean=row.label.replace(/^\s*(?:#\d{1,3}\s+|\d{1,3}\s*[.)]\s*)/u,'').replace(/\s*[[(]\d{1,2}:[0-5]\d[)\]]\s*$/u,'');
-  return matches(clean)?1900+correlation:0;
+  const clean=row.label.replace(optionNumber,'').replace(/\s*[[(]\d{1,2}:[0-5]\d[)\]]\s*$/u,'');
+  return matchesOptionLabel(clean,target,artist)?1900+correlation:0;
  };
  return rows.map((row,index)=>({row,index,score:score(row)})).filter(v=>v.score>0)
   .sort((a,b)=>b.score-a.score||a.index-b.index).map(v=>v.row);
@@ -177,7 +180,10 @@ export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTa
 
 /** A displayed duration can disqualify a button. Audio identity is checked independently. */
 export function botOptionDurationMismatch(row:BotSearchRow,target:BotSearchTarget):boolean {
- if(row.kind!=='option'||!target.durationSeconds)return false;
- const duration=/(?:\((\d{1,2}):([0-5]\d)\)|\[(\d{1,2}):([0-5]\d)\])\s*$/u.exec(row.label);
- return !!duration&&Math.abs(60*Number(duration[1]??duration[3])+Number(duration[2]??duration[4])-target.durationSeconds)>7;
+ if(row.kind!=='option'||!target.durationSeconds||!target.artist)return false;
+ const duration=optionDuration.exec(row.label);
+ if(!duration||Math.abs(60*Number(duration[1]??duration[3])+Number(duration[2]??duration[4])-target.durationSeconds)<=7)return false;
+ const artist=musicIdentityText(target.artist),label=row.label.replace(optionNumber,'');
+ return !matchesOptionLabel(row.label,target,artist)&&!matchesOptionLabel(label,target,artist)&&
+  matchesOptionLabel(label.replace(optionDuration,''),target,artist);
 }

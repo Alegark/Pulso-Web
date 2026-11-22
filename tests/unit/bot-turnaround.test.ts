@@ -114,6 +114,7 @@ test('one closed song record adds every bot, option and transfer while the dock 
 
 test('a stalled transfer cannot spend the backup bot’s reserved time',async t=>{
  t.mock.timers.enable({apis:['setTimeout','Date'],now:1000});
+ t.mock.method(performance,'now',()=>Date.now());
  const searched:string[]=[];
  const audio:BotDownloadedAudio={blob:new Blob([]),sha256:'b'.repeat(64),target,bytes:100,mime:'audio/wav'};
  const row:BotSearchRow={kind:'audio',rowRef:'audio',correlation:'reply',title:target.title,performer:target.artist,
@@ -145,4 +146,130 @@ test('a stalled transfer cannot spend the backup bot’s reserved time',async t=
  t.mock.timers.tick(1);
  assert.equal((await result).state,'audio');
  assert.deepEqual(searched,providers.map(p=>p.providerRef));
+});
+
+test('a clock-shaped suffix in the title or performer is part of the button identity',()=>{
+ for(const [title,artist] of [['Train (12:30)','Own Artist'],['Train','Own Artist [12:30]']]){
+  const wanted={...target,title,artist,durationSeconds:210};
+  const label=title.endsWith(')')?`${artist} - ${title}`:`${title} - ${artist}`;
+  const row={...option('a'),label} as BotSearchRow;
+  assert.equal(matchingSongRows([row],wanted).length,1);
+  assert.equal(botOptionDurationMismatch(row,wanted),false);
+  assert.equal(botOptionDurationMismatch({...row,label:label+' (10:00)'} as BotSearchRow,wanted),true);
+ }
+});
+
+function scriptedAcquisition(wanted=target){
+ let state:BotSearchSnapshot={binding:null,scopeKey:'review',providerRef:null,providerRevision:1,expectedTarget:wanted,
+  pending:false,cancelling:false,available:true,retryBlocked:false,retryAt:null,delivery:'acknowledged',expiresAt:null,
+  queryId:null,error:null,providerNotice:null,rows:[]};
+ const listeners=new Set<(value:BotSearchSnapshot)=>void>(),searches:string[]=[],statuses:string[]=[],downloads:string[]=[];
+ const update=(patch:Partial<BotSearchSnapshot>)=>{
+  state={...state,...patch};
+  for(const listener of listeners)listener(state);
+ };
+ const session=createDiagnosticSession();session.setEnabled(true);
+ const measurement=beginSongAggregate(session)!;
+ const fixture={
+  searches,statuses,downloads,update,session,measurement,
+  onSearch:(_first:boolean,_cancel:()=>void)=>{},
+  onDownload:async(_ref:string,_admit:(cancel?:()=>void)=>void,_budget?:number):Promise<BotDownloadedAudio|null>=>null,
+ };
+ const client={
+  botsSnapshot:()=>({revision:1,scopeKey:'review'}),searchSnapshot:()=>state,captureSearchActionCurrent:()=>()=>true,
+  subscribeSearch(fn:(value:BotSearchSnapshot)=>void){listeners.add(fn);return()=>{listeners.delete(fn);};},
+  searchBot({providerRef}:{providerRef:string},_allowed:unknown,admit:(v:BotSearchAdmission)=>void){
+   searches.push(providerRef);
+   const queryId=String(searches.length);
+   update({providerRef,queryId,pending:false,error:null,delivery:'acknowledged',rows:[],expiresAt:Date.now()+120000});
+   const cancel=()=>update({error:'cancelled',pending:false});
+   admit({queryId,cancel});fixture.onSearch(providerRef===providers[0].providerRef,cancel);
+  },
+  downloadBot(ref:string,_allowed:unknown,admit:(v:BotSearchAdmission)=>void,_timing:unknown,budget?:number){
+   downloads.push(ref);
+   return fixture.onDownload(ref,cancel=>admit({queryId:state.queryId!,cancel:cancel??(()=>{})}),budget);
+  },
+ } as unknown as TelegramSessionClient;
+ return {...fixture, hooks:fixture, params:{client,providers,revision:1,target:wanted,signal:new AbortController().signal,
+  current:()=>true,networkCurrent:()=>true,progress:()=>{},status:(message:string)=>statuses.push(message),measurement}};
+}
+
+for(const phase of ['búsqueda','descarga'])test(`a reserved bot timeout during ${phase} leaves an empty album result unavailable`,async t=>{
+ t.mock.timers.enable({apis:['setTimeout','Date'],now:1000});
+ t.mock.method(performance,'now',()=>Date.now());
+ const f=scriptedAcquisition();
+ f.hooks.onSearch=first=>{if(first)f.update(phase==='búsqueda'?{pending:true}:{rows:[option('a')]});};
+ f.hooks.onDownload=async(_ref,admit)=>new Promise(resolve=>{
+  admit(()=>{f.update({pending:false,error:'cancelled'});resolve(null);});
+ });
+ const result=acquireFromOrderedBots({...f.params,accept:async()=> 'saved'});
+ await new Promise(resolve=>setImmediate(resolve));
+ t.mock.timers.tick(150000);
+ assert.deepEqual(await result,{state:'unavailable'});
+ assert.deepEqual(f.searches,providers.map(p=>p.providerRef));
+});
+
+for(const collection of [false,true])test(`timer expiry survives a wall-clock rollback in ${collection?'a collection':'an interactive search'}`,async t=>{
+ t.mock.timers.enable({apis:['setTimeout','Date'],now:1000});
+ let monotonic=1000;
+ t.mock.method(performance,'now',()=>monotonic);
+ const f=scriptedAcquisition();
+ f.hooks.onSearch=first=>{if(first)f.update({pending:true});};
+ const setTime=Date.now;
+ let offset=0;
+ t.mock.method(Date,'now',()=>setTime()-offset);
+ const health=sessionBotHealth(f.params.client,'review');
+ if(collection){
+  health.observe(providers[0].providerRef,15000,'timeout');
+  health.observe(providers[1].providerRef,250,'success');
+ }
+ const initial=f.hooks.onSearch;
+ f.hooks.onSearch=(first,cancel)=>{initial(first,cancel);if(first)offset=1;};
+ const result=acquireFromOrderedBots({...f.params,...(collection?{accept:async()=> 'saved' as const,
+  collection:{completed:new Set<number>(),ambiguous:new Set<number>(),responded:false,reasons:[]}}:{})});
+ await new Promise(resolve=>setImmediate(resolve));
+ monotonic+=149999;t.mock.timers.tick(150000);
+ await result;
+ f.measurement.finish();
+ assert.deepEqual(f.searches,providers.map(p=>p.providerRef));
+ assert.deepEqual({...f.session.getSnapshot().songs[0].rejections},{timeout:1,'no-compatible-row':1});
+ if(collection)assert.equal(health.order(providers)[0],providers[1]);
+});
+
+test('an exhausted album callback budget advances without sending a fresh search to that bot',async t=>{
+ let now=0;t.mock.method(performance,'now',()=>now);
+ const f=scriptedAcquisition();
+ f.hooks.onSearch=first=>{if(first)f.update({rows:[option('a'),option('b')]});};
+ f.hooks.onDownload=async(_ref,admit,budget)=>{
+  admit();assert.equal(budget,65000);now+=budget!;
+  f.update({error:'timeout',rows:[]});return null;
+ };
+ await acquireFromOrderedBots({...f.params,accept:async()=> 'saved'});
+ assert.deepEqual(f.searches,providers.map(p=>p.providerRef));
+});
+
+test('when duration rejects every compatible button, report only duration',async()=>{
+ const f=scriptedAcquisition();
+ f.hooks.onSearch=()=>f.update({rows:[option('a',' (10:00)')]});
+ const result=await acquireFromOrderedBots({...f.params,providers:providers.slice(0,1),accept:async()=> 'saved'});
+ assert.deepEqual(result,{state:'known-failure',reasons:['returned-audio-mismatch','audio-duration-mismatch']});
+ assert.deepEqual(f.downloads,[]);
+});
+
+test('a metadata rejection is shown for the next callback only',async()=>{
+ const f=scriptedAcquisition();
+ f.hooks.onSearch=()=>f.update({rows:[option('a'),option('b'),option('c')]});
+ f.hooks.onDownload=async(ref,admit)=>{
+  admit();
+  f.update({rows:[option('b'),option('c')].filter(row=>row.rowRef!==ref)});
+  return {blob:new Blob(),sha256:'c'.repeat(64),target,bytes:100,mime:'audio/wav'};
+ };
+ let attempts=0;
+ const result=await acquireFromOrderedBots({...f.params,providers:providers.slice(0,1),
+  accept:async()=>++attempts===1?'import-tag-mismatch':attempts===2?'retry':'saved'});
+ assert.equal(result.state,'audio');
+ assert.deepEqual(f.downloads,['a','b','c']);
+ assert.deepEqual(f.statuses.filter(s=>s.includes('prepara')),[
+  'El bot prepara el archivo…','La opción no coincide (metadatos) · probando otra… El bot prepara el archivo…','El bot prepara el archivo…',
+ ]);
 });

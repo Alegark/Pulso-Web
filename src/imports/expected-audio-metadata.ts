@@ -17,6 +17,7 @@ export function verifiedCompoundAudioTitle(title:string|undefined,expected:Omit<
  if(!title||!expected.artist||expected.durationSeconds===undefined||expectedAudioDurationMismatch(expected,actual)||
   expected.recordingTitle!==undefined&&normalized(expected.recordingTitle)!==normalized(expected.title))return false;
  const parts=title.split(/\s+[–—-]\s+/u),song=normalized(expected.title),artist=normalized(expected.artist);
+ if(!song||!artist)return false;
  return parts.slice(0,-1).some((_,i)=>{
   const left=normalized(parts.slice(0,i+1).join(' - ')),right=normalized(parts.slice(i+1).join(' - '));
   return left===artist&&right===song||left===song&&right===artist;

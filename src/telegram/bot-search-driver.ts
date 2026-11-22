@@ -125,13 +125,13 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    const rpc=async(fn:(ms:number)=>Promise<unknown>,count=true)=>{check();try{const v=await fn(Math.max(1,deadline-time.now()));check();if(count)budget(v);check();return v;}catch(error){
     if(error===f.cause)throw error;const cause=observe(error);if(!f.cause)f.cause=cause;throw f.cause;
    }};
-   const poll=async(read:number,history:(ms:number)=>Promise<unknown>,immediate=false)=>{
-    pollStart??=performance.now();if(!immediate)await sleepPoll(read);
+   const poll=async(read:number,history:(ms:number)=>Promise<unknown>,immediate=false,maxDelay=Infinity)=>{
+    pollStart??=performance.now();if(!immediate)await sleepPoll(Math.min(botPollDelay(read),maxDelay));
     metrics[c.type==='bot-search.search'?'searchReads':'callbackReads']++;return rpc(history);
    };
-   const sleepPoll=async(read:number)=>{
+   const sleepPoll=async(ms:number)=>{
     check();
-    await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},botPollDelay(read));});
+    await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},ms);});
     check();
    };
    const work=Promise.resolve().then(async():Promise<BotSearchReply>=>{
@@ -182,18 +182,19 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        for(let read=0;;read++){
         check();
         const nearDeadline=deadline-time.now()<=botPollDelay(read);
-        if(read>=B.downloadReads||read>=graceEnd||read>0&&nearDeadline){
+        const graceRemaining=graceEnd-time.now();
+        if(read>=B.downloadReads||graceRemaining<=0||read>0&&nearDeadline){
          if(!unmatched)throw fail(rejectedFile??'timeout');
          const expiresAt=time.now()+B.resultTtlMs;
          if(!reuseMenu){retained=unmatched.refs;retainedUntil=expiresAt;retainedSearch={...previous,baseline};}
          return {...e,type:'bot-search.result',delivery:'acknowledged',rows:unmatched.rows.filter(row=>row.kind==='audio'),expiresAt,expectedTarget:c.target};
         }
-        const raw=await poll(read,ms=>dependency.readHistory(approved.peer,Math.min(baseline,selection.messageId-1),20,abort.signal,ms),nearDeadline);
+        const raw=await poll(read,ms=>dependency.readHistory(approved.peer,Math.min(baseline,selection.messageId-1),20,abort.signal,ms),nearDeadline,graceRemaining);
         const page=projectBotCallbackPage(raw,approved.botId,baseline,previous.outgoing,selection.messageId,selectedDocumentId,c.target);if(page.concurrent)throw fail('uncertain');
         const audio=page.rows.filter(row=>row.kind==='audio'),compatible=matchingSongRows(audio,c.target);
         const selectedAudio=compatible.find(row=>!downloadedDocuments.has(page.refs.get(row.rowRef)?.documentId??''));
         rejectedFile??=page.rejectedFile??(compatible.length&&!selectedAudio?'file-invalid':undefined);
-        if(rejectedFile||audio.length)graceEnd=Math.min(graceEnd,read+5);
+        if((rejectedFile||audio.length)&&graceEnd===Infinity)graceEnd=time.now()+4500;
         if(audio.length){
          // Correlation may be recent. Fresh exact-peer window plus ONE compatible
          // recording permits continuation; equal matches keep the ranked first one.

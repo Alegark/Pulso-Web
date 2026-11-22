@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {expectedAudioTagMismatch as mismatch} from '../../src/imports/expected-audio-metadata';
+import {expectedAudioTagMismatch as mismatch,verifiedCompoundAudioTitle} from '../../src/imports/expected-audio-metadata';
 const expected={title:'Own song (Live)',artist:'Own Artist'};
 test('one catalogue performer matches a complete member of declared file collaborators',()=>{
  for(const separator of [';','/','\u0000',','])for(const artist of ['Own Artist'+separator+'Guest','Guest'+separator+'Own Artist'])assert.equal(mismatch({title:'Own song (Live)',artist},expected),null);
@@ -38,3 +38,16 @@ for(const [format,mime,fixture] of [['MP3','audio/mpeg',taggedMp3],['M4A','audio
    assert.equal(mismatch(file.common,{...expected,artist:'Own Artist feat. Guest',durationSeconds:file.format.duration},file.format.duration),'title');
   }
  });
+
+test('compound titles require nonempty identities and preserve internal hyphens and versions',()=>{
+ const wanted={title:'Train - Part II',artist:'A - B',durationSeconds:210};
+ for(const title of ['A - B — Train - Part II','Train - Part II – A - B'])
+  assert.equal(mismatch({title,artist:'Uploader'},wanted,210),null);
+ for(const title of ['Other song - Train - Part II','A - B — Train - Part II (Live)'])
+  assert.equal(mismatch({title,artist:'Uploader'},wanted,210),'title');
+ for(const artist of ['!!!',null]){
+  const title='Train - Part II - ???';
+  assert.equal(verifiedCompoundAudioTitle(title,{...wanted,artist},210),false);
+  if(artist)assert.notEqual(mismatch({title,artist:'Uploader'},{...wanted,artist},210),null);
+ }
+});

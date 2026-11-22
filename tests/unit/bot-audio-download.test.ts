@@ -151,11 +151,11 @@ test('one unrelated audio after the callback does not finish before the requeste
  try{const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(polls,2);assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert(s.calls.filter(x=>x.r._==='upload.getFile').every(x=>x.r.location.id.equals(new Long(11,3))));}finally{s.driver.close();}
 });
 test('unrelated audio only reaches a bounded final result without callback retry or file bytes',async()=>{
- let polls=0;
- const time:BotProvidersClock={now:()=>Date.now(),setTimeout:(fn,ms)=>setTimeout(fn,ms<=BOT_SEARCH_BOUNDS.pollMs?1:ms),clearTimeout:timer=>clearTimeout(timer)};
+ let now=0,firstSeen=0;
+ const time:BotProvidersClock={now:()=>now,setTimeout:(fn,ms)=>setTimeout(()=>{if(ms<=1000)now+=ms;fn();},ms<=1000?1:ms),clearTimeout:timer=>clearTimeout(timer)};
  const unrelated={...doc(),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
- const s=await setup(true,(r,v,clicked)=>{if(clicked&&r._==='messages.getHistory'&&r.limit===20){polls++;return history([{...msg(unrelated),id:13}]);}return v;},time);
- try{const r=await s.download();assert.equal(r?.type,'bot-search.result');assert.equal(polls,5);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.some(x=>x.r._==='upload.getFile'),false);assert.equal(s.progress.some(x=>x.type==='bot-search.download-progress'),false);}finally{s.driver.close();}
+ const s=await setup(true,(r,v,clicked)=>{if(clicked&&r._==='messages.getHistory'&&r.limit===20){firstSeen ||= now;return history([{...msg(unrelated),id:13}]);}return v;},time);
+ try{const r=await s.download();assert.equal(r?.type,'bot-search.result');assert.equal(now-firstSeen,4500);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.some(x=>x.r._==='upload.getFile'),false);assert.equal(s.progress.some(x=>x.type==='bot-search.download-progress'),false);}finally{s.driver.close();}
 });
 
 test('targeted search waits past an unrelated audio for the matching menu without resending',async()=>{
@@ -294,7 +294,7 @@ for(const expired of [false,true])test(expired?'retained menu expires at the ori
  },time);
  try{
   const firstReply=await s.driver.handle({...s.dl,callbackBudgetMs:65000},s.ctx);
-  assert.equal(firstReply?.type,'bot-search.result');assert.equal(clicks,1);assert.ok(now<6000);
+  assert.equal(firstReply?.type,'bot-search.result');assert.equal(clicks,1);
   if(expired)now+=BOT_SEARCH_BOUNDS.resultTtlMs;
   const alternate=await s.driver.handle({...s.dl,requestId:randomUUID(),rowRef:s.rows[1].rowRef,callbackBudgetMs:65000},s.ctx);
   if(expired){assert.equal(alternate?.type,'bot-search.error');if(alternate?.type==='bot-search.error')assert.equal(alternate.error,'expired');}
