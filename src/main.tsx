@@ -1,3 +1,5 @@
+import {elapsedMs} from './diagnostics/download-timing';
+import {songTiming} from './diagnostics/song-timing';
 import {RateLimited,rateLimitedMessage} from './http/rate-limit.mjs';
 import {queuePositionKey,queuePositionRecord,withQueuePosition,type QueuePosition} from './ui/queue-position';
 import {ShellNotice} from './ui/ShellNotice';
@@ -43,7 +45,7 @@ import {createRoot} from 'react-dom/client';
 import {Ownership} from './playback/ownership';
 import {Player} from './playback/player';
 import {normalizeSnapshot,planQueueRestore,restoreAssetAvailable,type Snapshot} from './playback/queue-restore';
-import {all,createPlaylist,changePlaylist,editTrack,verifiedAssetDetailed,validAsset,validAudioFingerprint,type LocalAsset,type Track,type Playlist} from './library/library';
+import {all,createPlaylist,changePlaylist,editTrack,verifiedAssetDetailed,checkIdbAssetPresence,validAsset,validAudioFingerprint,type LocalAsset,type Track,type Playlist} from './library/library';
 import {importOperations,importIssues,retainImportIssue,terminal,type ImportOperation,type ImportIssue} from './storage/import-operations';
 import {inspectLibraryTrackDownload,prepareBatchCopyReplacement,reconcileLibraryDownload,repairBatchLibraryDownload} from './library/library-download-recovery';
 import {readRecord,writeRecord,openExistingDatabase,admittedTransaction,request,closeDatabase,subscribeDatabaseLifecycle,registerDatabaseOpenGuard,registerDatabaseUseGuard,retireDatabaseRealm,type DatabaseLifecycleState} from './storage/database';
@@ -89,7 +91,7 @@ import './ui/responsive-shell.css';
 import './ui/design-fidelity.css';
 import './ui/app-polish.css';
 import './ui/mini-player.css';
-import {createDiagnosticSession,type Handle} from './diagnostics/session';
+import {appDiagnosticSession as diagnostics,type Handle} from './diagnostics/session';
 import {domFailure,failureText,result,type Operation,type Phase,type Result} from './diagnostics/contract';
 import {createResponseGate,type ImportRequest,type RecoveryRequest,type WorkerResponse} from './imports/import-protocol';
 import {workerFailureOutcome,makeOutcome,type OutcomeV1} from './imports/import-outcome';
@@ -112,7 +114,7 @@ function captureTelegramLifetime(){return captureRemovalRaw();}
 function captureTelegramCurrent(){const review=sourceReview.captureCurrent(),mutation=captureForeignMutationCurrent(),scope=scopeId,proof=control.proof,admission=databaseGeneration,current=control.activity.scope();return()=>scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&current()&&review()&&mutation()&&control.owner&&databaseState==='ready'&&!busy&&!sourceReview.hasReservation();}
 function captureLyricsCurrent(){const review=sourceReview.captureCurrent();const scope=scopeId,proof=control.proof,admission=databaseGeneration,current=control.activity.scope();return()=>scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&control.owner&&!busy&&databaseState==='ready'&&current()&&review();}
 function captureLyricsWriteCurrent(){const current=captureLyricsCurrent(),mutation=captureForeignMutationCurrent();return()=>current()&&mutation()&&!copyRemovalBlocked();}
-const diagnostics=createDiagnosticSession();
+
 function diagnosticCurrent(){const scope=scopeId,current=control.activity.scope();return ()=>scope===scopeId&&current()&&control.activity.admitted;}
 function beginDiagnostic(operation:Operation){return diagnostics.begin(operation,diagnosticCurrent());}
 // Capabilities and their handles stay in this document. Features/workers only
@@ -413,7 +415,8 @@ function captureBotAudioImport(libraryMode?:'cache',parked?:ReadonlySet<string>)
   if(used||!allowed()||botImportActive||!songAdmissionIdle(parked)||signal.aborted)return {state:'failed',trackId:null};used=true;
   const operation=control.activity.begin();if(!operation)return {state:'failed',trackId:null};const own={};botImportActive=own;emit();
   const current=()=>admitted()&&raw()&&review()&&operation.current()&&botImportActive===own&&!sourceReview.hasReservation()&&!queueForeignBlocked();
-  let outcome:OutcomeV1|undefined,confirmed=false;const diagnostic=beginDiagnostic('import-audio');
+  let outcome:OutcomeV1|undefined,confirmed=false,refreshed=false;const diagnostic=beginDiagnostic('import-audio');
+  const timing=songTiming(audio),completeTiming=timing?.values.result==='received';
   try{
    if(!current()||signal.aborted)return {state:'failed',trackId:null};
    const suffix=audio.mime==='audio/mpeg'?'.mp3':audio.mime==='audio/mp4'?'.m4a':'.wav';
@@ -422,18 +425,26 @@ function captureBotAudioImport(libraryMode?:'cache',parked?:ReadonlySet<string>)
    const request:ImportRequest={version:2,type:'import',operationId,file,expected:{sha256:audio.sha256,title:audio.target.title,artist:audio.target.artist,...(audio.target.album&&audio.target.durationSeconds!==null&&audio.target.durationSeconds>0?{recordingTitle:audio.recordingTitle??audio.target.title,album:audio.target.album,durationSeconds:audio.target.durationSeconds}:{})},...(libraryMode?{libraryMode}:{}),...(parked?.size?{parkedOperationIds:[...parked]}:{})};
    const worker=new Worker(new URL('./imports/import.worker.ts',import.meta.url),{type:'module'});
    const settled=await invokeDomainWorker('import',worker,request,current,bytes=>{if(current()&&!signal.aborted)onProgress(bytes);},signal,120_000);outcome=settled.outcome;
+   if(timing?.current()&&settled.response&&'timing' in settled.response&&settled.response.timing){
+    const observed=settled.response.timing;
+    for(const key of ['analysisMs','writeMs','verifyMs','metadataMs'] as const)timing.values[key]+=observed[key];
+    timing.values.backend=observed.backend;
+   }
    confirmed=settled.response?.type==='complete'&&outcome.status==='confirmed'&&outcome.writeState==='published';outcomeDiagnostic(diagnostic,outcome);
    if(!current())return {state:confirmed||outcome.recoveryRequired?'uncertain':'failed',trackId:null};
    if(confirmed)verifiedResponse(operationId);else if(outcome.recoveryRequired)unverifiedResponse(operationId);
    // Even a cancellation that loses to commit must reconcile the confirmed receipt.
-   try{await refresh(true,false,diagnostic,'refresh');}catch{control.activity.block('import-state',true);return {state:'uncertain',trackId:null};}
+   const refreshing=performance.now();
+   try{await refresh(false,false,diagnostic,'refresh',false,true);refreshed=true;}
+   catch{control.activity.block('import-state',true);return {state:'uncertain',trackId:null};}
+   finally{if(timing?.current())timing.values.refreshMs+=elapsedMs(refreshing);}
    status=confirmed?(libraryMode==='cache'?'':'Canción descargada, verificada y guardada en este navegador.'):outcome.recoveryRequired?'La copia requiere revisión antes de volver a descargar.':'No se pudo guardar la canción.';emit();
    return {state:confirmed?'saved':outcome.recoveryRequired?'uncertain':'failed',
     trackId:confirmed&&settled.response?.type==='complete'?settled.response.result.track.id:null,
     ...(!confirmed&&['transaction-aborted','storage-unavailable'].includes(outcome.primary?.code??'')?{retryWrite:true}:{}),
     ...(!confirmed&&['quota-exceeded','storage-denied','database-blocked'].includes(outcome.primary?.code??'')?{storageUnavailable:true}:{})};
   }catch{return {state:confirmed||outcome?.recoveryRequired?'uncertain':'failed',trackId:null};}
-  finally{diagnostics.finish(diagnostic);if(botImportActive===own)botImportActive=null;operation.end();emit();}
+  finally{if(completeTiming)timing?.finish(confirmed&&refreshed?'saved':confirmed||outcome?.recoveryRequired?'uncertain':signal.aborted?'cancelled':'failed');diagnostics.finish(diagnostic);if(botImportActive===own)botImportActive=null;operation.end();emit();}
  };
 }
 function captureBotAudioSave(){
@@ -607,7 +618,7 @@ librarySync.subscribe(()=>emit());
 addEventListener('online',()=>void librarySync.sync());
 addEventListener('focus',()=>void librarySync.sync());
 librarySync.startPolling();
-function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failurePhase?:'refresh',fromSync=false){
+function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failurePhase?:'refresh',fromSync=false,afterImport=false){
  const accountId=accountController.getSnapshot().user?.id??null,auth=accountEpoch;const scope=scopeId,proof=control.proof,admission=databaseGeneration,activityScope=control.activity.scope(),diagnostic=parent===undefined?beginDiagnostic('refresh-library'):parent;
  const current=()=>auth===accountEpoch&&accountId===(accountController.getSnapshot().user?.id??null)&&scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&activityScope();
  const work=refreshTail.then(async()=>{
@@ -620,6 +631,11 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
  const assets=new Map((await all<LocalAsset>('assets')).map(asset=>[asset.id,asset]));
  const nextAvailability:typeof availability=new Map();
  const checks=new Map<string,Promise<Awaited<ReturnType<typeof verifiedAssetDetailed>>>>();
+ if(afterImport){
+  const ids=new Set(nextTracks.map(track=>track.assetId));
+  const idb=[...assets.values()].filter(asset=>ids.has(asset.id)&&validAsset(asset)&&asset.backend==='idb');
+  for(const [id,checked] of await checkIdbAssetPresence(idb))checks.set(id,Promise.resolve(checked));
+ }
  let unknown=0,firstFailure:Result|undefined;
  for(let offset=0;offset<nextTracks.length;offset+=8){
   if(!current())return;
@@ -627,9 +643,9 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
    if(track.assetId===null)return;
    const asset=assets.get(track.assetId),generation=validAsset(asset)?`${asset.backend}:${asset.storageKey}:${asset.revision}`:asset===undefined?'missing':'invalid';
    const cached=availability.get(track.id);
-   if(!force&&cached?.generation===generation){nextAvailability.set(track.id,cached);return;}
+   if(!force&&!afterImport&&cached?.generation===generation){nextAvailability.set(track.id,cached);return;}
    let check=checks.get(track.assetId);
-   if(!check){check=verifiedAssetDetailed(track.assetId);checks.set(track.assetId,check);}
+   if(!check){check=verifiedAssetDetailed(track.assetId,afterImport?'presence':false);checks.set(track.assetId,check);}
    const checked=await check;
    if(checked.state==='unknown'){++unknown;firstFailure??=localFailure(AppFailure.create(checked.failure),'read');return;}
    nextAvailability.set(track.id,{generation,state:checked.state==='valid'?'available':checked.state==='missing'?'missing':'invalid'});
@@ -650,7 +666,7 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
   if(status===availabilityNotice)status='';
   availabilityNotice='';
  }
- if(force)artworkRefreshToken++;
+ if(force||afterImport)artworkRefreshToken++;
  control.activity.block('import-state',false);control.activity.block('opening',false);
  removalEligibleTracks.clear();for(const track of nextTracks){const asset=track.assetId?assets.get(track.assetId):null;if(validAsset(asset)&&asset.bytes<=AUDIO_FILE_MAX_BYTES&&nextAvailability.get(track.id)?.state==='available')removalEligibleTracks.add(track.id);}
  if(updateQueueTitles&&!copyRemovalPending&&!queueForeignBlocked())for(const entry of player.entries){const track=tracks.find(t=>t.id===entry.trackId);if(track)entry.title=track.title;}emit();

@@ -1,30 +1,34 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';import Long from 'long';
 import {createBotProvidersDriver,type BotProvidersClock} from '../../src/telegram/bot-providers-driver';
 import {createBotSearchSdkDriver} from '../../src/telegram/bot-search-driver';
-import {parseBotSearchReply} from '../../src/telegram/bot-search-protocol';
+import {BOT_SEARCH_BOUNDS,botPollDelay,parseBotSearchReply} from '../../src/telegram/bot-search-protocol';
 const deferred=()=>{let resolve!:(v:unknown)=>void,reject!:(e:unknown)=>void;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 const tick=()=>new Promise<void>(r=>setImmediate(r));
 function fakeClock(){let now=1000,id=0;const timers=new Map<number,{at:number;fn:()=>void}>();return {now:()=>now,setTimeout(fn:()=>void,ms:number){const n=++id;timers.set(n,{at:now+ms,fn});return n;},clearTimeout(n:number){timers.delete(n);},jump(ms:number){now+=ms;},advance(ms:number){const end=now+ms;for(;;){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;},timers} as unknown as BotProvidersClock&{jump(ms:number):void;advance(ms:number):void;timers:Map<number,unknown>};}
+async function advancePolls(time:ReturnType<typeof fakeClock>,...reads:number[]){await tick();for(const read of reads){time.advance(botPollDelay(read));await tick();}}
 const identity=(username='ivkmbot',id=101,hash=123)=>({_: 'contacts.resolvedPeer',peer:{_: 'peerUser',userId:id},chats:[],users:[{_: 'user',id,bot:true,username,accessHash:new Long(hash,45,false),firstName:'Fixture bot'}]});
 const history=(messages:unknown[]=[])=>({_: 'messages.messages',messages,users:[],chats:[]});
 const msg=(id=12,extra:Record<string,unknown>={})=>({_: 'message',id,peerId:{_: 'peerUser',userId:101},fromId:{_: 'peerUser',userId:101},message:'Fixture recent reply',replyMarkup:{_:'replyInlineMarkup',rows:[{_:'keyboardInlineButtonRow',buttons:[{_:'keyboardInlineButton',text:'Fixture song — Fixture artist',type:{_:'inlineButtonTypeCallback',data:new Uint8Array([1])}}]}]},...extra});
 const ack=()=>({_: 'updateShortSentMessage',out:true,id:10});
 async function setup(hook?:(request:any,options:any)=>Promise<unknown>,username='ivkmbot'){
  const binding={accountRef:randomUUID(),accountEpoch:1},sessionId=randomUUID(),time=fakeClock(),ctx={signal:new AbortController().signal,current:()=>true};let invalidations=0;
- const pool=createBotProvidersDriver(binding,sessionId,{resolveIdentity:async u=>identity(u),invalidateSession(){invalidations++;}},time);
+ const pool=createBotProvidersDriver(binding,sessionId,{resolveIdentity:async u=>identity(u,u==='lydbot'?102:101),invalidateSession(){invalidations++;}},time);
  const pe=()=>({protocol:'pulso-bot-providers',version:1,...binding,sessionId,providerRevision:pool.getSnapshot()!.revision,operationId:randomUUID(),requestId:randomUUID()});
  const offer=await pool.handle({...pe(),type:'bots.validate',input:username},ctx);assert.equal(offer?.type,'bots.validated');const ref=offer!.type==='bots.validated'?offer!.offer.providerRef:'';
  await pool.handle({...pe(),type:'bots.setOrder',expectedRevision:0,providerRefs:[ref]},ctx);
- const calls:any[]=[],progress:any[]=[];let cooldown:null|{retryAt:number|null;retryBlocked:boolean}=null;
- const driver=createBotSearchSdkDriver(binding,sessionId,{providers:pool,call:async(r:any,o:any)=>{calls.push({request:r,options:o});return hook?hook(r,o):r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg()]);},current(s:AbortSignal){if(s.aborted)throw Error('cancelled');},invalidateSession(){invalidations++;},getAccountCooldown:()=>cooldown} as never,time);
+ const calls:any[]=[],progress:any[]=[];let verifyCalls=0,rejectIdentity=false;let cooldown:null|{retryAt:number|null;retryBlocked:boolean}=null;
+ const driver=createBotSearchSdkDriver(binding,sessionId,{providers:{captureSearchProvider(ref:string,revision:number){
+  const capture=pool.captureSearchProvider(ref,revision);
+  return capture&&{...capture,verifyIdentity(raw:unknown){verifyCalls++;return rejectIdentity?null:capture.verifyIdentity(raw);}};
+ }},call:async(r:any,o:any)=>{calls.push({request:r,options:o});return hook?hook(r,o):r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg()]);},current(s:AbortSignal){if(s.aborted)throw Error('cancelled');},invalidateSession(){invalidations++;},getAccountCooldown:()=>cooldown} as never,time);
  const e=()=>({protocol:'pulso-bot-search' as const,version:1 as const,...binding,sessionId,providerRevision:1,queryId:randomUUID(),requestId:randomUUID()});
  const command=(extra:Record<string,unknown>={},context:any={...ctx,publish:(r:any)=>progress.push(r)})=>{const c={...e(),type:'bot-search.search',providerRef:ref,query:'Fixture song',consent:true,...extra};return {c,p:driver.handle(c,context)};};
  const check=async(p:Promise<any>,c:any)=>{const r=await p;assert.ok(parseBotSearchReply(r,c));return r;};
  const cancel=(c:any)=>driver.handle({...e(),type:'bot-search.cancel',queryId:c.queryId,targetRequestId:c.requestId},ctx);
- return {driver,pool,ref,pe,e,ctx,time,calls,progress,command,check,cancel,setCooldown(v:typeof cooldown){cooldown=v;},get invalidations(){return invalidations;}};
+ return {driver,pool,ref,pe,e,ctx,time,calls,progress,command,check,cancel,get verifyCalls(){return verifyCalls;},rejectIdentity(value:boolean){rejectIdentity=value;},setCooldown(v:typeof cooldown){cooldown=v;},get invalidations(){return invalidations;}};
 }
 test('typed SDK foundation performs exact identity, baseline1, one plaintext stable-Long send, peer-specific20 poll',async()=>{
- const s=await setup();assert.equal(s.calls.length,0);const {c,p}=s.command({target:{title:'Song (Live remix)',artist:'Artist',album:'Album not sent',durationSeconds:222}});const result=await s.check(p,c);assert.equal(result.type,'bot-search.result');assert.equal(result.rows[0].correlation,'recent');assert.equal(result.expectedTarget.album,'Album not sent');assert.equal(s.progress.length,1);
+ const s=await setup();assert.equal(s.calls.length,0);const {c,p}=s.command({target:{title:'Song (Live remix)',artist:'Artist',album:'Album not sent',durationSeconds:222}});await advancePolls(s.time,0);const result=await s.check(p,c);assert.equal(result.type,'bot-search.result');assert.equal(result.rows[0].correlation,'recent');assert.equal(result.expectedTarget.album,'Album not sent');assert.equal(s.progress.length,1);
  assert.deepEqual(s.calls.map(x=>x.request._),['contacts.resolveUsername','messages.getHistory','messages.sendMessage','messages.getHistory']);
  const baseline=s.calls[1].request,send=s.calls[2].request,poll=s.calls[3].request;assert.equal(baseline.limit,1);assert.equal(poll.limit,20);assert.equal(poll.minId,0);assert.equal(send.message,'Song (Live remix) Artist');assert.equal(send.noWebpage,true);assert.ok(send.randomId instanceof Long);assert.deepEqual(Object.keys(send).sort(),['_','message','noWebpage','peer','randomId']);assert.equal(send.peer.userId,101);assert.ok(send.peer.accessHash instanceof Long);
  for(const {options:o}of s.calls){assert.equal(o.maxRetryCount,0);assert.equal(o.floodSleepThreshold,0);assert.equal(o.timeout,0);assert.equal(o.abortSignal,undefined);}
@@ -40,17 +44,17 @@ test('fresh identity must match approved id AND signed hash; username transfer i
 });
 test('baseline only before send; nonzero baseline is exact minID, unrelated old rows cannot satisfy query',async()=>{
  let polls=0;const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():r.limit===1?history([msg(8)]):(++polls===1?history([msg(8)]):history([msg()])));
- const {c,p}=s.command();await tick();assert.equal(s.calls.at(-1).request.minId,8);s.time.advance(1000);assert.equal((await s.check(p,c)).type,'bot-search.result');assert.equal(polls,2);s.driver.close();
+ const {c,p}=s.command();await advancePolls(s.time,0);assert.equal(s.calls.at(-1).request.minId,8);await advancePolls(s.time,1);assert.equal((await s.check(p,c)).type,'bot-search.result');assert.equal(polls,2);s.driver.close();
 });
 test('progress text waits for an edited musical menu on the same message',async()=>{
  let polls=0;const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():r.limit===1?history():history([++polls===1?msg(12,{message:'Buscando…',replyMarkup:undefined}):msg(12)]));
- const {c,p}=s.command();await tick();assert.equal(polls,1);let done=false;void p.then(()=>{done=true;});await tick();assert.equal(done,false);
- s.time.advance(1000);const result=await s.check(p,c);assert.equal(result.type,'bot-search.result');assert.ok(result.rows.some((row:{kind:string})=>row.kind==='option'));assert.equal(s.calls.filter(x=>x.request._==='messages.sendMessage').length,1);s.driver.close();
+ const {c,p}=s.command();await advancePolls(s.time,0);assert.equal(polls,1);let done=false;void p.then(()=>{done=true;});await tick();assert.equal(done,false);
+ await advancePolls(s.time,1);const result=await s.check(p,c);assert.equal(result.type,'bot-search.result');assert.ok(result.rows.some((row:{kind:string})=>row.kind==='option'));assert.equal(s.calls.filter(x=>x.request._==='messages.sendMessage').length,1);s.driver.close();
 });
 test('ignores photos and stickers without useful rows while waiting for the musical menu',async()=>{
  for(const media of [{_:'messageMediaPhoto'},{_:'messageMediaDocument',document:{_:'document',mimeType:'image/webp',attributes:[{_:'documentAttributeSticker'}]}}]){
   let polls=0;const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():r.limit===1?history():history([++polls===1?msg(12,{message:'',replyMarkup:undefined,media}):msg(13)]));
-  try{const {c,p}=s.command();await tick();s.time.advance(1000);assert.equal((await s.check(p,c)).type,'bot-search.result');assert.equal(polls,2);}finally{s.driver.close();}
+  try{const {c,p}=s.command();await advancePolls(s.time,0,1);assert.equal((await s.check(p,c)).type,'bot-search.result');assert.equal(polls,2);}finally{s.driver.close();}
  }
 });
 test('lost send ACK is uncertain, never empty/retried/fallback; malformed ACK also uncertain',async()=>{
@@ -79,37 +83,109 @@ test('absolute deadline checks survive suspended timers; no progress after stale
   if(dimension==='root'){epoch++;epoch++;context.current=()=>true;}else await t.pool.handle({...t.pe(),type:'bots.setOrder',expectedRevision:1,providerRefs:[]},t.ctx);
   g.resolve(identity());assert.equal((await t.check(x.p,x.c)).error,'cancelled');assert.equal(t.calls.length,1);assert.equal(t.progress.length,0);t.driver.close();}
 });
-test('empty history reaches timeout, never no-match; one-second polls are bounded and canceled cleanly',async()=>{
- const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history());const {c,p}=s.command();await tick();for(let n=0;n<15;n++){s.time.advance(1000);await tick();}const r=await s.check(p,c);assert.equal(r.error,'timeout');assert.equal(r.delivery,'acknowledged');assert.ok(s.calls.length<=18);assert.equal(s.calls.filter(x=>x.request._==='messages.sendMessage').length,1);assert.equal(await s.driver.whenSettled(),true);s.driver.close();assert.equal(s.time.timers.size,0);
+test('empty history follows the adaptive schedule within the original deadline and bounded read cap',async()=>{
+ const pollTimes:number[]=[];
+ const s=await setup(async r=>{
+  if(r._==='contacts.resolveUsername')return identity();
+  if(r._==='messages.sendMessage')return ack();
+  if(r.limit===20)pollTimes.push(s.time.now()-1000);
+  return history();
+ });
+ const {c,p}=s.command();await tick();assert.equal(pollTimes.length,0);
+ await advancePolls(s.time,...Array.from({length:BOT_SEARCH_BOUNDS.reads},(_,i)=>i));
+ const r=await s.check(p,c);assert.equal(r.error,'timeout');assert.equal(r.delivery,'acknowledged');
+ assert.deepEqual(pollTimes.slice(0,5),[250,500,900,1600,2600]);
+ assert.equal(pollTimes.at(-1),14600);assert.ok(pollTimes.length<=19);
+ const callbackWindow=Array.from({length:BOT_SEARCH_BOUNDS.downloadReads},(_,i)=>botPollDelay(i)).reduce((a,b)=>a+b);
+ assert.ok(callbackWindow>=59000&&callbackWindow<=61000);assert.equal(BOT_SEARCH_BOUNDS.downloadReads,63);
+ assert.equal(s.calls.filter(x=>x.request._==='messages.sendMessage').length,1);assert.equal(await s.driver.whenSettled(),true);s.driver.close();assert.equal(s.time.timers.size,0);
 });
 test('concurrent external outgoing makes response uncertain even with a valid bot reply',async()=>{
- const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(11,{out:true}),msg()]));const {c,p}=s.command();assert.equal((await s.check(p,c)).error,'uncertain');s.driver.close();
+ const s=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(11,{out:true}),msg()]));const {c,p}=s.command();await advancePolls(s.time,0);assert.equal((await s.check(p,c)).error,'uncertain');s.driver.close();
 });
 test('raw projection budget applies to each reply; no send after oversized identity, no truncated success',async()=>{
  const s=await setup(async()=>({...identity(),incidental:'x'.repeat(40000)}));const x=s.command();assert.equal((await s.check(x.p,x.c)).error,'limit-raw-bytes');assert.equal(s.calls.length,1);s.driver.close();
- const t=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(12,{message:'',replyMarkup:undefined,media:{_: 'unknownMedia'}})]));const y=t.command();await tick();for(let n=0;n<14;n++){t.time.advance(1000);await tick();}assert.equal((await t.check(y.p,y.c)).error,'unsupported');assert.equal(t.calls.length,18);t.driver.close();
+ const t=await setup(async r=>r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(12,{message:'',replyMarkup:undefined,media:{_: 'unknownMedia'}})]));const y=t.command();await advancePolls(t.time,...Array.from({length:19},(_,i)=>i));assert.equal((await t.check(y.p,y.c)).error,'unsupported');assert.equal(t.calls.length,20);t.driver.close();
 });
 test('request/query IDs finite; replay rejected; static accessors do no IO, quiesce invalidates',async()=>{
- const s=await setup();const x=s.command();await x.p;assert.equal((await s.driver.handle(x.c,s.ctx) as any).error,'expired');const y=s.command({queryId:x.c.queryId});assert.equal((await s.check(y.p,y.c)).error,'expired');const calls=s.calls.length;
+ const s=await setup();const x=s.command();await advancePolls(s.time,0);await x.p;assert.equal((await s.driver.handle(x.c,s.ctx) as any).error,'expired');const y=s.command({queryId:x.c.queryId});assert.equal((await s.check(y.p,y.c)).error,'expired');const calls=s.calls.length;
  for(let n=0;n<254;n++){const z=s.command({providerRef:randomUUID()});await z.p;}const z=s.command();assert.equal((await s.check(z.p,z.c)).error,'limit-requests');assert.equal(s.invalidations,1);assert.equal(s.calls.length,calls);assert.equal(await s.driver.quiesce(),true);
 });
 
 
 test('sequential metadata replies each have their own raw budget rather than sharing a single reply cap',async()=>{
  const s=await setup(async r=>({... (r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg()])),note:'x'.repeat(8192)}));
- const z=s.command();const r=await s.check(z.p,z.c);assert.equal(r.type,'bot-search.result');assert.equal(s.calls.length,4);s.driver.close();
+ const z=s.command();await advancePolls(s.time,0);const r=await s.check(z.p,z.c);assert.equal(r.type,'bot-search.result');assert.equal(s.calls.length,4);s.driver.close();
 });
 
 
 test('repeated individually valid progress replies keep polling bounded and never resend',async()=>{
  let polls=0;
  const s=await setup(async r=>({... (r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[++polls===10?msg():msg(12,{message:'Searching…',replyMarkup:undefined})])),incidental:'x'.repeat(8192)}));
- const z=s.command();await tick();for(let n=1;n<10;n++){s.time.advance(1000);await tick();}
+ const z=s.command();await advancePolls(s.time,...Array.from({length:10},(_,i)=>i));
  const r=await s.check(z.p,z.c);assert.equal(r.type,'bot-search.result');assert.equal(polls,10);assert.equal(s.calls.length,13);assert.equal(s.calls.filter(c=>c.request._==='messages.sendMessage').length,1);assert.equal(await s.driver.whenSettled(),true);s.driver.close();assert.equal(s.time.timers.size,0);
 });
 test('large later reply still fails its individual guard after smaller cumulative replies',async()=>{
  let polls=0;
  const s=await setup(async r=>({... (r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg(12,{message:'Searching…',replyMarkup:undefined})])),incidental:'x'.repeat(r._==='messages.getHistory'&&r.limit===20&&++polls===3?40000:8192)}));
- const z=s.command();await tick();for(let n=1;n<3;n++){s.time.advance(1000);await tick();}
+ const z=s.command();await advancePolls(s.time,0,1,2);
  const r=await s.check(z.p,z.c);assert.equal(r.error,'limit-raw-bytes');assert.equal(polls,3);assert.equal(s.calls.length,6);assert.equal(s.calls.filter(c=>c.request._==='messages.sendMessage').length,1);assert.equal(await s.driver.whenSettled(),true);s.driver.close();assert.equal(s.time.timers.size,0);
+});
+
+test('cached resolution still verifies every command and is invalidated by rejected identity, peer, and revision',async()=>{
+ let badPeer=false;
+ const s=await setup(async r=>{
+  if(r._==='contacts.resolveUsername')return identity();
+  if(badPeer)throw {errorMessage:'PEER_ID_INVALID'};
+  return r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg()]);
+ });
+ const count=()=>s.calls.filter(call=>call.request._==='contacts.resolveUsername').length;
+ const search=async(providerRevision=1,providerRef=s.ref)=>{
+  const {c,p}=s.command({providerRevision,providerRef});await advancePolls(s.time,0);
+  return s.check(p,c);
+ };
+ try{
+  assert.equal((await search()).type,'bot-search.result');
+  assert.equal((await search()).type,'bot-search.result');assert.equal(count(),1);assert.equal(s.verifyCalls,2);
+  s.rejectIdentity(true);assert.equal((await search()).error,'unsupported');s.rejectIdentity(false);
+  assert.equal((await search()).type,'bot-search.result');assert.equal(count(),2);
+  badPeer=true;assert.equal((await search()).error,'unsupported');badPeer=false;
+  assert.equal((await search()).type,'bot-search.result');assert.equal(count(),3);
+  const other=await s.pool.handle({...s.pe(),type:'bots.validate',input:'lydbot'},s.ctx);
+  assert.equal(other?.type,'bots.validated');
+  if(other?.type!=='bots.validated')throw Error('Missing fixture offer');
+  // Add a different bot while keeping the cached provider reference.
+  await s.pool.handle({...s.pe(),type:'bots.setOrder',expectedRevision:1,providerRefs:[s.ref,other.offer.providerRef]},s.ctx);
+  assert.equal((await search(2)).type,'bot-search.result');assert.equal(count(),4);
+ }finally{s.driver.close();}
+});
+
+test('a late ACK still permits one immediate history read before the search deadline',async()=>{
+ const s=await setup(async request=>{
+  if(request._==='contacts.resolveUsername')return identity();
+  if(request._==='messages.sendMessage'){s.time.jump(14750);return ack();}
+  return history(request.limit===1?[]:[msg()]);
+ });
+ try{
+  const {c,p}=s.command();
+  assert.equal((await s.check(p,c)).type,'bot-search.result');
+  assert.equal(s.calls.filter(call=>call.request.limit===20).length,1);
+ }finally{s.driver.close();}
+});
+
+for(const code of ['USER_ID_INVALID','INPUT_USER_DEACTIVATED','USER_IS_BLOCKED'])test(`${code} invalidates only the cached identity`,async()=>{
+ let rejected=false;
+ const s=await setup(async request=>{
+  if(request._==='contacts.resolveUsername')return identity();
+  if(rejected)throw {errorMessage:code};
+  return request._==='messages.sendMessage'?ack():history(request.limit===1?[]:[msg()]);
+ });
+ const search=async()=>{const {c,p}=s.command();await advancePolls(s.time,0);return s.check(p,c);};
+ try{
+  assert.equal((await search()).type,'bot-search.result');
+  rejected=true;assert.equal((await search()).error,'network');
+  rejected=false;assert.equal((await search()).type,'bot-search.result');
+  assert.equal(s.calls.filter(call=>call.request._==='contacts.resolveUsername').length,2);
+  assert.equal(s.invalidations,0);
+ }finally{s.driver.close();}
 });

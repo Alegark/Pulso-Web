@@ -1,7 +1,7 @@
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import {AppFailure,atBoundary,fail,fromKnownError,issuedFailure,makeFailure,nativeDOMName,missingAssetException,type FailureV1} from '../errors/app-failure';
-import {readRecord,readRecordFrom} from './database';
+import {admittedTransaction,closeDatabase,committed,openDatabase,readRecord,readRecordFrom,request} from './database';
 import type {LocalAsset} from '../library/library';
 export const ASSET_DIRECTORY='pulso-assets-v1';
 export const WRITER_LOCK='pulso-web:local:asset-writer';
@@ -16,7 +16,7 @@ export interface AssetReader {
   * onChunk requires integrity=true; otherwise unknown/input-invalid, no reads.
   * check may guard presence-only verification without adding OPFS byte reads.
   */
- verifyDetailed(integrity?:boolean,scan?:{check?:()=>void;onChunk?:(bytes:Uint8Array)=>void}):Promise<ReadVerificationV1>;
+ verifyDetailed(integrity?:boolean|'presence',scan?:{check?:()=>void;onChunk?:(bytes:Uint8Array)=>void}):Promise<ReadVerificationV1>;
  readRange(start:number,end:number):Promise<Uint8Array>;
  release():void;
 }
@@ -70,7 +70,7 @@ export async function openAssetReader(asset:LocalAsset,current=true,control?:{si
  }
  const bytes=new Uint8Array(length);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.length;}return bytes;
  });
- const verifyDetailed=async(integrity=true,scan?:{check?:()=>void;onChunk?:(bytes:Uint8Array)=>void}):Promise<ReadVerificationV1>=>{
+ const verifyDetailed=async(integrity:boolean|'presence'=true,scan?:{check?:()=>void;onChunk?:(bytes:Uint8Array)=>void}):Promise<ReadVerificationV1>=>{
  // Internal synchronous consumers only. Callback failures are not evidence of
  // missing/corrupt storage; preserve issued guards, otherwise report unknown.
  const callback=(work:()=>void)=>{try{work();}catch(error){
@@ -84,14 +84,35 @@ export async function openAssetReader(asset:LocalAsset,current=true,control?:{si
  check();
  if(released)fail('verify','internal','input-invalid',asset.backend);
  // Presence-only OPFS must never acquire a hidden byte-reading pass.
- if(!integrity&&scan?.onChunk)fail('verify','internal','input-invalid',asset.backend);
+ if(integrity!==true&&scan?.onChunk)fail('verify','internal','input-invalid',asset.backend);
  if(file&&file.size!==asset.bytes)fail('verify','integrity','length-mismatch',asset.backend);
- const hash=integrity?sha256.create():null;
- // One pass; OPFS presence-only retains its previous no-read behavior.
- if(hash||!file)for(let offset=0;offset<asset.bytes;offset+=65536){
- check();const bytes=await readRange(offset,Math.min(offset+65536,asset.bytes));check();hash?.update(bytes);
- if(scan?.onChunk){check();callback(()=>scan.onChunk!(bytes));}
+ const hash=integrity===true?sha256.create():null;
+ const consume=(bytes:Uint8Array)=>{check();hash?.update(bytes);if(scan?.onChunk)callback(()=>scan.onChunk!(bytes));};
+ if(file&&hash)for(let offset=0;offset<asset.bytes;offset+=65536){
+  check();consume(await readRange(offset,Math.min(offset+65536,asset.bytes)));
  }
+ if(!file)await atBoundary('verify','idb',async()=>{
+  const db=control?.database??await openDatabase();
+  try{
+   if(integrity==='presence'){
+    const range=IDBKeyRange.bound([asset.storageKey,0],[asset.storageKey,asset.chunks-1]);
+    const tx=admittedTransaction(db,'chunks'),done=committed(tx);
+    const count=await request(tx.objectStore('chunks').count(range));await done;
+    if(count!==asset.chunks)fail('verify','integrity','asset-missing','idb');
+   }else for(let first=0;first<asset.chunks;first+=8){
+    check();const tx=admittedTransaction(db,'chunks'),done=committed(tx),store=tx.objectStore('chunks');
+    const parts=await Promise.all(Array.from({length:Math.min(8,asset.chunks-first)},(_,i)=>request<unknown>(store.get([asset.storageKey,first+i]))));
+    await done;
+    for(let i=0;i<parts.length;i++){
+     const chunk=parts[i];
+     if(chunk===undefined)fail('verify','integrity','asset-missing','idb');
+     if(!(chunk instanceof Uint8Array))fail('verify','integrity','local-corrupt','idb');
+     if(chunk.length!==Math.min(65536,asset.bytes-(first+i)*65536))fail('verify','integrity','length-mismatch','idb');
+     consume(chunk);
+    }
+   }
+  }finally{if(!control?.database)closeDatabase(db);}
+ });
  check();
  if(hash&&bytesToHex(hash.digest())!==asset.sha256)fail('verify','integrity','digest-mismatch',asset.backend);
  check();return {state:'valid',failure:null};

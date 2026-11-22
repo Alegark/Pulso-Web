@@ -1,11 +1,15 @@
 /** Synthetic Telegram RPC replies. The app's session, worker and bot driver run normally. */
 import Long from 'long';
+import {benchmarkPart} from './playlist-benchmark-audio.mjs';
 import {openTemporaryTelegram as setupSdk} from './required-setup-sdk';
 import {createBotSearchDriver} from '../../src/telegram/bot-search-driver';
 
 type Audio = {key:number;title:string;artist:string;duration:number;mime:string;bytes:number};
-type Reply = {audio:Audio[];menu?:{label:string;audio:Audio}[]};
-type Chat = {outgoing:number;messages:unknown[];latest:number;menu?:Reply['menu']};
+declare const __PLAYLIST_RPC_MS__:number;
+const benchmark=typeof __PLAYLIST_RPC_MS__!=='undefined'&&__PLAYLIST_RPC_MS__>0;
+const delayRpc=()=>benchmark?new Promise<void>(resolve=>setTimeout(resolve,__PLAYLIST_RPC_MS__)):undefined;
+type Reply = {delayMs?:number;audio:Audio[];menu?:{label:string;audio:Audio}[]};
+type Chat = {outgoing:number;messages:unknown[];latest:number;menu?:Reply['menu'];readyAt:number;delayMs:number};
 
 export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal){
  const base=await setupSdk(identity,signal);
@@ -34,14 +38,16 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
   return createBotSearchDriver(base.getAccountBinding()!,session,{
    captureProvider:(ref,rev)=>pool.captureSearchProvider(ref,rev),
    async resolveIdentity(username){
+    await delayRpc();
     const id=101+['kdmusic_bot','deezermusicbot','lydbot'].indexOf(username);
     return {_:'contacts.resolvedPeer',peer:peerUser(id),users:[{_:'user',id,bot:true,username,firstName:username,accessHash:new Long(3,id,false)}],chats:[]};
    },
    async sendQuery(input,query,_randomId,abort){
     const peer=botId(input);
+    await delayRpc();
     const response=await rpc('search',{peer,query},abort);
     if(!response.ok)throw Error('Unexpected fixture query');
-    const {audio,menu}:Reply=await response.json();
+    const {audio,menu,delayMs=0}:Reply=await response.json();
     const outgoing=(chats.get(peer)?.latest??0)+1;
     const options=menu&&{
      ...incoming(peer,outgoing+1,outgoing,'Selecciona una canción'),
@@ -52,14 +58,17 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
     };
     const messages=options?[options]:audio.length?audio.map((candidate,index)=>document(peer,outgoing+1+index,outgoing,candidate))
      :[incoming(peer,outgoing+1,outgoing,'No se encontraron resultados')];
-    chats.set(peer,{outgoing,messages,latest:outgoing+messages.length,menu});
+    chats.set(peer,{outgoing,messages,latest:outgoing+messages.length,menu,readyAt:performance.now()+delayMs,delayMs});
     return {_:'updateShortSentMessage',out:true,id:outgoing,date:1,pts:outgoing,ptsCount:1};
    },
    async readHistory(input,_min,limit){
+    await delayRpc();
     const chat=chats.get(botId(input));
+    if(chat&&performance.now()<chat.readyAt)return history();
     return history(limit===1?chat?.messages.slice(-1):chat?.messages);
    },
    async readKnown(input,id){
+    await delayRpc();
     const chat=chats.get(botId(input));
     const match=chat?.messages.find(message=>(message as {id:number}).id===id);
     return history(match?[match]:[]);
@@ -67,12 +76,15 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
    async callback(input,id,data,abort){
     const peer=botId(input),chat=chats.get(peer),audio=chat?.menu?.[data[0]-1]?.audio;
     if(!chat||!audio||id!==chat.outgoing+1)throw Error('Unexpected fixture callback');
+    await delayRpc();
     const response=await rpc('callback',{peer,key:audio.key,option:data[0]},abort);
     if(!response.ok)throw Error('Fixture callback was rejected');
-    chat.messages.push(document(peer,++chat.latest,id,audio));
+    chat.messages.push(document(peer,++chat.latest,id,audio));chat.readyAt=performance.now()+chat.delayMs;
     return {_:'messages.botCallbackAnswer',cacheTime:0};
    },
    async readDocumentPart(doc,offset,limit,abort){
+    await delayRpc();
+    if(benchmark)return benchmarkPart(doc.location.id.toNumber(),offset,limit);
     const response=await rpc('read',{key:doc.location.id.toNumber(),offset,limit},abort);
     if(response.status===429)throw {errorMessage:'FLOOD_WAIT_2'};
     if(response.status===503)throw new TypeError('Synthetic network failure reading audio part');

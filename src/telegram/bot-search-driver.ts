@@ -1,4 +1,5 @@
-import {cooldownDeadline} from './rpc-failure';
+import {elapsedMs,emptyNetworkTiming,measure,type NetworkTiming} from '../diagnostics/download-timing';
+import {classifyTelegramFailure,cooldownDeadline,invalidatesBotIdentity} from './rpc-failure';
 import {assembleBotDownloadBytes,botDownloadTransferMs,BotDownloadBytesFailure} from './bot-download-bytes';
 import {recordingTitleCandidate} from '../library/recording-title';
 import Long from 'long';
@@ -6,7 +7,7 @@ import type {tl} from '@mtcute/core';
 import type {BaseTelegramClient} from '@mtcute/core/client.js';
 import {botProvidersFailure,type BotProvidersClock,type BotSearchProviderCapture,type BotProvidersDriver} from './bot-providers-driver';
 import {isUuid,parseAccountBinding,type AccountBinding} from './sources-protocol';
-import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,botSearchText,formatBotSearchQuery,parseBotSearchCommand,matchingSongRows,type BotSearchEnvelope,type BotSearchReply,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
+import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,botPollDelay,botSearchText,formatBotSearchQuery,parseBotSearchCommand,matchingSongRows,type BotSearchEnvelope,type BotSearchReply,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
 import {assertBotSearchRawBudget,botSearchAck,botSearchBaseline,BotSearchProjectionError,projectBotSearchPage,projectBotCallbackPage,botSearchDocumentIdentity,botSearchKnownMessage,botSearchMessageFingerprint,botSearchAudioFingerprint,botSearchDocument,type BotSearchPrivateRef} from './bot-search-page';
 /** Inject only inside the worker. No generic RPC, root peers or arbitrary message identifiers. */
 export interface BotSearchDependency {
@@ -17,10 +18,11 @@ export interface BotSearchDependency {
  readKnown?(peer:tl.TypeInputPeer,messageId:number,signal:AbortSignal):Promise<unknown>;
  callback?(peer:tl.TypeInputPeer,messageId:number,data:Uint8Array,signal:AbortSignal):Promise<unknown>;
  readDocumentPart?(document:NonNullable<ReturnType<typeof botSearchDocument>>,offset:number,limit:number,signal:AbortSignal):Promise<Uint8Array>;
+ isOtherDc?(dcId:number):boolean|null;
  invalidateSession():void;
  getAccountCooldown?():{readonly retryAt:number|null;readonly retryBlocked:boolean}|null;
 }
-export interface BotSearchContext {readonly signal:AbortSignal;readonly current:()=>boolean;readonly publish?:(reply:BotSearchReply)=>void}
+export interface BotSearchContext {readonly signal:AbortSignal;readonly current:()=>boolean;readonly publish?:(reply:BotSearchReply)=>void;readonly timing?:(timing:NetworkTiming)=>void}
 export interface BotSearchDriver {
  handle(raw:unknown,context:BotSearchContext):Promise<BotSearchReply|null>;
  whenSettled():Promise<boolean>;
@@ -37,18 +39,19 @@ const randomLong=()=>{const a=crypto.getRandomValues(new Int32Array(2));return n
 export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:string,dependency:BotSearchDependency,time:BotProvidersClock=clock):BotSearchDriver {
  const binding=parseAccountBinding(bindingInput);if(!binding||!isUuid(sessionId))throw Error('protocol');
  let closed=false,invalidated=false,settlement=Promise.resolve(true),cooldown:Failure|null=null;
+ let identityRevision=-1;const identities=new Map<string,unknown>();
  const requests=new Set<string>(),queries=new Set<string>();
  // Future selection is intentionally unavailable. These bounded opaque handles have no public accessor.
  let retainedSearch:{providerRef:string;queryId:string;revision:number;baseline:number;outgoing:number;target:import('./bot-search-protocol').BotSearchTarget|null}|null=null;
  let retained:ReadonlyMap<string,BotSearchPrivateRef>=new Map(),retainedUntil=0;
  type Flight={e:BotSearchEnvelope;delivery:BotSearchDelivery;cause:Failure|null;stop(f:Failure):void};let flight:Flight|null=null;
- const close=()=>{if(closed)return;closed=true;retainedSearch=null;retained=new Map();retainedUntil=0;requests.clear();queries.clear();flight?.stop(fail('cancelled'));};
+ const close=()=>{if(closed)return;closed=true;retainedSearch=null;retained=new Map();retainedUntil=0;requests.clear();queries.clear();identities.clear();flight?.stop(fail('cancelled'));};
  const invalidate=()=>{close();if(!invalidated){invalidated=true;dependency.invalidateSession();}};
  const live=(ctx:BotSearchContext,capture?:BotSearchProviderCapture)=>{try{return !closed&&!ctx.signal.aborted&&ctx.current()&&(!capture||capture.current());}catch{return false;}};
  const response=(e:BotSearchEnvelope,f:Failure,delivery:BotSearchDelivery):BotSearchReply=>Object.freeze({...copyBotSearchEnvelope(e),type:'bot-search.error',...f,delivery});
  return Object.freeze({close,quiesce(){close();return settlement;},whenSettled(){return settlement;},
   async handle(raw:unknown,context:BotSearchContext):Promise<BotSearchReply|null>{
-   const ctx=Object.freeze({signal:context.signal,current:context.current,publish:context.publish});
+   const ctx=Object.freeze({signal:context.signal,current:context.current,publish:context.publish,timing:context.timing});
    const c=parseBotSearchCommand(raw);if(!c)return null;const e=copyBotSearchEnvelope(c);
    if(closed||e.sessionId!==sessionId||e.accountRef!==binding.accountRef||e.accountEpoch!==binding.accountEpoch)return response(e,fail('session-expired'),'not-dispatched');
    if(!live(ctx))return response(e,fail('cancelled'),'not-dispatched');
@@ -65,8 +68,9 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
 
    // Expiry is absolute and cannot be revived by reuse/reorder; no retained raw chat transcript.
    if(time.now()>=retainedUntil||retained.size){retained=new Map();retainedUntil=0;}
+   if(identityRevision!==c.providerRevision){identities.clear();identityRevision=c.providerRevision;}
    const capture=dependency.captureProvider(c.providerRef,c.providerRevision);
-   if(!capture)return response(e,fail('expired'),'not-dispatched');
+   if(!capture){identities.delete(c.providerRef);return response(e,fail('expired'),'not-dispatched');}
    // Supported providers use private-chat music menus with layer232 callback
    // buttons. Selection still requires this attempt's exact peer, menu and target.
    if(capture.username!=='ivkmbot'&&capture.username!=='lydbot'&&capture.username!=='ansmusicbot'&&capture.username!=='kdmusic_bot'&&capture.username!=='deezermusicbot')return response(e,fail('unsupported'),'not-dispatched');
@@ -78,10 +82,16 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    const abort=new AbortController();let deadline=time.now()+duration;
    let wake!:(v:BotSearchReply)=>void;const stopped=new Promise<BotSearchReply>(r=>{wake=r;});
    let settle!:(v:boolean)=>void;settlement=new Promise<boolean>(r=>{settle=r;});
-   let timer:ReturnType<typeof setTimeout>|undefined,grace:ReturnType<typeof setTimeout>|undefined,delay:ReturnType<typeof setTimeout>|undefined,delayWake:(()=>void)|undefined,finished=false;
-   const finish=(ok:boolean)=>{if(finished)return;finished=true;ctx.signal.removeEventListener('abort',onAbort);if(timer!==undefined)time.clearTimeout(timer);if(grace!==undefined)time.clearTimeout(grace);if(delay!==undefined)time.clearTimeout(delay);if(flight===f)flight=null;settle(ok);};
+   const metrics=emptyNetworkTiming();
+   let transferStart:number|undefined,pollStart:number|undefined;
+   let timer:ReturnType<typeof setTimeout>|undefined,grace:ReturnType<typeof setTimeout>|undefined,delay:ReturnType<typeof setTimeout>|undefined,delayWake:(()=>void)|undefined,finished=false,stopping=false;
+   const finish=(ok:boolean)=>{if(finished)return;finished=true;ctx.signal.removeEventListener('abort',onAbort);if(timer!==undefined)time.clearTimeout(timer);if(grace!==undefined)time.clearTimeout(grace);if(delay!==undefined)time.clearTimeout(delay);if(flight===f)flight=null;
+    if(transferStart!==undefined)metrics.transferMs=elapsedMs(transferStart);
+    if(pollStart!==undefined)metrics[c.type==='bot-search.search'?'searchPollMs':'callbackPollMs']=elapsedMs(pollStart);
+    try{ctx.timing?.(metrics);}catch{/* Observation cannot block settlement. */}
+    settle(ok);};
    const f:Flight={e,delivery:'not-dispatched',cause:null,stop(cause){
-    if(f.cause)return;if(cause.error==='timeout'&&f.delivery==='uncertain')cause=fail('uncertain');
+    if(stopping)return;stopping=true;cause=f.cause??cause;if(cause.error==='timeout'&&f.delivery==='uncertain')cause=fail('uncertain');
     f.cause=cause;retained=new Map();retainedUntil=0;wake(response(e,cause,f.delivery));abort.abort();delayWake?.();
     grace=time.setTimeout(()=>{finish(false);invalidate();},B.settlementMs);
    }};
@@ -99,6 +109,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
     if(error instanceof BotSearchProjectionError)return fail(error.limit??error.code);
     if(error instanceof BotDownloadBytesFailure)return fail(error.code==='size'?'file-too-large':error.code==='cancelled'?'cancelled':'file-invalid');
     // SDK late failures are observed independently of a winning cancel/deadline cause.
+    const kind=classifyTelegramFailure(error).error;
+    if(kind==='invalid-peer'||kind==='access'||invalidatesBotIdentity(error))identities.delete(c.providerRef);
     const cause=botProvidersFailure(error,time.now());
     if(cause.error==='session-expired'){if(!f.cause)f.cause=cause;invalidate();}
     if(cause.error==='rate-limit'){
@@ -110,10 +122,25 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    const rpc=async(fn:(ms:number)=>Promise<unknown>,count=true)=>{check();try{const v=await fn(Math.max(1,deadline-time.now()));check();if(count)budget(v);check();return v;}catch(error){
     if(error===f.cause)throw error;const cause=observe(error);if(!f.cause)f.cause=cause;throw f.cause;
    }};
+   const poll=async(read:number,history:(ms:number)=>Promise<unknown>,immediate=false)=>{
+    pollStart??=performance.now();if(!immediate)await sleepPoll(read);
+    metrics[c.type==='bot-search.search'?'searchReads':'callbackReads']++;return rpc(history);
+   };
+   const sleepPoll=async(read:number)=>{
+    check();
+    await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},botPollDelay(read));});
+    check();
+   };
    const work=Promise.resolve().then(async():Promise<BotSearchReply>=>{
     try{
-     check();const identity=await rpc(ms=>dependency.resolveIdentity(capture.username,abort.signal,ms));
-     const approved=capture.verifyIdentity(identity);if(!approved){if(!capture.current())throw fail('identity-changed');throw fail('unsupported');}check();
+     check();
+     const approved=await measure(ms=>{metrics.resolveMs=ms;},async()=>{
+      try{
+       const identity=identities.has(c.providerRef)?identities.get(c.providerRef):await rpc(ms=>dependency.resolveIdentity(capture.username,abort.signal,ms));
+       const verified=capture.verifyIdentity(identity);if(!verified)throw fail(capture.current()?'unsupported':'identity-changed');
+       check();identities.set(c.providerRef,identity);return verified;
+      }catch(error){identities.delete(c.providerRef);throw error;}
+     });
      if(c.type==='bot-search.download'){
       if(!dependency.readKnown||!dependency.readDocumentPart||!selection?.row||!previous)throw fail('unsupported');
       const known=async(ref:BotSearchPrivateRef)=>{
@@ -133,7 +160,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        if(!dependency.callback||!selected.callbackData||!(matchingSongRows([selected.row],c.target).length===1||!['kdmusic_bot','deezermusicbot'].includes(capture.username)&&fold(c.target.title).length>=3&&fold(selected.row.label).includes(fold(c.target.title))))throw fail('unsupported');
        const baseline=botSearchBaseline(await rpc(ms=>dependency.readHistory(approved.peer,0,1,abort.signal,ms)),approved.botId);
        f.delivery='uncertain';if(ctx.publish&&live(ctx,capture))try{ctx.publish({...e,type:'bot-search.sending',delivery:'uncertain'});}catch{/* Observers cannot own or repeat the callback. */}
-       const answer=await rpc(()=>dependency.callback!(approved.peer,selected.messageId,selected.callbackData!.slice(),abort.signal));
+       const answer=await measure(ms=>{metrics.callbackMs=ms;},()=>rpc(()=>dependency.callback!(approved.peer,selected.messageId,selected.callbackData!.slice(),abort.signal)));
        if(!answer||typeof answer!=='object'||Object.getOwnPropertyDescriptor(answer,'_')?.value!=='messages.botCallbackAnswer')throw fail('unsupported');
        f.delivery='acknowledged';
        const notice=botSearchText(Object.getOwnPropertyDescriptor(answer,'message')?.value,500);
@@ -149,12 +176,14 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        if(['url','hasUrl'].some(key=>{const field=Object.getOwnPropertyDescriptor(answer,key);return !!field&&(!('value' in field)||!!field.value);}))throw fail('unsupported');
        let unmatched:ReturnType<typeof projectBotCallbackPage>|null=null;
        for(let read=0;;read++){
-        check();if(read>=B.downloadReads){
+        check();
+        const nearDeadline=deadline-time.now()<=botPollDelay(read);
+        if(read>=B.downloadReads||read>0&&nearDeadline){
          if(!unmatched)throw fail('timeout');
          retained=unmatched.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={...previous,baseline};
          return {...e,type:'bot-search.result',delivery:'acknowledged',rows:unmatched.rows.filter(row=>row.kind==='audio'),expiresAt:retainedUntil,expectedTarget:c.target};
         }
-        const raw=await rpc(ms=>dependency.readHistory(approved.peer,Math.min(baseline,selection.messageId-1),20,abort.signal,ms));
+        const raw=await poll(read,ms=>dependency.readHistory(approved.peer,Math.min(baseline,selection.messageId-1),20,abort.signal,ms),nearDeadline);
         const page=projectBotCallbackPage(raw,approved.botId,baseline,previous.outgoing,selection.messageId,selectedDocumentId,c.target);if(page.concurrent)throw fail('uncertain');
         const audio=page.rows.filter(row=>row.kind==='audio'),matches=matchingSongRows(audio,c.target);
         if(audio.length){
@@ -164,9 +193,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
          // this same callback's bounded window without fetching unrelated bytes
          // or sending another query/callback.
          if(!matches.length)unmatched=page;
-         else{selected=page.refs.get(matches[0].rowRef)!;message=await known(selected);break;}
+         else{metrics.callbackPollMs=elapsedMs(pollStart!);pollStart=undefined;selected=page.refs.get(matches[0].rowRef)!;message=await known(selected);break;}
         }
-        await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},B.pollMs);});
        }
       }
       const row=selected.row;if(row?.kind!=='audio')throw fail('unsupported');
@@ -178,15 +206,22 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       deadline=time.now()+transferMs;
       if(timer!==undefined)time.clearTimeout(timer);
       timer=time.setTimeout(()=>f.stop(fail('timeout')),transferMs);
+      const progress=(bytes:number)=>{if(ctx.publish&&live(ctx,capture)&&!f.cause)try{ctx.publish({...e,type:'bot-search.download-progress',bytes,total:row.bytes});}catch{/* Observation does not own transport. */}};
+      try{metrics.otherDc=dependency.isOtherDc?.(document.dcId)??null;}catch{/* Optional observation. */}
+      transferStart=performance.now();
       const result=await assembleBotDownloadBytes({bytes:row.bytes,mime:row.mimeType},async(offset,limit)=>{
-       // The descriptor passed validation; zero bytes means ready to receive,
-       // not that Telegram has delivered any part of the file yet.
-       if(offset===0&&ctx.publish&&live(ctx,capture)&&!f.cause)try{ctx.publish({...e,type:'bot-search.download-progress',bytes:0,total:row.bytes});}catch{/* Observation does not own transport. */}
-       const bytes=await rpc(()=>dependency.readDocumentPart!(document,offset,limit,abort.signal),false);
-       if(!(bytes instanceof Uint8Array)||bytes.length!==Math.min(limit,row.bytes-offset))throw new BotDownloadBytesFailure('short');
-       if(ctx.publish&&live(ctx,capture))try{ctx.publish({...e,type:'bot-search.download-progress',bytes:offset+bytes.length,total:row.bytes});}catch{/* Observation does not own transport. */}
-       return bytes;
-      },()=>live(ctx,capture)&&!f.cause&&time.now()<deadline);
+       if(offset===0)progress(0);
+       const part=await rpc(()=>dependency.readDocumentPart!(document,offset,limit,abort.signal),false);
+       if(part instanceof Uint8Array){metrics.parts++;metrics.bytes+=part.length;}
+       return part as Uint8Array;
+      },()=>live(ctx,capture)&&!f.cause&&time.now()<deadline,progress,error=>{
+       // A rejected part stops dispatch. Its siblings retain the transfer
+       // deadline; only actual cancellation or expiry starts settlement grace.
+       if(!live(ctx,capture))f.stop(fail('cancelled'));
+       else if(time.now()>=deadline)f.stop(fail('timeout'));
+       else f.cause??=observe(error);
+      });
+      metrics.transferMs=elapsedMs(transferStart);transferStart=undefined;
       await known(selected);check();retained=new Map();retainedSearch=null;
       return {...e,type:'bot-search.downloaded',audio:{...result,target:c.target,...(fold(row.title)!==fold(c.target.title)?{recordingTitle:row.title}:{})}};
      }
@@ -195,7 +230,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      f.delivery='uncertain';
      // Progress is advisory only, guarded immediately; it contains neither query nor peer.
      if(ctx.publish&&live(ctx,capture)){try{ctx.publish(Object.freeze({...e,type:'bot-search.sending',delivery:'uncertain'}));}catch{/* UI observers cannot change authority. */}}
-     const ack=botSearchAck(await rpc(ms=>dependency.sendQuery(approved.peer,query!,randomId,abort.signal,ms)),approved.botId,randomId);
+     const ack=botSearchAck(await measure(ms=>{metrics.sendMs=ms;},()=>rpc(ms=>dependency.sendQuery(approved.peer,query!,randomId,abort.signal,ms))),approved.botId,randomId);
      if(!ack||ack<=baseline)throw fail('uncertain');f.delivery='acknowledged';check();
      let lastCandidates:ReturnType<typeof projectBotSearchPage>|null=null,sawBotReply=false;
      let rejectedFile:ReturnType<typeof projectBotSearchPage>['rejectedFile'];
@@ -204,7 +239,9 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       return Object.freeze({...e,type:'bot-search.result',delivery:'acknowledged',rows:page.rows,expiresAt:retainedUntil,expectedTarget:c.target??null});
      };
      for(let reads=0;reads<B.reads;reads++){
-      const page=projectBotSearchPage(await rpc(ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms)),approved.botId,baseline,ack,[],c.target??null);check();
+      const nearDeadline=deadline-time.now()<=botPollDelay(reads);
+      if(reads>0&&nearDeadline)break;
+      const page=projectBotSearchPage(await poll(reads,ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms),nearDeadline),approved.botId,baseline,ack,[],c.target??null);check();
       if(page.concurrent)throw fail('uncertain');
       if(page.rows.some(row=>row.kind==='option'||row.kind==='audio')){
        lastCandidates=page;
@@ -216,8 +253,6 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       if(!lastCandidates&&!rejectedFile&&page.rows.some(row=>row.kind==='message'&&row.correlation==='reply'&&
        /^(?:no (?:se )?encontraron resultados|no results found)[.!]?$/iu.test(row.text)))return searchResult(page);
       sawBotReply ||= page.unrecognized||page.rows.length>0;
-      if(reads+1===B.reads||deadline-time.now()<=B.pollMs)break;
-      await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},Math.min(B.pollMs,Math.max(0,deadline-time.now())));});check();
      }
      if(rejectedFile)throw fail(rejectedFile);
      if(lastCandidates)return searchResult(lastCandidates);
@@ -226,6 +261,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      // Internally constructed causes are data-only; SDK errors were normalized in rpc.
      const known=error&&typeof error==='object'&&Object.getPrototypeOf(error)===Object.prototype&&Object.getOwnPropertyDescriptor(error,'error')?.value;
      const cause=f.cause??(typeof known==='string'?error as Failure:observe(error));
+     if(cause.error==='conflict'||cause.error==='identity-changed'||cause.error==='unsupported')identities.delete(c.providerRef);
      if(!f.cause)f.cause=cause;return response(e,cause,f.delivery);
     }
    }).finally(()=>finish(true));
@@ -243,7 +279,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
  * Injectable call is worker-private, never a root/session API. */
 export function createBotSearchSdkDriver(binding:AccountBinding,sessionId:string,sdk:{
  readonly call:BaseTelegramClient['call'];readonly providers:BotProvidersDriver;
- readonly current:(signal:AbortSignal)=>void;readonly invalidateSession:()=>void;
+ readonly current:(signal:AbortSignal)=>void;readonly invalidateSession:()=>void;readonly isOtherDc?:(dcId:number)=>boolean|null;
  readonly getAccountCooldown:NonNullable<BotSearchDependency['getAccountCooldown']>;
 },time?:BotProvidersClock):BotSearchDriver {
  return createBotSearchDriver(binding,sessionId,{
@@ -254,6 +290,6 @@ export function createBotSearchSdkDriver(binding:AccountBinding,sessionId:string
   async readKnown(_peer,id,abort){sdk.current(abort);const r=await sdk.call({_:'messages.getMessages',id:[{_:'inputMessageID',id}]},{timeout:0,maxRetryCount:0,floodSleepThreshold:0});sdk.current(abort);return r;},
   async callback(peer,msgId,data,abort){sdk.current(abort);const r=await sdk.call({_:'messages.getBotCallbackAnswer',peer,msgId,data},{timeout:0,maxRetryCount:0,floodSleepThreshold:0});sdk.current(abort);return r;},
   async readDocumentPart(document,offset,limit,abort){sdk.current(abort);const r=await sdk.call({_:'upload.getFile',location:document.location,offset,limit,precise:true},{dcId:document.dcId,kind:'download',timeout:0,maxRetryCount:0,floodSleepThreshold:0});sdk.current(abort);if(r._!=='upload.file')throw new BotSearchProjectionError('unsupported');return r.bytes;},
-  getAccountCooldown:sdk.getAccountCooldown,invalidateSession:sdk.invalidateSession,
+  getAccountCooldown:sdk.getAccountCooldown,isOtherDc:sdk.isOtherDc,invalidateSession:sdk.invalidateSession,
  },time);
 }

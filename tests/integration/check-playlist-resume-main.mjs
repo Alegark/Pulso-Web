@@ -29,18 +29,36 @@ const fixture=(release='old')=>({name:'playlist-resume-sdk-test',enforce:'pre',r
   if(id.endsWith('/src/main.tsx'))return code.replace('function captureBatchDownload(recoverPending=false):SongPlaybackAttempt|null {',
    'function captureBatchDownload(recoverPending=false):SongPlaybackAttempt|null {if(document.documentElement.dataset.testBusy==="true")return null;')
    .replace('prepare:async manual=>{',
-   'prepare:async manual=>{if (document.documentElement.dataset.testUpdateBlocked === "true") return false;')+`
-document.documentElement.dataset.testBuild=${JSON.stringify(release)};window.testEmit=emit;`;
+   'prepare:async manual=>{if (document.documentElement.dataset.testUpdateBlocked === "true") return false;')
+   .replace("await refresh(false,false,diagnostic,'refresh',false,true);","await window.testBeforeImportRefresh?.();await refresh(false,false,diagnostic,'refresh',false,true);")+`
+document.documentElement.dataset.testBuild=${JSON.stringify(release)};window.testEmit=emit;window.testCopyState=id=>availability.get(id)?.state;`;
   if(id.endsWith('/src/ui/DownloadDock.tsx'))return code.replace('const displayTime=5000;', 'const displayTime=window.testDockTime??5000;');
   if(id.endsWith('/src/ui/TelegramPanel.tsx'))return code.replace('tracks={localTracks} client={client.current}',
    'tracks={document.documentElement.dataset.testHoldTracks==="true"?[]:localTracks} client={client.current}');
   if(id.endsWith('/tests/integration/required-setup-sdk.ts'))return code.replace("await fetch('/__setup-event?kind='+kind);",
    "if(!(await fetch('/__setup-event?kind='+kind)).ok)throw Error('network');");
+  if(id.endsWith('/library/ordered-bot-acquisition.ts'))return code.replace('await terminal;ownedCancel=undefined;',
+   'await terminal;if(window.testManualSettlement){await window.testManualSettlement;window.testManualSettlement=null;}ownedCancel=undefined;');
   if(id.endsWith('/telegram/session-client.ts')){
    return code+`
 const testSearchBot=TelegramSessionClient.prototype.searchBot;
     TelegramSessionClient.prototype.searchBot=function(...args){
-     window.testSessionClient=this;
+     if(window.testStartManualLane&&args[0].target?.title==='Pista 3'){
+      window.testStartManualLane=false;
+      // Admit the competing search synchronously at settlement. The product
+      // no longer waits a second before admitting the selected download.
+      const stop=this.subscribeSearch(state=>{
+       if(state.expectedTarget?.title!=='Pista 3'||state.pending||!state.rows.length)return;
+       stop();
+       if(window.testManualLaneCompletesFirst)window.testManualSettlement=new Promise(resolve=>{
+        const unsubscribe=this.subscribeSearch(manual=>{
+         if(manual.pending||manual.queryId===state.queryId||manual.delivery!=='acknowledged')return;
+         unsubscribe();window.testManualSettledBeforeCollection=true;resolve();
+        });
+       });
+       testSearchBot.call(this,{providerRef:this.botsSnapshot().providers[0].providerRef,query:'Consulta manual',consent:true});
+      });
+     }
      return testSearchBot.apply(this,args);
     };
 `;
@@ -55,7 +73,7 @@ const testSearchBot=TelegramSessionClient.prototype.searchBot;
  }});
 const backgroundModes=['background-alive','cold-resume','stop-reload','two-tabs','wake-restore','paused-hidden','hidden-rejection','orphan-idle'];
 const channelModes=['long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop',...backgroundModes];
-const fallbackModes=['bot-timeout','bot-unsupported','manual-lane'];
+const fallbackModes=['bot-timeout','bot-unsupported','manual-lane','manual-lane-settled'];
 const updateModes=['update-resume','update-offline','update-startup','update-single','update-album','update-timeout','update-stopped','update-attempted','update-auto','update-auto-busy','update-priority-album','update-priority-song','update-album-cancelled','update-album-other-edition'];
 const allModes=[...updateModes,...channelModes,...fallbackModes,'autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
 const modes=process.env.PLAYLIST_RESUME_MODE?process.env.PLAYLIST_RESUME_MODE.split(','):allModes;
@@ -220,7 +238,7 @@ try{
       }
       if(mode==='update-priority-song'&&event.kind==='read'){gateProbes++;await searchGate;}
       const network=event.kind==='read'&&event.title==='Pista 3'&&(mode==='reconnect'&&thirdSearches<=2||mode==='wake-restore'&&thirdSearches===1);
-      return route.fulfill({json:{mode:albumMode||mode==='update-priority-album'?'missing':singleMode?'single':updating||mode==='hidden-rejection'?'autoheal':backgroundModes.includes(mode)?'suspend':mode,flood,network}});
+      return route.fulfill({json:{mode:albumMode||mode==='update-priority-album'?'missing':singleMode?'single':updating||mode==='hidden-rejection'?'autoheal':backgroundModes.includes(mode)?'suspend':mode==='manual-lane-settled'?'manual-lane':mode,flood,network}});
      }
      return route.fallback();
     });
@@ -236,6 +254,8 @@ try{
      return route.fulfill({json:cloud});
     });
     await context.addInitScript(({loseAck,channel,fallback,mode,user,updating})=>{
+     if(mode==='manual-lane'||mode==='manual-lane-settled')window.testStartManualLane=true;
+     if(mode==='manual-lane-settled')window.testManualLaneCompletesFirst=true;
      let hidden=false,offset=-500;
      if(mode!=='missing'&&mode!=='paused-hidden')window.testDockTime=45000;
      if(updating){
@@ -540,6 +560,24 @@ try{
       },{entry:next.entry,bundle:next.html.match(/src="(\/assets\/[^"]+\.js)"/)[1],user});
       pointer=mode==='update-offline'?'offline':'new';
      }
+     if(mode==='connected'&&process.env.PLAYLIST_TEST_PURGED_COPY==='1'){
+      await page.waitForFunction(id=>window.testCopyState(id)==='available',ids[0]);
+      await page.evaluate(storageKey=>{
+       const edit=async(value,restore)=>{
+        const db=await new Promise((resolve,reject)=>{
+         const req=indexedDB.open('pulso-web-local-v1');
+         req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+        });
+        try{await new Promise((resolve,reject)=>{
+         const tx=db.transaction('chunks','readwrite'),store=tx.objectStore('chunks'),key=[storageKey,0];
+         if(restore)store.put(value,key);else store.delete(key);
+         tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);
+        });}finally{db.close();}
+       };
+       window.testBeforeImportRefresh=async()=>{window.testBeforeImportRefresh=null;await edit(null,false);window.testPurged=true;};
+       window.testRestorePurgedCopy=value=>edit(Uint8Array.from(atob(value),c=>c.charCodeAt(0)),true);
+      },readyCopies[0].id);
+     }
      const clickedAt=Date.now();
      const continueButton=dock.getByRole('button',{name:'Continuar',exact:true});
      await continueButton.click();
@@ -603,14 +641,6 @@ try{
      releaseSearch();
     }
     if(mode==='manual-lane'){
-     await page.waitForFunction(()=>{
-      const client=window.testSessionClient,state=client?.searchSnapshot();
-      return state?.expectedTarget?.title==='Pista 3'&&!state.pending&&state.rows.length>0;
-     });
-     await page.evaluate(()=>{
-      const client=window.testSessionClient;
-      client.searchBot({providerRef:client.botsSnapshot().providers[0].providerRef,query:'Consulta manual',consent:true});
-     });
      await waitForWorker(()=>trace.some(event=>event.title==='Consulta manual'));
      await advance(4000);
      assert.equal(trace.filter(event=>event.title==='Pista 3').length,1);
@@ -778,7 +808,8 @@ try{
       assert.ok(notices.every(notice=>notice.tag==='pulso-download-collection'));
      }
     }else if(fallback){
-     assert.deepEqual(searches.map(({title,peer})=>[title,peer]),mode==='manual-lane'?
+     if(mode==='manual-lane-settled')assert.equal(await page.evaluate(()=>window.testManualSettledBeforeCollection),true);
+     assert.deepEqual(searches.map(({title,peer})=>[title,peer]),mode.startsWith('manual-lane')?
       [['Pista 3',101],['Consulta manual',101],['Pista 3',101],['Pista 4',101]]:
       [['Pista 3',101],['Pista 3',102],['Pista 4',101]]);
      if(mode==='bot-timeout')assert.ok(searches[1].at-searches[0].at>=14_000,'the first bot stayed silent through its response deadline');
@@ -802,6 +833,10 @@ try{
       });}finally{db.close();}
      },operationId);
      assert.deepEqual(staging,mode==='parked'?{state:'cleanup',hasChunk:true}:{state:'discarded',hasChunk:false});
+    }
+    if(mode==='connected'&&process.env.PLAYLIST_TEST_PURGED_COPY==='1'){
+     assert.equal(await page.evaluate(id=>window.testPurged&&window.testCopyState(id),ids[0]),'missing');
+     await page.evaluate(audio=>window.testRestorePurgedCopy(audio),readyCopies[0].audio);
     }
     const copies=await page.evaluate(async ids=>{
      const db=await new Promise((resolve,reject)=>{const q=indexedDB.open('pulso-web-local-v1');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});

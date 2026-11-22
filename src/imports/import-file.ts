@@ -1,3 +1,4 @@
+import {elapsedMs,type ImportTiming} from '../diagnostics/download-timing';
 import {expectedAudioTagMismatch,expectedAudioDurationMismatch,type ExpectedAudioMetadata} from './expected-audio-metadata';
 import {activeLibraryAccount} from '../accounts/library-local';
 import {extractLocalAlbumMetadata,type Mp4AlbumTag} from './album-metadata';
@@ -20,17 +21,20 @@ import {assertImportsResolved,validImportOperation,deduplicateOperation,cleanupO
 export {importOperations,importOperation,recoverImportOperation,importIssues,retainImportIssue} from '../storage/import-operations';
 export type ImportLyricsWarning=EmbeddedLyricsFailure|LyricsFailure;
 export interface ImportOptions {libraryMode?:'cache';backend?:'idb'|'opfs'|'auto';operationId?:string;expected?:ExpectedAudioMetadata;parkedOperationIds?:readonly string[]}
-const CHUNK=65536;
+type ImportPhase='analysisMs'|'writeMs'|'verifyMs'|'metadataMs';
+type MarkTiming=(phase:ImportPhase|null)=>void;
+const CHUNK=65536,IDB_BATCH=512*1024,OPFS_CHECKPOINT=1024*1024;
 async function writeDirectory(){return atBoundary('open','opfs',async()=>{assertDatabaseUse('write');const root=await navigator.storage.getDirectory();assertDatabaseUse('write');return root.getDirectoryHandle(ASSET_DIRECTORY,{create:true});});}
 /** Owns WRITER_LOCK internally, including recovery gating and final outcome resolution. */
-async function importFileCore(file:File,signal:AbortSignal,progress:(bytes:number)=>void=()=>{},options:ImportOptions={},attempt:Attempt):Promise<ImportResult & {artworkWarning?:ArtworkFailure;lyricsWarning?:ImportLyricsWarning;lyricsInspection?:EmbeddedLyricsStoreResult}> {
+async function importFileCore(file:File,signal:AbortSignal,progress:(bytes:number)=>void=()=>{},options:ImportOptions,attempt:Attempt,mark:MarkTiming,timing?:ImportTiming):Promise<ImportResult & {artworkWarning?:ArtworkFailure;lyricsWarning?:ImportLyricsWarning;lyricsInspection?:EmbeddedLyricsStoreResult}> {
  if(options.libraryMode!==undefined&&options.libraryMode!=='cache')fail('validate','internal','input-invalid','none');
  const operationId=options.operationId??crypto.randomUUID();
  const {result,inspect}=await navigator.locks.request(WRITER_LOCK,async()=>{
   const prior=options.operationId?await importOperation(options.operationId):undefined;
-  return {result:await performImport(file,signal,progress,{...options,operationId},attempt),inspect:!prior};
+  return {result:await performImport(file,signal,progress,{...options,operationId},attempt,mark,timing),inspect:!prior};
  });
  if(!inspect||signal.aborted)return result;
+ mark('metadataMs');
  try{assertDatabaseUse('publish');}catch{return result;}
  let outcome:ImportResult & {artworkWarning?:ArtworkFailure;lyricsWarning?:ImportLyricsWarning;lyricsInspection?:EmbeddedLyricsStoreResult}=result;
  // Audio outcome is already confirmed. Optional metadata failures must never enter audio cleanup.
@@ -59,7 +63,8 @@ async function importFileCore(file:File,signal:AbortSignal,progress:(bytes:numbe
  }catch(error){outcome={...outcome,lyricsWarning:optionalCode(error,LyricsError,lyricsCodes,'storage')};}
  return outcome;
 }
-async function performImport(file:File,signal:AbortSignal,progress:(bytes:number)=>void,options:ImportOptions,attempt:Attempt):Promise<ImportResult & {artworkWarning?:ArtworkFailure}>{
+async function performImport(file:File,signal:AbortSignal,progress:(bytes:number)=>void,options:ImportOptions,attempt:Attempt,mark:MarkTiming,timing?:ImportTiming):Promise<ImportResult & {artworkWarning?:ArtworkFailure}>{
+ mark('analysisMs');
  const accountId=await activeLibraryAccount();checkCancelled(signal);
  if(options.libraryMode!==undefined&&options.libraryMode!=='cache')fail('validate','internal','input-invalid','none');
  const operationId=options.operationId??crypto.randomUUID();
@@ -108,30 +113,49 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
    directory=undefined;backend='idb';
   }
  }
+ if(timing)timing.backend=backend;
+ mark('writeMs');
  attempt.backend=backend;attempt.closeState=backend==='opfs'?'not-attempted':'not-applicable';
  checkCancelled(signal);
  let job:ImportOperation={version:1,operationId,owner:crypto.randomUUID(),revision:1,state:'writing',backend,storageKey,bytes:0,expectedBytes:file.size,...(accountId?{accountId}:{}),...(options.libraryMode==='cache'?{libraryMode:'cache' as const}:{})};
 
- let writer:FileSystemWritableFileStream|undefined;let closeAttempted=false;let closed=false;
+ let writer:FileSystemWritableFileStream|undefined;let closeAttempted=false;let closed=false;let badExpectedInput=false;
  try{
  attempt.started=true;await createOperation(job);
  if(directory)writer=await atBoundary('open','opfs',async()=>{assertDatabaseUse('write');const handle=await directory.getFileHandle(job.storageKey,{create:true});assertDatabaseUse('write');return handle.createWritable();});
- const hash=sha256.create();let count=0;
- for(let offset=0;offset<file.size;offset+=CHUNK){
- checkCancelled(signal); const bytes=new Uint8Array(await atBoundary('read','none',()=>file.slice(offset,offset+CHUNK).arrayBuffer()));hash.update(bytes);
- if(writer){await atBoundary('write','opfs',()=>{assertDatabaseUse('write');return writer!.write(bytes);});job=await updateOperation(job,{bytes:offset+bytes.length});}
- else{
- await atBoundary('write','idb',async()=>{const db=await openDatabase();try{const tx=admittedTransaction(db,['chunks','jobs'],'readwrite');const done=transactionDone(tx);
- try{const current=await request<ImportOperation|undefined>(tx.objectStore('jobs').get(operationId));
- if(!validImportOperation(current,operationId)||JSON.stringify(current)!==JSON.stringify(job)||current.owner!==job.owner||current.revision!==job.revision||current.state!=='writing'){fail('write','internal','conflict','idb');}
- tx.objectStore('chunks').put(bytes,[job.storageKey,count]);const next={...job,bytes:offset+bytes.length,revision:job.revision+1};tx.objectStore('jobs').put(next,operationId);await done;job=next;
- }catch(error){try{tx.abort();}catch{/* settled */}await done.catch(()=>{});throw error;}
- }finally{closeDatabase(db);}});
+ // A writing job has no publishable manifest. A discarded job removes its
+ // entire owned generation, including any bytes beyond its last checkpoint.
+ const hash=options.expected?null:sha256.create();let count=0;
+ const db=writer?undefined:await atBoundary('open','idb',openDatabase);
+ try{
+ for(let offset=0;offset<file.size;){
+  checkCancelled(signal);
+  const size=writer?CHUNK:IDB_BATCH;
+  const bytes=new Uint8Array(await atBoundary('read','none',()=>file.slice(offset,offset+size).arrayBuffer()));
+  if(bytes.length!==Math.min(size,file.size-offset))fail('read','integrity','length-mismatch',backend);
+  checkCancelled(signal);hash?.update(bytes);
+  offset+=bytes.length;
+  if(writer){
+   await atBoundary('write','opfs',()=>{assertDatabaseUse('write');return writer!.write(bytes);});
+   if(offset===file.size||offset-job.bytes>=OPFS_CHECKPOINT)job=await updateOperation(job,{bytes:offset});
+   count++;
+  }else{
+   await atBoundary('write','idb',async()=>{const tx=admittedTransaction(db!,['chunks','jobs'],'readwrite');const done=transactionDone(tx);
+    try{const current=await request<ImportOperation|undefined>(tx.objectStore('jobs').get(operationId));
+     checkCancelled(signal);
+     if(!validImportOperation(current,operationId)||JSON.stringify(current)!==JSON.stringify(job)||current.owner!==job.owner||current.revision!==job.revision||current.state!=='writing')fail('write','internal','conflict','idb');
+     const chunks=tx.objectStore('chunks');
+     for(let at=0;at<bytes.length;at+=CHUNK)chunks.put(bytes.slice(at,at+CHUNK),[job.storageKey,count++]);
+     const next={...job,bytes:offset,revision:job.revision+1};tx.objectStore('jobs').put(next,operationId);await done;job=next;
+    }catch(error){try{tx.abort();}catch{/* settled */}await done.catch(()=>{});throw error;}
+   });
+  }
+  await atBoundary('transport','none',()=>progress(offset));
  }
- count++;await atBoundary('transport','none',()=>progress(offset+bytes.length));
- }
- const digest=bytesToHex(hash.digest());
- if(options.expected&&digest!==options.expected.sha256)fail('verify','integrity','digest-mismatch',backend);
+ }finally{if(db)closeDatabase(db);}
+ // The reopened generation is verified against this digest before the job
+ // reaches ready, including after recovering an interrupted verification.
+ const digest=hash?bytesToHex(hash.digest()):options.expected!.sha256;
  const candidates=await atBoundary('read','idb',()=>all<LocalAsset>('assets'));
  let existing:LocalAsset|undefined;
  for(const candidate of candidates.filter(a=>validAsset(a)&&a.sha256===digest&&a.bytes===file.size)){
@@ -150,7 +174,23 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
  const track:LinkedTrack={...(accountId?{accountId}:{}),localAlbum,id:crypto.randomUUID(),assetId:asset.id,audioFingerprint:{algorithm:'sha256',sha256:digest,bytes:file.size},title:text(metadata.common.title)||truncate(file.name.replace(/\.[^.]+$/,''))||'Sin título',artist:text(metadata.common.artist),album:text(metadata.common.album),duration,favorite:false,revision:1,createdAt:new Date().toISOString(),manualOverrides:{}};
  job=await updateOperation(job,{state:'verifying',asset,track,expectedAssetRevision:existing?.revision??0});
  if(writer){assertDatabaseUse('write');closeAttempted=true;attempt.closeState='unknown';await atBoundary('close','opfs',()=>writer!.close());closed=true;attempt.closeState='acknowledged';}
- const reader=await openAssetReader(asset,false);try{const verified=await reader.verifyDetailed();if(verified.state!=='valid')throw AppFailure.create(verified.failure);}finally{reader.release();}
+ mark('verifyMs');
+ const reader=await openAssetReader(asset,false);
+ try{
+  const verified=await reader.verifyDetailed();
+  if(verified.state!=='valid'){
+   // Distinguish a definitive input rejection from an uncertain storage
+   // failure. Only the exceptional mismatch path hashes the source again.
+   if(options.expected&&verified.failure.code==='digest-mismatch'){
+    const source=sha256.create();
+    for(let offset=0;offset<file.size;offset+=IDB_BATCH){
+     checkCancelled(signal);source.update(new Uint8Array(await atBoundary('read','none',()=>file.slice(offset,offset+IDB_BATCH).arrayBuffer())));
+    }
+    badExpectedInput=bytesToHex(source.digest())!==digest;
+   }
+   throw AppFailure.create(verified.failure);
+  }
+ }finally{reader.release();}
  job=await updateOperation(job,{state:'ready'});checkCancelled(signal); 
  const duplicate=await deduplicateOperation(job,signal);if(duplicate?.result)return outcome(duplicate.result);
  checkCancelled(signal); job=await updateOperation(job,{state:'publishing'});
@@ -167,7 +207,7 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
  if(current?.state==='sealed'&&current.result)return current.result;
  if(current?.state==='discarded'&&current.result)return current.result;
  if(current?.result&&current.state==='cleanup')attempt.pendingPublication=true;
- let uncertain=abortFailed||closeAttempted&&!closed||current?.state==='publishing'||current?.state==='verifying'||attempt.primary?.phase==='transport'||current?.state==='cleanup'&&!!current.result;
+ let uncertain=abortFailed||closeAttempted&&!closed||current?.state==='publishing'||current?.state==='verifying'&&!badExpectedInput||attempt.primary?.phase==='transport'||current?.state==='cleanup'&&!!current.result;
  if(current&&!uncertain){
  try{if(current.state!=='cleanup')current=await updateOperation(current,{state:'cleanup',cause:attempt.primary?.code==='cancelled'?'cancelled':attempt.primary?.code==='quota-exceeded'?'quota':'copy-failed'});await cleanupOperation(current);}
  catch(cleanup){attempt.secondary('cleanup',fromKnownError(cleanup,{phase:'cleanup',backend:current.backend}));uncertain=true;}
@@ -180,15 +220,17 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
 }
 function checkCancelled(signal:AbortSignal){assertDatabaseUse('write');if(signal.aborted)fail('validate','cancelled','cancelled','none');}
 /** Public detailed API: one copy algorithm, one writer lock, optional metadata after durable audio. */
-export async function importFileDetailed(file:File,signal:AbortSignal,progress:(bytes:number)=>void=()=>{},options:ImportOptions={}):Promise<ImportAttemptResult>{
+export async function importFileDetailed(file:File,signal:AbortSignal,progress:(bytes:number)=>void=()=>{},options:ImportOptions={},timing?:ImportTiming):Promise<ImportAttemptResult>{
  const attempt=new Attempt();
+ let phase:ImportPhase|null=null,started=0;
+ const mark:MarkTiming=next=>{if(!timing)return;if(phase)timing[phase]+=elapsedMs(started);phase=next;started=performance.now();};
  try{
- const result=await importFileCore(file,signal,progress,options,attempt);
+ const result=await importFileCore(file,signal,progress,options,attempt,mark,timing);
  return {kind:'confirmed',result,outcome:attempt.confirmed()};
  }catch(error){
  attempt.failure(fromKnownError(error,{phase:null,backend:attempt.backend,cancelRequested:signal.aborted}));
  return {kind:'failed',outcome:attempt.outcome(attempt.started?'unknown':attempt.cleaned?'not-published':'not-started')};
- }
+ }finally{mark(null);}
 }
 /** Legacy surface uses the same core; only fixed safe messages cross a failed attempt. */
 export async function importFile(file:File,signal:AbortSignal,progress:(bytes:number)=>void=()=>{},options:ImportOptions={}):Promise<DetailedImportResult>{
