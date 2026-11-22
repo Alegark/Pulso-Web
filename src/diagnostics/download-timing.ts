@@ -6,10 +6,10 @@ export const importTimingKeys=['analysisMs','writeMs','verifyMs','metadataMs','b
 export const downloadTimingKeys=['totalMs','waitMs','refreshMs','kBps','result',...networkTimingKeys,...importTimingKeys] as const;
 export const emptyNetworkTiming=()=>({resolveMs:0,sendMs:0,searchPollMs:0,searchReads:0,callbackMs:0,callbackPollMs:0,callbackReads:0,transferMs:0,bytes:0,parts:0,otherDc:null as boolean|null});
 export const emptyImportTiming=()=>({analysisMs:0,writeMs:0,verifyMs:0,metadataMs:0,backend:null as 'opfs'|'idb'|null});
-export type NetworkTiming=ReturnType<typeof emptyNetworkTiming>;
+export type NetworkTiming=ReturnType<typeof emptyNetworkTiming>&{firstBotReplyMs?:number};
 export type ImportTiming=ReturnType<typeof emptyImportTiming>;
 export type DownloadResult='received'|'saved'|'failed'|'uncertain'|'cancelled';
-export type DownloadTiming=NetworkTiming&ImportTiming&{totalMs:number;waitMs:number;refreshMs:number;kBps:number;result:DownloadResult};
+export type DownloadTiming=ReturnType<typeof emptyNetworkTiming>&ImportTiming&{totalMs:number;waitMs:number;refreshMs:number;kBps:number;result:DownloadResult};
 export const elapsedMs=(start:number)=>Math.round(Math.max(0,performance.now()-start));
 export async function measure<T>(report:(ms:number)=>void,work:()=>Promise<T>):Promise<T>{
  const start=performance.now();try{return await work();}finally{report(elapsedMs(start));}
@@ -24,6 +24,6 @@ function timing(value:unknown,keys:readonly string[]){
  }
  return Object.freeze(row);
 }
-export const parseNetworkTiming=(value:unknown)=>timing(value,networkTimingKeys) as Readonly<NetworkTiming>|null;
+export const parseNetworkTiming=(value:unknown)=>timing(value,value&&typeof value==='object'&&Object.hasOwn(value,'firstBotReplyMs')?[...networkTimingKeys,'firstBotReplyMs']:networkTimingKeys) as Readonly<NetworkTiming>|null;
 export const parseImportTiming=(value:unknown)=>timing(value,importTimingKeys) as Readonly<ImportTiming>|null;
 export const parseDownloadTiming=(value:unknown)=>timing(value,downloadTimingKeys) as Readonly<DownloadTiming>|null;

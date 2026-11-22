@@ -19,3 +19,22 @@ test('normalization and optional tags preserve existing import behavior',()=>{
  assert.equal(mismatch({title:'Ówn song (Live)',artist:'OWN ARTIST'},expected),null);
  assert.equal(mismatch({},expected),null);assert.equal(mismatch({artist:'Guest'},{title:'Own',artist:null}),null);
 });
+
+import {parseBuffer} from 'music-metadata';
+import {taggedM4a,taggedMp3} from '../integration/tagged-audio-fixture.mjs';
+
+for(const [format,mime,fixture] of [['MP3','audio/mpeg',taggedMp3],['M4A','audio/mp4',taggedM4a]] as const)
+ test(`${format} compound title identifies the full artist and recording with independently parsed duration`,async()=>{
+  const uploader='Unrelated uploader';
+  for(const compound of ['Ówn Artist - Own song (LIVE)','Own song (Live) – Own Artist','Own Artist — Own song (Live)']){
+   const file=await parseBuffer(fixture(compound,uploader),{mimeType:mime},{skipCovers:true,duration:true});
+   assert.equal(file.common.title,compound);
+   assert.equal(file.common.artist,uploader);
+   assert.ok(file.format.duration&&file.format.duration>0);
+   assert.equal(mismatch(file.common,{...expected,durationSeconds:file.format.duration},file.format.duration),null);
+   assert.equal(mismatch(file.common,expected,file.format.duration),'title');
+   assert.equal(mismatch(file.common,{...expected,durationSeconds:90},file.format.duration),'title');
+   assert.equal(mismatch(file.common,{...expected,title:'Own song (Remix)',durationSeconds:file.format.duration},file.format.duration),'title');
+   assert.equal(mismatch(file.common,{...expected,artist:'Own Artist feat. Guest',durationSeconds:file.format.duration},file.format.duration),'title');
+  }
+ });

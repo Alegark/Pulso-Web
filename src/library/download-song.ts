@@ -1,3 +1,4 @@
+import {beginSongAggregate} from '../diagnostics/song-aggregate';
 import {acquireFromOrderedBots,type CandidateDisposition} from './ordered-bot-acquisition';
 import type {AlbumRow} from './album-acquisition';
 import type {PendingDownload,SavedCandidate} from './library-download-checkpoint';
@@ -20,9 +21,11 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
  const failedDigests=new Set(previousAttempts.map(candidate=>candidate.digest));
  const excludedRowKeys=new Set(previousAttempts.map(candidate=>candidate.rowKey));
  const network=()=>p.mark({kind:'network',index:p.index});
+ const measurement=p.measurement??beginSongAggregate();
+ try{
  network();
- p.message('Buscando canción…');
- const result=await acquireFromOrderedBots({...p,target,excludedDigests:failedDigests,excludedRowKeys,accept:async (audio,rowKey):Promise<CandidateDisposition|'saved'>=>{
+ const result=await acquireFromOrderedBots({...p,target,measurement,status:p.message,excludedDigests:failedDigests,excludedRowKeys,accept:async (audio,rowKey):Promise<CandidateDisposition|'saved'>=>{
+  let rejection:Awaited<ReturnType<SongPlaybackAttempt['save']>>['rejection'];
   const attempts=[...previousAttempts.slice(-1),{digest:audio.sha256,rowKey}];
   // One repeat of the same bytes for a transient write failure, after proving
   // that the previous operation published nothing. Every write has a new ID.
@@ -51,14 +54,15 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
     await parkSongDownload(attempt,operationId,signal);
     return 'parked';
    }
-   if(!local.retryWrite)break;
+   if(!local.retryWrite){rejection=local.rejection;break;}
   }
   previousAttempts=attempts;
   p.onFailedCandidates?.(attempts);
   failedDigests.add(audio.sha256);
   network();
-  p.message('Probando otra opción…');
-  return 'retry';
+  const reason=rejection==='import-tag-mismatch'?'metadatos':'duración';
+  p.message(rejection?`La opción no coincide (${reason}) · probando otra…`:'Probando otra opción…');
+  return rejection??'retry';
  }});
  if(result.state==='stopped'||!current())return {state:'stopped'};
  if(savedId)return {state:'downloaded',trackId:savedId,confirmed:true,message:'Descargada'};
@@ -67,6 +71,7 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
  if(result.state==='known-failure'&&(failedDigests.size||result.reasons.some(reason=>reason!=='no-compatible-row')))return {state:'failed',reason:'no-valid-file',message:'Ningún bot entregó un archivo válido'};
  if(result.state==='known-failure'&&result.reasons.length)return {state:'failed',reason:'not-found',message:'No existe en tus bots'};
  return {state:'failed',message:'No hay bots disponibles'};
+ }finally{if(!p.measurement)measurement?.finish();}
 }
 
 export async function reconcileSongDownload(attempt:SongPlaybackAttempt,operationId:string,track:string|SongChoice,signal:AbortSignal){

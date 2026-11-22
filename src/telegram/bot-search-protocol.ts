@@ -3,7 +3,7 @@ import {isBotDownloadMime} from './bot-download-bytes';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {dataArray,dataRecord,isUuid,parseAccountBinding,utf8Bytes,type AccountBinding} from './sources-protocol';
 import {recordingTitleCandidate} from '../library/recording-title';
-export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:19,downloadReads:63,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadResolveMs:120000});
+export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:19,downloadReads:63,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadResolveMs:120000,callbackBudgetMs:65000});
 // Compared with immediate + 1 s polling, the warm-up adds at most three
 // history reads. The 15 s command deadline and ~59 s callback window remain.
 const earlyPollMs=[250,250,400,700] as const;
@@ -15,7 +15,7 @@ export interface BotSearchEnvelope extends AccountBinding {readonly protocol:'pu
 export interface BotSearchTarget {readonly title:string;readonly artist:string|null;readonly album:string|null;readonly durationSeconds:number|null}
 export type BotSearchCommand=
  |(BotSearchEnvelope&{readonly type:'bot-search.search';readonly providerRef:string;readonly query:string;readonly consent:true;readonly target?:BotSearchTarget})
- |(BotSearchEnvelope&{readonly type:'bot-search.download';readonly providerRef:string;readonly rowRef:string;readonly target:BotSearchTarget;readonly consent:true})
+ |(BotSearchEnvelope&{readonly type:'bot-search.download';readonly providerRef:string;readonly rowRef:string;readonly target:BotSearchTarget;readonly consent:true;readonly callbackBudgetMs?:number})
  |(BotSearchEnvelope&{readonly type:'bot-search.cancel';readonly targetRequestId:string});
 /** Closed non-content diagnostics. No counts, query, peer or account data. */
 export const BOT_SEARCH_LIMIT_DIAGNOSTICS=Object.freeze({
@@ -84,7 +84,7 @@ function row(raw:unknown):BotSearchRow|null {
 export function parseBotSearchCommand(raw:unknown):BotSearchCommand|null {
  try{const r=dataRecord(raw);if(!r)return null;const e=envelope(r);if(!e)return null;let extra:string[],out:BotSearchCommand;
  if(r.type==='bot-search.search'){if(!isUuid(r.providerRef)||!isBotSearchQuery(r.query)||r.consent!==true)return null;const target=r.target===undefined?undefined:parseBotSearchTarget(r.target);if(target===null)return null;extra=['providerRef','query','consent',...(target?['target']:[])];out={...e,type:r.type,providerRef:r.providerRef,query:r.query,consent:true,...(target?{target}:{})};}
- else if(r.type==='bot-search.download'){const target=parseBotSearchTarget(r.target);if(!isUuid(r.providerRef)||!isUuid(r.rowRef)||!target||r.consent!==true)return null;extra=['providerRef','rowRef','target','consent'];out={...e,type:r.type,providerRef:r.providerRef,rowRef:r.rowRef,target,consent:true};}
+ else if(r.type==='bot-search.download'){const target=parseBotSearchTarget(r.target);if(!isUuid(r.providerRef)||!isUuid(r.rowRef)||!target||r.consent!==true)return null;const ms=r.callbackBudgetMs;if(ms!==undefined&&(!revision(ms)||ms<1||ms>BOT_SEARCH_BOUNDS.callbackBudgetMs))return null;extra=['providerRef','rowRef','target','consent',...(ms===undefined?[]:['callbackBudgetMs'])];out={...e,type:r.type,providerRef:r.providerRef,rowRef:r.rowRef,target,consent:true,...(ms===undefined?{}:{callbackBudgetMs:ms})};}
  else if(r.type==='bot-search.cancel'){if(!isUuid(r.targetRequestId))return null;extra=['targetRequestId'];out={...e,type:r.type,targetRequestId:r.targetRequestId};}else return null;
  return dataRecord(raw,[...keys,'type',...extra])&&utf8Bytes(JSON.stringify(out))<=BOT_SEARCH_BOUNDS.dtoBytes?Object.freeze(out):null;}catch{return null;}
 }
@@ -173,4 +173,11 @@ export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTa
  };
  return rows.map((row,index)=>({row,index,score:score(row)})).filter(v=>v.score>0)
   .sort((a,b)=>b.score-a.score||a.index-b.index).map(v=>v.row);
+}
+
+/** A displayed duration can disqualify a button. Audio identity is checked independently. */
+export function botOptionDurationMismatch(row:BotSearchRow,target:BotSearchTarget):boolean {
+ if(row.kind!=='option'||!target.durationSeconds)return false;
+ const duration=/(?:\((\d{1,2}):([0-5]\d)\)|\[(\d{1,2}):([0-5]\d)\])\s*$/u.exec(row.label);
+ return !!duration&&Math.abs(60*Number(duration[1]??duration[3])+Number(duration[2]??duration[4])-target.durationSeconds)>7;
 }

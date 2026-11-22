@@ -1,3 +1,4 @@
+import {elapsedMs} from '../diagnostics/download-timing';
 import {cooldownDeadline} from '../telegram/rpc-failure';
 import type {TelegramSessionClient} from '../telegram/session-client';
 
@@ -32,7 +33,7 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
  const duration=(ms:number)=>ms>=60_000?`${Math.ceil(ms/60_000)} min`:`${Math.ceil(ms/1000)} s`;
  const pauseForTrack=()=>{
   let disruptions=0,lastWait=0;
-  return async(report:(message:string)=>void,interrupted=false,suspended=false):Promise<{message:string;automatic:boolean}|null>=>{
+  return async(report:(message:string)=>void,interrupted=false,suspended=false,timing?:{reconnectMs:number;floodWaitMs:number}):Promise<{message:string;automatic:boolean}|null>=>{
    if(interrupted&&!suspended)disruptions++;
    let attempts=0,restoring=false,waitingForFlood=false,wasOffline=false;
    let renew=interrupted&&(suspended||disruptions>=2);
@@ -42,9 +43,11 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
     idleSince=Date.now();retryAt=idleSince+retryDelay;
     nextAttemptAt=idleSince+(RECONNECT_DELAYS[attempts]??0);
    };
-   const sleepUntilWake=async(ms:number)=>{
+   const sleepUntilWake=async(ms:number,phase?:'reconnectMs'|'floodWaitMs')=>{
+    const started=performance.now();
     const before=Date.now(),observed=generation;
     await sleep(ms);
+    if(timing&&phase)timing[phase]+=elapsedMs(started);
     if(generation!==observed||Date.now()-before>ms+1000)reset();
    };
    const pause=(message:string,automatic=false)=>({message,automatic});
@@ -52,7 +55,7 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
    while(live()){
     const remote=client.searchSnapshot(),session=client.snapshot?.();
     if(session?.phase==='restoring'){
-     restoring=true;report('Reconectando con Telegram…');await sleepUntilWake(250);continue;
+     restoring=true;report('Reconectando con Telegram…');await sleepUntilWake(250,'reconnectMs');continue;
     }
     if(restoring){restoring=false;reset();retryAt=Date.now();}
     if(remote.retryBlocked&&!legacyWait)legacyWait=cooldownDeadline(remote);
@@ -65,7 +68,7 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
       return pause(`Telegram pide esperar ${duration(remaining)}. Pulsa Continuar cuando termine la espera.`);
      lastWait=until;waitingForFlood=true;renew=false;
      report(`Telegram pide esperar ${duration(remaining)} · continúo sola`);
-     await sleepUntilWake(delayFor(until));
+     await sleepUntilWake(delayFor(until),'floodWaitMs');
      continue;
     }
     if((session?.phase==='error'&&!['network','timeout','cancelled','rate-limit'].includes(session.error??''))||
@@ -76,7 +79,7 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
      if(!wasOffline){wasOffline=true;reset();}
      if(Date.now()-idleSince>=60_000)return pause('Pulso sigue sin conexión. Pulsa Continuar cuando vuelva la red.',true);
      report('Pulso sigue sin conexión.');
-     await sleepUntilWake(1000);continue;
+     await sleepUntilWake(1000,'reconnectMs');continue;
     }
     if(wasOffline||waitingForFlood){
      reset();if(waitingForFlood)retryAt=Date.now();
@@ -98,7 +101,7 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
       }
      }
     }
-    await sleepUntilWake(250);
+    await sleepUntilWake(250,'reconnectMs');
    }
    return null;
   };

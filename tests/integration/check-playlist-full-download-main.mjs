@@ -9,6 +9,7 @@ import {chromium,webkit} from 'playwright-core';
 import {createTestWorkspace} from './test-workspace.mjs';
 import {installRequiredAccountFixture} from './required-account-fixture.mjs';
 import {benchmarkPart,benchmarkBytes} from './playlist-benchmark-audio.mjs';
+import {taggedM4a} from './tagged-audio-fixture.mjs';
 import {accountId,bots,playlistFixture,uuid} from './playlist-full-download-fixture.mjs';
 
 const evidence=resolve(process.env.PULSO_TEST_EVIDENCE_DIR??'.local/test-evidence/playlist-full-download');
@@ -17,9 +18,13 @@ assert.equal(await realpath(evidence),evidence);
 process.env.PULSO_TEST_EVIDENCE_DIR=evidence;
 const work=await createTestWorkspace('playlist-full-download');
 const checkpointKey='pulso:library-download:v1:'+accountId;
-const modes=['full','resume','missing','stale-checkpoint','benchmark'];
+const modes=['full','resume','missing','stale-checkpoint','benchmark','turnaround'];
 const selectedMode=process.env.PLAYLIST_FULL_MODE;
 const selectedEngine=process.env.PLAYLIST_FULL_ENGINE;
+const baseline=process.env.PLAYLIST_TURNAROUND_BASE==='1';
+const turnaroundScenarios=['mismatch','muted','reuse','tags-compound','tags-unrelated'];
+const selectedScenarios=process.env.PLAYLIST_TURNAROUND_SCENARIOS?.split(',')??turnaroundScenarios;
+assert.ok(selectedScenarios.every(scenario=>turnaroundScenarios.includes(scenario)));
 const repeatFrom=Number(process.env.PLAYLIST_FULL_REPEAT_FROM??'1');
 const repeats=Number(process.env.PLAYLIST_FULL_REPEATS??'3');
 assert.ok(!selectedMode||modes.includes(selectedMode));
@@ -37,9 +42,12 @@ const reviewButtons='[aria-label="Revisión de descarga"], .download-dock__stora
 
 const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
  if(id==='./temporary-sdk')return resolve('tests/integration/playlist-full-download-sdk.ts');
+},transform(code,id){
+ if(selectedMode==='turnaround'&&id.endsWith('/src/main.tsx'))return code+
+  '\nwindow.testTurnaroundDiagnostics=()=>{diagnostics.setEnabled(true);return diagnostics.getSnapshot().songs;};';
 }});
 
-async function seed(page,origin,preexisting,oldCheckpoint){
+async function seed(page,origin,preexisting,oldCheckpoint,botPool=bots){
  await page.goto(origin+'/testonly-seed');
  await page.evaluate(async ({accountId,bots})=>{
   localStorage.setItem('pulso:setup:v1:'+accountId,'complete');
@@ -56,7 +64,7 @@ async function seed(page,origin,preexisting,oldCheckpoint){
    store.put(1,'bot-selection-revision-v1');
    tx.oncomplete=ok;tx.onabort=()=>fail(tx.error);
   });}finally{db.close();}
- },{accountId,bots});
+ },{accountId,bots:botPool});
  await page.goto(origin);
  await openPlaylist(page);
  if(!preexisting)return;
@@ -531,6 +539,149 @@ async function checkBenchmark(browser,engine,origin,bundle,delayMs,backend){
  }finally{await ctx.close();}
 }
 
+async function checkTurnaround(browser,engine,origin,scenario){
+ const context=await browser.newContext(config);
+ const trace=[],observed=new Set();
+ const report={engine,scenario,baseline,status:'FAIL'};
+ const {tracks:fixtures,candidates}=playlistFixture('full');
+ const tagged=scenario.startsWith('tags-'),compound=scenario==='tags-compound';
+ const expectedSaved=!(baseline&&compound);
+ const tracks=fixtures.slice(0,scenario==='muted'?6:1).map(({track})=>({...track,duration:tagged?4:track.duration}));
+ const byId=new Map(tracks.map((track,i)=>[track.id,{...fixtures[i],payload:candidates.get(fixtures[i].goodKey).payload}]));
+ const taggedFiles=new Map();
+ if(tagged){
+  const [track]=tracks;
+  for(let variant=0;variant<=3;variant++){
+   const title=variant===0?track.title:compound?`${track.artist} — ${track.title}`:`Otra canción ${variant}`;
+   const artist=variant===0?track.artist:`Perfil sintético ${variant}`;
+   taggedFiles.set(byId.get(track.id).goodKey+variant,taggedM4a(title,artist));
+  }
+ }
+ const descriptor=(track,variant=0)=>({key:byId.get(track.id).goodKey+variant,title:track.title,artist:track.artist,
+  duration:scenario==='mismatch'&&variant?52:track.duration,mime:tagged?'audio/mp4':'audio/wav',bytes:taggedFiles.get(byId.get(track.id).goodKey+variant)?.length??byId.get(track.id).payload.length});
+ const cloud={accountId,revision:1,document:{version:1,tracks,
+  playlists:[{id:uuid(99),name:playlistName,entries:tracks.map((track,i)=>({trackId:track.id,id:uuid(100+i)}))}]}};
+ try{
+  await context.routeWebSocket('**/*',socket=>void socket.close());
+  await context.route('**/*',async route=>{
+   const url=new URL(route.request().url());
+   if(url.origin!==origin){observed.add(url.origin);return route.abort();}
+   if(url.pathname==='/testonly-seed')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>seed</title>'});
+   if(url.pathname==='/__setup-event')return route.fulfill({json:{}});
+   if(url.pathname!=='/__playlist-full-rpc')return route.fallback();
+   const {kind,peer,query,key,offset,limit,option}=route.request().postDataJSON();
+   const track=tracks.find(t=>query===t.title+' '+t.artist||[0,1,2,3].some(variant=>key===descriptor(t,variant).key));
+   if(!track)return route.fulfill({status:400});
+   trace.push({kind,peer,trackId:track.id,option,key,ms:performance.now()});
+   if(kind==='callback')return route.fulfill({json:{}});
+   if(kind==='search'){
+    if(scenario==='muted')return route.fulfill({json:peer===101?{silent:true,audio:[]}:{audio:[descriptor(track)]}});
+    if(tagged){
+     if(peer===102)return route.fulfill({json:{audio:compound?[]:[descriptor(track)]}});
+     return route.fulfill({json:{audio:[],delayMs:400,menu:[1,2,3].map(variant=>({
+      label:`${variant}. ${track.artist} - ${track.title}`,audio:descriptor(track,variant),
+     }))}});
+    }
+    return route.fulfill({json:{audio:[],delayMs:400,menu:[
+     {label:`1. ${track.artist} - ${track.title}`,audio:descriptor(track,1)},
+     {label:`2. ${track.artist} - ${track.title} (0:02)`,audio:descriptor(track)},
+    ]}});
+   }
+   if(kind!=='read')return route.fulfill({status:400});
+   await new Promise(ok=>setTimeout(ok,350));
+   const bytes=taggedFiles.get(key)??byId.get(track.id).payload;
+   return route.fulfill({contentType:'application/octet-stream',
+    body:!tagged&&key===descriptor(track,1).key?Buffer.alloc(bytes.length):bytes.subarray(offset,offset+limit)});
+  });
+  await installRequiredAccountFixture(context,origin);
+  await context.route(origin+'/api/account-library',route=>route.fulfill({json:cloud}));
+  await context.addInitScript(({total,capture,expectedSaved})=>{
+   window.turnaround={start:null,marks:[],states:[],summary:null};
+   document.addEventListener('click',event=>{
+    if(event.target.closest('button')?.getAttribute('aria-label')==='Descargar playlist completa')window.turnaround.start??=performance.now();
+   },true);
+   new MutationObserver(()=>{
+    const sample=window.turnaround;
+    if(sample.start===null)return;
+    const dock=document.querySelector('.download-dock');
+    if(!dock)return;
+    const progress=dock.querySelector('progress')?.value??0;
+    if(progress>sample.marks.length)sample.marks.push(performance.now());
+    if([...document.querySelectorAll('[role="status"]')].some(node=>node.textContent.startsWith(`Descarga finalizada · ${expectedSaved?total:0} de ${total} guardadas`))){
+     if(sample.marks.length<total)sample.marks.push(performance.now());
+     sample.summary=dock.querySelector('.download-dock__handle')?.textContent;
+    }
+    if(!capture)return;
+    const panel=dock.querySelector('.download-dock__panel');
+    const text=panel?.textContent??'';
+    for(const pattern of [/Consultando bot \d de \d…/,/Probando otro bot…/,/El bot prepara el archivo…/,
+     /Descargando [\d,]+ de [\d,]+ MB…/,/La opción no coincide \(duración\) · probando otra…/,/Guardando copia…/,/Buscando canción…/]){
+     const state=text.match(pattern)?.[0];
+     if(state&&!sample.states.includes(state))sample.states.push(state);
+    }
+   }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
+  },{total:tracks.length,capture:true,expectedSaved});
+  const page=await context.newPage();
+  const errors=[];page.on('pageerror',error=>errors.push(String(error)));
+  await seed(page,origin,null,null,bots.slice(0,2));
+  await page.locator('.bot-providers-list li').nth(1).waitFor({state:'attached'});
+  await page.evaluate(()=>window.testTurnaroundDiagnostics());
+  await page.getByRole('button',{name:startLabel,exact:true}).evaluate(button=>button.click());
+  const handle=page.locator('.download-dock__handle');
+  await handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();});
+  await page.waitForFunction(total=>window.turnaround.marks.length===total&&window.turnaround.summary,tracks.length,{timeout:135000});
+  const {copies}=await inspect(page,tracks.map(track=>track.id));
+  for(const [i,copy] of copies.entries()){
+   if(!expectedSaved)assert.equal(copy,null);
+   else if(tagged)assert.equal(copy.sha256,createHash('sha256').update(taggedFiles.get(descriptor(tracks[i],compound?1:0).key)).digest('hex'));
+   else assert.equal(copy.sha256,byId.get(tracks[i].id).expected.sha256);
+  }
+  assert.deepEqual(errors,[]);
+  assert.deepEqual([...observed],[]);
+  const {start,marks,states}=await page.evaluate(()=>window.turnaround);
+  const samplesMs=marks.map((mark,i)=>Math.round(mark-(marks[i-1]??start)));
+  const searches=tracks.map(({id})=>trace.filter(e=>e.trackId===id&&e.kind==='search').map(e=>e.peer));
+  const songs=await page.evaluate(()=>window.testTurnaroundDiagnostics());
+  const callbacks=trace.filter(e=>e.kind==='callback');
+  const betweenCallbacksMs=callbacks.length===2?Math.round(callbacks[1].ms-callbacks[0].ms):null;
+  Object.assign(report,{songs,samplesMs,states,searches,betweenCallbacksMs,
+   callbackOptions:callbacks.map(e=>e.option),saved:copies.filter(Boolean).length});
+  if(tagged){
+   assert.deepEqual(searches,[baseline?[101,101,101,102]:compound?[101]:[101,102]]);
+   assert.deepEqual(callbacks.map(e=>e.option),baseline?[1,2,3]:compound?[1]:[1,2]);
+   if(!baseline){
+    assert.equal(songs[0].candidatesDownloaded,compound?1:3);
+    assert.equal(songs[0].winningBotSlot,compound?0:1);
+    assert.equal(songs[0].rejections['import-tag-mismatch']??0,compound?0:2);
+    assert.ok(samplesMs[0]<15000,'The reserve must allow the backup to run promptly');
+   }
+  }else if(scenario==='muted'){
+   if(!baseline)assert.ok(states.includes('Probando otro bot…'));
+   assert.deepEqual(searches,tracks.map((_,i)=>baseline||i<2?[101,102]:[102]));
+   if(!baseline)assert.deepEqual(songs.map(({botsTried,winningBotSlot,timeoutCount})=>[botsTried,winningBotSlot,timeoutCount]),
+    tracks.map((_,i)=>[i<2?2:1,1,i<2?1:0]));
+  }else{
+   assert.deepEqual(searches,[baseline?[101,101]:[101]]);
+   assert.deepEqual(callbacks.map(e=>e.option),[1,2]);
+   if(!baseline){
+    assert.ok(betweenCallbacksMs<8000);
+    for(const state of [/Consultando bot 1 de 2/,/El bot prepara el archivo/,/Descargando .* MB/,/Guardando copia/])assert.ok(states.some(text=>state.test(text)),String(state));
+    assert.equal(songs.length,1);
+    assert.equal(songs[0].candidatesTried,2);
+    assert.equal(songs[0].candidatesRejected,1);
+    assert.equal(songs[0].candidatesDownloaded,1);
+    if(scenario==='mismatch'){
+     assert.ok(states.some(text=>text.includes('no coincide (duración)')));
+     assert.equal(songs[0].rejections['mismatch-duration'],1);
+    }
+   }
+  }
+  report.status='PASS';
+ }catch(error){report.error=String(error.stack??error);}
+ finally{await context.close();}
+ return report;
+}
+
 let server,browser,tempDirectory;
 const oldTemp=process.env.TMPDIR;
 const stop=()=>{report.errors.push('Interrupted');void browser?.close();};
@@ -550,7 +701,14 @@ try{
   report.engines[engine]=browser.version();
   try{
    for(const mode of modes){
-    if(selectedMode&&selectedMode!==mode||!selectedMode&&mode==='benchmark')continue;
+    if(selectedMode&&selectedMode!==mode||!selectedMode&&['benchmark','turnaround'].includes(mode))continue;
+    if(mode==='turnaround'){
+     for(const scenario of selectedScenarios){
+      const result=await checkTurnaround(browser,engine,origin,scenario);
+      report.cases.push(result);console.log(JSON.stringify(result));
+     }
+     continue;
+    }
     if(mode==='benchmark'){
      for(const backend of ['opfs','idb'])for(const delayMs of [400,1200]){
       const result=await checkBenchmark(browser,engine,origin,bundle,delayMs,backend);

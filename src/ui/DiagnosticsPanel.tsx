@@ -3,8 +3,8 @@ import React from 'react';
 import {fieldSets,projectReview,serializeReviewed,type Capabilities,type Dataset,type Review,type Selection} from '../diagnostics/export';
 import type {DiagnosticSession} from '../diagnostics/session';
 import './diagnostics.css';
-const empty=():Selection=>({errors:[],capabilities:[],limits:[],downloads:[]});
-const labels:Record<string,string>={errors:'Errores de esta sesión',capabilities:'Capacidades observadas',limits:'Límites de esta fase',downloads:'Tiempos de descarga de esta sesión',sequence:'Orden',correlationId:'Correlación',operation:'Operación',phase:'Fase',outcome:'Resultado',family:'Familia',code:'Código',backend:'Backend',transport:'Transporte',count:'Cantidad'};
+const empty=():Selection=>({errors:[],capabilities:[],limits:[],downloads:[],songs:[]});
+const labels:Record<string,string>={errors:'Errores de esta sesión',capabilities:'Capacidades observadas',limits:'Límites de esta fase',downloads:'Tiempos de descarga de esta sesión',songs:'Tiempos acumulados por canción',sequence:'Orden',correlationId:'Correlación',operation:'Operación',phase:'Fase',outcome:'Resultado',family:'Familia',code:'Código',backend:'Backend',transport:'Transporte',count:'Cantidad'};
 export function DiagnosticsPanel({session,capabilities}:{session:DiagnosticSession;capabilities:Capabilities}) {
  const snapshot=React.useSyncExternalStore(session.subscribe,session.getSnapshot);
  const [selection,setSelection]=React.useState<Selection>(empty),[review,setReview]=React.useState<Review|null>(null),[feedback,setFeedback]=React.useState('');
