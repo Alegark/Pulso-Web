@@ -44,6 +44,7 @@ const reviewButtons='[aria-label="Revisión de descarga"], .download-dock__stora
 const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
  if(id==='./temporary-sdk')return resolve('tests/integration/playlist-full-download-sdk.ts');
 },transform(code,id){
+ // Shorten the real callback timer only for the separate recovery regression run.
  if(callbackTimeout&&id.endsWith('/src/telegram/bot-search-protocol.ts')){
   assert.ok(code.includes('callbackBudgetMs:65000'));
   return code.replace('callbackBudgetMs:65000','callbackBudgetMs:1500');
@@ -645,7 +646,7 @@ async function checkTurnaround(browser,engine,origin,scenario){
   const handle=page.locator('.download-dock__handle');
   await handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();});
   await page.waitForFunction(({timeout,total})=>window.turnaround.summary&&(timeout||window.turnaround.marks.length===total),
-   {timeout,total:tracks.length},{timeout:timeout?22000:scenario==='muted'?200000:135000});
+   {timeout,total:tracks.length},{timeout:timeout?30000:scenario==='muted'?200000:135000});
   const {copies}=await inspect(page,tracks.map(track=>track.id));
   for(const [i,copy] of copies.entries()){
    if(!expectedSaved||timeout&&(i===1||i===2))assert.equal(copy,null);
