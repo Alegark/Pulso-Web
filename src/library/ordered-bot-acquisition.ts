@@ -150,10 +150,8 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      const ownReply=owned(found,provider.providerRef,queryId);
      if(collection){
       if(channelDown(found,ownReply)||p.suspended?.()&&!confirmedRejection(found,ownReply))return {state:'unavailable'};
-      if(!ownReply&&(found.pending||found.cancelling)){
-       if(!queryId)continue;
-       if(!selectionRetried){selectionRetried=true;continue;}
-      }
+      if(!queryId&&(found.pending||found.cancelling))continue;
+      if(queryId&&!ownReply&&!selectionRetried&&live()){selectionRetried=true;continue;}
       if(!ownReply||found.error==='timeout'||found.error==='uncertain'||!found.error&&found.delivery==='uncertain'){
        collection.ambiguous.add(i);
       }else if(found.delivery==='acknowledged'&&!['busy','cancelled','expired'].includes(found.error??'')){

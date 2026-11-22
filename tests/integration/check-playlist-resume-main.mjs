@@ -37,6 +37,8 @@ document.documentElement.dataset.testBuild=${JSON.stringify(release)};window.tes
    'tracks={document.documentElement.dataset.testHoldTracks==="true"?[]:localTracks} client={client.current}');
   if(id.endsWith('/tests/integration/required-setup-sdk.ts'))return code.replace("await fetch('/__setup-event?kind='+kind);",
    "if(!(await fetch('/__setup-event?kind='+kind)).ok)throw Error('network');");
+  if(id.endsWith('/library/ordered-bot-acquisition.ts'))return code.replace('await terminal;ownedCancel=undefined;',
+   'await terminal;if(window.testManualSettlement){await window.testManualSettlement;window.testManualSettlement=null;}ownedCancel=undefined;');
   if(id.endsWith('/telegram/session-client.ts')){
    return code+`
 const testSearchBot=TelegramSessionClient.prototype.searchBot;
@@ -48,6 +50,12 @@ const testSearchBot=TelegramSessionClient.prototype.searchBot;
       const stop=this.subscribeSearch(state=>{
        if(state.expectedTarget?.title!=='Pista 3'||state.pending||!state.rows.length)return;
        stop();
+       if(window.testManualLaneCompletesFirst)window.testManualSettlement=new Promise(resolve=>{
+        const unsubscribe=this.subscribeSearch(manual=>{
+         if(manual.pending||manual.queryId===state.queryId||manual.delivery!=='acknowledged')return;
+         unsubscribe();window.testManualSettledBeforeCollection=true;resolve();
+        });
+       });
        testSearchBot.call(this,{providerRef:this.botsSnapshot().providers[0].providerRef,query:'Consulta manual',consent:true});
       });
      }
@@ -65,7 +73,7 @@ const testSearchBot=TelegramSessionClient.prototype.searchBot;
  }});
 const backgroundModes=['background-alive','cold-resume','stop-reload','two-tabs','wake-restore','paused-hidden','hidden-rejection','orphan-idle'];
 const channelModes=['long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop',...backgroundModes];
-const fallbackModes=['bot-timeout','bot-unsupported','manual-lane'];
+const fallbackModes=['bot-timeout','bot-unsupported','manual-lane','manual-lane-settled'];
 const updateModes=['update-resume','update-offline','update-startup','update-single','update-album','update-timeout','update-stopped','update-attempted','update-auto','update-auto-busy','update-priority-album','update-priority-song','update-album-cancelled','update-album-other-edition'];
 const allModes=[...updateModes,...channelModes,...fallbackModes,'autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
 const modes=process.env.PLAYLIST_RESUME_MODE?process.env.PLAYLIST_RESUME_MODE.split(','):allModes;
@@ -230,7 +238,7 @@ try{
       }
       if(mode==='update-priority-song'&&event.kind==='read'){gateProbes++;await searchGate;}
       const network=event.kind==='read'&&event.title==='Pista 3'&&(mode==='reconnect'&&thirdSearches<=2||mode==='wake-restore'&&thirdSearches===1);
-      return route.fulfill({json:{mode:albumMode||mode==='update-priority-album'?'missing':singleMode?'single':updating||mode==='hidden-rejection'?'autoheal':backgroundModes.includes(mode)?'suspend':mode,flood,network}});
+      return route.fulfill({json:{mode:albumMode||mode==='update-priority-album'?'missing':singleMode?'single':updating||mode==='hidden-rejection'?'autoheal':backgroundModes.includes(mode)?'suspend':mode==='manual-lane-settled'?'manual-lane':mode,flood,network}});
      }
      return route.fallback();
     });
@@ -246,7 +254,8 @@ try{
      return route.fulfill({json:cloud});
     });
     await context.addInitScript(({loseAck,channel,fallback,mode,user,updating})=>{
-     if(mode==='manual-lane')window.testStartManualLane=true;
+     if(mode==='manual-lane'||mode==='manual-lane-settled')window.testStartManualLane=true;
+     if(mode==='manual-lane-settled')window.testManualLaneCompletesFirst=true;
      let hidden=false,offset=-500;
      if(mode!=='missing'&&mode!=='paused-hidden')window.testDockTime=45000;
      if(updating){
@@ -799,7 +808,8 @@ try{
       assert.ok(notices.every(notice=>notice.tag==='pulso-download-collection'));
      }
     }else if(fallback){
-     assert.deepEqual(searches.map(({title,peer})=>[title,peer]),mode==='manual-lane'?
+     if(mode==='manual-lane-settled')assert.equal(await page.evaluate(()=>window.testManualSettledBeforeCollection),true);
+     assert.deepEqual(searches.map(({title,peer})=>[title,peer]),mode.startsWith('manual-lane')?
       [['Pista 3',101],['Consulta manual',101],['Pista 3',101],['Pista 4',101]]:
       [['Pista 3',101],['Pista 3',102],['Pista 4',101]]);
      if(mode==='bot-timeout')assert.ok(searches[1].at-searches[0].at>=14_000,'the first bot stayed silent through its response deadline');

@@ -734,3 +734,11 @@ La matriz de reanudación, actualización y descargas pasó 84/84, 42 por motor.
 | WebKit IDB forzado | 21,493 → 6,601 | 17,245 → 7,059 |
 
 WPE volvió a usar IDB. Siguen pendientes iPhone físico, Telegram real y publicación tras revisión.
+
+#### Segunda revisión de la PR #16
+
+La colección vuelve a buscar en el mismo bot una sola vez si una operación manual reemplaza su selección, incluso cuando esa operación ya terminó o se limpió. Conserva la espera del carril y sus comprobaciones de autoridad. El sondeo después del callback hace una primera lectura inmediata si el plazo restante es menor o igual al primer intervalo. Si ya observó un audio incompatible y no cabe otro sondeo, entrega el resultado observado sin esperar a que venza el temporizador.
+
+Contra `d3334cb` fallaron los dos casos unitarios del callback tardío y la variante de búsqueda manual ya liquidada en ambos motores. Con la corrección pasaron los cuatro. En Chromium y WebKit, la variante vuelve al bot 101. Se conserva la evidencia del benchmark anterior porque la ruta de transferencia de bytes permanece igual. Siguen pendientes iPhone físico, Telegram real y publicación tras revisión.
+
+Validación del candidato corregido. Tipos de app y tests, lint, 872 unitarias, 73 de servidor, 10 de Python de servidor, build y Wrangler dry-run pasaron. La matriz enfocada pasó 86/86, 43 en Chromium y 43 en WebKit.

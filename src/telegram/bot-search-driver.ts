@@ -176,12 +176,14 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        if(['url','hasUrl'].some(key=>{const field=Object.getOwnPropertyDescriptor(answer,key);return !!field&&(!('value' in field)||!!field.value);}))throw fail('unsupported');
        let unmatched:ReturnType<typeof projectBotCallbackPage>|null=null;
        for(let read=0;;read++){
-        check();if(read>=B.downloadReads){
+        check();
+        const nearDeadline=deadline-time.now()<=botPollDelay(read);
+        if(read>=B.downloadReads||read>0&&nearDeadline){
          if(!unmatched)throw fail('timeout');
          retained=unmatched.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={...previous,baseline};
          return {...e,type:'bot-search.result',delivery:'acknowledged',rows:unmatched.rows.filter(row=>row.kind==='audio'),expiresAt:retainedUntil,expectedTarget:c.target};
         }
-        const raw=await poll(read,ms=>dependency.readHistory(approved.peer,Math.min(baseline,selection.messageId-1),20,abort.signal,ms));
+        const raw=await poll(read,ms=>dependency.readHistory(approved.peer,Math.min(baseline,selection.messageId-1),20,abort.signal,ms),nearDeadline);
         const page=projectBotCallbackPage(raw,approved.botId,baseline,previous.outgoing,selection.messageId,selectedDocumentId,c.target);if(page.concurrent)throw fail('uncertain');
         const audio=page.rows.filter(row=>row.kind==='audio'),matches=matchingSongRows(audio,c.target);
         if(audio.length){

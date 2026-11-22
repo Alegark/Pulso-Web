@@ -238,3 +238,30 @@ for(const stop of ['rate-limit','header','short','cancelled','quarantine','trans
   assert.equal(s.invalidations,quarantined?1:0);
  }finally{s.driver.close();for(const part of parts.values())part.resolve(null);}
 });
+
+for(const match of [true,false])test(match?'late callback admits a first immediate history read':'callback returns unmatched audio when a further poll would exceed the deadline',async()=>{
+ let now=0,reads=0,next=0;const timers=new Set<number>();
+ const clock={now:()=>now,setTimeout(fn:()=>void,ms:number){
+  const id=++next;timers.add(id);
+  if(ms<=1000)queueMicrotask(()=>{if(timers.delete(id)){now+=ms;fn();}});
+  return id;
+ },clearTimeout(id:number){timers.delete(id);}} as unknown as BotProvidersClock;
+ const unrelated={...doc(),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
+ const s=await setup(true,(r,v,clicked)=>{
+  if(r._==='messages.getBotCallbackAnswer')now+=BOT_SEARCH_BOUNDS.downloadResolveMs-(match?250:500);
+  if(clicked&&r._==='messages.getHistory'&&r.limit===20){
+   reads++;if(!match)now++;
+   return history([{...msg(match?doc():unrelated),id:13}]);
+  }
+  if(clicked&&r._==='messages.getMessages')return history([{...msg(doc()),id:13}]);
+  return v;
+ },clock);
+ try{
+  const reply=await s.download();
+  assert.equal(reply?.type,match?'bot-search.downloaded':'bot-search.result');
+  assert.equal(reads,1);
+  assert.equal(await s.driver.whenSettled(),true);
+  assert.equal(s.invalidations,0);
+  if(reply?.type==='bot-search.result')assert.equal(reply.rows.length,1);
+ }finally{s.driver.close();}
+});
