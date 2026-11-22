@@ -1,3 +1,4 @@
+import {emptyImportTiming,parseImportTiming,type ImportTiming} from '../diagnostics/download-timing';
 import {copyAccountCatalog} from '../accounts/library-document.mjs';
 import {recordingTitleCandidate} from '../library/recording-title';
 import type {ExpectedAudioMetadata} from './expected-audio-metadata';
@@ -80,13 +81,15 @@ export function copyWorkerRequest(value:unknown):ImportRequest|RecoveryRequest|n
  }
  const r=plain(h,['version','type','operationId','requestId','revision','action']);return r&&r.type==='recover'&&uuid(r.requestId)&&integer(r.revision,1)&&member(r.action,['resume','discard'])?r as RecoveryRequest:null;
 }
-export type WorkerResponse={version:2;operationId:string;type:'progress';bytes:number}|{version:2;operationId:string;type:'complete';result:DetailedImportResult;outcome:OutcomeV1}|{version:2;operationId:string;type:'error';outcome:OutcomeV1}|{version:2;requestId:string;type:'recovered';state:'sealed'|'discarded';outcome:OutcomeV1}|{version:2;requestId:string;type:'error';outcome:OutcomeV1};
+export type WorkerResponse={version:2;operationId:string;type:'progress';bytes:number}|{version:2;operationId:string;type:'complete';result:DetailedImportResult;outcome:OutcomeV1;timing?:Readonly<ImportTiming>}|{version:2;operationId:string;type:'error';outcome:OutcomeV1;timing?:Readonly<ImportTiming>}|{version:2;requestId:string;type:'recovered';state:'sealed'|'discarded';outcome:OutcomeV1}|{version:2;requestId:string;type:'error';outcome:OutcomeV1};
 export function copyWorkerResponse(value:unknown):WorkerResponse|null{
- const h=optionalRecord(value,['version','type'],['operationId','requestId','bytes','result','outcome','state']);if(!h||h.version!==2)return null;
+ const h=optionalRecord(value,['version','type'],['operationId','requestId','bytes','result','outcome','state','timing']);if(!h||h.version!==2)return null;
  if(h.type==='progress'){const r=plain(h,['version','operationId','type','bytes']);return r&&uuid(r.operationId)&&integer(r.bytes,0,100*1024*1024)?r as WorkerResponse:null;}
  const recovery=Object.hasOwn(h,'requestId');
  const keys=h.type==='error'?['version',recovery?'requestId':'operationId','type','outcome']:recovery?['version','requestId','type','state','outcome']:['version','operationId','type','result','outcome'];
+ if(!recovery&&Object.hasOwn(h,'timing'))keys.push('timing');
  const r=plain(h,keys);if(!r||!uuid(r[recovery?'requestId':'operationId']))return null;
+ if(Object.hasOwn(r,'timing')){const timing=parseImportTiming(r.timing);if(!timing)return null;r.timing=timing;}
  const o=copyOutcomeV1(r.outcome);if(!o)return null;r.outcome=o;
  if(h.type==='error')return o.status!=='confirmed'?r as WorkerResponse:null;
  if(recovery){if(h.type!=='recovered'||!member(r.state,['sealed','discarded'])||o.status!=='confirmed'||o.writeState!==(r.state==='sealed'?'published':'not-published'))return null;}
@@ -126,13 +129,14 @@ export function createImportV2Handler(send:(response:WorkerResponse)=>void){
  const controller=new AbortController();active={operationId:request.operationId,controller};
  try{
  const {importFileDetailed}=await import('./import-file');
- const attempt=await importFileDetailed(request.file,controller.signal,bytes=>send({version:2,type:'progress',operationId:request.operationId,bytes}),{operationId:request.operationId,expected:request.expected,libraryMode:request.libraryMode,parkedOperationIds:request.parkedOperationIds});
+ const timing=request.expected?emptyImportTiming():undefined,observed=timing?{timing}:{};
+ const attempt=await importFileDetailed(request.file,controller.signal,bytes=>send({version:2,type:'progress',operationId:request.operationId,bytes}),{operationId:request.operationId,expected:request.expected,libraryMode:request.libraryMode,parkedOperationIds:request.parkedOperationIds},timing);
  if(attempt.kind==='confirmed'){
  const result=copyImportResult(attempt.result);
- if(result)send({version:2,type:'complete',operationId:request.operationId,result,outcome:attempt.outcome});
+ if(result)send({version:2,type:'complete',operationId:request.operationId,result,outcome:attempt.outcome,...observed});
  else send({version:2,type:'error',operationId:request.operationId,outcome:makeOutcome({...attempt.outcome,status:'uncertain',primary:attempt.outcome.primary??workerFailureOutcome('worker-protocol').primary,writeState:'published',recoveryRequired:true})});
  }
- else send({version:2,type:'error',operationId:request.operationId,outcome:attempt.outcome});
+ else send({version:2,type:'error',operationId:request.operationId,outcome:attempt.outcome,...observed});
  }finally{active=null;}
  return true;
  };

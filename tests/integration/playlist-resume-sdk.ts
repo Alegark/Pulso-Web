@@ -20,7 +20,7 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
  const history=(messages:unknown[]=[])=>({_:'messages.messages',messages,users:[],chats:[]});
  const report=async(kind:string,details:object)=>await (await fetch('/__playlist-event',{method:'POST',body:JSON.stringify({kind,workerAt:Date.now(),...details})})).json();
  const resolveIdentity=async(username:string)=>{
-  peer=username==='kdmusic_bot'?101:username==='deezermusicbot'?102:103;
+  const peer=username==='kdmusic_bot'?101:username==='deezermusicbot'?102:103;
   return {_:'contacts.resolvedPeer',peer:{_:'peerUser',userId:peer},users:[{_:'user',id:peer,bot:true,username,firstName:username,accessHash:new Long(3,peer,false)}],chats:[]};
  };
  const missing=()=>title==='Pista 3'&&mode==='missing';
@@ -46,7 +46,8 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
     }
     return history([message()]);
    },
-   async sendQuery(_peer,query){
+   async sendQuery(input,query){
+    if(input._!=='inputPeerUser')throw Error('Unexpected fixture peer');peer=input.userId;
     const found=/Pista [1-4]|Consulta manual/.exec(query);if(!found)throw Error('Unexpected fixture query');
     title=found[0];const reply=await report('search',{title,peer});mode=reply.mode;
     return {_:'updateShortSentMessage',out:true,id:10,date:1,pts:1,ptsCount:1};

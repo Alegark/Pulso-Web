@@ -1,8 +1,13 @@
+import {parseNetworkTiming,type NetworkTiming} from '../diagnostics/download-timing';
 import {isBotDownloadMime} from './bot-download-bytes';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {dataArray,dataRecord,isUuid,parseAccountBinding,utf8Bytes,type AccountBinding} from './sources-protocol';
 import {recordingTitleCandidate} from '../library/recording-title';
-export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:16,downloadReads:60,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadResolveMs:120000});
+export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:19,downloadReads:63,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadResolveMs:120000});
+// Compared with immediate + 1 s polling, the warm-up adds at most three
+// history reads. The 15 s command deadline and ~59 s callback window remain.
+const earlyPollMs=[250,250,400,700] as const;
+export const botPollDelay=(read:number)=>earlyPollMs[read]??BOT_SEARCH_BOUNDS.pollMs;
 // Catalogue and file metadata may differ by a few seconds. This never relaxes
 // the required title/performer/version match or the ranking by closest duration.
 export const BOT_SEARCH_DURATION_TOLERANCE_SECONDS=5;
@@ -29,14 +34,14 @@ export type BotSearchRow=
  |(Row&{readonly kind:'option';readonly label:string})
  |(Row&{readonly kind:'message';readonly text:string});
 export type BotDownloadedAudio=Readonly<{blob:Blob;bytes:number;mime:'audio/mpeg'|'audio/mp4'|'audio/wav';sha256:string;target:BotSearchTarget;recordingTitle?:string}>;
-export type BotSearchReply=
+export type BotSearchReply=(
  |(BotSearchEnvelope&{readonly type:'bot-search.provider-notice';readonly text:string})
  |(BotSearchEnvelope&{readonly type:'bot-search.download-progress';readonly bytes:number;readonly total:number})
  |(BotSearchEnvelope&{readonly type:'bot-search.downloaded';readonly audio:BotDownloadedAudio})
  |(BotSearchEnvelope&{readonly type:'bot-search.sending';readonly delivery:'uncertain'})
  |(BotSearchEnvelope&{readonly type:'bot-search.result';readonly delivery:'acknowledged';readonly rows:readonly BotSearchRow[];readonly expiresAt:number;readonly expectedTarget:BotSearchTarget|null})
  |(BotSearchEnvelope&{readonly type:'bot-search.error';readonly error:BotSearchError;readonly delivery:BotSearchDelivery;readonly retryAt:number|null;readonly retryBlocked:boolean})
- |(BotSearchEnvelope&{readonly type:'bot-search.cancelled';readonly targetRequestId:string});
+ |(BotSearchEnvelope&{readonly type:'bot-search.cancelled';readonly targetRequestId:string}))&{readonly timing?:Readonly<NetworkTiming>};
 const revision=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 const timestamp=(v:unknown):v is number=>revision(v)&&v>0&&v<=8640000000000000;
 const keys=['protocol','version','sessionId','accountRef','accountEpoch','providerRevision','queryId','requestId'] as const;
@@ -97,6 +102,9 @@ export function parseBotSearchReply(raw:unknown,expected:BotSearchEnvelope):BotS
   extra=['error','delivery','retryAt','retryBlocked'];out={...e,type:r.type,error:r.error as BotSearchError,delivery:r.delivery as BotSearchDelivery,retryAt:r.retryAt as number|null,retryBlocked:r.retryBlocked};break;
  default:return null;
  }
+ const timing=Object.hasOwn(r,'timing')?parseNetworkTiming(r.timing):undefined;
+ if(timing===null||timing&&!['bot-search.result','bot-search.error','bot-search.downloaded'].includes(out.type))return null;
+ if(timing){extra.push('timing');out={...out,timing};}
  return dataRecord(raw,[...keys,'type',...extra])&&utf8Bytes(JSON.stringify(out))<=BOT_SEARCH_BOUNDS.dtoBytes?Object.freeze(out):null;}catch{return null;}
 }
 

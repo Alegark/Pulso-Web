@@ -46,17 +46,17 @@ test('total deadline cancels the original lane and does not dispatch another pro
  const task=acquireFromOrderedBots({client,providers,revision:4,target,signal:new AbortController().signal,current:()=>true,networkCurrent:client.captureBotsCurrent(),progress:()=>{}});
  for(let i=0;i<5;i++)await Promise.resolve();assert.equal(searches,1);t.mock.timers.tick(180000);assert.equal(cancelled,1);state={...state,pending:false,error:'timeout',delivery:'uncertain'};listener(state);assert.equal((await task).state,'uncertain');assert.equal(searches,1);
 });
-test('album shared cooldown spaces searches and callback across providers and gestures',async t=>{
+test('album spaces consecutive searches while downloading the selected row immediately',async t=>{
  t.mock.timers.enable({apis:['setTimeout','Date']});
  let state:any={queryId:'initial',providerRef:null,providerRevision:4,expectedTarget:null,pending:false,available:true,error:null,delivery:'acknowledged',retryBlocked:false,retryAt:null,rows:[]},count=0;const times:number[]=[];
  const client={botsSnapshot:()=>({revision:4}),searchSnapshot:()=>state,captureBotsCurrent:()=>()=>true,captureSearchActionCurrent:()=>()=>true,captureSearchCancel:()=>undefined,subscribeSearch:()=>()=>{},searchBot(input:any,_allowed:unknown,started:(v:any)=>void){times.push(Date.now());count++;state={...state,queryId:`q${count}`,providerRef:input.providerRef,expectedTarget:input.target,rows:count===1?[]:[{kind:'option',rowRef:'row',correlation:'reply',label:'Song — Artist'}]};started({queryId:state.queryId,cancel:()=>{}});},async downloadBot(_row:unknown,_allowed:unknown,started:(v:any)=>void){times.push(Date.now());started({queryId:state.queryId,cancel:()=>{}});return audio;}} as unknown as TelegramSessionClient;
  const clock={settledAt:0};
  const task=acquireFromOrderedBots({client,providers,revision:4,target,signal:new AbortController().signal,current:()=>true,networkCurrent:client.captureBotsCurrent(),remoteClock:clock,progress:()=>{}});
  const flush=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
- await flush();t.mock.timers.tick(1000);await flush();t.mock.timers.tick(1000);await flush();t.mock.timers.tick(1000);await flush();assert.equal((await task).state,'audio');
- assert.equal(times.length,3);assert.ok(times[1]-times[0]>=1000);assert.ok(times[2]-times[1]>=1000);
+ await flush();t.mock.timers.tick(1000);await flush();t.mock.timers.tick(1000);await flush();assert.equal((await task).state,'audio');
+ assert.equal(times.length,3);assert.ok(times[1]-times[0]>=1000);assert.equal(times[2],times[1]);
  const next=acquireFromOrderedBots({client,providers:providers.slice(0,1),revision:4,target,signal:new AbortController().signal,current:()=>true,networkCurrent:client.captureBotsCurrent(),remoteClock:clock,progress:()=>{}});
- await flush();assert.equal(times.length,3);t.mock.timers.tick(1000);await flush();t.mock.timers.tick(1000);await flush();assert.equal((await next).state,'audio');assert.ok(times[3]-times[2]>=1000);assert.ok(times[4]-times[3]>=1000);
+ await flush();assert.equal(times.length,3);t.mock.timers.tick(1000);await flush();assert.equal((await next).state,'audio');assert.ok(times[3]-times[2]>=1000);assert.equal(times[4],times[3]);
 });
 
 test('unsupported first provider is skipped while preserving configured order and deduplicating',()=>{

@@ -1,3 +1,4 @@
+import type {NetworkTiming} from '../diagnostics/download-timing';
 /// <reference lib="webworker" />
 import {hasSavedTelegramSession,clearSavedTelegramSession} from './saved-session';
 import {parseSessionCommand,sessionFailure,type SessionCommand,type SessionReply,type Delivery} from './session-protocol';
@@ -43,9 +44,9 @@ async function searchCommand(command:BotSearchCommand){
  let core:BotSearchDriver|undefined;try{core=search??=driver.createBotSearch?.(session);}catch{closeLocal();return;}
  let terminal=false,sending=false,notice=false;
  const run=async()=>{try{
-  refreshCooldown();let reply:BotSearchReply|null;
+  refreshCooldown();let reply:BotSearchReply|null,timing:NetworkTiming|undefined;
   if(command.type!=='bot-search.cancel'&&(!core||!remoteAllowed()))reply={...copyBotSearchEnvelope(command),type:'bot-search.error',error:core?'rate-limit':'unsupported',delivery:'not-dispatched',retryAt:core?retryAt:null,retryBlocked:false};
-  else reply=await core!.handle(command,{signal:abort.signal,current,publish:raw=>{
+  else reply=await core!.handle(command,{signal:abort.signal,current,timing:value=>{timing=value;},publish:raw=>{
    if(terminal)return;const progress=parseBotSearchReply(raw,command);if(!progress||!['bot-search.sending','bot-search.download-progress','bot-search.provider-notice'].includes(progress.type)||command.type==='bot-search.cancel'||!current()){closeLocal();return;}
    if(progress.type==='bot-search.provider-notice'){if(command.type!=='bot-search.download'){closeLocal();return;}if(notice||searchCancelled)return;notice=true;}
    if(progress.type==='bot-search.sending'){if(sending)return;sending=true;}post(progress,false);
@@ -53,7 +54,7 @@ async function searchCommand(command:BotSearchCommand){
   const settled=command.type!=='bot-search.cancel'&&core?await core.whenSettled():true;
   if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&!isBotSearchCancelReply(reply,command)){closeLocal();return;}if('retryAt' in reply)observeRemote(reply);refreshCooldown();
   if(reply.type==='bot-search.cancelled')searchCancelled=true;
-  const sessionClosed=!settled||!current()||!driver.getAccountBinding();post(reply,sessionClosed);if(sessionClosed)closeLocal();
+  const sessionClosed=!settled||!current()||!driver.getAccountBinding();post(timing?{...reply,timing}:reply,sessionClosed);if(sessionClosed)closeLocal();
  }catch{closeLocal();}};
  if(command.type==='bot-search.cancel'){const flight=run();searchControl=flight;try{await flight;}finally{if(searchControl===flight)searchControl=null;}}
  else{searchCancelled=false;const flight=run();searchFlight=flight;try{await flight;}finally{if(searchFlight===flight)searchFlight=null;}}

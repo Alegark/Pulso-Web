@@ -181,8 +181,9 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
    current(signal);if(!binding||!isUuid(sessionId)||!botProviders||botProvidersSession!==sessionId||sourcesSession&&sourcesSession!==sessionId)throw Error('unsupported');
    if(botSearch){if(botSearchSession!==sessionId)throw Error('unsupported');return botSearch;}
    botSearchSession=sessionId;signal.addEventListener('abort',sourceLifetimeAbort,{once:true});
+   let primaryDc:number|undefined;void client.getPrimaryDcId().then(id=>{primaryDc=id;}).catch(()=>{});
    botSearch=createBotSearchSdkDriver(binding,sessionId,{
-    call:accountRead,providers:botProviders,current,getAccountCooldown,
+    call:accountRead,providers:botProviders,current,getAccountCooldown,isOtherDc:dcId=>primaryDc===undefined?null:primaryDc!==dcId,
     invalidateSession(){void close().catch(()=>{});},
    });return botSearch;
   },

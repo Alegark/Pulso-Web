@@ -1,3 +1,4 @@
+import {emptyNetworkTiming,emptyImportTiming} from '../../src/diagnostics/download-timing';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -57,4 +58,29 @@ test('closed domain mappings exhaustive and unknown DOM/worker causes remain hon
  assert.equal(mapBackup('quota','write').family,'quota');assert.equal(mapBackup('uncertain','commit').outcome,'uncertain');
  assert.equal(domFailure(new DOMException('canary','QuotaExceededError'),'write').code,'quota-exceeded');assert.equal(domFailure(new DOMException('canary','AbortError'),'write').code,'transaction-aborted');
  assert.equal(domFailure({name:'QuotaExceededError',message:'canary'},'read').code,'unknown');assert.equal(importFailure('import-failed').code,'unknown');assert.equal(importFailure('quota').family,'quota');
+});
+
+test('download timings are opt-in, bounded, scoped and projected from a closed primitive schema',()=>{
+ const session=createDiagnosticSession();
+ const values={...emptyNetworkTiming(),...emptyImportTiming(),totalMs:400,waitMs:250,refreshMs:2,kBps:1500,result:'saved' as const};
+ assert.equal(session.recordDownload(values),undefined);
+ session.setEnabled(true);
+ assert.equal(session.recordDownload({...values,title:'secret'}),undefined);
+ assert.equal(session.recordDownload({...values,otherDc:'secret'}),undefined);
+ assert.equal(session.recordDownload({...values,transferMs:Infinity}),undefined);
+ let accessed=false;
+ assert.equal(session.recordDownload({...values,get backend(){accessed=true;return 'idb';}}),undefined);
+ assert.equal(accessed,false);
+ for(let i=0;i<55;i++)session.recordDownload({...values,parts:i});
+ const snapshot=session.getSnapshot();
+ assert.equal(snapshot.downloads.length,50);assert.equal(snapshot.downloads[0].parts,5);
+ const current=snapshot.downloads.at(-1)!;
+ session.recordDownload({...values,result:'failed'},current);
+ const selection={errors:[],capabilities:[],limits:['mode']};
+ assert.deepEqual(JSON.parse(projectReview(session.getSnapshot(),selection,caps).json).datasets,{limits:{mode:'local'}});
+ const projection=projectReview(session.getSnapshot(),{...selection,downloads:['totalMs','result','otherDc','backend']},caps);
+ const rows=JSON.parse(projection.json).datasets.downloads;
+ assert.equal(rows.length,50);assert.deepEqual(rows.at(-1),{totalMs:400,result:'failed',otherDc:null,backend:null});
+ session.clear();assert.equal(session.getSnapshot().downloads.length,0);
+ assert.equal(session.recordDownload(values,current),undefined);
 });

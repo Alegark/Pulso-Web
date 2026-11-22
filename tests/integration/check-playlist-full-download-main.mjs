@@ -8,6 +8,7 @@ import tailwindcss from '@tailwindcss/vite';
 import {chromium,webkit} from 'playwright-core';
 import {createTestWorkspace} from './test-workspace.mjs';
 import {installRequiredAccountFixture} from './required-account-fixture.mjs';
+import {benchmarkPart,benchmarkBytes} from './playlist-benchmark-audio.mjs';
 import {accountId,bots,playlistFixture,uuid} from './playlist-full-download-fixture.mjs';
 
 const evidence=resolve(process.env.PULSO_TEST_EVIDENCE_DIR??'.local/test-evidence/playlist-full-download');
@@ -16,7 +17,7 @@ assert.equal(await realpath(evidence),evidence);
 process.env.PULSO_TEST_EVIDENCE_DIR=evidence;
 const work=await createTestWorkspace('playlist-full-download');
 const checkpointKey='pulso:library-download:v1:'+accountId;
-const modes=['full','resume','missing','stale-checkpoint'];
+const modes=['full','resume','missing','stale-checkpoint','benchmark'];
 const selectedMode=process.env.PLAYLIST_FULL_MODE;
 const selectedEngine=process.env.PLAYLIST_FULL_ENGINE;
 const repeatFrom=Number(process.env.PLAYLIST_FULL_REPEAT_FROM??'1');
@@ -58,6 +59,7 @@ async function seed(page,origin,preexisting,oldCheckpoint){
  },{accountId,bots});
  await page.goto(origin);
  await openPlaylist(page);
+ if(!preexisting)return;
  await page.evaluate(async ({trackId,assetId,audio,sha256})=>{
   const db=await new Promise((ok,fail)=>{
    const request=indexedDB.open('pulso-web-local-v1');
@@ -452,6 +454,83 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
  return receipt;
 }
 
+async function checkBenchmark(browser,engine,origin,bundle,delayMs,backend){
+ const ctx=await browser.newContext(config);
+ const trace=[];
+ const tracks=[1,2].map(n=>({id:uuid(n),title:`Silencio ${n}`,artist:'Prueba',album:null,duration:525,favorite:false,inLibrary:true,
+  createdAt:'2026-11-21T00:00:00Z',localAlbum:null,catalog:null}));
+ const audio=tracks.map((track,i)=>({key:i+1,title:track.title,artist:track.artist,duration:track.duration,mime:'audio/mpeg',bytes:benchmarkBytes}));
+ const cloud={accountId,revision:1,document:{version:1,tracks,
+  playlists:[{id:uuid(99),name:playlistName,entries:tracks.map((track,i)=>({trackId:track.id,id:uuid(100+i)}))}]}};
+ try{
+  await ctx.routeWebSocket('**/*',socket=>void socket.close());
+  await ctx.route('**/*',async route=>{
+   const url=new URL(route.request().url());
+   if(url.origin!==origin)return route.abort();
+   if(url.pathname==='/testonly-seed')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>seed</title>'});
+   if(url.pathname==='/__setup-event')return route.fulfill({json:{}});
+   if(url.pathname==='/__playlist-full-rpc'){
+    const {kind,query,key,offset,limit}=route.request().postDataJSON();
+    trace.push({kind,key,offset});
+    if(kind==='search'){
+     const descriptor=audio.find(item=>query===item.title+' '+item.artist);
+     return route.fulfill({json:{delayMs,audio:[],menu:[{label:`1. ${descriptor.artist} - ${descriptor.title}`,
+      audio:descriptor}]}});
+    }
+    if(kind==='callback')return route.fulfill({json:{}});
+    return route.abort();
+   }
+   if(backend==='idb'&&/\/assets\/import\.worker-[^/]+\.js$/.test(url.pathname)){
+    const worker=await readFile(bundle+url.pathname,'utf8');
+    return route.fulfill({contentType:'text/javascript',body:`Object.defineProperty(navigator.storage,'getDirectory',{value:undefined});
+`+worker});
+   }
+   return route.fallback();
+  });
+  await installRequiredAccountFixture(ctx,origin);
+  await ctx.route(origin+'/api/account-library',route=>route.fulfill({json:cloud}));
+  await ctx.addInitScript(()=>{
+   window.benchmark={start:null,marks:[],failed:false};
+   const scan=()=>{
+    const dock=document.querySelector('.download-dock');
+    const progress=dock?.querySelector('progress');
+    if(progress?.value===1&&window.benchmark.marks.length===0)window.benchmark.marks.push(performance.now());
+    const terminal=[...document.querySelectorAll('[role="status"]')].find(node=>node.textContent==='Descarga finalizada · 2 de 2 guardadas');
+    if(terminal&&window.benchmark.marks.length===1)window.benchmark.marks.push(performance.now());
+    if([...document.querySelectorAll('[role="status"]')].some(node=>/^Descarga (finalizada|detenida) ·/.test(node.textContent)&&node!==terminal))window.benchmark.failed=true;
+   };
+   new MutationObserver(scan).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
+   document.addEventListener('click',event=>{
+    if(event.target.closest('button')?.getAttribute('aria-label')==='Descargar playlist completa')window.benchmark.start??=performance.now();
+   },true);
+  });
+  const page=await ctx.newPage();
+  page.setDefaultTimeout(90000);
+  await seed(page,origin,null,null);
+  await page.locator('.bot-providers-list li').nth(2).waitFor({state:'attached'});
+  await page.getByRole('button',{name:startLabel,exact:true}).evaluate(button=>button.click());
+  await page.waitForFunction(()=>window.benchmark.marks.length===2||window.benchmark.failed,null,{timeout:180000}).then(async()=>{assert.equal(await page.evaluate(()=>window.benchmark.failed),false);}).catch(async error=>{
+   const handle=page.locator('.download-dock__handle');
+   await handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();}).catch(()=>{});
+   const dock=await page.getByRole('region',{name:'Descargas',exact:true}).allTextContents();
+   throw Error(JSON.stringify({dock,trace}),{cause:error});
+  });
+  const {copies}=await inspect(page,tracks.map(track=>track.id));
+  const actualBackend=copies[0]?.backend;
+  for(const [i,copy] of copies.entries()){
+   assert.equal(copy?.sha256,createHash('sha256').update(benchmarkPart(i+1)).digest('hex'));
+   assert.equal(copy?.bytes,benchmarkBytes);
+   assert.equal(copy?.backend,actualBackend);
+   if(backend==='idb')assert.equal(copy?.backend,'idb');
+  }
+  const {start,marks}=await page.evaluate(()=>window.benchmark);
+  assert.notEqual(start,null);
+  const samplesMs=[Math.round(marks[0]-start),Math.round(marks[1]-marks[0])];
+  return {status:'PASS',engine,delayMs,rpcMs:200,requestedBackend:backend,backend:actualBackend,bytes:benchmarkBytes,
+   samplesMs,meanMs:Math.round((marks[1]-start)/2)};
+ }finally{await ctx.close();}
+}
+
 let server,browser,tempDirectory;
 const oldTemp=process.env.TMPDIR;
 const stop=()=>{report.errors.push('Interrupted');void browser?.close();};
@@ -461,7 +540,7 @@ try{
  tempDirectory=await open(work.dir,'r');
  process.env.TMPDIR=`/proc/${process.pid}/fd/${tempDirectory.fd}`;
  const bundle=resolve(work.dir,'bundle');
- await build({configFile:false,plugins:[tailwindcss(),sdk()],worker:{plugins:()=>[sdk()]},logLevel:'error',build:{outDir:bundle}});
+ await build({configFile:false,define:{__PLAYLIST_RPC_MS__:selectedMode==='benchmark'?'200':'0'},plugins:[tailwindcss(),sdk()],worker:{plugins:()=>[sdk()]},logLevel:'error',build:{outDir:bundle}});
  await writeFile(bundle+'/telegram-config.json',JSON.stringify({api_id:12345,api_hash:'0'.repeat(32)}));
  server=await preview({configFile:false,build:{outDir:bundle},preview:{host:'127.0.0.1',port:0}});
  const origin='http://127.0.0.1:'+server.httpServer.address().port;
@@ -471,7 +550,14 @@ try{
   report.engines[engine]=browser.version();
   try{
    for(const mode of modes){
-    if(selectedMode&&selectedMode!==mode)continue;
+    if(selectedMode&&selectedMode!==mode||!selectedMode&&mode==='benchmark')continue;
+    if(mode==='benchmark'){
+     for(const backend of ['opfs','idb'])for(const delayMs of [400,1200]){
+      const result=await checkBenchmark(browser,engine,origin,bundle,delayMs,backend);
+      report.cases.push(result);console.log(JSON.stringify(result));
+     }
+     continue;
+    }
     const repetitions=mode==='full'?Array.from({length:repeats},(_,i)=>repeatFrom+i):[1];
     for(const repetition of repetitions){
      if(report.errors.length)break;

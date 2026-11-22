@@ -38,3 +38,21 @@ La evidencia local de D1 está en `docs/evidence-bot-limit-diagnostics-web.json`
 Es un límite aproximado del trabajo decodificado, no de bytes de red, WASM o memoria máxima. Las respuestas son secuenciales y no se conserva un historial bruto. Los bytes del archivo siguen su límite independiente de 8 MiB, partes de 64 KiB y plazo de 120 segundos. Las guardas por respuesta de profundidad, nodos, propiedades, referencias, binarios y forma del teclado siguen intactas. Una respuesta individual sobredimensionada continúa devolviendo L03 aunque las anteriores fueran pequeñas.
 
 Una reproducción sintética del recorrido completo da L15 en el código D1 anterior, y el nuevo código completa seis lecturas de progreso/menú/audio, un envío, un callback y una copia verificada reproducible. La repetición posterior usa la copia local sin otro RPC. Esto comprueba el arreglo del presupuesto; no sustituye la prueba física del propietario. Evidencia: `docs/evidence-bot-l15-budget-web.json`.
+
+## Tiempos de descarga
+
+Con «Activar diagnóstico de sesión», Pulso conserva en memoria hasta 50
+intentos. «Tiempos de descarga de esta sesión» empieza con todas las casillas
+desmarcadas. Al desplegar la ventana de descargas, «Última» resume el último
+intento mientras el diagnóstico siga activo. Limpiar, desactivar o cambiar de
+ámbito borra estos registros junto con el resto del diagnóstico de sesión.
+
+El conjunto exportable contiene solo campos cerrados. Los sufijos `Ms`
+indican milisegundos medidos con `performance.now()`. `searchReads` y
+`callbackReads` cuentan sondeos posteriores al envío o callback.
+`bytes` y `parts` cuentan respuestas de transferencia recibidas a tiempo.
+`kBps` usa kilobytes decimales por segundo. `otherDc` indica si el centro
+de datos de los bytes difiere del principal, si se conoce. `backend` puede
+ser `opfs`, `idb` o `null`. `result` puede ser `received`, `saved`, `failed`,
+`uncertain` o `cancelled`. No se incluyen identificadores, títulos,
+intérpretes, consultas, bots, cuentas, rutas, URLs ni nombres de archivos.

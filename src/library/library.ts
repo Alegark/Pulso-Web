@@ -80,7 +80,7 @@ function manifestAsset(value:unknown):LocalAsset|null {
   return validAsset(copy)?copy:null;
  }catch{return null;}
 }
-export async function verifiedAssetDetailed(id:string,integrity=false):Promise<VerifiedAssetResult> {
+export async function verifiedAssetDetailed(id:string,integrity:boolean|'presence'=false):Promise<VerifiedAssetResult> {
  let record:unknown;
  try{record=await readRecord<unknown>('assets',id);}
  catch(error){return {state:'unknown',asset:null,failure:fromKnownError(error,{phase:'read',backend:'idb'})};}
