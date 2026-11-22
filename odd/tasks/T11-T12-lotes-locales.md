@@ -807,3 +807,26 @@ Pulso ahora distingue las duraciones añadidas a una opción de las que forman p
 El respaldo se consultó directamente desde la tercera canción en ambos motores. La ventana más larga elevó el intervalo entre callbacks frente a la primera entrega y conservó el objetivo de menos de 8 s. Siguen pendientes la aceptación en iPhone físico con Telegram real y la inspección temprana de etiquetas antes de descargar el archivo completo.
 
 Pasaron tipos de aplicación y pruebas, lint, 892 unitarias, 73 de servidor, 10 de Python, build y Wrangler dry-run. Pasó la matriz enfocada completa con 86/86, 43 en Chromium y 43 en WebKit.
+
+#### Segunda revisión de la PR #17
+
+Contra `ef4bee3` fallaron cinco casos unitarios y el escenario de colección en Chromium. Tras guardar la primera canción, el callback agotado provocó una segunda restauración de la sesión y dejó pendientes las tres restantes. Las unitarias reprodujeron también el reenvío del álbum con 4 s de presupuesto de callback todavía disponibles, la clasificación incorrecta de un vencimiento después de una discrepancia y el mensaje de metadatos que sobrevivía a un reintento de audio directo.
+
+Si el canal está sano y algún bot respondió, agotar el presupuesto marca esa canción con «Telegram no respondió a tiempo» y deja continuar la colección. Se conserva la salud aprendida en la sesión. Un callback con timeout confirmado cede el turno aunque quede presupuesto. Un corte después de encontrar una opción compatible mantiene el resultado por confirmar también en álbum y búsqueda interactiva. Cada candidato consume el aviso anterior, incluido el audio directo.
+
+El escenario nuevo usa el temporizador real con un presupuesto de callback reducido a 1,5 s solo en ese build de prueba. En Chromium y WebKit guardó las canciones primera y cuarta, dejó las otras dos con el aviso individual, hizo cero reconexiones y fue directo al respaldo en la cuarta. La colección terminó en 11,917 s en Chromium y 18,507 s en WebKit. Se verificó el SHA-256 de las dos copias.
+
+Los diez escenarios anteriores también pasaron. Tiempos de pared en segundos para esta revisión.
+
+| Escenario | Chromium | WebKit |
+| --- | ---: | ---: |
+| Canción cuyo primer callback entregó audio incompatible | 6,599 | 8,291 |
+| Intervalo entre esos dos callbacks | 5,016 | 5,201 |
+| Menú con una primera opción inválida | 4,400 | 2,693 |
+| M4A con título compuesto guardado al primer intento | 3,390 | 2,923 |
+| M4A con etiquetas ajenas guardado desde el respaldo | 5,882 | 8,110 |
+| Bot mudo, canciones 3 a 6 | 0,909–1,595 | 1,186–2,307 |
+
+Pasaron tipos de app y pruebas, lint, 896 unitarias, 73 de servidor, 10 de Python, build y Wrangler dry-run. Siguen pendientes la comprobación con iPhone físico y Telegram real y la inspección temprana de etiquetas. La publicación queda para revisión.
+
+La matriz enfocada de descarga, reanudación y actualización volvió a pasar 86/86, con 43 casos por motor.
