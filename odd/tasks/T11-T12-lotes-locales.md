@@ -760,3 +760,27 @@ El manifiesto autoritativo de 280 archivos y 64962 bytes se promovió a `.local/
 - Evaluar updates MTProto como señal para despertar, solapar la importación con la búsqueda de la siguiente canción, revisar `inactivityTimeout` y reutilizar el import worker.
 - Investigar las regresiones de Chromium desde `ac89e5a` en `artwork`, `artwork-containers`, `opfs` y `library`.
 - Resolver los fallos del entorno WPE en la batería general.
+
+### Menor espera por bot y por opción · 2026-11-22
+
+En la v56, una opción incompatible podía mantener el sondeo del callback durante unos 60 segundos y la siguiente opción requería otra consulta. También se empezaba cada canción por el mismo bot. En una comprobación externa con Telegram real en Chromium, un archivo M4A compatible tardó 12 s y se rechazó por `metadata-title-mismatch`. La etiqueta de título reunía el artista y el título correctos, el campo de artista identificaba a quien subió el archivo y la duración analizada coincidía. En otro caso el respaldo guardó una canción en 21 s. El límite común permitía gastar casi todo el tiempo en transferir y rechazar varios archivos del primer bot.
+
+El sondeo conserva la espera inicial y, tras detectar audio incompatible, acepta hasta cuatro lecturas adicionales por si llega el correcto. Una segunda opción usa el menú original mientras siga vigente. Pulso revalida peer, huella y correlación, descarta botones con duración explícita fuera de ±7 s y deduplica documentos. Se asignan hasta 65 s de resolución de callbacks por bot y se reservan hasta 30 s por bot de respaldo dentro del presupuesto remoto de 180 s. La importación atómica y la liquidación de un carril ajeno se contabilizan en el diagnóstico y preservan esa reserva. Dos rechazos de etiquetas o duración en una canción hacen pasar al siguiente bot. Dos fallos seguidos degradan temporalmente al bot si hay otro que ya guardó una copia. La salud vive en la sesión, el orden elegido se conserva y el bot degradado vuelve a tener su turno al vencer cinco minutos o si el resto no consigue guardar la canción.
+
+El importador acepta títulos de etiqueta con el artista completo y el título esperado, en ambos órdenes y con los separadores acordados, si Telegram ya entregó una fila compatible y la duración analizada coincide. Usa los metadatos esperados para la ficha en ese caso. El diagnóstico conserva un agregado por canción en RAM, con posiciones anónimas y motivos enumerados. El dock diferencia consulta, preparación, transferencia, rechazo, cambio de bot y guardado y conserva los avisos de espera y reconexión.
+
+**Telegram sintético en loopback.** Tiempo de pared en segundos desde la activación de la descarga hasta que el dock confirmó la copia o el fin de la operación. Base `826ec06` y candidato con las mismas fixtures. Se verificó el SHA-256 de cada copia.
+
+| Escenario | Chromium v56 → candidato | WebKit v56 → candidato |
+| --- | ---: | ---: |
+| Callback con audio de otra duración | 68,912 → 5,997 | 67,808 → 7,405 |
+| Intervalo entre esos dos callbacks | 62,797 → 3,681 | 61,701 → 3,783 |
+| Menú tras recibir bytes inválidos | 4,206 → 3,514 | 3,458 → 4,109 |
+| M4A con título compuesto | 9,309 sin copia → 2,571 guardada | 11,180 sin copia → 5,613 guardada |
+| M4A con etiquetas de otra canción | 9,808 → 5,992 | 16,705 → 11,203 |
+
+En el bot mudo, los seis tiempos por canción fueron 21,201 / 16,806 / 17,594 / 16,796 / 17,687 / 18,011 s en Chromium base y 17,399 / 17,707 / 1,983 / 2,620 / 1,901 / 1,297 s en el candidato. En WebKit fueron 18,971 / 22,420 / 16,786 / 20,206 / 18,884 / 18,111 s en base y 18,403 / 18,297 / 2,488 / 2,121 / 1,781 / 1,296 s en el candidato. En ambos motores se consultó directamente al respaldo desde la tercera canción. Los dos escenarios de menú pasaron de dos envíos a uno. El título compuesto se guardó en el primer callback y el título ajeno se descartó dos veces antes de guardar desde el respaldo, frente a tres rechazos en v56. La prueba del dock observó la consulta, la preparación, el progreso de bytes, el rechazo, el cambio de bot y el guardado.
+
+Pasaron tipos de aplicación y pruebas, lint, 883 pruebas unitarias, 73 de servidor, 10 de Python, build de producción y Wrangler dry-run. Pasaron los diez escenarios sintéticos del candidato en Chromium y WebKit. Las repeticiones aisladas permitieron medir los casos que habían sufrido vencimientos bajo carga concurrente.
+
+**Pendientes.** Confirmar latencia, memoria y diagnóstico en iPhone físico con Telegram real. Evaluar validación temprana de etiquetas con una vista acotada del prefijo. El parser actual necesita una vista coherente del archivo y un M4A puede tener `moov` al final. Hasta verificar ese recorrido, la validación de duración y etiquetas se hace sobre el archivo completo. Evaluar modo inline, consultas en paralelo o cambios de coincidencia después de observar los datos del diagnóstico. Publicación tras revisión. P0-W sigue abierto.
