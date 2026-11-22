@@ -830,3 +830,21 @@ Los diez escenarios anteriores también pasaron. Tiempos de pared en segundos pa
 Pasaron tipos de app y pruebas, lint, 896 unitarias, 73 de servidor, 10 de Python, build y Wrangler dry-run. Siguen pendientes la comprobación con iPhone físico y Telegram real y la inspección temprana de etiquetas. La publicación queda para revisión.
 
 La matriz enfocada de descarga, reanudación y actualización volvió a pasar 86/86, con 43 casos por motor.
+
+
+### Menor espera de los bots publicada · 2026-11-22
+
+Cloudflare Workers Free, USD 0, sirve [v57](https://pulso-web.pruebassoftware.workers.dev/releases/4857dea3d67edfcc.html), versión `add9ff6f-fdf8-48dc-aa8c-761952494d95`, despliegue `b5157899-13ec-479c-a8c4-fccabcd32d91` al 100 % desde `2026-11-22T13:07:35.589Z` según el MCP oficial. Se verificaron los bytes y SHA-256 del Worker, los 13 bindings, los límites y la configuración de ejecución. Se conservaron Turnstile y los secretos. El freeze retuvo 10 publicaciones anteriores y el inventario heredado, sin retirar rutas. Cloudflare solicitó 13 archivos. [PR #17](https://github.com/Alegark/Pulso-Web/pull/17), apilada sobre #16. Commit de producto publicado: `bf7d8a1a3924ffd3e2a36474e9a89860a66f707a`.
+
+Pasaron los tipos de la app y de las pruebas, lint, 896 pruebas unitarias, 73 de servidor, 10 de Python, build de producción y simulación de Wrangler. Pasaron 86/86 casos enfocados y 12/12 escenarios sintéticos, 43 y 6 por motor en Chromium y WebKit.
+
+HTTPS confirmó `latest.json`, el HTTP 307 hacia la ruta sin `.html`, el HTTP 200 y el meta `pulso-release` con valor `4857dea3d67edfcc`. Coincidieron bytes y SHA-256 de 285/285 rutas estáticas, incluido `sw.js`. Las 51 entradas históricas, incluidas v56, v55 y v54, sirvieron el bundle actual con cabeceras de navegación. Se conservaron `turnstileSiteKey` y `challenges.cloudflare.com` en la CSP. Perfil y biblioteca anónimos devolvieron HTTP 401.
+
+El manifiesto autoritativo de 288 archivos y 67415 bytes quedó en `.local/test-evidence/bot-turnaround-release/site-manifest.json`, SHA-256 `8bdffe5247c7d0a131cfdb4bd0b7b6c158bf11e47d987b9751903910a8681859`, con fecha MCP `2026-11-22T13:07:35.589Z`. Los recibos compactos quedan en el mismo directorio. P0-W sigue abierto.
+
+- Medir el comportamiento en iPhone físico con Telegram real.
+- Inspeccionar etiquetas antes de descargar el archivo completo, incluidos M4A con el átomo `moov` al final.
+- Evaluar modo inline, consultas en paralelo y relajar la coincidencia según lo que muestre el diagnóstico real.
+- Investigar el HTTP 503 observado con sesión iniciada en `/api/account-profile` y `/api/account-library`.
+- Investigar la regresión desde `ac89e5a` en Chromium para `artwork`, `artwork-containers`, `opfs` y `library`.
+- Resolver el fallo del entorno WPE de WebKit en la batería general.
