@@ -713,3 +713,24 @@ El entorno WPE no abrió un escritor OPFS. Los tiempos incluyen la variación de
 **Descarga, reanudación y actualización.** La base pasó 84/84. El candidato pasó 82/84 en la matriz completa y 2/2 en la repetición focal. El escenario de búsqueda manual usaba el segundo eliminado para tomar el carril. Ahora la prueba admite la búsqueda manual al liquidar la anterior y verifica que el lote espere sin reconectar, retome la pista y confirme las copias. Con ese escenario pasaron ambos motores en ambas versiones. También pasaron 2 pruebas de worker sintético y 10 casos de liquidación con el SDK instalado.
 
 **Pendientes.** Aceptación de latencia y memoria en iPhone físico y con Telegram real. Evaluar updates MTProto como señal, solapar la importación con la búsqueda siguiente, revisar `inactivityTimeout` y reutilizar el import worker. Publicación en Cloudflare tras revisión. P0-W continúa abierto.
+
+#### Correcciones tras la revisión de la PR #16
+
+El importador rechaza un fragmento corto o vacío como `length-mismatch` antes de escribirlo. Tras importar se comprueba la presencia de todas las copias. OPFS comprueba el tamaño e IDB cuenta claves y compara los manifiestos en una sola transacción de lectura. Cada asset comparte el resultado entre sus pistas. El worker omite la medición si añadirla excedería el presupuesto del mensaje.
+
+Si una búsqueda manual toma el carril al liquidarse la búsqueda de una colección, el lote espera y vuelve a consultar el mismo bot una vez. Un error de parte detiene el despacho y conserva el plazo de transferencia para liquidar lo que ya está en vuelo. La cancelación real y el vencimiento siguen aplicando la gracia de cuarentena. Tres errores de peer invalidan la identidad en caché sin cambiar su clasificación. Si el ACK llega cerca del límite de búsqueda, cabe un primer sondeo inmediato.
+
+Pasaron 870 unitarias, 73 de servidor, 10 de Python, tipos de app y tests, lint, build y Wrangler dry-run. En Chromium y WebKit pasaron las comprobaciones focales de almacenamiento, purga tras importar, carril manual y cancelación. Contra `cca6016` fallaron las regresiones de slice corto, presencia tras purga, presupuesto del mensaje y carril manual, además de las ocho comprobaciones focales del driver.
+
+La matriz de reanudación, actualización y descargas pasó 84/84, 42 por motor. El caso manual volvió al bot 101 en Chromium y WebKit.
+
+**Repetición del benchmark.** Misma fixture, tamaño, retardos y SHA verificado. Nueva medición de la base `7632d3b` y el candidato corregido. Media en segundos por canción.
+
+| Motor y backend observado | Bot 400 ms, v55 → candidato | Bot 1.200 ms, v55 → candidato |
+|---|---:|---:|
+| Chromium OPFS | 11,199 → 4,958 | 11,804 → 8,736 |
+| Chromium IDB forzado | 11,304 → 3,903 | 18,645 → 8,461 |
+| WebKit IDB automático | 26,551 → 6,689 | 21,449 → 8,514 |
+| WebKit IDB forzado | 21,493 → 6,601 | 17,245 → 7,059 |
+
+WPE volvió a usar IDB. Siguen pendientes iPhone físico, Telegram real y publicación tras revisión.

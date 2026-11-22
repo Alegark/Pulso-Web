@@ -159,3 +159,33 @@ test('cached resolution still verifies every command and is invalidated by rejec
   assert.equal((await search(2)).type,'bot-search.result');assert.equal(count(),4);
  }finally{s.driver.close();}
 });
+
+test('a late ACK still permits one immediate history read before the search deadline',async()=>{
+ const s=await setup(async request=>{
+  if(request._==='contacts.resolveUsername')return identity();
+  if(request._==='messages.sendMessage'){s.time.jump(14750);return ack();}
+  return history(request.limit===1?[]:[msg()]);
+ });
+ try{
+  const {c,p}=s.command();
+  assert.equal((await s.check(p,c)).type,'bot-search.result');
+  assert.equal(s.calls.filter(call=>call.request.limit===20).length,1);
+ }finally{s.driver.close();}
+});
+
+for(const code of ['USER_ID_INVALID','INPUT_USER_DEACTIVATED','USER_IS_BLOCKED'])test(`${code} invalidates only the cached identity`,async()=>{
+ let rejected=false;
+ const s=await setup(async request=>{
+  if(request._==='contacts.resolveUsername')return identity();
+  if(rejected)throw {errorMessage:code};
+  return request._==='messages.sendMessage'?ack():history(request.limit===1?[]:[msg()]);
+ });
+ const search=async()=>{const {c,p}=s.command();await advancePolls(s.time,0);return s.check(p,c);};
+ try{
+  assert.equal((await search()).type,'bot-search.result');
+  rejected=true;assert.equal((await search()).error,'network');
+  rejected=false;assert.equal((await search()).type,'bot-search.result');
+  assert.equal(s.calls.filter(call=>call.request._==='contacts.resolveUsername').length,2);
+  assert.equal(s.invalidations,0);
+ }finally{s.driver.close();}
+});

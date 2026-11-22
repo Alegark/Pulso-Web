@@ -102,3 +102,36 @@ export async function verifiedAssetDetailed(id:string,integrity:boolean|'presenc
 export async function verifiedAsset(id:string,integrity=false):Promise<LocalAsset|null> {
  const result=await verifiedAssetDetailed(id,integrity);return result.state==='valid'?result.asset:null;
 }
+
+/** Compare IDB manifests and count their keys in one readonly snapshot. */
+export async function checkIdbAssetPresence(assets:readonly LocalAsset[]):Promise<Map<string,VerifiedAssetResult>>{
+ const results=new Map<string,VerifiedAssetResult>();
+ if(!assets.length)return results;
+ try{
+  const db=await openDatabase();try{
+   const tx=admittedTransaction(db,['assets','chunks']),done=committed(tx);
+   const manifests=tx.objectStore('assets'),chunks=tx.objectStore('chunks');
+   await Promise.all(assets.map(async asset=>{
+    const [record,count]=await Promise.all([
+     request(manifests.get(asset.id)),
+     request(chunks.count(IDBKeyRange.bound([asset.storageKey,0],[asset.storageKey,asset.chunks-1]))),
+    ]);
+    const current=manifestAsset(record);
+    if(record===undefined){
+     results.set(asset.id,{state:'missing',asset:null,failure:makeFailure('verify','integrity','asset-missing','idb')});
+    }else if(!current||current.id!==asset.id){
+     results.set(asset.id,{state:'corrupt',asset:null,failure:makeFailure('verify','integrity','local-corrupt','idb')});
+    }else if(current.backend!==asset.backend||current.storageKey!==asset.storageKey||current.revision!==asset.revision||current.bytes!==asset.bytes){
+     results.set(asset.id,{state:'unknown',asset:null,failure:makeFailure('verify','integrity','asset-changed','idb')});
+    }else if(count!==asset.chunks){
+     results.set(asset.id,{state:'missing',asset:null,failure:makeFailure('verify','integrity','asset-missing','idb')});
+    }else results.set(asset.id,{state:'valid',asset:current,failure:null});
+   }));
+   await done;assertDatabaseUse('read');
+  }finally{closeDatabase(db);}
+ }catch(error){
+  const failure=fromKnownError(error,{phase:'verify',backend:'idb'});
+  for(const asset of assets)results.set(asset.id,{state:'unknown',asset:null,failure});
+ }
+ return results;
+}

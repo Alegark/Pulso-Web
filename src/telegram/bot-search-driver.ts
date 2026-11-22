@@ -1,5 +1,5 @@
 import {elapsedMs,emptyNetworkTiming,measure,type NetworkTiming} from '../diagnostics/download-timing';
-import {classifyTelegramFailure,cooldownDeadline} from './rpc-failure';
+import {classifyTelegramFailure,cooldownDeadline,invalidatesBotIdentity} from './rpc-failure';
 import {assembleBotDownloadBytes,botDownloadTransferMs,BotDownloadBytesFailure} from './bot-download-bytes';
 import {recordingTitleCandidate} from '../library/recording-title';
 import Long from 'long';
@@ -110,7 +110,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
     if(error instanceof BotDownloadBytesFailure)return fail(error.code==='size'?'file-too-large':error.code==='cancelled'?'cancelled':'file-invalid');
     // SDK late failures are observed independently of a winning cancel/deadline cause.
     const kind=classifyTelegramFailure(error).error;
-    if(kind==='invalid-peer'||kind==='access')identities.delete(c.providerRef);
+    if(kind==='invalid-peer'||kind==='access'||invalidatesBotIdentity(error))identities.delete(c.providerRef);
     const cause=botProvidersFailure(error,time.now());
     if(cause.error==='session-expired'){if(!f.cause)f.cause=cause;invalidate();}
     if(cause.error==='rate-limit'){
@@ -122,8 +122,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    const rpc=async(fn:(ms:number)=>Promise<unknown>,count=true)=>{check();try{const v=await fn(Math.max(1,deadline-time.now()));check();if(count)budget(v);check();return v;}catch(error){
     if(error===f.cause)throw error;const cause=observe(error);if(!f.cause)f.cause=cause;throw f.cause;
    }};
-   const poll=async(read:number,history:(ms:number)=>Promise<unknown>)=>{
-    pollStart??=performance.now();await sleepPoll(read);
+   const poll=async(read:number,history:(ms:number)=>Promise<unknown>,immediate=false)=>{
+    pollStart??=performance.now();if(!immediate)await sleepPoll(read);
     metrics[c.type==='bot-search.search'?'searchReads':'callbackReads']++;return rpc(history);
    };
    const sleepPoll=async(read:number)=>{
@@ -212,7 +212,13 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        const part=await rpc(()=>dependency.readDocumentPart!(document,offset,limit,abort.signal),false);
        if(part instanceof Uint8Array){metrics.parts++;metrics.bytes+=part.length;}
        return part as Uint8Array;
-      },()=>live(ctx,capture)&&!f.cause&&time.now()<deadline,progress,error=>f.stop(f.cause??observe(error)));
+      },()=>live(ctx,capture)&&!f.cause&&time.now()<deadline,progress,error=>{
+       // A rejected part stops dispatch. Its siblings retain the transfer
+       // deadline; only actual cancellation or expiry starts settlement grace.
+       if(!live(ctx,capture))f.stop(fail('cancelled'));
+       else if(time.now()>=deadline)f.stop(fail('timeout'));
+       else f.cause??=observe(error);
+      });
       metrics.transferMs=elapsedMs(transferStart);transferStart=undefined;
       await known(selected);check();retained=new Map();retainedSearch=null;
       return {...e,type:'bot-search.downloaded',audio:{...result,target:c.target,...(fold(row.title)!==fold(c.target.title)?{recordingTitle:row.title}:{})}};
@@ -231,8 +237,9 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       return Object.freeze({...e,type:'bot-search.result',delivery:'acknowledged',rows:page.rows,expiresAt:retainedUntil,expectedTarget:c.target??null});
      };
      for(let reads=0;reads<B.reads;reads++){
-      if(deadline-time.now()<=botPollDelay(reads))break;
-      const page=projectBotSearchPage(await poll(reads,ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms)),approved.botId,baseline,ack,[],c.target??null);check();
+      const nearDeadline=deadline-time.now()<=botPollDelay(reads);
+      if(reads>0&&nearDeadline)break;
+      const page=projectBotSearchPage(await poll(reads,ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms),nearDeadline),approved.botId,baseline,ack,[],c.target??null);check();
       if(page.concurrent)throw fail('uncertain');
       if(page.rows.some(row=>row.kind==='option'||row.kind==='audio')){
        lastCandidates=page;

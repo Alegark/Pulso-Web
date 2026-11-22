@@ -1,7 +1,7 @@
 import {importFileDetailed,importFile,importOperation,importOperations,recoverImportOperation} from '../../src/imports/import-file';
-import {all,editTrack,createPlaylist,changePlaylist,verifiedAsset,verifiedAssetDetailed,type LocalAsset,type Track,type Playlist} from '../../src/library/library';
+import {all,editTrack,createPlaylist,changePlaylist,verifiedAsset,verifiedAssetDetailed,checkIdbAssetPresence,type LocalAsset,type Track,type Playlist} from '../../src/library/library';
 import {assetDirectory,openAssetReader} from '../../src/storage/asset-reader';
-import {readRecord,writeRecord} from '../../src/storage/database';
+import {admittedTransaction,closeDatabase,committed,openDatabase,readRecord,writeRecord} from '../../src/storage/database';
 import {createOperation,updateOperation,importIssues,retainImportIssue,assertImportsResolved,type ImportOperation} from '../../src/storage/import-operations';
 import {editDuringImport} from './import-edit-fixture';
 const results:string[]=[];
@@ -79,6 +79,45 @@ await check(`SHA esperado se contrasta con la generación persistida antes de pu
   assert(await rejects(()=>recoverImportOperation(operationId,job.revision,'resume')),'recuperación publicó bytes alterados');
   await recoverImportOperation(operationId,job.revision,'discard');
  }
+});
+await check('rechaza slice corto o vacío durante la escritura sin dejar staging',async()=>{
+ for(const length of [0,17]){
+  const original=wav(61,1024*1024),file=new File([original],original.name,{type:original.type}),id=crypto.randomUUID();
+  const slice=file.slice.bind(file);
+  let injected=false;
+  file.slice=(start,end,type)=>{
+   if(!injected&&start===512*1024&&end===1024*1024){injected=true;return slice(start,start+length,type);}
+   return slice(start,end,type);
+  };
+  const result=await importFileDetailed(file,signal(),()=>{},{backend:'idb',operationId:id});
+  const job=await importOperation(id);
+  assert(injected&&result.kind==='failed'&&result.outcome.primary?.code==='length-mismatch'&&result.outcome.primary.phase==='read','el slice incompleto no se detectó al leer');
+  assert(job?.state==='discarded'&&!await readRecord('chunks',[job.storageKey,0]),'quedó staging o no se liberó el carril');
+ }
+});
+await check('la presencia por lote vuelve a detectar una copia purgada después de guardar otra',async()=>{
+ const copy=async(seed:number)=>{
+  const saved=await importFile(wav(seed),signal(),()=>{},{backend:'idb'});
+  const asset=await readRecord<LocalAsset>('assets',saved.track.assetId);assert(asset,'sin asset');
+  return asset;
+ };
+ const old=await copy(62);
+ assert((await checkIdbAssetPresence([old])).get(old.id)?.state==='valid','presencia inicial');
+ const db=await openDatabase();
+ try{
+  const tx=admittedTransaction(db,'chunks','readwrite'),done=committed(tx);
+  tx.objectStore('chunks').delete([old.storageKey,0]);await done;
+ }finally{closeDatabase(db);}
+ const latest=await copy(63);
+ const get=IDBObjectStore.prototype.get,count=IDBObjectStore.prototype.count;
+ let reads=0;const transactions=new Set<IDBTransaction>();
+ IDBObjectStore.prototype.get=function(...args:Parameters<IDBObjectStore['get']>){if(this.name==='chunks')reads++;return get.apply(this,args);};
+ IDBObjectStore.prototype.count=function(...args:Parameters<IDBObjectStore['count']>){if(this.name==='chunks')transactions.add(this.transaction);return count.apply(this,args);};
+ try{
+  const results=await checkIdbAssetPresence([old,latest]);
+  assert(results.get(old.id)?.state==='missing'&&results.get(latest.id)?.state==='valid','se reutilizó la presencia antigua');
+  assert(reads===0&&transactions.size===1,'la presencia no se resolvió en un snapshot sin payload');
+ }finally{IDBObjectStore.prototype.get=get;IDBObjectStore.prototype.count=count;}
 });
 await check('OPFS real: copia, hash incremental, reopen, rangos y dedup conserva metadata',async()=>{
  assert(typeof navigator.storage.getDirectory==='function','OPFS ausente');
@@ -214,5 +253,5 @@ await check('jobs inválidos/legacy bloquean hasta retención expresa; snapshot 
  const circular:{self?:unknown}={};circular.self=circular;await writeRecord('jobs','malformed-cycle',circular);const cycle=(await importIssues()).find(i=>i.key==='malformed-cycle')!;assert(cycle&&!cycle.retained,'ciclo no revisable');await retainImportIssue(cycle);
  assert(await verifiedAsset(originalAsset.id,true),'perdió kept');await assertImportsResolved();
 });
-(window as unknown as {pulsoOpfs:unknown}).pulsoOpfs={passed:results.length===13&&results.every(s=>s.startsWith('PASS')),results,userAgent:navigator.userAgent};
+(window as unknown as {pulsoOpfs:unknown}).pulsoOpfs={passed:results.length===15&&results.every(s=>s.startsWith('PASS')),results,userAgent:navigator.userAgent};
 document.querySelector('#results')!.textContent+='\nCOMPLETADO';

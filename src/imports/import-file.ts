@@ -132,6 +132,7 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
   checkCancelled(signal);
   const size=writer?CHUNK:IDB_BATCH;
   const bytes=new Uint8Array(await atBoundary('read','none',()=>file.slice(offset,offset+size).arrayBuffer()));
+  if(bytes.length!==Math.min(size,file.size-offset))fail('read','integrity','length-mismatch',backend);
   checkCancelled(signal);hash?.update(bytes);
   offset+=bytes.length;
   if(writer){

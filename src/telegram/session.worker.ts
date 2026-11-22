@@ -54,7 +54,7 @@ async function searchCommand(command:BotSearchCommand){
   const settled=command.type!=='bot-search.cancel'&&core?await core.whenSettled():true;
   if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&!isBotSearchCancelReply(reply,command)){closeLocal();return;}if('retryAt' in reply)observeRemote(reply);refreshCooldown();
   if(reply.type==='bot-search.cancelled')searchCancelled=true;
-  const sessionClosed=!settled||!current()||!driver.getAccountBinding();post(timing?{...reply,timing}:reply,sessionClosed);if(sessionClosed)closeLocal();
+  const sessionClosed=!settled||!current()||!driver.getAccountBinding();const timed=timing&&{...reply,timing};post(timed&&parseBotSearchReply(timed,command)?timed:reply,sessionClosed);if(sessionClosed)closeLocal();
  }catch{closeLocal();}};
  if(command.type==='bot-search.cancel'){const flight=run();searchControl=flight;try{await flight;}finally{if(searchControl===flight)searchControl=null;}}
  else{searchCancelled=false;const flight=run();searchFlight=flight;try{await flight;}finally{if(searchFlight===flight)searchFlight=null;}}

@@ -29,8 +29,9 @@ const fixture=(release='old')=>({name:'playlist-resume-sdk-test',enforce:'pre',r
   if(id.endsWith('/src/main.tsx'))return code.replace('function captureBatchDownload(recoverPending=false):SongPlaybackAttempt|null {',
    'function captureBatchDownload(recoverPending=false):SongPlaybackAttempt|null {if(document.documentElement.dataset.testBusy==="true")return null;')
    .replace('prepare:async manual=>{',
-   'prepare:async manual=>{if (document.documentElement.dataset.testUpdateBlocked === "true") return false;')+`
-document.documentElement.dataset.testBuild=${JSON.stringify(release)};window.testEmit=emit;`;
+   'prepare:async manual=>{if (document.documentElement.dataset.testUpdateBlocked === "true") return false;')
+   .replace("await refresh(false,false,diagnostic,'refresh',false,true);","await window.testBeforeImportRefresh?.();await refresh(false,false,diagnostic,'refresh',false,true);")+`
+document.documentElement.dataset.testBuild=${JSON.stringify(release)};window.testEmit=emit;window.testCopyState=id=>availability.get(id)?.state;`;
   if(id.endsWith('/src/ui/DownloadDock.tsx'))return code.replace('const displayTime=5000;', 'const displayTime=window.testDockTime??5000;');
   if(id.endsWith('/src/ui/TelegramPanel.tsx'))return code.replace('tracks={localTracks} client={client.current}',
    'tracks={document.documentElement.dataset.testHoldTracks==="true"?[]:localTracks} client={client.current}');
@@ -550,6 +551,24 @@ try{
       },{entry:next.entry,bundle:next.html.match(/src="(\/assets\/[^"]+\.js)"/)[1],user});
       pointer=mode==='update-offline'?'offline':'new';
      }
+     if(mode==='connected'&&process.env.PLAYLIST_TEST_PURGED_COPY==='1'){
+      await page.waitForFunction(id=>window.testCopyState(id)==='available',ids[0]);
+      await page.evaluate(storageKey=>{
+       const edit=async(value,restore)=>{
+        const db=await new Promise((resolve,reject)=>{
+         const req=indexedDB.open('pulso-web-local-v1');
+         req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+        });
+        try{await new Promise((resolve,reject)=>{
+         const tx=db.transaction('chunks','readwrite'),store=tx.objectStore('chunks'),key=[storageKey,0];
+         if(restore)store.put(value,key);else store.delete(key);
+         tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);
+        });}finally{db.close();}
+       };
+       window.testBeforeImportRefresh=async()=>{window.testBeforeImportRefresh=null;await edit(null,false);window.testPurged=true;};
+       window.testRestorePurgedCopy=value=>edit(Uint8Array.from(atob(value),c=>c.charCodeAt(0)),true);
+      },readyCopies[0].id);
+     }
      const clickedAt=Date.now();
      const continueButton=dock.getByRole('button',{name:'Continuar',exact:true});
      await continueButton.click();
@@ -781,7 +800,7 @@ try{
      }
     }else if(fallback){
      assert.deepEqual(searches.map(({title,peer})=>[title,peer]),mode==='manual-lane'?
-      [['Pista 3',101],['Consulta manual',101],['Pista 3',102],['Pista 4',101]]:
+      [['Pista 3',101],['Consulta manual',101],['Pista 3',101],['Pista 4',101]]:
       [['Pista 3',101],['Pista 3',102],['Pista 4',101]]);
      if(mode==='bot-timeout')assert.ok(searches[1].at-searches[0].at>=14_000,'the first bot stayed silent through its response deadline');
      const notices=await page.evaluate(()=>window.testNotifications);
@@ -804,6 +823,10 @@ try{
       });}finally{db.close();}
      },operationId);
      assert.deepEqual(staging,mode==='parked'?{state:'cleanup',hasChunk:true}:{state:'discarded',hasChunk:false});
+    }
+    if(mode==='connected'&&process.env.PLAYLIST_TEST_PURGED_COPY==='1'){
+     assert.equal(await page.evaluate(id=>window.testPurged&&window.testCopyState(id),ids[0]),'missing');
+     await page.evaluate(audio=>window.testRestorePurgedCopy(audio),readyCopies[0].audio);
     }
     const copies=await page.evaluate(async ids=>{
      const db=await new Promise((resolve,reject)=>{const q=indexedDB.open('pulso-web-local-v1');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});

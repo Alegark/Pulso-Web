@@ -195,28 +195,46 @@ test('callback downloads the compatible alternative to a larger or unsupported e
  }
 });
 
-for(const stop of ['rate-limit','cancelled','quarantine'] as const)test(`parallel ${stop} retains the lane until every part settles or grace expires`,async()=>{
+for(const stop of ['rate-limit','header','short','cancelled','quarantine','transfer-timeout'] as const)test(`parallel ${stop} retains the lane until every part settles or grace expires`,async()=>{
  const size=512*1024*6,document=doc(size);
  const parts=new Map<number,{resolve:(v:unknown)=>void;reject:(e:unknown)=>void}>();
- const timers=new Map<number,{ms:number;fn:()=>void}>();let next=0;
- const clock={now:()=>1000,setTimeout(fn:()=>void,ms:number){const id=++next;if(ms<=1000)queueMicrotask(fn);else timers.set(id,{ms,fn});return id;},clearTimeout(id:number){timers.delete(id);}} as unknown as BotProvidersClock;
+ const timers=new Map<number,{at:number;fn:()=>void}>();let next=0,now=1000;
+ const clock={now:()=>now,setTimeout(fn:()=>void,ms:number){const id=++next;if(ms<=1000)queueMicrotask(fn);else timers.set(id,{at:now+ms,fn});return id;},clearTimeout(id:number){timers.delete(id);}} as unknown as BotProvidersClock;
+ const advance=(ms:number)=>{now+=ms;for(const [id,timer] of timers)if(timer.at<=now){timers.delete(id);timer.fn();}};
  const s=await setup(false,(r,v)=>r._==='upload.getFile'?new Promise((resolve,reject)=>parts.set(r.offset,{resolve,reject})):
   ['messages.getMessages','messages.getHistory'].includes(r._)&&r.limit!==1?history([msg(document)]):v,clock);
  const abort=new AbortController();
  try{
   const download=s.driver.handle(s.dl,{...s.ctx,signal:abort.signal});
-  await new Promise(resolve=>setImmediate(resolve));assert.equal(parts.size,4);
+  let replied=false,settled=false;
+  void download.then(()=>{replied=true;});
+  void s.driver.whenSettled().then(()=>{settled=true;});
+  const tick=()=>new Promise(resolve=>setImmediate(resolve));
+  await tick();assert.equal(parts.size,4);
   const chunks=[...parts.values()];
-  if(stop==='rate-limit')chunks[1].reject({errorMessage:'FLOOD_WAIT_4'});else abort.abort();
-  const early=await download;
-  assert.equal(early?.type,'bot-search.error');
-  if(early?.type==='bot-search.error'){assert.equal(early.error,stop==='rate-limit'?'rate-limit':'cancelled');if(stop==='rate-limit')assert.equal(early.retryAt,5000);}
-  let settled=false;void s.driver.whenSettled().then(()=>{settled=true;});
-  for(const part of chunks.slice(0,3))part.resolve({_:'upload.file',bytes:new Uint8Array(512*1024)});
-  await new Promise(resolve=>setImmediate(resolve));assert.equal(settled,false);assert.equal(parts.size,4);
-  if(stop==='quarantine')[...timers.values()].find(timer=>timer.ms===BOT_SEARCH_BOUNDS.settlementMs)?.fn();
-  else chunks[3].resolve({_:'upload.file',bytes:new Uint8Array(512*1024)});
-  assert.equal(await s.driver.whenSettled(),stop!=='quarantine');
-  assert.equal(s.invalidations,stop==='quarantine'?1:0);
+  const part=(length=512*1024)=>({_:'upload.file',bytes:new Uint8Array(length)});
+  if(stop==='rate-limit'||stop==='transfer-timeout')chunks[1].reject({errorMessage:'FLOOD_WAIT_4'});
+  else if(stop==='header')chunks[0].resolve(part());
+  else if(stop==='short')chunks[1].resolve(part(1));
+  else abort.abort();
+  await tick();
+  if(stop!=='cancelled'&&stop!=='quarantine'){
+   advance(2500);await tick();
+   assert.equal(settled,false);assert.equal(replied,false);assert.equal(parts.size,4);
+  }
+  for(const chunk of chunks.slice(0,3))chunk.resolve(part());
+  await tick();assert.equal(settled,false);assert.equal(parts.size,4);
+  if(stop==='transfer-timeout')advance(33000);
+  if(stop==='quarantine'||stop==='transfer-timeout')advance(BOT_SEARCH_BOUNDS.settlementMs);
+  else chunks[3].resolve(part());
+  const result=await download;
+  assert.equal(result?.type,'bot-search.error');
+  if(result?.type==='bot-search.error'){
+   assert.equal(result.error,stop==='rate-limit'||stop==='transfer-timeout'?'rate-limit':stop==='header'||stop==='short'?'file-invalid':'cancelled');
+   if(result.error==='rate-limit')assert.equal(result.retryAt,5000);
+  }
+  const quarantined=stop==='quarantine'||stop==='transfer-timeout';
+  assert.equal(await s.driver.whenSettled(),!quarantined);
+  assert.equal(s.invalidations,quarantined?1:0);
  }finally{s.driver.close();for(const part of parts.values())part.resolve(null);}
 });

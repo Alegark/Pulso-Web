@@ -21,6 +21,16 @@ export function cooldownDeadline(wait:{retryAt?:number|null;retryBlocked?:boolea
  return Math.max(wait.retryAt??0,wait.retryBlocked?now+UNKNOWN_FLOOD_WAIT_MS:0);
 }
 
+/** Identity cache only. These RPC errors keep their public classification. */
+export function invalidatesBotIdentity(error:unknown):boolean {
+ try{
+  return !!error&&typeof error==='object'&&['text','errorMessage','message'].some(key=>{
+   const value=Object.getOwnPropertyDescriptor(error,key)?.value;
+   return value==='USER_ID_INVALID'||value==='INPUT_USER_DEACTIVATED'||value==='USER_IS_BLOCKED';
+  });
+ }catch{return false;}
+}
+
 /** Own data fields only. Never forward raw SDK text or execute an error accessor. */
 export function classifyTelegramFailure(error:unknown,now=Date.now()):RpcFailure {
  try{

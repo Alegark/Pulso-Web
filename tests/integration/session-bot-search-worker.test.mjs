@@ -32,7 +32,17 @@ export async function openTemporaryTelegram(){
  return {async begin(){f.auth.push('begin');binding={accountRef:crypto.randomUUID(),accountEpoch:1};return null;},async code(){},async password(){},getAccountBinding(){return binding;},getAccountCooldown,
  createSources(session){return sources??=createSourcesDriver(binding,session,{getDialogs:()=>read(async()=>{f.pages++;if(f.mode==='source-deferred')return deferred('source');return {_: 'messages.dialogs',dialogs:[],chats:[],users:[],messages:[]};}),invalidateSession:invalidate},f.clock);},
  createBotProviders(session){f.botsCreated++;return bots??=createBotProvidersDriver(binding,session,{resolveIdentity:async username=>read(async()=>{f.profiles++;return f.mode==='profile-deferred'?deferred('profile'):identity(username);}),invalidateSession:invalidate},f.clock);},
- ...(f.historical?{}:{createBotSearch(session){f.searchCreated++;return search??=createBotSearchSdkDriver(binding,session,{providers:bots,call,current(signal){if(signal.aborted)throw Error('cancelled');},invalidateSession:invalidate,getAccountCooldown},f.clock);}}),
+ ...(f.historical?{}:{createBotSearch(session){f.searchCreated++;
+ if(f.mode==='large-reply')return {async handle(c,ctx){
+  const {query,providerRef,consent,...envelope}=c;
+  const rows=Array.from({length:20},()=>({kind:'message',rowRef:crypto.randomUUID(),correlation:'reply',text:'é'.repeat(750)}));
+  const reply={...envelope,type:'bot-search.result',delivery:'acknowledged',rows,expiresAt:Date.now()+120000,expectedTarget:null};
+  const size=value=>new TextEncoder().encode(JSON.stringify(value)).length;
+  while(size(reply)<32720)rows.find(row=>row.text.length<1000).text+='é';
+  const timing={resolveMs:1,sendMs:1,searchPollMs:1,searchReads:1,callbackMs:0,callbackPollMs:0,callbackReads:0,transferMs:0,bytes:0,parts:0,otherDc:null};
+  f.largeSizes=[size(reply),size({...reply,timing})];ctx.timing(timing);return reply;
+ },whenSettled:async()=>true,close(){}};
+ return search??=createBotSearchSdkDriver(binding,session,{providers:bots,call,current(signal){if(signal.aborted)throw Error('cancelled');},invalidateSession:invalidate,getAccountCooldown},f.clock);}}),
  async logout(){f.auth.push('logout');f.logoutActive=f.active;binding=null;},async close(){binding=null;search?.close();sources?.close();bots?.close();f.destroy++;}};
 }`;
 const bundle=await build({configFile:false,root:artifacts,envDir:artifacts,publicDir:false,logLevel:'silent',plugins:[{name:'r143-sdk-fixture',enforce:'pre',resolveId(id){if(id==='./temporary-sdk')return '\0r143-sdk';},load(id){if(id==='\0r143-sdk')return sdk;}}],build:{write:false,minify:false,lib:{entry:resolve('src/telegram/session.worker.ts'),formats:['es']},rolldownOptions:{output:{codeSplitting:false}}}});
@@ -56,6 +66,13 @@ function setup({historical=false,mode='normal'}={}){
 }
 async function run(name,fn,options){const s=setup(options);try{await fn(s);assert.ok(s.fixture.maxActive<=1);cases.push(name);}finally{s.cleanup();}}
 await run('lazy factory; typed one query; closed result + progress; target title/artist only',async s=>{const c=await s.auth();assert.equal(s.fixture.searchCreated,0);const ref=await s.selected(c);assert.equal(s.fixture.searchCreated,0);const search={...s.search(c,ref),target:{title:'Synthetic Live',artist:'Fixture artist',album:'Not sent',durationSeconds:123}};s.send(search);await tick();assert.equal(s.fixture.sentText,'Synthetic Live Fixture artist');assert.equal(s.fixture.sends,1);assert.deepEqual(s.fixture.limits,[1,20]);const progress=s.messages.find(m=>m.reply?.type==='bot-search.sending'),terminal=s.terminal(search);assert.equal(progress.reply.delivery,'uncertain');assert.equal(terminal.reply.type,'bot-search.result',JSON.stringify(terminal));assert.equal(terminal.sessionClosed,false);assert.equal(terminal.reply.timing.searchReads,1);assert.deepEqual(terminal.reply.rows.map(r=>r.kind),['audio','option','message']);assert.equal(terminal.reply.rows[1].label,'Synthetic option');assert.equal(terminal.reply.rows[0].bytes,12345);assert.ok(!JSON.stringify(terminal).includes('inlineButtonTypeCallback'));assert.ok(!JSON.stringify(terminal).includes('replyToMsgId'));assert.deepEqual(terminal.reply.expectedTarget,search.target);assert.deepEqual(Object.keys(terminal).sort(),['protocol','reply','retryAt','retryBlocked','sessionClosed','version']);assert.ok(!JSON.stringify(terminal).includes('accessHash'));for(const o of s.fixture.options){assert.equal(o.maxRetryCount,0);assert.equal(o.floodSleepThreshold,0);assert.equal(o.timeout,0);assert.equal(o.abortSignal,undefined);}});
+await run('a reply near the DTO budget still arrives without oversized timing',async s=>{
+ const c=await s.auth(),ref=await s.selected(c),search=s.search(c,ref);
+ s.send(search);await tick();
+ assert.ok(s.fixture.largeSizes[0]<=32768&&s.fixture.largeSizes[1]>32768);
+ const terminal=s.terminal(search);assert.equal(terminal.reply.type,'bot-search.result');
+ assert.equal(terminal.reply.timing,undefined);assert.equal(terminal.sessionClosed,false);assert.equal(s.closed(),false);
+},{mode:'large-reply'});
 await run('late cancel after verified download replies expired and preserves the connection',async s=>{
  const c=await s.auth(),ref=await s.selected(c);
  const target={title:'Synthetic title',artist:'Synthetic artist',album:null,durationSeconds:123};

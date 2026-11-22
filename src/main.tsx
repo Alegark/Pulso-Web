@@ -45,7 +45,7 @@ import {createRoot} from 'react-dom/client';
 import {Ownership} from './playback/ownership';
 import {Player} from './playback/player';
 import {normalizeSnapshot,planQueueRestore,restoreAssetAvailable,type Snapshot} from './playback/queue-restore';
-import {all,createPlaylist,changePlaylist,editTrack,verifiedAssetDetailed,validAsset,validAudioFingerprint,type LocalAsset,type Track,type Playlist} from './library/library';
+import {all,createPlaylist,changePlaylist,editTrack,verifiedAssetDetailed,checkIdbAssetPresence,validAsset,validAudioFingerprint,type LocalAsset,type Track,type Playlist} from './library/library';
 import {importOperations,importIssues,retainImportIssue,terminal,type ImportOperation,type ImportIssue} from './storage/import-operations';
 import {inspectLibraryTrackDownload,prepareBatchCopyReplacement,reconcileLibraryDownload,repairBatchLibraryDownload} from './library/library-download-recovery';
 import {readRecord,writeRecord,openExistingDatabase,admittedTransaction,request,closeDatabase,subscribeDatabaseLifecycle,registerDatabaseOpenGuard,registerDatabaseUseGuard,retireDatabaseRealm,type DatabaseLifecycleState} from './storage/database';
@@ -631,6 +631,11 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
  const assets=new Map((await all<LocalAsset>('assets')).map(asset=>[asset.id,asset]));
  const nextAvailability:typeof availability=new Map();
  const checks=new Map<string,Promise<Awaited<ReturnType<typeof verifiedAssetDetailed>>>>();
+ if(afterImport){
+  const ids=new Set(nextTracks.map(track=>track.assetId));
+  const idb=[...assets.values()].filter(asset=>ids.has(asset.id)&&validAsset(asset)&&asset.backend==='idb');
+  for(const [id,checked] of await checkIdbAssetPresence(idb))checks.set(id,Promise.resolve(checked));
+ }
  let unknown=0,firstFailure:Result|undefined;
  for(let offset=0;offset<nextTracks.length;offset+=8){
   if(!current())return;
@@ -638,7 +643,7 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
    if(track.assetId===null)return;
    const asset=assets.get(track.assetId),generation=validAsset(asset)?`${asset.backend}:${asset.storageKey}:${asset.revision}`:asset===undefined?'missing':'invalid';
    const cached=availability.get(track.id);
-   if(!force&&cached?.generation===generation){nextAvailability.set(track.id,cached);return;}
+   if(!force&&!afterImport&&cached?.generation===generation){nextAvailability.set(track.id,cached);return;}
    let check=checks.get(track.assetId);
    if(!check){check=verifiedAssetDetailed(track.assetId,afterImport?'presence':false);checks.set(track.assetId,check);}
    const checked=await check;
