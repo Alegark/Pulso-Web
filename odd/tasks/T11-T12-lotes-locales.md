@@ -786,3 +786,24 @@ Pasaron tipos de aplicación y pruebas, lint, 883 pruebas unitarias, 73 de servi
 La matriz enfocada de descarga, reanudación y actualización pasó 86/86 en ambos árboles, 43 por motor. En la base se completó WebKit con una repetición de los 32 casos restantes tras interrumpirse la primera corrida. En la batería general, base y candidato pasaron 12/16 en Chromium 154 y 4/16 en WebKit 27.2, con los mismos fallos en ambos árboles. Chromium mantuvo los cuatro fallos conocidos en `artwork`, `artwork-containers`, `opfs` y `library`. En WPE permanecieron los 12 grupos fallidos de la base.
 
 **Pendientes.** Confirmar latencia, memoria y diagnóstico en iPhone físico con Telegram real. Evaluar validación temprana de etiquetas con una vista acotada del prefijo. El parser actual necesita una vista coherente del archivo y un M4A puede tener `moov` al final. Hasta verificar ese recorrido, la validación de duración y etiquetas se hace sobre el archivo completo. Evaluar modo inline, consultas en paralelo o cambios de coincidencia después de observar los datos del diagnóstico. Publicación tras revisión. P0-W sigue abierto.
+
+#### Revisión de la PR #17
+
+Se reprodujeron los ocho hallazgos contra `fc8fa20`. Las pruebas separaron el vencimiento durante la búsqueda y la descarga, y el desfase del temporizador se comprobó tanto en búsqueda interactiva como en una colección. También se reprodujeron la vuelta al mismo bot tras agotar el callback de un álbum, el filtro aplicado a parte del título o del artista, la identidad vacía en etiquetas compuestas, el doble diagnóstico de duración y el aviso de metadatos repetido. La gracia anterior terminaba a los 2,35 s en el caso de audio temprano.
+
+Pulso ahora distingue las duraciones añadidas a una opción de las que forman parte de su identidad. Un corte por presupuesto mantiene el resultado como pendiente de confirmar y deja probar el respaldo. Los plazos internos usan un reloj monotónico y el temporizador marca el vencimiento antes de cancelar el RPC. Agotar el callback de un álbum ya no repite la búsqueda. La gracia concede hasta 4,5 s desde el primer audio incompatible y conserva el límite total de lecturas. El dock anuncia el motivo que corresponde a la opción que acaba de fallar.
+
+**Repetición de los diez escenarios sintéticos.** Tiempo de pared en segundos. En Chromium y WebKit se verificó el SHA-256 de las copias y se conservó un solo envío por menú.
+
+| Escenario | Chromium | WebKit |
+| --- | ---: | ---: |
+| Canción cuyo primer callback entregó audio incompatible | 7,395 | 7,177 |
+| Intervalo entre esos dos callbacks | 5,051 | 5,023 |
+| Menú con una primera opción inválida | 3,900 | 3,878 |
+| M4A con título compuesto guardado al primer intento | 3,807 | 7,798 |
+| M4A con etiquetas ajenas guardado desde el respaldo tras dos rechazos | 5,016 | 7,312 |
+| Bot mudo, canciones 3 a 6 | 1,892–2,392 | 0,928–2,083 |
+
+El respaldo se consultó directamente desde la tercera canción en ambos motores. La ventana más larga elevó el intervalo entre callbacks frente a la primera entrega y conservó el objetivo de menos de 8 s. Siguen pendientes la aceptación en iPhone físico con Telegram real y la inspección temprana de etiquetas antes de descargar el archivo completo.
+
+Pasaron tipos de aplicación y pruebas, lint, 892 unitarias, 73 de servidor, 10 de Python, build y Wrangler dry-run. Pasó la matriz enfocada completa con 86/86, 43 en Chromium y 43 en WebKit.
