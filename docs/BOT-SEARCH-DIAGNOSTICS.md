@@ -41,7 +41,7 @@ Una reproducción sintética del recorrido completo da L15 en el código D1 ante
 
 ## Tiempos de descarga
 
-Con «Activar diagnóstico de sesión», Pulso conserva en memoria hasta 50
+Con «Activar diagnóstico de esta sesión», Pulso conserva en memoria hasta 50
 intentos. «Tiempos de descarga de esta sesión» empieza con todas las casillas
 desmarcadas. Al desplegar la ventana de descargas, «Última» resume el último
 intento mientras el diagnóstico siga activo. Limpiar, desactivar o cambiar de

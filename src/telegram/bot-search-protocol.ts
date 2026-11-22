@@ -7,7 +7,7 @@ export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRo
 // Compared with immediate + 1 s polling, the warm-up adds at most three
 // history reads. The 15 s command deadline and ~59 s callback window remain.
 const earlyPollMs=[250,250,400,700] as const;
-export const botPollDelay=(read:number)=>earlyPollMs[read]??BOT_SEARCH_BOUNDS.pollMs;
+export const botPollDelay=(read:number):number=>earlyPollMs[read]??BOT_SEARCH_BOUNDS.pollMs;
 // Catalogue and file metadata may differ by a few seconds. This never relaxes
 // the required title/performer/version match or the ranking by closest duration.
 export const BOT_SEARCH_DURATION_TOLERANCE_SECONDS=5;

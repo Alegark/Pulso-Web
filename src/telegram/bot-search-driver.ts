@@ -252,7 +252,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      // Internally constructed causes are data-only; SDK errors were normalized in rpc.
      const known=error&&typeof error==='object'&&Object.getPrototypeOf(error)===Object.prototype&&Object.getOwnPropertyDescriptor(error,'error')?.value;
      const cause=f.cause??(typeof known==='string'?error as Failure:observe(error));
-     if(cause.error==='conflict'||cause.error==='identity-changed')identities.delete(c.providerRef);
+     if(cause.error==='conflict'||cause.error==='identity-changed'||cause.error==='unsupported')identities.delete(c.providerRef);
      if(!f.cause)f.cause=cause;return response(e,cause,f.delivery);
     }
    }).finally(()=>finish(true));
