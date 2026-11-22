@@ -8,8 +8,8 @@ type Audio = {key:number;title:string;artist:string;duration:number;mime:string;
 declare const __PLAYLIST_RPC_MS__:number;
 const benchmark=typeof __PLAYLIST_RPC_MS__!=='undefined'&&__PLAYLIST_RPC_MS__>0;
 const delayRpc=()=>benchmark?new Promise<void>(resolve=>setTimeout(resolve,__PLAYLIST_RPC_MS__)):undefined;
-type Reply = {delayMs?:number;audio:Audio[];menu?:{label:string;audio:Audio}[]};
-type Chat = {outgoing:number;messages:unknown[];latest:number;menu?:Reply['menu'];readyAt:number;delayMs:number};
+type Reply = {silent?:boolean;delayMs?:number;audio:Audio[];menu?:{label:string;audio:Audio}[]};
+type Chat = {outgoing:number;messages:unknown[];latest:number;menu?:Reply['menu'];readyAt:number;delayMs:number;quietCallback?:boolean};
 
 export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal){
  const base=await setupSdk(identity,signal);
@@ -47,7 +47,7 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
     await delayRpc();
     const response=await rpc('search',{peer,query},abort);
     if(!response.ok)throw Error('Unexpected fixture query');
-    const {audio,menu,delayMs=0}:Reply=await response.json();
+    const {audio,menu,silent,delayMs=0}:Reply=await response.json();
     const outgoing=(chats.get(peer)?.latest??0)+1;
     const options=menu&&{
      ...incoming(peer,outgoing+1,outgoing,'Selecciona una canción'),
@@ -56,7 +56,7 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
        type:{_:'inlineButtonTypeCallback',data:Uint8Array.of(index+1)}}],
      }))},
     };
-    const messages=options?[options]:audio.length?audio.map((candidate,index)=>document(peer,outgoing+1+index,outgoing,candidate))
+    const messages=silent?[]:options?[options]:audio.length?audio.map((candidate,index)=>document(peer,outgoing+1+index,outgoing,candidate))
      :[incoming(peer,outgoing+1,outgoing,'No se encontraron resultados')];
     chats.set(peer,{outgoing,messages,latest:outgoing+messages.length,menu,readyAt:performance.now()+delayMs,delayMs});
     return {_:'updateShortSentMessage',out:true,id:outgoing,date:1,pts:outgoing,ptsCount:1};
@@ -64,6 +64,7 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
    async readHistory(input,_min,limit){
     await delayRpc();
     const chat=chats.get(botId(input));
+    if(chat?.quietCallback&&limit===20)await new Promise(resolve=>setTimeout(resolve,700));
     if(chat&&performance.now()<chat.readyAt)return history();
     return history(limit===1?chat?.messages.slice(-1):chat?.messages);
    },
@@ -79,7 +80,10 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
     await delayRpc();
     const response=await rpc('callback',{peer,key:audio.key,option:data[0]},abort);
     if(!response.ok)throw Error('Fixture callback was rejected');
-    chat.messages.push(document(peer,++chat.latest,id,audio));chat.readyAt=performance.now()+chat.delayMs;
+    const {silent=false}=await response.json();
+    chat.quietCallback=silent;
+    if(!silent)chat.messages.push(document(peer,++chat.latest,id,audio));
+    chat.readyAt=performance.now()+chat.delayMs;
     return {_:'messages.botCallbackAnswer',cacheTime:0};
    },
    async readDocumentPart(doc,offset,limit,abort){

@@ -7,7 +7,7 @@ import type {tl} from '@mtcute/core';
 import type {BaseTelegramClient} from '@mtcute/core/client.js';
 import {botProvidersFailure,type BotProvidersClock,type BotSearchProviderCapture,type BotProvidersDriver} from './bot-providers-driver';
 import {isUuid,parseAccountBinding,type AccountBinding} from './sources-protocol';
-import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,botPollDelay,botSearchText,formatBotSearchQuery,parseBotSearchCommand,matchingSongRows,type BotSearchEnvelope,type BotSearchReply,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
+import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,botPollDelay,botSearchText,formatBotSearchQuery,parseBotSearchCommand,matchingSongRows,botOptionDurationMismatch,type BotSearchEnvelope,type BotSearchReply,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
 import {assertBotSearchRawBudget,botSearchAck,botSearchBaseline,BotSearchProjectionError,projectBotSearchPage,projectBotCallbackPage,botSearchDocumentIdentity,botSearchKnownMessage,botSearchMessageFingerprint,botSearchAudioFingerprint,botSearchDocument,type BotSearchPrivateRef} from './bot-search-page';
 /** Inject only inside the worker. No generic RPC, root peers or arbitrary message identifiers. */
 export interface BotSearchDependency {
@@ -44,8 +44,9 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
  // Future selection is intentionally unavailable. These bounded opaque handles have no public accessor.
  let retainedSearch:{providerRef:string;queryId:string;revision:number;baseline:number;outgoing:number;target:import('./bot-search-protocol').BotSearchTarget|null}|null=null;
  let retained:ReadonlyMap<string,BotSearchPrivateRef>=new Map(),retainedUntil=0;
+ const downloadedDocuments=new Set<string>();
  type Flight={e:BotSearchEnvelope;delivery:BotSearchDelivery;cause:Failure|null;stop(f:Failure):void};let flight:Flight|null=null;
- const close=()=>{if(closed)return;closed=true;retainedSearch=null;retained=new Map();retainedUntil=0;requests.clear();queries.clear();identities.clear();flight?.stop(fail('cancelled'));};
+ const close=()=>{if(closed)return;closed=true;retainedSearch=null;retained=new Map();retainedUntil=0;requests.clear();queries.clear();downloadedDocuments.clear();identities.clear();flight?.stop(fail('cancelled'));};
  const invalidate=()=>{close();if(!invalidated){invalidated=true;dependency.invalidateSession();}};
  const live=(ctx:BotSearchContext,capture?:BotSearchProviderCapture)=>{try{return !closed&&!ctx.signal.aborted&&ctx.current()&&(!capture||capture.current());}catch{return false;}};
  const response=(e:BotSearchEnvelope,f:Failure,delivery:BotSearchDelivery):BotSearchReply=>Object.freeze({...copyBotSearchEnvelope(e),type:'bot-search.error',...f,delivery});
@@ -67,7 +68,9 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    if(c.type==='bot-search.search'){if(queries.has(c.queryId))return response(e,fail('expired'),'not-dispatched');queries.add(c.queryId);}
 
    // Expiry is absolute and cannot be revived by reuse/reorder; no retained raw chat transcript.
-   if(time.now()>=retainedUntil||retained.size){retained=new Map();retainedUntil=0;}
+   const reuseMenu=c.type==='bot-search.download'&&c.callbackBudgetMs!==undefined&&selection?.row?.kind==='option';
+   if(reuseMenu)retained=new Map([...retained].filter(([key,ref])=>key!==c.rowRef&&ref.row?.kind==='option'));
+   else{retained=new Map();retainedUntil=0;downloadedDocuments.clear();}
    if(identityRevision!==c.providerRevision){identities.clear();identityRevision=c.providerRevision;}
    const capture=dependency.captureProvider(c.providerRef,c.providerRevision);
    if(!capture){identities.delete(c.providerRef);return response(e,fail('expired'),'not-dispatched');}
@@ -78,11 +81,11 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    const shared=dependency.getAccountCooldown?.();
    if(shared)return response(e,{error:'rate-limit',...shared},'not-dispatched');
    if(cooldown&&cooldown.retryAt!==null&&time.now()<cooldown.retryAt)return response(e,cooldown,'not-dispatched');
-   const duration=c.type==='bot-search.download'?B.downloadResolveMs:B.timeoutMs;
+   const duration=c.type==='bot-search.download'?(reuseMenu?c.callbackBudgetMs!:B.downloadResolveMs):B.timeoutMs;
    const abort=new AbortController();let deadline=time.now()+duration;
    let wake!:(v:BotSearchReply)=>void;const stopped=new Promise<BotSearchReply>(r=>{wake=r;});
    let settle!:(v:boolean)=>void;settlement=new Promise<boolean>(r=>{settle=r;});
-   const metrics=emptyNetworkTiming();
+   const metrics:NetworkTiming=emptyNetworkTiming();
    let transferStart:number|undefined,pollStart:number|undefined;
    let timer:ReturnType<typeof setTimeout>|undefined,grace:ReturnType<typeof setTimeout>|undefined,delay:ReturnType<typeof setTimeout>|undefined,delayWake:(()=>void)|undefined,finished=false,stopping=false;
    const finish=(ok:boolean)=>{if(finished)return;finished=true;ctx.signal.removeEventListener('abort',onAbort);if(timer!==undefined)time.clearTimeout(timer);if(grace!==undefined)time.clearTimeout(grace);if(delay!==undefined)time.clearTimeout(delay);if(flight===f)flight=null;
@@ -122,13 +125,13 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    const rpc=async(fn:(ms:number)=>Promise<unknown>,count=true)=>{check();try{const v=await fn(Math.max(1,deadline-time.now()));check();if(count)budget(v);check();return v;}catch(error){
     if(error===f.cause)throw error;const cause=observe(error);if(!f.cause)f.cause=cause;throw f.cause;
    }};
-   const poll=async(read:number,history:(ms:number)=>Promise<unknown>,immediate=false)=>{
-    pollStart??=performance.now();if(!immediate)await sleepPoll(read);
+   const poll=async(read:number,history:(ms:number)=>Promise<unknown>,immediate=false,maxDelay=Infinity)=>{
+    pollStart??=performance.now();if(!immediate)await sleepPoll(Math.min(botPollDelay(read),maxDelay));
     metrics[c.type==='bot-search.search'?'searchReads':'callbackReads']++;return rpc(history);
    };
-   const sleepPoll=async(read:number)=>{
+   const sleepPoll=async(ms:number)=>{
     check();
-    await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},botPollDelay(read));});
+    await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},ms);});
     check();
    };
    const work=Promise.resolve().then(async():Promise<BotSearchReply>=>{
@@ -157,7 +160,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       if(selected.row?.kind==='option'){
        const selectedDocumentId=botSearchDocumentIdentity(message);
        const fold=(v:string)=>v.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
-       if(!dependency.callback||!selected.callbackData||!(matchingSongRows([selected.row],c.target).length===1||!['kdmusic_bot','deezermusicbot'].includes(capture.username)&&fold(c.target.title).length>=3&&fold(selected.row.label).includes(fold(c.target.title))))throw fail('unsupported');
+       if(!dependency.callback||!selected.callbackData||botOptionDurationMismatch(selected.row,c.target)||!(matchingSongRows([selected.row],c.target).length===1||!['kdmusic_bot','deezermusicbot'].includes(capture.username)&&fold(c.target.title).length>=3&&fold(selected.row.label).includes(fold(c.target.title))))throw fail('unsupported');
        const baseline=botSearchBaseline(await rpc(ms=>dependency.readHistory(approved.peer,0,1,abort.signal,ms)),approved.botId);
        f.delivery='uncertain';if(ctx.publish&&live(ctx,capture))try{ctx.publish({...e,type:'bot-search.sending',delivery:'uncertain'});}catch{/* Observers cannot own or repeat the callback. */}
        const answer=await measure(ms=>{metrics.callbackMs=ms;},()=>rpc(()=>dependency.callback!(approved.peer,selected.messageId,selected.callbackData!.slice(),abort.signal)));
@@ -174,26 +177,32 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
         if(field&&(!('value'in field)||field.value!==undefined&&typeof field.value!=='boolean'))throw fail('unsupported');
        }
        if(['url','hasUrl'].some(key=>{const field=Object.getOwnPropertyDescriptor(answer,key);return !!field&&(!('value' in field)||!!field.value);}))throw fail('unsupported');
-       let unmatched:ReturnType<typeof projectBotCallbackPage>|null=null;
+       let unmatched:ReturnType<typeof projectBotCallbackPage>|null=null,graceEnd=Infinity;
+       let rejectedFile:ReturnType<typeof projectBotCallbackPage>['rejectedFile'];
        for(let read=0;;read++){
         check();
         const nearDeadline=deadline-time.now()<=botPollDelay(read);
-        if(read>=B.downloadReads||read>0&&nearDeadline){
-         if(!unmatched)throw fail('timeout');
-         retained=unmatched.refs;retainedUntil=time.now()+B.resultTtlMs;retainedSearch={...previous,baseline};
-         return {...e,type:'bot-search.result',delivery:'acknowledged',rows:unmatched.rows.filter(row=>row.kind==='audio'),expiresAt:retainedUntil,expectedTarget:c.target};
+        const graceRemaining=graceEnd-time.now();
+        if(read>=B.downloadReads||graceRemaining<=0||read>0&&nearDeadline){
+         if(!unmatched)throw fail(rejectedFile??'timeout');
+         const expiresAt=time.now()+B.resultTtlMs;
+         if(!reuseMenu){retained=unmatched.refs;retainedUntil=expiresAt;retainedSearch={...previous,baseline};}
+         return {...e,type:'bot-search.result',delivery:'acknowledged',rows:unmatched.rows.filter(row=>row.kind==='audio'),expiresAt,expectedTarget:c.target};
         }
-        const raw=await poll(read,ms=>dependency.readHistory(approved.peer,Math.min(baseline,selection.messageId-1),20,abort.signal,ms),nearDeadline);
+        const raw=await poll(read,ms=>dependency.readHistory(approved.peer,Math.min(baseline,selection.messageId-1),20,abort.signal,ms),nearDeadline,graceRemaining);
         const page=projectBotCallbackPage(raw,approved.botId,baseline,previous.outgoing,selection.messageId,selectedDocumentId,c.target);if(page.concurrent)throw fail('uncertain');
-        const audio=page.rows.filter(row=>row.kind==='audio'),matches=matchingSongRows(audio,c.target);
+        const audio=page.rows.filter(row=>row.kind==='audio'),compatible=matchingSongRows(audio,c.target);
+        const selectedAudio=compatible.find(row=>!downloadedDocuments.has(page.refs.get(row.rowRef)?.documentId??''));
+        rejectedFile??=page.rejectedFile??(compatible.length&&!selectedAudio?'file-invalid':undefined);
+        if((rejectedFile||audio.length)&&graceEnd===Infinity)graceEnd=time.now()+4500;
         if(audio.length){
          // Correlation may be recent. Fresh exact-peer window plus ONE compatible
          // recording permits continuation; equal matches keep the ranked first one.
          // The first audio need not be the selected recording. Keep observing
          // this same callback's bounded window without fetching unrelated bytes
          // or sending another query/callback.
-         if(!matches.length)unmatched=page;
-         else{metrics.callbackPollMs=elapsedMs(pollStart!);pollStart=undefined;selected=page.refs.get(matches[0].rowRef)!;message=await known(selected);break;}
+         if(selectedAudio){metrics.callbackPollMs=elapsedMs(pollStart!);pollStart=undefined;selected=page.refs.get(selectedAudio.rowRef)!;message=await known(selected);break;}
+         if(!compatible.length)unmatched=page;
         }
        }
       }
@@ -201,6 +210,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       const fold=(v:string)=>v.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
       if(!row.title||!recordingTitleCandidate(row.title,c.target.title,c.target.album,c.target.durationSeconds)||c.target.artist&&(!row.performer||fold(row.performer)!==fold(c.target.artist)))throw fail('conflict');
       const document=botSearchDocument(message);if(!document)throw fail('unsupported');
+      const documentId=botSearchDocumentIdentity(message)!;
+      if(reuseMenu&&downloadedDocuments.has(documentId))throw fail('file-invalid');
       check();
       const transferMs=botDownloadTransferMs(row.bytes);
       deadline=time.now()+transferMs;
@@ -222,7 +233,9 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        else f.cause??=observe(error);
       });
       metrics.transferMs=elapsedMs(transferStart);transferStart=undefined;
-      await known(selected);check();retained=new Map();retainedSearch=null;
+      await known(selected);check();
+      if(reuseMenu)downloadedDocuments.add(documentId);
+      else{retained=new Map();retainedSearch=null;}
       return {...e,type:'bot-search.downloaded',audio:{...result,target:c.target,...(fold(row.title)!==fold(c.target.title)?{recordingTitle:row.title}:{})}};
      }
      const baseline=botSearchBaseline(await rpc(ms=>dependency.readHistory(approved.peer,0,1,abort.signal,ms)),approved.botId);check();
@@ -230,6 +243,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      f.delivery='uncertain';
      // Progress is advisory only, guarded immediately; it contains neither query nor peer.
      if(ctx.publish&&live(ctx,capture)){try{ctx.publish(Object.freeze({...e,type:'bot-search.sending',delivery:'uncertain'}));}catch{/* UI observers cannot change authority. */}}
+     const sentAt=performance.now();
      const ack=botSearchAck(await measure(ms=>{metrics.sendMs=ms;},()=>rpc(ms=>dependency.sendQuery(approved.peer,query!,randomId,abort.signal,ms))),approved.botId,randomId);
      if(!ack||ack<=baseline)throw fail('uncertain');f.delivery='acknowledged';check();
      let lastCandidates:ReturnType<typeof projectBotSearchPage>|null=null,sawBotReply=false;
@@ -243,6 +257,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       if(reads>0&&nearDeadline)break;
       const page=projectBotSearchPage(await poll(reads,ms=>dependency.readHistory(approved.peer,baseline,20,abort.signal,ms),nearDeadline),approved.botId,baseline,ack,[],c.target??null);check();
       if(page.concurrent)throw fail('uncertain');
+      if(page.unrecognized||page.rows.length||page.rejectedFile)metrics.firstBotReplyMs??=elapsedMs(sentAt);
       if(page.rows.some(row=>row.kind==='option'||row.kind==='audio')){
        lastCandidates=page;
        if(page.rows.some(row=>row.kind==='option')||!c.target?.artist||matchingSongRows(page.rows,c.target).length)return searchResult(page);

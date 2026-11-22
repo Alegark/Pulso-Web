@@ -1,5 +1,5 @@
 import {appDiagnosticSession} from './session';
-import {elapsedMs,emptyImportTiming,emptyNetworkTiming,type DownloadResult,type DownloadTiming,type NetworkTiming} from './download-timing';
+import {elapsedMs,networkTimingKeys,emptyImportTiming,emptyNetworkTiming,type DownloadResult,type DownloadTiming,type NetworkTiming} from './download-timing';
 import type {BotDownloadedAudio} from '../telegram/bot-search-protocol';
 
 const received=new WeakMap<BotDownloadedAudio,NonNullable<ReturnType<typeof beginSongTiming>>>();
@@ -10,8 +10,8 @@ export function beginSongTiming(){
  let previous:Readonly<DownloadTiming>|undefined;
  const record={
   values,current,
-  search(timing:Readonly<NetworkTiming>){Object.assign(values,timing);},
-  download(timing:Readonly<NetworkTiming>){Object.assign(values,timing,{resolveMs:values.resolveMs+timing.resolveMs,sendMs:values.sendMs,searchPollMs:values.searchPollMs,searchReads:values.searchReads});},
+  search(timing:Readonly<NetworkTiming>){Object.assign(values,legacy(timing));},
+  download(timing:Readonly<NetworkTiming>){Object.assign(values,legacy(timing),{resolveMs:values.resolveMs+timing.resolveMs,sendMs:values.sendMs,searchPollMs:values.searchPollMs,searchReads:values.searchReads});},
   finish(result:DownloadResult){
    if(!current())return;
    values.kBps=values.transferMs?Math.round(values.bytes/values.transferMs):0;
@@ -23,3 +23,5 @@ export function beginSongTiming(){
  return record;
 }
 export const songTiming=(audio:BotDownloadedAudio)=>received.get(audio);
+
+const legacy=(timing:Readonly<NetworkTiming>)=>Object.fromEntries(networkTimingKeys.map(key=>[key,timing[key]]));

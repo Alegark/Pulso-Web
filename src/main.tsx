@@ -1,3 +1,4 @@
+import type {SongImportRejection} from './library/selected-song';
 import {elapsedMs} from './diagnostics/download-timing';
 import {songTiming} from './diagnostics/song-timing';
 import {RateLimited,rateLimitedMessage} from './http/rate-limit.mjs';
@@ -411,7 +412,7 @@ function captureBotAudioImport(libraryMode?:'cache',parked?:ReadonlySet<string>)
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();let used=false;
  const allowed=()=>admitted()&&raw()&&review()&&!busy&&!importRecoveryPending(parked)&&!metadataRescanBlocked&&!copyRemovalPending&&!sourceReview.hasReservation()&&!queueForeignBlocked();
  if(!allowed()||botImportActive||!songAdmissionIdle(parked))return null;
- return async(audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId:string=crypto.randomUUID()):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean;storageUnavailable?:boolean}>=>{
+ return async(audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId:string=crypto.randomUUID()):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean;storageUnavailable?:boolean;rejection?:SongImportRejection}>=>{
   if(used||!allowed()||botImportActive||!songAdmissionIdle(parked)||signal.aborted)return {state:'failed',trackId:null};used=true;
   const operation=control.activity.begin();if(!operation)return {state:'failed',trackId:null};const own={};botImportActive=own;emit();
   const current=()=>admitted()&&raw()&&review()&&operation.current()&&botImportActive===own&&!sourceReview.hasReservation()&&!queueForeignBlocked();
@@ -422,7 +423,8 @@ function captureBotAudioImport(libraryMode?:'cache',parked?:ReadonlySet<string>)
    const suffix=audio.mime==='audio/mpeg'?'.mp3':audio.mime==='audio/mp4'?'.m4a':'.wav';
    const file=new File([audio.blob],audio.target.title.replace(/[\/\\]/g,' ').slice(0,160)+suffix,{type:audio.mime});
    if(parked?.size)parkedImportAdmissions.set(current,parked);
-   const request:ImportRequest={version:2,type:'import',operationId,file,expected:{sha256:audio.sha256,title:audio.target.title,artist:audio.target.artist,...(audio.target.album&&audio.target.durationSeconds!==null&&audio.target.durationSeconds>0?{recordingTitle:audio.recordingTitle??audio.target.title,album:audio.target.album,durationSeconds:audio.target.durationSeconds}:{})},...(libraryMode?{libraryMode}:{}),...(parked?.size?{parkedOperationIds:[...parked]}:{})};
+   const request:ImportRequest={version:2,type:'import',operationId,file,expected:{sha256:audio.sha256,title:audio.target.title,artist:audio.target.artist,...(audio.target.durationSeconds!==null&&audio.target.durationSeconds>0?{durationSeconds:audio.target.durationSeconds,
+    ...(audio.target.album?{recordingTitle:audio.recordingTitle??audio.target.title,album:audio.target.album}:{})}:{})},...(libraryMode?{libraryMode}:{}),...(parked?.size?{parkedOperationIds:[...parked]}:{})};
    const worker=new Worker(new URL('./imports/import.worker.ts',import.meta.url),{type:'module'});
    const settled=await invokeDomainWorker('import',worker,request,current,bytes=>{if(current()&&!signal.aborted)onProgress(bytes);},signal,120_000);outcome=settled.outcome;
    if(timing?.current()&&settled.response&&'timing' in settled.response&&settled.response.timing){
@@ -441,6 +443,8 @@ function captureBotAudioImport(libraryMode?:'cache',parked?:ReadonlySet<string>)
    status=confirmed?(libraryMode==='cache'?'':'Canción descargada, verificada y guardada en este navegador.'):outcome.recoveryRequired?'La copia requiere revisión antes de volver a descargar.':'No se pudo guardar la canción.';emit();
    return {state:confirmed?'saved':outcome.recoveryRequired?'uncertain':'failed',
     trackId:confirmed&&settled.response?.type==='complete'?settled.response.result.track.id:null,
+    ...(outcome.primary?.code==='metadata-duration-mismatch'?{rejection:'import-duration-mismatch' as const}:
+     ['metadata-title-mismatch','metadata-artist-mismatch'].includes(outcome.primary?.code??'')?{rejection:'import-tag-mismatch' as const}:{}),
     ...(!confirmed&&['transaction-aborted','storage-unavailable'].includes(outcome.primary?.code??'')?{retryWrite:true}:{}),
     ...(!confirmed&&['quota-exceeded','storage-denied','database-blocked'].includes(outcome.primary?.code??'')?{storageUnavailable:true}:{})};
   }catch{return {state:confirmed||outcome?.recoveryRequired?'uncertain':'failed',trackId:null};}

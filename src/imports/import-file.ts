@@ -1,5 +1,5 @@
 import {elapsedMs,type ImportTiming} from '../diagnostics/download-timing';
-import {expectedAudioTagMismatch,expectedAudioDurationMismatch,type ExpectedAudioMetadata} from './expected-audio-metadata';
+import {expectedAudioTagMismatch,expectedAudioDurationMismatch,verifiedCompoundAudioTitle,type ExpectedAudioMetadata} from './expected-audio-metadata';
 import {activeLibraryAccount} from '../accounts/library-local';
 import {extractLocalAlbumMetadata,type Mp4AlbumTag} from './album-metadata';
 import {assertDatabaseUse} from '../storage/database';
@@ -171,7 +171,8 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
  const text=(s:string|undefined)=>s?truncate(s.trim())||null:null;
  const asset:LocalAsset={id:existing?.id??crypto.randomUUID(),namespace:'local',storageKey:job.storageKey,bytes:file.size,sha256:digest,mime,chunks:count,state:'complete',revision:(existing?.revision??0)+1,backend,chunkSize:CHUNK,retention:'kept'};
  const localAlbum=extractLocalAlbumMetadata(metadata.native,mime,albumTags,retried?'not-inspected':metadataWarning?(metadataWarning==='tag-size'?'omitted':metadataWarning==='tag-unsupported'?'not-inspected':'invalid'):null);
- const track:LinkedTrack={...(accountId?{accountId}:{}),localAlbum,id:crypto.randomUUID(),assetId:asset.id,audioFingerprint:{algorithm:'sha256',sha256:digest,bytes:file.size},title:text(metadata.common.title)||truncate(file.name.replace(/\.[^.]+$/,''))||'Sin título',artist:text(metadata.common.artist),album:text(metadata.common.album),duration,favorite:false,revision:1,createdAt:new Date().toISOString(),manualOverrides:{}};
+ const canonical=options.expected&&verifiedCompoundAudioTitle(metadata.common.title,options.expected,duration)?options.expected:null;
+ const track:LinkedTrack={...(accountId?{accountId}:{}),localAlbum,id:crypto.randomUUID(),assetId:asset.id,audioFingerprint:{algorithm:'sha256',sha256:digest,bytes:file.size},title:canonical?.title||text(metadata.common.title)||truncate(file.name.replace(/\.[^.]+$/,''))||'Sin título',artist:canonical?.artist??text(metadata.common.artist),album:text(metadata.common.album),duration,favorite:false,revision:1,createdAt:new Date().toISOString(),manualOverrides:{}};
  job=await updateOperation(job,{state:'verifying',asset,track,expectedAssetRevision:existing?.revision??0});
  if(writer){assertDatabaseUse('write');closeAttempted=true;attempt.closeState='unknown';await atBoundary('close','opfs',()=>writer!.close());closed=true;attempt.closeState='acknowledged';}
  mark('verifyMs');

@@ -1,20 +1,21 @@
 import {parseDownloadTiming,type DownloadTiming} from './download-timing';
-import {eventKeys,increment,MAX_BYTES,operationValues,plain,resultKeys,validResult,type DiagnosticEvent,type Operation,type Result} from './contract';
+import {eventKeys,increment,MAX_BYTES,operationValues,plain,parseSongAggregate,resultKeys,validResult,type DiagnosticEvent,type Operation,type Result,type SongAggregate} from './contract';
 export interface Handle { readonly diagnosticHandle: true }
-export interface SessionSnapshot { readonly enabled:boolean; readonly revision:number; readonly events:readonly Readonly<DiagnosticEvent>[]; readonly downloads:readonly Readonly<DownloadTiming>[]; readonly droppedRecords:number; readonly rejectedRecords:number }
+export interface SessionSnapshot { readonly enabled:boolean; readonly revision:number; readonly events:readonly Readonly<DiagnosticEvent>[]; readonly downloads:readonly Readonly<DownloadTiming>[]; readonly songs:readonly Readonly<SongAggregate>[]; readonly droppedRecords:number; readonly rejectedRecords:number }
 const snapshots=new WeakSet<object>();
 export function isSessionSnapshot(value:unknown):value is SessionSnapshot {return !!value&&typeof value==='object'&&snapshots.has(value);}
 /** Weak issuance table: no pending-operation list and no retained business objects. */
 export function createDiagnosticSession(uuid:()=>string=()=>crypto.randomUUID()) {
  let epoch=Symbol();let sequence=0,enabled=false,dropped=0,rejected=0,revision=0;
  let downloads:Readonly<DownloadTiming>[]=[];
+ let songs:Readonly<SongAggregate>[]=[];let songSeq=0;
  let events:Readonly<DiagnosticEvent>[]=[];
  const issued=new WeakMap<object,{id:string;operation:Operation;epoch:symbol;capture:boolean;current:()=>boolean;used:Set<string>}>();
  const listeners=new Set<()=>void>();
- let snapshot:SessionSnapshot=Object.freeze({enabled,revision,events:Object.freeze([]),downloads:Object.freeze([]),droppedRecords:dropped,rejectedRecords:rejected});
+ let snapshot:SessionSnapshot=Object.freeze({enabled,revision,events:Object.freeze([]),downloads:Object.freeze([]),songs:Object.freeze([]),droppedRecords:dropped,rejectedRecords:rejected});
  snapshots.add(snapshot);
- function publish(){snapshot=Object.freeze({enabled,revision:(revision=increment(revision)),events:Object.freeze([...events]),downloads:Object.freeze([...downloads]),droppedRecords:dropped,rejectedRecords:rejected});snapshots.add(snapshot);for(const fn of listeners)try{fn();}catch{/* observers cannot affect product */}}
- function reset(keepEnabled:boolean){epoch=Symbol();enabled=keepEnabled;events=[];downloads=[];sequence=0;dropped=0;rejected=0;publish();}
+ function publish(){snapshot=Object.freeze({enabled,revision:(revision=increment(revision)),events:Object.freeze([...events]),downloads:Object.freeze([...downloads]),songs:Object.freeze([...songs]),droppedRecords:dropped,rejectedRecords:rejected});snapshots.add(snapshot);for(const fn of listeners)try{fn();}catch{/* observers cannot affect product */}}
+ function reset(keepEnabled:boolean){epoch=Symbol();enabled=keepEnabled;events=[];downloads=[];songs=[];songSeq=0;sequence=0;dropped=0;rejected=0;publish();}
  return {
   getSnapshot:()=>snapshot,
   subscribe:(fn:()=>void)=>{listeners.add(fn);return()=>{listeners.delete(fn);};},
@@ -23,6 +24,12 @@ export function createDiagnosticSession(uuid:()=>string=()=>crypto.randomUUID())
   resetScope(){reset(false);},
   // A review's scope survives new records, but never a clear/consent/ownership transition.
   scope(){const saved=epoch;return()=>saved===epoch;},
+  beginSong(){if(enabled){songSeq=increment(songSeq);return songSeq;}},
+  recordSong(value:unknown){
+   const row=parseSongAggregate(value);if(!enabled||!row)return;
+   songs.push(row);if(songs.length>50)songs.shift();
+   publish();
+  },
   recordDownload(value:unknown,previous?:Readonly<DownloadTiming>){
    const row=parseDownloadTiming(value);
    if(!enabled||!row)return;

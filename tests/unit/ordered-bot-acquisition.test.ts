@@ -41,6 +41,7 @@ test('cancellation during an in-flight query waits for settlement and sends no n
 });
 test('total deadline cancels the original lane and does not dispatch another provider',async t=>{
  t.mock.timers.enable({apis:['setTimeout','Date']});
+ t.mock.method(performance,'now',()=>Date.now());
  let state:any={queryId:'before',providerRef:null,providerRevision:4,expectedTarget:null,pending:false,available:true,error:null,delivery:'not-dispatched',retryBlocked:false,retryAt:null,rows:[]},listener:(snapshot:any)=>void=()=>{},cancelled=0,searches=0;
  const client={botsSnapshot:()=>({revision:4}),searchSnapshot:()=>state,captureBotsCurrent:()=>()=>true,captureSearchActionCurrent:()=>()=>true,captureSearchCancel:()=>()=>{cancelled++;},subscribeSearch:(fn:(snapshot:any)=>void)=>{listener=fn;return()=>{};},searchBot(input:any,_allowed:unknown,started:(v:any)=>void){searches++;state={...state,queryId:'pending',providerRef:input.providerRef,expectedTarget:input.target,pending:true};started({queryId:state.queryId,cancel:()=>{cancelled++;}});},downloadBot:async()=>{throw Error('unexpected');}} as unknown as TelegramSessionClient;
  const task=acquireFromOrderedBots({client,providers,revision:4,target,signal:new AbortController().signal,current:()=>true,networkCurrent:client.captureBotsCurrent(),progress:()=>{}});
@@ -48,6 +49,7 @@ test('total deadline cancels the original lane and does not dispatch another pro
 });
 test('album spaces consecutive searches while downloading the selected row immediately',async t=>{
  t.mock.timers.enable({apis:['setTimeout','Date']});
+ t.mock.method(performance,'now',()=>Date.now());
  let state:any={queryId:'initial',providerRef:null,providerRevision:4,expectedTarget:null,pending:false,available:true,error:null,delivery:'acknowledged',retryBlocked:false,retryAt:null,rows:[]},count=0;const times:number[]=[];
  const client={botsSnapshot:()=>({revision:4}),searchSnapshot:()=>state,captureBotsCurrent:()=>()=>true,captureSearchActionCurrent:()=>()=>true,captureSearchCancel:()=>undefined,subscribeSearch:()=>()=>{},searchBot(input:any,_allowed:unknown,started:(v:any)=>void){times.push(Date.now());count++;state={...state,queryId:`q${count}`,providerRef:input.providerRef,expectedTarget:input.target,rows:count===1?[]:[{kind:'option',rowRef:'row',correlation:'reply',label:'Song — Artist'}]};started({queryId:state.queryId,cancel:()=>{}});},async downloadBot(_row:unknown,_allowed:unknown,started:(v:any)=>void){times.push(Date.now());started({queryId:state.queryId,cancel:()=>{}});return audio;}} as unknown as TelegramSessionClient;
  const clock={settledAt:0};

@@ -60,9 +60,14 @@ function readPosition():Point|null{
 export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUpdate,pendingDownload}:{updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;pendingDownload?:{saved:number;total:number;title?:string;reason?:string;retaking:boolean;onContinue:()=>void};message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
  const {running,active,notice}=useAlbumDownloadState();
  const diagnostics=useSyncExternalStore(appDiagnosticSession.subscribe,appDiagnosticSession.getSnapshot);
- const timing=diagnostics.enabled?diagnostics.downloads.at(-1):undefined;
- const number=(value:number)=>value.toLocaleString('es',{minimumFractionDigits:1,maximumFractionDigits:1});
- const savedMs=timing?timing.analysisMs+timing.writeMs+timing.verifyMs+timing.metadataMs+timing.refreshMs:0;
+ const song=diagnostics.enabled?diagnostics.songs.at(-1):undefined;
+ const seconds=(ms:number)=>(ms/1000).toLocaleString('es',{maximumFractionDigits:1});
+ const mismatches=song&&[
+  song.rejections['mismatch-title']?'título/versión':'',
+  song.rejections['import-tag-mismatch']?'metadatos':'',
+  song.rejections['mismatch-artist']?'artista':'',
+  song.rejections['mismatch-duration']||song.rejections['import-duration-mismatch']?'duración':'',
+ ].filter(Boolean).join(', ');
  const [finished,setFinished]=useState<{notice:NonNullable<AlbumCoordinator['notice']>;stopped:boolean}|null>(null);
  const [transient,setTransient]=useState('');
  const messageTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
@@ -234,7 +239,12 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
       {!pendingBatch&&<p>{running?summary:finished?.stopped?'Descarga detenida':'Descarga finalizada'}</p>}
       {running&&currentIndex>=0&&<p><bdi dir="auto">{currentNotice?.titles?.[currentIndex]??`Canción ${currentIndex+1}`}</bdi></p>}
       {detailMessage&&<p>{detailMessage}</p>}
-      {timing&&<p>Última: {number(timing.totalMs/1000)} s · espera {number(timing.waitMs/1000)} · red {number(Math.max(0,timing.totalMs-timing.waitMs-savedMs)/1000)}{timing.kBps>0?` a ${number(timing.kBps/1000)} MB/s`:''} · guardado {number(savedMs/1000)}{timing.backend?` · ${timing.backend}`:''}</p>}
+      {song&&<p>Última: {seconds(song.totalMs)} s · {song.botsTried} {song.botsTried===1?'bot':'bots'} · {song.candidatesTried} {song.candidatesTried===1?'opción':'opciones'}
+       {song.candidatesRejected>0&&` (${song.candidatesRejected} ${song.candidatesRejected===1?'rechazada':'rechazadas'}${mismatches?': '+mismatches:''})`}
+       {song.firstBotReplyMs>0&&` · bot ${seconds(song.firstBotReplyMs)} s`}{song.callbackPollMs>0&&` · callback ${seconds(song.callbackPollMs)} s`}
+       {song.transferMs>0&&` · red ${seconds(song.transferMs)} s`}{song.importMs>0&&` · guardado ${seconds(song.importMs)} s`}
+       {song.timeoutMs>0&&` · espera agotada ${seconds(song.timeoutMs)} s`}{song.reconnectMs>0&&` · reconexión ${seconds(song.reconnectMs)} s`}
+       {song.floodWaitMs>0&&` · pausa de Telegram ${seconds(song.floodWaitMs)} s`}</p>}
       {rows.length>0&&<ol>{rows.map((row,index)=>{
        const failed=!row.confirmed&&(row.state==='failed'||row.state==='uncertain');
        const reason=!row.confirmed&&row.reason?reasonLabels[row.reason].row:null;

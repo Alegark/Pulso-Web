@@ -42,10 +42,22 @@ Una reproducción sintética del recorrido completo da L15 en el código D1 ante
 ## Tiempos de descarga
 
 Con «Activar diagnóstico de esta sesión», Pulso conserva en memoria hasta 50
-intentos. «Tiempos de descarga de esta sesión» empieza con todas las casillas
-desmarcadas. Al desplegar la ventana de descargas, «Última» resume el último
-intento mientras el diagnóstico siga activo. Limpiar, desactivar o cambiar de
-ámbito borra estos registros junto con el resto del diagnóstico de sesión.
+intentos y hasta 50 canciones. Las opciones de exportación empiezan desmarcadas.
+Al desplegar la ventana de descargas, «Última» resume la última canción procesada
+con todos los bots y opciones probados. Limpiar, desactivar o cambiar de ámbito
+borra ambos conjuntos junto con el resto del diagnóstico de sesión.
+
+«Tiempos acumulados por canción» exporta `songs`. `songSeq` se reinicia al
+borrar o cambiar de ámbito y `winningBotSlot` usa una posición desde cero en
+el orden elegido. `candidatesTried` incluye opciones descartadas por la
+duración del botón. `candidatesDownloaded` incluye archivos completos
+rechazados al importar. Una opción puede tener varios motivos de rechazo.
+`firstBotReplyMs` suma el tiempo hasta la primera respuesta del bot observada
+en cada búsqueda que recibió respuesta. Los tiempos de espera agotada pueden
+coincidir con los de sondeo o transferencia. `totalMs` mide el reloj de la
+operación, incluidas la espera entre búsquedas, la reconexión y la importación.
+
+«Tiempos de descarga de esta sesión» conserva el conjunto `downloads` de v56.
 
 El conjunto exportable contiene solo campos cerrados. Los sufijos `Ms`
 indican milisegundos medidos con `performance.now()`. `searchReads` y

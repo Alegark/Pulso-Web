@@ -1,3 +1,4 @@
+import type {SongRejection} from '../diagnostics/contract';
 import {MB_UUID} from './catalog-id';
 import {LIBRARY_LIMITS} from '../accounts/library-document.mjs';
 import {activeLibraryAccount} from '../accounts/library-local';
@@ -16,11 +17,12 @@ import {musicIdentityText} from '../telegram/bot-search-protocol';
 export interface SongCopyInspection {current():boolean;inspect(choice:SongChoice,signal:AbortSignal):Promise<{state:'available'|'missing'|'unknown';trackId:string|null;inLibrary:boolean|null}>}
 export interface SongManagement {current():boolean;playReady:boolean;add(current?:()=>boolean):Promise<boolean>;addToPlaylist(id:string,current?:()=>boolean):Promise<boolean>;play():Promise<'playing'|'gesture-required'|'failed'>}
 export type SongChoice=Pick<MusicCatalogChoice,'id'|'title'|'displayTitle'|'artist'|'album'|'duration'> & {source:MusicCatalogChoice['source']|'spotify';searchArtist?:string};
+export type SongImportRejection=Extract<SongRejection,'import-tag-mismatch'|'import-duration-mismatch'>;
 export interface SongPlaybackAttempt {
  current():boolean;
  addToLibrary(trackId:string,current:()=>boolean,signal:AbortSignal):Promise<boolean>;
  lookup(choice:SongChoice,signal:AbortSignal,repair?:boolean):Promise<string|null>;
- save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId?:string):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean;storageUnavailable?:boolean}>;
+ save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId?:string):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean;storageUnavailable?:boolean;rejection?:SongImportRejection}>;
  waitForDownload?(signal:AbortSignal):Promise<boolean>;
  inspectDownload?(trackId:string,signal:AbortSignal):Promise<string|null>;
  reconcileDownload?(operationId:string,trackId:string,signal:AbortSignal,repair?:boolean):Promise<{state:'saved'|'missing'|'uncertain';trackId:string|null}>;

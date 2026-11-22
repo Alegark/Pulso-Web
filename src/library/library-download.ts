@@ -1,3 +1,4 @@
+import {beginSongAggregate} from '../diagnostics/song-aggregate';
 import {collectionTelegramWait} from './collection-telegram-wait';
 import {sameHeldDownload,type HeldDownload,type LibraryDownloadCheckpoint,type PendingDownload,type SavedCandidate} from './library-download-checkpoint';
 import type {Track} from './library';
@@ -134,8 +135,9 @@ export async function downloadLibrarySelection(p:{
     const collection:CollectionBotProgress={completed:new Set(),ambiguous:new Set(),responded:false,reasons:[]};
     let interrupted=false,suspended=false,lastSuspension=-1;
     const status=(message:string,waiting=false)=>{if(row.message!==message){row.message=message;update(message,waiting);}};
-    while(live()){
-     const pauseReason=await pause(message=>status(message,true),interrupted,suspended);
+    const measurement=beginSongAggregate();
+    try{while(live()){
+     const pauseReason=await pause(message=>status(message,true),interrupted,suspended,measurement?.values);
      if(!live())return stop();
      if(pauseReason){
       mark(i,{kind:'network',index:i});
@@ -153,7 +155,7 @@ export async function downloadLibrarySelection(p:{
      }
      const audioCurrent=()=>captured()&&p.client.botsSnapshot().revision===bots.revision;
      const crossedSuspension=()=>wait.generation()!==generation&&wait.generation()!==lastSuspension;
-     const result=await downloadSong({...p,providers,revision:bots.revision,collection,choice,trackId:track.id,index:i,current:live,
+     const result=await downloadSong({...p,providers,revision:bots.revision,collection,measurement,choice,trackId:track.id,index:i,current:live,
       networkCurrent:()=>audioCurrent()&&wait.online(),audioCurrent,suspended:crossedSuspension,remoteClock,
       waitForDownload,previousAttempts:attempts.get(track.id),onFailedCandidates:candidates=>attempts.set(track.id,candidates),
       mark:value=>{pending=value;mark(i,value);},message:status,progress:()=>{}});
@@ -166,7 +168,7 @@ export async function downloadLibrarySelection(p:{
      }
      interrupted=true;suspended=crossedSuspension();
      if(suspended)lastSuspension=wait.generation();
-    }
+    }}finally{measurement?.finish();}
     if(!live())return stop();
    }
    if(row.reason==='parked'&&pending){

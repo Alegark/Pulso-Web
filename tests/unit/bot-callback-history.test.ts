@@ -44,7 +44,7 @@ test('callback edit of exact selected menu is found without an extra RPC or call
  try{const r=await result;assert.equal(r?.type,'bot-search.downloaded');assert.equal(polls,3);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getMessages').length,3);assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert.equal(await s.driver.whenSettled(),true);}finally{s.driver.close();}assert.equal(time.timers.size,0);
 });
 test('callback history excludes older neighbouring audio, but includes exact menu edit and newer replies',()=>{
- const selected=msg(doc());const neighbour={...msg(doc()),id:13};const newer={...msg(doc()),id:16};const p=projectBotCallbackPage(history([neighbour,selected,newer]),101,15,10,12,null,target);
+ const selected=msg(doc());const neighbour={...msg(doc()),id:13};const newer={...msg({...doc(),id:new Long(66,3)}),id:16};const p=projectBotCallbackPage(history([neighbour,selected,newer]),101,15,10,12,null,target);
  assert.equal(p.rows.filter(r=>r.kind==='audio').length,2);assert.deepEqual([...p.refs.values()].filter(r=>r.row?.kind==='audio').map(r=>r.messageId),[12,16]);
 });
 test('unchanged selected menu does not turn older matching audio into a download',()=>{

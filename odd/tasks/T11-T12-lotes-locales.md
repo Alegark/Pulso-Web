@@ -760,3 +760,91 @@ El manifiesto autoritativo de 280 archivos y 64962 bytes se promovió a `.local/
 - Evaluar updates MTProto como señal para despertar, solapar la importación con la búsqueda de la siguiente canción, revisar `inactivityTimeout` y reutilizar el import worker.
 - Investigar las regresiones de Chromium desde `ac89e5a` en `artwork`, `artwork-containers`, `opfs` y `library`.
 - Resolver los fallos del entorno WPE en la batería general.
+
+### Menor espera por bot y por opción · 2026-11-22
+
+En la v56, una opción incompatible podía mantener el sondeo del callback durante unos 60 segundos y la siguiente opción requería otra consulta. También se empezaba cada canción por el mismo bot. En una comprobación externa con Telegram real en Chromium, un archivo M4A compatible tardó 12 s y se rechazó por `metadata-title-mismatch`. La etiqueta de título reunía el artista y el título correctos, el campo de artista identificaba a quien subió el archivo y la duración analizada coincidía. En otro caso el respaldo guardó una canción en 21 s. El límite común permitía gastar casi todo el tiempo en transferir y rechazar varios archivos del primer bot.
+
+El sondeo conserva la espera inicial y, tras detectar audio incompatible, acepta hasta cuatro lecturas adicionales por si llega el correcto. Una segunda opción usa el menú original mientras siga vigente. Pulso revalida peer, huella y correlación, descarta botones con duración explícita fuera de ±7 s y deduplica documentos. Se asignan hasta 65 s de resolución de callbacks por bot y se reservan hasta 30 s por bot de respaldo dentro del presupuesto remoto de 180 s. La importación atómica y la liquidación de un carril ajeno se contabilizan en el diagnóstico y preservan esa reserva. Dos rechazos de etiquetas o duración en una canción hacen pasar al siguiente bot. Dos fallos seguidos degradan temporalmente al bot si hay otro que ya guardó una copia. La salud vive en la sesión, el orden elegido se conserva y el bot degradado vuelve a tener su turno al vencer cinco minutos o si el resto no consigue guardar la canción.
+
+El importador acepta títulos de etiqueta con el artista completo y el título esperado, en ambos órdenes y con los separadores acordados, si Telegram ya entregó una fila compatible y la duración analizada coincide. Usa los metadatos esperados para la ficha en ese caso. El diagnóstico conserva un agregado por canción en RAM, con posiciones anónimas y motivos enumerados. El dock diferencia consulta, preparación, transferencia, rechazo, cambio de bot y guardado y conserva los avisos de espera y reconexión.
+
+**Telegram sintético en loopback.** Tiempo de pared en segundos desde la activación de la descarga hasta que el dock confirmó la copia o el fin de la operación. Base `826ec06` y candidato con las mismas fixtures. Se verificó el SHA-256 de cada copia.
+
+| Escenario | Chromium v56 → candidato | WebKit v56 → candidato |
+| --- | ---: | ---: |
+| Callback con audio de otra duración | 68,912 → 5,997 | 67,808 → 7,405 |
+| Intervalo entre esos dos callbacks | 62,797 → 3,681 | 61,701 → 3,783 |
+| Menú tras recibir bytes inválidos | 4,206 → 3,514 | 3,458 → 4,109 |
+| M4A con título compuesto | 9,309 sin copia → 2,571 guardada | 11,180 sin copia → 5,613 guardada |
+| M4A con etiquetas de otra canción | 9,808 → 5,992 | 16,705 → 11,203 |
+
+En el bot mudo, los seis tiempos por canción fueron 21,201 / 16,806 / 17,594 / 16,796 / 17,687 / 18,011 s en Chromium base y 17,399 / 17,707 / 1,983 / 2,620 / 1,901 / 1,297 s en el candidato. En WebKit fueron 18,971 / 22,420 / 16,786 / 20,206 / 18,884 / 18,111 s en base y 18,403 / 18,297 / 2,488 / 2,121 / 1,781 / 1,296 s en el candidato. En ambos motores se consultó directamente al respaldo desde la tercera canción. Los dos escenarios de menú pasaron de dos envíos a uno. El título compuesto se guardó en el primer callback y el título ajeno se descartó dos veces antes de guardar desde el respaldo, frente a tres rechazos en v56. La prueba del dock observó la consulta, la preparación, el progreso de bytes, el rechazo, el cambio de bot y el guardado.
+
+Pasaron tipos de aplicación y pruebas, lint, 883 pruebas unitarias, 73 de servidor, 10 de Python, build de producción y Wrangler dry-run. Pasaron los diez escenarios sintéticos del candidato en Chromium y WebKit. Las repeticiones aisladas permitieron medir los casos que habían sufrido vencimientos bajo carga concurrente.
+
+La matriz enfocada de descarga, reanudación y actualización pasó 86/86 en ambos árboles, 43 por motor. En la base se completó WebKit con una repetición de los 32 casos restantes tras interrumpirse la primera corrida. En la batería general, base y candidato pasaron 12/16 en Chromium 154 y 4/16 en WebKit 27.2, con los mismos fallos en ambos árboles. Chromium mantuvo los cuatro fallos conocidos en `artwork`, `artwork-containers`, `opfs` y `library`. En WPE permanecieron los 12 grupos fallidos de la base.
+
+**Pendientes.** Confirmar latencia, memoria y diagnóstico en iPhone físico con Telegram real. Evaluar validación temprana de etiquetas con una vista acotada del prefijo. El parser actual necesita una vista coherente del archivo y un M4A puede tener `moov` al final. Hasta verificar ese recorrido, la validación de duración y etiquetas se hace sobre el archivo completo. Evaluar modo inline, consultas en paralelo o cambios de coincidencia después de observar los datos del diagnóstico. Publicación tras revisión. P0-W sigue abierto.
+
+#### Revisión de la PR #17
+
+Se reprodujeron los ocho hallazgos contra `fc8fa20`. Las pruebas separaron el vencimiento durante la búsqueda y la descarga, y el desfase del temporizador se comprobó tanto en búsqueda interactiva como en una colección. También se reprodujeron la vuelta al mismo bot tras agotar el callback de un álbum, el filtro aplicado a parte del título o del artista, la identidad vacía en etiquetas compuestas, el doble diagnóstico de duración y el aviso de metadatos repetido. La gracia anterior terminaba a los 2,35 s en el caso de audio temprano.
+
+Pulso ahora distingue las duraciones añadidas a una opción de las que forman parte de su identidad. Un corte por presupuesto mantiene el resultado como pendiente de confirmar y deja probar el respaldo. Los plazos internos usan un reloj monotónico y el temporizador marca el vencimiento antes de cancelar el RPC. Agotar el callback de un álbum ya no repite la búsqueda. La gracia concede hasta 4,5 s desde el primer audio incompatible y conserva el límite total de lecturas. El dock anuncia el motivo que corresponde a la opción que acaba de fallar.
+
+**Repetición de los diez escenarios sintéticos.** Tiempo de pared en segundos. En Chromium y WebKit se verificó el SHA-256 de las copias y se conservó un solo envío por menú.
+
+| Escenario | Chromium | WebKit |
+| --- | ---: | ---: |
+| Canción cuyo primer callback entregó audio incompatible | 7,395 | 7,177 |
+| Intervalo entre esos dos callbacks | 5,051 | 5,023 |
+| Menú con una primera opción inválida | 3,900 | 3,878 |
+| M4A con título compuesto guardado al primer intento | 3,807 | 7,798 |
+| M4A con etiquetas ajenas guardado desde el respaldo tras dos rechazos | 5,016 | 7,312 |
+| Bot mudo, canciones 3 a 6 | 1,892–2,392 | 0,928–2,083 |
+
+El respaldo se consultó directamente desde la tercera canción en ambos motores. La ventana más larga elevó el intervalo entre callbacks frente a la primera entrega y conservó el objetivo de menos de 8 s. Siguen pendientes la aceptación en iPhone físico con Telegram real y la inspección temprana de etiquetas antes de descargar el archivo completo.
+
+Pasaron tipos de aplicación y pruebas, lint, 892 unitarias, 73 de servidor, 10 de Python, build y Wrangler dry-run. Pasó la matriz enfocada completa con 86/86, 43 en Chromium y 43 en WebKit.
+
+#### Segunda revisión de la PR #17
+
+Contra `ef4bee3` fallaron cinco casos unitarios y el escenario de colección en Chromium. Tras guardar la primera canción, el callback agotado provocó una segunda restauración de la sesión y dejó pendientes las tres restantes. Las unitarias reprodujeron también el reenvío del álbum con 4 s de presupuesto de callback todavía disponibles, la clasificación incorrecta de un vencimiento después de una discrepancia y el mensaje de metadatos que sobrevivía a un reintento de audio directo.
+
+Si el canal está sano y algún bot respondió, agotar el presupuesto marca esa canción con «Telegram no respondió a tiempo» y deja continuar la colección. Se conserva la salud aprendida en la sesión. Un callback con timeout confirmado cede el turno aunque quede presupuesto. Un corte después de encontrar una opción compatible mantiene el resultado por confirmar también en álbum y búsqueda interactiva. Cada candidato consume el aviso anterior, incluido el audio directo.
+
+El escenario nuevo usa el temporizador real con un presupuesto de callback reducido a 1,5 s solo en ese build de prueba. En Chromium y WebKit guardó las canciones primera y cuarta, dejó las otras dos con el aviso individual, hizo cero reconexiones y fue directo al respaldo en la cuarta. La colección terminó en 11,917 s en Chromium y 18,507 s en WebKit. Se verificó el SHA-256 de las dos copias.
+
+Los diez escenarios anteriores también pasaron. Tiempos de pared en segundos para esta revisión.
+
+| Escenario | Chromium | WebKit |
+| --- | ---: | ---: |
+| Canción cuyo primer callback entregó audio incompatible | 6,599 | 8,291 |
+| Intervalo entre esos dos callbacks | 5,016 | 5,201 |
+| Menú con una primera opción inválida | 4,400 | 2,693 |
+| M4A con título compuesto guardado al primer intento | 3,390 | 2,923 |
+| M4A con etiquetas ajenas guardado desde el respaldo | 5,882 | 8,110 |
+| Bot mudo, canciones 3 a 6 | 0,909–1,595 | 1,186–2,307 |
+
+Pasaron tipos de app y pruebas, lint, 896 unitarias, 73 de servidor, 10 de Python, build y Wrangler dry-run. Siguen pendientes la comprobación con iPhone físico y Telegram real y la inspección temprana de etiquetas. La publicación queda para revisión.
+
+La matriz enfocada de descarga, reanudación y actualización volvió a pasar 86/86, con 43 casos por motor.
+
+
+### Menor espera de los bots publicada · 2026-11-22
+
+Cloudflare Workers Free, USD 0, sirve [v57](https://pulso-web.pruebassoftware.workers.dev/releases/4857dea3d67edfcc.html), versión `add9ff6f-fdf8-48dc-aa8c-761952494d95`, despliegue `b5157899-13ec-479c-a8c4-fccabcd32d91` al 100 % desde `2026-11-22T13:07:35.589Z` según el MCP oficial. Se verificaron los bytes y SHA-256 del Worker, los 13 bindings, los límites y la configuración de ejecución. Se conservaron Turnstile y los secretos. El freeze retuvo 10 publicaciones anteriores y el inventario heredado, sin retirar rutas. Cloudflare solicitó 13 archivos. [PR #17](https://github.com/Alegark/Pulso-Web/pull/17), apilada sobre #16. Commit de producto publicado: `bf7d8a1a3924ffd3e2a36474e9a89860a66f707a`.
+
+Pasaron los tipos de la app y de las pruebas, lint, 896 pruebas unitarias, 73 de servidor, 10 de Python, build de producción y simulación de Wrangler. Pasaron 86/86 casos enfocados y 12/12 escenarios sintéticos, 43 y 6 por motor en Chromium y WebKit.
+
+HTTPS confirmó `latest.json`, el HTTP 307 hacia la ruta sin `.html`, el HTTP 200 y el meta `pulso-release` con valor `4857dea3d67edfcc`. Coincidieron bytes y SHA-256 de 285/285 rutas estáticas, incluido `sw.js`. Las 51 entradas históricas, incluidas v56, v55 y v54, sirvieron el bundle actual con cabeceras de navegación. Se conservaron `turnstileSiteKey` y `challenges.cloudflare.com` en la CSP. Perfil y biblioteca anónimos devolvieron HTTP 401.
+
+El manifiesto autoritativo de 288 archivos y 67415 bytes quedó en `.local/test-evidence/bot-turnaround-release/site-manifest.json`, SHA-256 `8bdffe5247c7d0a131cfdb4bd0b7b6c158bf11e47d987b9751903910a8681859`, con fecha MCP `2026-11-22T13:07:35.589Z`. Los recibos compactos quedan en el mismo directorio. P0-W sigue abierto.
+
+- Medir el comportamiento en iPhone físico con Telegram real.
+- Inspeccionar etiquetas antes de descargar el archivo completo, incluidos M4A con el átomo `moov` al final.
+- Evaluar modo inline, consultas en paralelo y relajar la coincidencia según lo que muestre el diagnóstico real.
+- Investigar el HTTP 503 observado con sesión iniciada en `/api/account-profile` y `/api/account-library`.
+- Investigar la regresión desde `ac89e5a` en Chromium para `artwork`, `artwork-containers`, `opfs` y `library`.
+- Resolver el fallo del entorno WPE de WebKit en la batería general.
