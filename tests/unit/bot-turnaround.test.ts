@@ -236,12 +236,12 @@ for(const collection of [false,true])test(`timer expiry survives a wall-clock ro
  if(collection)assert.equal(health.order(providers)[0],providers[1]);
 });
 
-test('an exhausted album callback budget advances without sending a fresh search to that bot',async t=>{
+test('an album callback timeout with budget remaining does not repeat the search',async t=>{
  let now=0;t.mock.method(performance,'now',()=>now);
  const f=scriptedAcquisition();
  f.hooks.onSearch=first=>{if(first)f.update({rows:[option('a'),option('b')]});};
  f.hooks.onDownload=async(_ref,admit,budget)=>{
-  admit();assert.equal(budget,65000);now+=budget!;
+  admit();assert.equal(budget,65000);now+=budget!-4000;
   f.update({error:'timeout',rows:[]});return null;
  };
  await acquireFromOrderedBots({...f.params,accept:async()=> 'saved'});
@@ -272,4 +272,53 @@ test('a metadata rejection is shown for the next callback only',async()=>{
  assert.deepEqual(f.statuses.filter(s=>s.includes('prepara')),[
   'El bot prepara el archivo…','La opción no coincide (metadatos) · probando otra… El bot prepara el archivo…','El bot prepara el archivo…',
  ]);
+});
+
+for(const album of [false,true])test(`a deadline after a mismatch remains inconclusive in ${album?'an album':'an interactive search'}`,async t=>{
+ t.mock.timers.enable({apis:['setTimeout','Date'],now:1000});
+ t.mock.method(performance,'now',()=>Date.now());
+ const f=scriptedAcquisition();
+ f.hooks.onSearch=first=>f.update({rows:album?
+  (first?[option('bad',' (10:00)'),option('good')]:[]):
+  [first?option('bad',' (10:00)'):option('good')]});
+ f.hooks.onDownload=async(_ref,admit)=>new Promise(resolve=>{
+  admit(()=>{f.update({pending:false,error:'cancelled'});resolve(null);});
+ });
+ const result=acquireFromOrderedBots({...f.params,...(album?{accept:async()=> 'saved' as const}:{})});
+ await new Promise(resolve=>setImmediate(resolve));
+ t.mock.timers.tick(album?150000:180000);
+ assert.deepEqual(await result,{state:album?'unavailable':'uncertain'});
+ assert.deepEqual(f.searches,providers.map(p=>p.providerRef));
+});
+
+test('a direct audio retry consumes the stale rejection before the next menu callback',async()=>{
+ const f=scriptedAcquisition();
+ const rows:BotSearchRow[]=[272,273].map((durationSeconds,i)=>({kind:'audio',rowRef:`audio-${i}`,correlation:'reply',
+  title:target.title,performer:target.artist,durationSeconds,mimeType:'audio/wav',bytes:100}));
+ f.hooks.onSearch=()=>f.update({rows:[...rows,option('menu')]});
+ f.hooks.onDownload=async(_ref,admit)=>{
+  admit();f.update({rows:[]});
+  return {blob:new Blob(),sha256:'c'.repeat(64),target,bytes:100,mime:'audio/wav'};
+ };
+ let attempts=0;
+ const result=await acquireFromOrderedBots({...f.params,providers:providers.slice(0,1),
+  accept:async()=>++attempts===1?'import-tag-mismatch':attempts===2?'retry':'saved'});
+ assert.equal(result.state,'audio');
+ assert.deepEqual(f.downloads,['audio-0','audio-1','menu']);
+ assert.deepEqual(f.statuses.filter(s=>s.includes('prepara')),['El bot prepara el archivo…']);
+});
+
+test('an answered collection with an exhausted callback fails only the song',async t=>{
+ let now=0;t.mock.method(performance,'now',()=>now);
+ const f=scriptedAcquisition();
+ f.hooks.onSearch=first=>f.update({rows:first?[option('a')]:[]});
+ f.hooks.onDownload=async(_ref,admit,budget)=>{
+  admit();assert.equal(budget,65000);now+=budget!;
+  f.update({error:'timeout',rows:[]});return null;
+ };
+ const collection={completed:new Set<number>(),ambiguous:new Set<number>(),responded:false,reasons:[]};
+ const result=await acquireFromOrderedBots({...f.params,collection,accept:async()=> 'saved'});
+ assert.deepEqual(result,{state:'timed-out'});
+ assert.equal(collection.responded,true);
+ assert.deepEqual(f.searches,providers.map(p=>p.providerRef));
 });

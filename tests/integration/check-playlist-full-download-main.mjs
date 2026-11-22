@@ -24,7 +24,8 @@ const selectedEngine=process.env.PLAYLIST_FULL_ENGINE;
 const baseline=process.env.PLAYLIST_TURNAROUND_BASE==='1';
 const turnaroundScenarios=['mismatch','muted','reuse','tags-compound','tags-unrelated'];
 const selectedScenarios=process.env.PLAYLIST_TURNAROUND_SCENARIOS?.split(',')??turnaroundScenarios;
-assert.ok(selectedScenarios.every(scenario=>turnaroundScenarios.includes(scenario)));
+const callbackTimeout=selectedScenarios.length===1&&selectedScenarios[0]==='callback-timeout';
+assert.ok(callbackTimeout||selectedScenarios.every(scenario=>turnaroundScenarios.includes(scenario)));
 const repeatFrom=Number(process.env.PLAYLIST_FULL_REPEAT_FROM??'1');
 const repeats=Number(process.env.PLAYLIST_FULL_REPEATS??'3');
 assert.ok(!selectedMode||modes.includes(selectedMode));
@@ -43,6 +44,10 @@ const reviewButtons='[aria-label="Revisión de descarga"], .download-dock__stora
 const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
  if(id==='./temporary-sdk')return resolve('tests/integration/playlist-full-download-sdk.ts');
 },transform(code,id){
+ if(callbackTimeout&&id.endsWith('/src/telegram/bot-search-protocol.ts')){
+  assert.ok(code.includes('callbackBudgetMs:65000'));
+  return code.replace('callbackBudgetMs:65000','callbackBudgetMs:1500');
+ }
  if(selectedMode==='turnaround'&&id.endsWith('/src/main.tsx'))return code+
   '\nwindow.testTurnaroundDiagnostics=()=>{diagnostics.setEnabled(true);return diagnostics.getSnapshot().songs;};';
 }});
@@ -543,11 +548,12 @@ async function checkTurnaround(browser,engine,origin,scenario){
  const context=await browser.newContext(config);
  const trace=[],observed=new Set();
  const report={engine,scenario,baseline,status:'FAIL'};
- let page;
+ let page,restores=0;
  const {tracks:fixtures,candidates}=playlistFixture('full');
  const tagged=scenario.startsWith('tags-'),compound=scenario==='tags-compound';
+ const timeout=scenario==='callback-timeout';
  const expectedSaved=!(baseline&&compound);
- const tracks=fixtures.slice(0,scenario==='muted'?6:1).map(({track})=>({...track,duration:tagged?4:track.duration}));
+ const tracks=fixtures.slice(0,scenario==='muted'?6:timeout?4:1).map(({track})=>({...track,duration:tagged?4:track.duration}));
  const byId=new Map(tracks.map((track,i)=>[track.id,{...fixtures[i],payload:candidates.get(fixtures[i].goodKey).payload}]));
  const taggedFiles=new Map();
  if(tagged){
@@ -568,14 +574,22 @@ async function checkTurnaround(browser,engine,origin,scenario){
    const url=new URL(route.request().url());
    if(url.origin!==origin){observed.add(url.origin);return route.abort();}
    if(url.pathname==='/testonly-seed')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>seed</title>'});
-   if(url.pathname==='/__setup-event')return route.fulfill({json:{}});
+   if(url.pathname==='/__setup-event'){
+    if(url.searchParams.get('kind')==='restore')restores++;
+    return route.fulfill({json:{}});
+   }
    if(url.pathname!=='/__playlist-full-rpc')return route.fallback();
    const {kind,peer,query,key,offset,limit,option}=route.request().postDataJSON();
    const track=tracks.find(t=>query===t.title+' '+t.artist||[0,1,2,3].some(variant=>key===descriptor(t,variant).key));
    if(!track)return route.fulfill({status:400});
    trace.push({kind,peer,trackId:track.id,option,key,ms:performance.now()});
-   if(kind==='callback')return route.fulfill({json:{}});
+   if(kind==='callback')return route.fulfill({json:{silent:timeout}});
    if(kind==='search'){
+    if(timeout){
+     const index=tracks.indexOf(track);
+     const menu=(index===1||index===2)&&peer===101?[{label:`${track.artist} - ${track.title}`,audio:descriptor(track)}]:undefined;
+     return route.fulfill({json:{audio:peer===102&&(index===0||index===3)?[descriptor(track)]:[],menu}});
+    }
     if(scenario==='muted')return route.fulfill({json:peer===101?{silent:true,audio:[]}:{audio:[descriptor(track)]}});
     if(tagged){
      if(peer===102)return route.fulfill({json:{audio:compound?[]:[descriptor(track)]}});
@@ -596,8 +610,8 @@ async function checkTurnaround(browser,engine,origin,scenario){
   });
   await installRequiredAccountFixture(context,origin);
   await context.route(origin+'/api/account-library',route=>route.fulfill({json:cloud}));
-  await context.addInitScript(({total,capture,expectedSaved})=>{
-   window.turnaround={start:null,marks:[],states:[],summary:null};
+  await context.addInitScript(({total,saved})=>{
+   window.turnaround={start:null,marks:[],states:[],summary:null,endedAt:null};
    document.addEventListener('click',event=>{
     if(event.target.closest('button')?.getAttribute('aria-label')==='Descargar playlist completa')window.turnaround.start??=performance.now();
    },true);
@@ -608,38 +622,39 @@ async function checkTurnaround(browser,engine,origin,scenario){
     if(!dock)return;
     const progress=dock.querySelector('progress')?.value??0;
     if(progress>sample.marks.length)sample.marks.push(performance.now());
-    if([...document.querySelectorAll('[role="status"]')].some(node=>node.textContent.startsWith(`Descarga finalizada · ${expectedSaved?total:0} de ${total} guardadas`))){
+    if([...document.querySelectorAll('[role="status"]')].some(node=>node.textContent.startsWith(`Descarga finalizada · ${saved} de ${total} guardadas`))){
      if(sample.marks.length<total)sample.marks.push(performance.now());
-     sample.summary=dock.querySelector('.download-dock__handle')?.textContent;
+     sample.summary=dock.querySelector('.download-dock__handle')?.textContent;sample.endedAt??=performance.now();
     }
-    if(!capture)return;
     const panel=dock.querySelector('.download-dock__panel');
     const text=panel?.textContent??'';
     for(const pattern of [/Consultando bot \d de \d…/,/Probando otro bot…/,/El bot prepara el archivo…/,
-     /Descargando [\d,]+ de [\d,]+ MB…/,/La opción no coincide \(duración\) · probando otra…/,/Guardando copia…/,/Buscando canción…/]){
+     /Descargando [\d,]+ de [\d,]+ MB…/,/La opción no coincide \(duración\) · probando otra…/,/Guardando copia…/,/Buscando canción…/,/Reconectando con Telegram…/,/Telegram no respondió a tiempo/]){
      const state=text.match(pattern)?.[0];
      if(state&&!sample.states.includes(state))sample.states.push(state);
     }
    }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
-  },{total:tracks.length,capture:true,expectedSaved});
+  },{total:tracks.length,saved:timeout?2:expectedSaved?tracks.length:0});
   page=await context.newPage();
   const errors=[];page.on('pageerror',error=>errors.push(String(error)));
   await seed(page,origin,null,null,bots.slice(0,2));
   await page.locator('.bot-providers-list li').nth(1).waitFor({state:'attached'});
+  const initialRestores=restores;
   await page.evaluate(()=>window.testTurnaroundDiagnostics());
   await page.getByRole('button',{name:startLabel,exact:true}).evaluate(button=>button.click());
   const handle=page.locator('.download-dock__handle');
   await handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();});
-  await page.waitForFunction(total=>window.turnaround.marks.length===total&&window.turnaround.summary,tracks.length,{timeout:scenario==='muted'?200000:135000});
+  await page.waitForFunction(({timeout,total})=>window.turnaround.summary&&(timeout||window.turnaround.marks.length===total),
+   {timeout,total:tracks.length},{timeout:timeout?22000:scenario==='muted'?200000:135000});
   const {copies}=await inspect(page,tracks.map(track=>track.id));
   for(const [i,copy] of copies.entries()){
-   if(!expectedSaved)assert.equal(copy,null);
+   if(!expectedSaved||timeout&&(i===1||i===2))assert.equal(copy,null);
    else if(tagged)assert.equal(copy.sha256,createHash('sha256').update(taggedFiles.get(descriptor(tracks[i],compound?1:0).key)).digest('hex'));
    else assert.equal(copy.sha256,byId.get(tracks[i].id).expected.sha256);
   }
   assert.deepEqual(errors,[]);
   assert.deepEqual([...observed],[]);
-  const {start,marks,states}=await page.evaluate(()=>window.turnaround);
+  const {start,marks,states,endedAt}=await page.evaluate(()=>window.turnaround);
   const samplesMs=marks.map((mark,i)=>Math.round(mark-(marks[i-1]??start)));
   const searches=tracks.map(({id})=>trace.filter(e=>e.trackId===id&&e.kind==='search').map(e=>e.peer));
   const songs=await page.evaluate(()=>window.testTurnaroundDiagnostics());
@@ -647,7 +662,19 @@ async function checkTurnaround(browser,engine,origin,scenario){
   const betweenCallbacksMs=callbacks.length===2?Math.round(callbacks[1].ms-callbacks[0].ms):null;
   Object.assign(report,{songs,samplesMs,states,searches,betweenCallbacksMs,
    callbackOptions:callbacks.map(e=>e.option),saved:copies.filter(Boolean).length});
-  if(tagged){
+  if(timeout){
+   report.elapsedMs=Math.round(endedAt-start);
+   report.samplesMs=songs.map(song=>song.totalMs);
+   report.restores=restores-initialRestores;
+   assert.deepEqual(searches,[[101,102],[101,102],[101,102],[102]]);
+   assert.deepEqual(callbacks.map(e=>e.option),[1,1]);
+   assert.equal(report.saved,2);
+   assert.equal(report.restores,0);
+   assert.ok(!states.includes('Reconectando con Telegram…'));
+   assert.deepEqual(songs.map(({timeoutCount,winningBotSlot})=>[timeoutCount,winningBotSlot]),[[0,1],[1,null],[1,null],[0,1]]);
+   await handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();});
+   assert.equal(await page.locator('.download-dock__panel li').filter({hasText:'Telegram no respondió a tiempo'}).count(),2);
+  }else if(tagged){
    assert.deepEqual(searches,[baseline?[101,101,101,102]:compound?[101]:[101,102]]);
    assert.deepEqual(callbacks.map(e=>e.option),baseline?[1,2,3]:compound?[1]:[1,2]);
    if(!baseline){
@@ -680,6 +707,7 @@ async function checkTurnaround(browser,engine,origin,scenario){
   report.status='PASS';
  }catch(error){
   report.error=String(error.stack??error);
+  report.restores=restores;
   report.transport=trace.map(({kind,peer,key,option})=>({kind,peer,key,option}));
   report.dock=await page?.locator('.download-dock').allTextContents().catch(()=>[]);
   report.observed=await page?.evaluate(()=>window.turnaround).catch(()=>null);

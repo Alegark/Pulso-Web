@@ -67,7 +67,8 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
  if(result.state==='stopped'||!current())return {state:'stopped'};
  if(savedId)return {state:'downloaded',trackId:savedId,confirmed:true,message:'Descargada'};
  if(result.state==='parked')return parkedSong;
- if(result.state==='unavailable'||result.state==='uncertain')return p.collection?{state:'telegram'}:{state:'failed',message:'Telegram no respondió a tiempo'};
+ if(result.state==='unavailable'||result.state==='uncertain'||result.state==='timed-out')
+  return p.collection&&result.state!=='timed-out'?{state:'telegram'}:{state:'failed',message:'Telegram no respondió a tiempo'};
  if(result.state==='known-failure'&&(failedDigests.size||result.reasons.some(reason=>reason!=='no-compatible-row')))return {state:'failed',reason:'no-valid-file',message:'Ningún bot entregó un archivo válido'};
  if(result.state==='known-failure'&&result.reasons.length)return {state:'failed',reason:'not-found',message:'No existe en tus bots'};
  return {state:'failed',message:'No hay bots disponibles'};
