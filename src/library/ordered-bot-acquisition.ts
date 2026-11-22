@@ -7,9 +7,8 @@ import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import {formatStorageMB} from './storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
-import {matchingSongRows} from './selected-song';
+import {matchingSongRows,type SongImportRejection} from './selected-song';
 import {BOT_SEARCH_BOUNDS,botAudioMismatchFields,botOptionDurationMismatch,isBotSearchLimitError,type BotSearchError,type BotSearchTarget,type BotDownloadedAudio,type BotSearchRow} from '../telegram/bot-search-protocol';
-import type {SongImportRejection} from './selected-song';
 import type {BotsSnapshot,TelegramSessionClient} from '../telegram/session-client';
 
 export type OrderedProvider={providerRef:string;label:string};
@@ -327,7 +326,8 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      if(!p.accept)return {state:'uncertain'};
      reasons.push('returned-audio-mismatch');break;
     }
-    if(audio&&!p.excludedDigests?.has(audio.sha256)){
+    const excludedAudio=!!audio&&p.excludedDigests?.has(audio.sha256);
+    if(audio&&!excludedAudio){
      timing?.attach(audio);
      if(!p.accept){timingResult='received';if(measurement)measurement.values.winningBotSlot=i;return {state:'audio',audio};}
      let disposition:CandidateDisposition|'saved';
@@ -374,7 +374,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     else reasons.push('file-invalid');
 
     if(audio&&measurement)measurement.values.candidatesRejected++;
-    if(audio&&p.excludedDigests?.has(audio.sha256))measurement?.rejection('file-invalid');
+    if(excludedAudio)measurement?.rejection('file-invalid');
     excludedRows.add(selected.key);
     selections++;
     if(!p.accept||!hasAlternate||metadataRejections>=METADATA_REJECTIONS_PER_BOT)break;

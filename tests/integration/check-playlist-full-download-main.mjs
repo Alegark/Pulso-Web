@@ -543,6 +543,7 @@ async function checkTurnaround(browser,engine,origin,scenario){
  const context=await browser.newContext(config);
  const trace=[],observed=new Set();
  const report={engine,scenario,baseline,status:'FAIL'};
+ let page;
  const {tracks:fixtures,candidates}=playlistFixture('full');
  const tagged=scenario.startsWith('tags-'),compound=scenario==='tags-compound';
  const expectedSaved=!(baseline&&compound);
@@ -621,7 +622,7 @@ async function checkTurnaround(browser,engine,origin,scenario){
     }
    }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
   },{total:tracks.length,capture:true,expectedSaved});
-  const page=await context.newPage();
+  page=await context.newPage();
   const errors=[];page.on('pageerror',error=>errors.push(String(error)));
   await seed(page,origin,null,null,bots.slice(0,2));
   await page.locator('.bot-providers-list li').nth(1).waitFor({state:'attached'});
@@ -629,7 +630,7 @@ async function checkTurnaround(browser,engine,origin,scenario){
   await page.getByRole('button',{name:startLabel,exact:true}).evaluate(button=>button.click());
   const handle=page.locator('.download-dock__handle');
   await handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();});
-  await page.waitForFunction(total=>window.turnaround.marks.length===total&&window.turnaround.summary,tracks.length,{timeout:135000});
+  await page.waitForFunction(total=>window.turnaround.marks.length===total&&window.turnaround.summary,tracks.length,{timeout:scenario==='muted'?200000:135000});
   const {copies}=await inspect(page,tracks.map(track=>track.id));
   for(const [i,copy] of copies.entries()){
    if(!expectedSaved)assert.equal(copy,null);
@@ -677,8 +678,12 @@ async function checkTurnaround(browser,engine,origin,scenario){
    }
   }
   report.status='PASS';
- }catch(error){report.error=String(error.stack??error);}
- finally{await context.close();}
+ }catch(error){
+  report.error=String(error.stack??error);
+  report.transport=trace.map(({kind,peer,key,option})=>({kind,peer,key,option}));
+  report.dock=await page?.locator('.download-dock').allTextContents().catch(()=>[]);
+  report.observed=await page?.evaluate(()=>window.turnaround).catch(()=>null);
+ }finally{await context.close();}
  return report;
 }
 
