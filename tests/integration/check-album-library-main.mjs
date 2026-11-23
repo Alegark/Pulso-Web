@@ -108,9 +108,10 @@ try{
   const styles=event.styles??[];
   if(!/^<html lang="es" style="--nav-height: \d+(?:\.\d+)?px; --mini-height: \d+(?:\.\d+)?px;">/.test(styles[0]))return false;
   if(styles.length===1)return true;
-  // WebKit reports the same shell attributes in the 7a01ecd setup control.
+  // The setup and collection dialogs already lock body scrolling in 7a01ecd.
   return report.browserFixture.engine==='webkit'&&/^6[0-6] /.test(event.group)&&styles.length===2&&
-   styles[1].startsWith('<body style="overflow: hidden;">')&&styles[1].includes('data-setup-pending="true"');
+   styles[1].startsWith('<body style="overflow: hidden;">')&&
+   (styles[1].includes('data-setup-pending="true"')||event.group.startsWith('66 ')&&['options','removal'].includes(event.collectionModal));
  });assert.deepEqual(report.csp.filter(e=>!report.cspBaseline.includes(e)),[]);assert.deepEqual(report.serverErrors,[]);assert(!report.events.some(e=>e.type.startsWith('blocked-')));
  for(const r of report.rpc)assert(['contacts.resolveUsername','messages.getHistory','messages.sendMessage','messages.getDialogs','messages.getMessages','messages.getBotCallbackAnswer','upload.getFile'].includes(r.method));
  report.status='PASS_LOCAL_MAIN_SYNTHETIC_SDK_ONLY';
