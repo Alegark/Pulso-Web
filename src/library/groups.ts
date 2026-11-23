@@ -99,7 +99,7 @@ function addUnique<T>(values: T[], value: T): void {
 
 function fieldEvidence(track: Track, field: 'artist' | 'album'): MetadataProvenance | null {
  if (Object.prototype.hasOwnProperty.call(track.manualOverrides, field)) return 'manual';
- if(field==='album'&&trackCatalogRelease(track))return 'catalog';
+ if(field==='album'&&(trackCatalogRelease(track)||albumEditionId(track)!==null))return 'catalog';
  return identity(track[field]) === null ? null : 'tags';
 }
 
@@ -135,7 +135,7 @@ function groupTracks(tracks: readonly Track[], kind: LibraryGroup['kind']): Libr
    group.artist = source.albumArtist.value;
   }
   group.trackIds.push(track.id);
-  if (!unknown) addUnique(group.labels, (kind === 'artist' ? track.artist : track.album)!);
+  if (!unknown) addUnique(group.labels, (kind === 'artist' ? track.artist : effectiveAlbum)!);
   if (artist !== null) addUnique(group.artistLabels, track.artist!);
   for (const field of kind === 'artist' ? ['artist'] as const : ['artist', 'album'] as const) {
    const provenance = fieldEvidence(track, field);

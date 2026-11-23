@@ -6,7 +6,8 @@ import {dataArray,dataRecord} from '../telegram/sources-protocol';
 import type {AlbumDetail,AlbumTrack} from './album-catalog';
 import {albumTrackChoice} from './album-acquisition';
 import {musicBrainzArtworkUrl,musicBrainzId,type CatalogId} from './catalog-id';
-import {albumEditionId,catalogRecordingId} from './catalog-release';
+import {albumEditionId} from './catalog-release';
+import {createSongResolver,type SongAliases} from './selected-song';
 import {groupAlbums,orderAlbumRows} from './groups';
 import type {Track} from './library';
 import {artworkUrl} from './player-artwork-provider';
@@ -17,12 +18,15 @@ export interface SavedAlbum extends AlbumDetail {
  failedTracks:string[];
 }
 
+const LIMIT=500;
+export interface SavedAlbumFailures { savedAt:string; failedTracks:string[] }
+
 const prefix = (accountId:string) => ['saved-catalog-album',accountId];
 export const savedAlbumKey = (accountId:string,id:CatalogId):IDBValidKey => [...prefix(accountId),id];
 export const savedAlbumGroupKey = (id:CatalogId) => JSON.stringify(['saved-catalog-album',id]);
 const range = (accountId:string) => IDBKeyRange.bound(prefix(accountId),[...prefix(accountId),[]]);
 const positive = (v:unknown,max=Number.MAX_SAFE_INTEGER):v is number => typeof v==='number'&&Number.isSafeInteger(v)&&v>0&&v<=max;
-const text = (v:unknown):v is string => typeof v==='string'&&!!v.trim()&&v.length<=300&&!/[\u0000-\u001f\u007f]/u.test(v);
+const text = (v:unknown):v is string => typeof v==='string'&&!!v.trim()&&v.length<=300;
 const date = (v:unknown):v is string => typeof v==='string'&&v.length===24&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
 const fields = (value:unknown,allowed:readonly string[]) => {
  const row=dataRecord(value);
@@ -39,7 +43,7 @@ export function copySavedAlbum(value:unknown,expectedId?:CatalogId):SavedAlbum|n
   !text(edition.title)||!text(edition.artist)||!(edition.releaseDate===null||text(edition.releaseDate)))return null;
  const id=edition.id,mb=musicBrainzId(id);
  const image=edition.artworkUrl===undefined?null:mb?musicBrainzArtworkUrl(edition.artworkUrl):artworkUrl(edition.artworkUrl);
- if(edition.artworkUrl!==undefined&&!image)return null;
+ if(edition.artworkUrl!==undefined&&(!image||mb&&new URL(image).searchParams.get('id')!==id.slice(12)))return null;
  const tracks:AlbumTrack[]=[],positions=new Set<string>(),choiceIds=new Set<string>();
  for(const input of list){
   const t=fields(input,['releaseId','trackId','disc','position','title','artist','durationMs','primaryArtist']);
@@ -66,8 +70,8 @@ export function copySavedAlbum(value:unknown,expectedId?:CatalogId):SavedAlbum|n
 }
 
 export async function readSavedAlbumsFrom(store:IDBObjectStore,accountId:string):Promise<SavedAlbum[]> {
- const keys=await request(store.getAllKeys(range(accountId)));
- const values=await request(store.getAll(range(accountId)));
+ const keys=await request(store.getAllKeys(range(accountId),LIMIT));
+ const values=await request(store.getAll(range(accountId),LIMIT));
  return values.flatMap((value,index)=>{
   const key=keys[index];
   if(!Array.isArray(key)||key.length!==3||!(positive(key[2])||musicBrainzId(key[2])))return [];
@@ -86,8 +90,8 @@ export async function readSavedAlbums(accountId:string):Promise<SavedAlbum[]> {
  }finally{closeDatabase(db);}
 }
 
-export async function saveAlbumRecord(accountId:string,detail:AlbumDetail,current:()=>boolean,failedTracks?:string[]):Promise<SavedAlbum|null> {
- const record=copySavedAlbum({version:1,savedAt:new Date().toISOString(),edition:detail.edition,tracks:detail.tracks,failedTracks:failedTracks??[]});
+export async function saveAlbumRecord(accountId:string,detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures):Promise<SavedAlbum|null> {
+ const record=copySavedAlbum({version:1,savedAt:new Date().toISOString(),edition:detail.edition,tracks:detail.tracks,failedTracks:failure?.failedTracks??[]});
  if(!record||!current())throw Error('saved-album');
  return navigator.locks.request(WRITER_LOCK,async()=>{
   if(!current())throw Error('account-changed');
@@ -99,11 +103,15 @@ export async function saveAlbumRecord(accountId:string,detail:AlbumDetail,curren
     const [active,raw]=await Promise.all([request(store.get(ACTIVE_LIBRARY_ACCOUNT)),request(store.get(key))]);
     if(!current()||active!==accountId)throw Error('account-changed');
     const previous=copySavedAlbum(raw,record.edition.id);
-    if(failedTracks!==undefined&&(!previous||JSON.stringify(previous.tracks)!==JSON.stringify(record.tracks))){
+    if(failure&&(!previous||previous.savedAt!==failure.savedAt||JSON.stringify(previous.tracks)!==JSON.stringify(record.tracks))){
      await done;
      return null;
     }
-    if(previous&&failedTracks===undefined){await done;return previous;}
+    if(previous&&!failure){await done;return previous;}
+    if(raw===undefined){
+     const count=await request(store.count(range(accountId)));
+     if(!current()||count>=LIMIT)throw Error('saved-album-limit');
+    }
     const next=previous?{...previous,failedTracks:record.failedTracks}:record;
     store.put(next,key);
     await done;
@@ -113,23 +121,20 @@ export async function saveAlbumRecord(accountId:string,detail:AlbumDetail,curren
  });
 }
 
-/** A saved roster references local recordings by exact catalogue identity. */
-export function matchSavedAlbumTracks(detail:AlbumDetail,tracks:readonly Track[]) {
- const byId=new Map<string,Track[]>();
- for(const track of tracks){
-  const id=catalogRecordingId(track);
-  if(!id)continue;
-  const matches=byId.get(id);
-  if(matches)matches.push(track);else byId.set(id,[track]);
- }
- return detail.tracks.map(track=>({track,copies:byId.get(albumTrackChoice(track,detail.edition.title).id)??[]}));
+export function resolvedAlbumTracks(detail:AlbumDetail,resolve:ReturnType<typeof createSongResolver>){
+ return detail.tracks.map(track=>{
+  const choice=albumTrackChoice(track,detail.edition.title);
+  try{return {choice,trackId:resolve(choice)};}catch{return {choice,trackId:null};}
+ });
 }
 
-export function libraryAlbumCards(tracks:readonly Track[],albums:readonly SavedAlbum[]){
+export function libraryAlbumCards(tracks:readonly Track[],albums:readonly SavedAlbum[],aliases?:SongAliases,allTracks=tracks){
+ const resolve=createSongResolver(allTracks,aliases);
+ const included=new Set(tracks.map(track=>track.id));
  const saved=albums.map(album=>({
   saved:true as const,key:savedAlbumGroupKey(album.edition.id),label:album.edition.title,artist:album.edition.artist,
   editionId:album.edition.id,artworkUrl:album.edition.artworkUrl,count:album.tracks.length,
-  trackIds:matchSavedAlbumTracks(album,tracks).flatMap(row=>row.copies.map(track=>track.id)),
+  trackIds:resolvedAlbumTracks(album,resolve).flatMap(({trackId})=>trackId&&included.has(trackId)?[trackId]:[]),
  }));
  const covered=new Set(saved.flatMap(album=>album.trackIds));
  const local=tracks.filter(track=>!covered.has(track.id));

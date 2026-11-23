@@ -99,3 +99,65 @@ export async function playlistWithLocalCopies(ids:string[]){
   playlist={...playlist,revision:playlist.revision+1};
  }
 }
+
+export async function seedSpotifyAlbum(forceIdb=false){
+ const {writeRecord}=await import('../../../src/storage/database');
+ const {activeLibraryAccount}=await import('../../../src/accounts/library-local');
+ const {tracks:[id]}=await seed(forceIdb);
+ const track=await readRecord<Track>('tracks',id);
+ if(!track)throw Error('fixture track');
+ const spotifyId='A'.repeat(22);
+ const catalogChoice={source:'spotify' as const,id:'spotify:'+spotifyId,title:track.title,artist:track.artist,album:track.album,duration:track.duration};
+ await writeRecord('tracks',id,{...track,manualOverrides:{},catalogChoice});
+ const account=await activeLibraryAccount()??'11111111-1111-4111-8111-111111111111';
+ const input=JSON.stringify([track.title,track.artist,track.album,catalogChoice.duration,catalogChoice.id,catalogChoice.source,
+  catalogChoice.title,catalogChoice.artist,catalogChoice.album,catalogChoice.duration]);
+ await writeRecord('settings',['spotify-catalog-release',1,account,id],{input,release:{
+  source:'spotify',releaseId:'B'.repeat(22),trackId:spotifyId,position:1,itunesReleaseId:42,title:track.album,artist:track.artist,
+ }});
+}
+
+export async function savedAlbumContracts(){
+ const {saveAlbumRecord,readSavedAlbums,savedAlbumKey,savedAlbumGroupKey}=await import('../../../src/library/saved-albums');
+ const {ACTIVE_LIBRARY_ACCOUNT,activeLibraryAccount}=await import('../../../src/accounts/library-local');
+ const {writeRecord}=await import('../../../src/storage/database');
+ const {WRITER_LOCK}=await import('../../../src/storage/asset-reader');
+ const {previewCollectionRemoval,confirmCollectionRemoval}=await import('../../../src/library/collection-removal');
+ const account=await activeLibraryAccount();
+ if(!account)throw Error('fixture account');
+ const id=77;
+ const detail={edition:{id,title:'Synthetic',artist:'Artist',trackCount:1,releaseDate:null},
+  tracks:[{releaseId:id,trackId:78,disc:1,position:1,title:'Song',artist:'Artist',durationMs:45000}]};
+ const ensure=(value:unknown)=>{if(!value)throw Error('saved album contract');};
+ let active=true,queued!:Promise<unknown>;
+ await navigator.locks.request(WRITER_LOCK,async()=>{
+  queued=saveAlbumRecord(account,detail,()=>active).catch(error=>error.message);
+  ensure((await navigator.locks.query()).pending?.some(lock=>lock.name===WRITER_LOCK));
+  active=false;
+ });
+ ensure(await queued==='account-changed');
+ await writeRecord('settings',ACTIVE_LIBRARY_ACCOUNT,'22222222-2222-4222-8222-222222222222');
+ try{ensure(await saveAlbumRecord(account,detail,()=>true).catch(error=>error.message)==='account-changed');}
+ finally{await writeRecord('settings',ACTIVE_LIBRARY_ACCOUNT,account);}
+ const saved=await saveAlbumRecord(account,detail,()=>true);
+ if(!saved)throw Error('save failed');
+ const update={savedAt:saved.savedAt,failedTracks:['itunes:77:1:1:78']};
+ const changed=await saveAlbumRecord(account,detail,()=>true,update);
+ ensure(changed?.savedAt===saved.savedAt&&changed?.failedTracks.length===1);
+ const context={current:()=>true,signal:new AbortController().signal};
+ const selection={kind:'album' as const,scope:'global-library' as const,key:savedAlbumGroupKey(id)};
+ const consent={confirm:true as const,acceptPossibleOnlyCopyLoss:true as const};
+ const unused=()=>{throw Error('no copies to clean');};
+ const host={readContext:unused,reserve:unused,record:unused,forget:unused};
+ const stale=await previewCollectionRemoval(selection,context);
+ await saveAlbumRecord(account,detail,()=>true,{...update,failedTracks:[]});
+ ensure((await confirmCollectionRemoval(stale.token,consent,context,host)).reason==='collection-changed');
+ const fresh=await previewCollectionRemoval(selection,context);
+ ensure((await confirmCollectionRemoval(fresh.token,consent,context,host)).metadata==='committed');
+ ensure(await saveAlbumRecord(account,detail,()=>true,update)===null);
+ await writeRecord('settings',savedAlbumKey(account,id),{...saved,version:2});
+ ensure(!(await readSavedAlbums(account)).some(album=>album.edition.id===id));
+ ensure(await saveAlbumRecord(account,detail,()=>true,update)===null);
+ ensure((await saveAlbumRecord(account,detail,()=>true))?.version===1);
+ return {lock:true,account:true,failures:true,conflict:true,removed:true,corrupt:true};
+}

@@ -36,7 +36,13 @@ export function trackCatalogRelease(track:Track):CatalogRelease|null {
  return release&&(!track.album||musicCatalogKey(track.album)===musicCatalogKey(release.title))?release:null;
 }
 
-export const displayTrackAlbum=(track:Track)=>track.album??trackCatalogRelease(track)?.title??null;
+export const displayTrackAlbum=(track:Track)=>track.album??trackCatalogRelease(track)?.title??(searchedAlbumChoice(track)?.album??null);
+
+function searchedAlbumChoice(track:Track){
+ const choice=track.catalogChoice;
+ return choice&&(choice.source==='itunes'||choice.source==='musicbrainz')&&choice.album?.trim()&&
+  !Object.keys(track.manualOverrides??{}).length&&(!track.album||musicCatalogKey(track.album)===musicCatalogKey(choice.album))?choice:null;
+}
 
 export function searchedITunesRelease(track:Track):number|null {
  if(Object.keys(track.manualOverrides??{}).length||track.catalogChoice?.source!=='itunes'||!track.catalogChoice.album||
@@ -47,10 +53,9 @@ export function searchedITunesRelease(track:Track):number|null {
 
 /** Exact recording IDs are shared by choices and locally attached releases. */
 export function catalogRecordingId(track:Track):string|null {
- const release=copyCatalogRelease(track.catalogRelease);
+ const release=trackCatalogRelease(track);
  if(release?.source==='itunes')return `itunes:${release.releaseId}:${release.disc}:${release.position}:${release.trackId}`;
- const choice=track.catalogChoice;
- return choice&&(choice.source==='itunes'||choice.source==='musicbrainz')?choice.id:null;
+ return searchedAlbumChoice(track)?.id??null;
 }
 
 export function albumEditionId(track:Track):CatalogId|null {
@@ -59,7 +64,8 @@ export function albumEditionId(track:Track):CatalogId|null {
  if(release?.source==='spotify'&&release.itunesReleaseId)return release.itunesReleaseId;
  const id=searchedITunesRelease(track);
  if(id!==null)return id;
- if(Object.keys(track.manualOverrides??{}).length||track.catalogChoice?.source!=='musicbrainz')return null;
- const releaseId=track.catalogChoice.id.split(':').slice(0,2).join(':');
+ const choice=searchedAlbumChoice(track);
+ if(choice?.source!=='musicbrainz')return null;
+ const releaseId=/^(musicbrainz:[0-9a-f-]+):[1-9][0-9]*:[1-9][0-9]*:[0-9a-f-]+$/.exec(choice.id)?.[1];
  return musicBrainzId(releaseId)?releaseId:null;
 }

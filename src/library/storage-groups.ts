@@ -1,9 +1,10 @@
+import type {SongAliases} from './selected-song';
 import type {Track,Playlist,LocalAsset} from './library';
 import {trackCatalogRelease} from './catalog-release';
 import {libraryAlbumCards,type SavedAlbum} from './saved-albums';
 export interface StorageGroup {id:string;title:string;subtitle:string;kind:'playlist'|'album'|'other';assetIds:string[];trackIds:string[];bytes:number;favorite?:boolean;artworkUrl?:string}
 /** Group memberships may overlap; physical bytes are unique within each group. */
-export function groupStorageDownloads(tracks:readonly Track[],playlists:readonly Playlist[],assets:readonly LocalAsset[],savedAlbums:readonly SavedAlbum[]=[]):StorageGroup[]{
+export function groupStorageDownloads(tracks:readonly Track[],playlists:readonly Playlist[],assets:readonly LocalAsset[],savedAlbums:readonly SavedAlbum[]=[],aliases?:SongAliases):StorageGroup[]{
  const assetMap=new Map(assets.map(a=>[a.id,a])),trackMap=new Map(tracks.map(t=>[t.id,t])),used=new Set<string>(),groups:StorageGroup[]=[];
  function add(id:string,title:string,subtitle:string,kind:StorageGroup['kind'],ids:readonly string[],favorite=false,artworkUrl?:string){
   const trackIds=[...new Set(ids)].filter(id=>{const t=trackMap.get(id);return !!t?.assetId&&assetMap.has(t.assetId);});
@@ -12,7 +13,7 @@ export function groupStorageDownloads(tracks:readonly Track[],playlists:readonly
  }
  add('favorites','Favoritos','Playlist automática','playlist',tracks.filter(t=>t.favorite).map(t=>t.id),true);
  for(const p of playlists)add('playlist:'+p.id,p.name,'Playlist','playlist',p.entries.map(e=>e.trackId));
- for(const album of libraryAlbumCards(tracks,savedAlbums)){
+ for(const album of libraryAlbumCards(tracks,savedAlbums,aliases)){
   const artwork=album.saved?album.artworkUrl:album.trackIds.map(id=>trackCatalogRelease(trackMap.get(id)!)?.artworkUrl).find(Boolean);
   add('album:'+album.key,album.label,album.artist?'Álbum · '+album.artist:'Álbum','album',album.trackIds,false,artwork);
  }

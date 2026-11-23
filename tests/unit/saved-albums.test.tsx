@@ -2,7 +2,10 @@ import React from "react";
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {copySavedAlbum,libraryAlbumCards,matchSavedAlbumTracks,readSavedAlbumsFrom,savedAlbumGroupKey} from '../../src/library/saved-albums';
+import {copySavedAlbum,libraryAlbumCards,resolvedAlbumTracks,readSavedAlbumsFrom,savedAlbumGroupKey} from '../../src/library/saved-albums';
+import {createSongResolver,songChoiceKey} from '../../src/library/selected-song';
+import {groupStorageDownloads} from "../../src/library/storage-groups";
+import type {LocalAsset} from "../../src/library/library";
 import type {Track} from '../../src/library/library';
 import {CollectionCover} from '../../src/ui/CollectionCover';
 
@@ -39,9 +42,9 @@ test('La edición guardada existe con cero, algunas o todas las copias y absorbe
  assert.deepEqual(libraryAlbumCards([],[album]).map(card=>[card.key,card.count,card.trackIds]),[[savedAlbumGroupKey(42),4,[]]]);
  const copies=[local(4),local(2),local(1),local(3)];
  const other=local(9,43);
- const partial=matchSavedAlbumTracks(album,[other,copies[0],copies[2]]);
- assert.deepEqual(partial.map(row=>row.copies.map(track=>track.id)),[['local-1'],[],[],['local-4']]);
- assert.deepEqual(matchSavedAlbumTracks(album,copies).map(row=>row.copies.length),[1,1,1,1]);
+ const partial=resolvedAlbumTracks(album,createSongResolver([other,copies[0],copies[2]]));
+ assert.deepEqual(partial.map(row=>row.trackId),['local-1',null,null,'local-4']);
+ assert.deepEqual(resolvedAlbumTracks(album,createSongResolver(copies)).map(row=>row.trackId),['local-1','local-2','local-3','local-4']);
  const [saved,loose]=libraryAlbumCards([other,...copies],[album]);
  assert.deepEqual(saved.trackIds,['local-1','local-2','local-3','local-4']);
  assert.equal(loose.editionId,43);
@@ -80,4 +83,56 @@ test('Una fila desconocida o corrupta queda aislada del resto de la lectura',asy
   if(original)Object.defineProperty(globalThis,'IDBKeyRange',original);
   else Reflect.deleteProperty(globalThis,'IDBKeyRange');
  }
+});
+
+test('MusicBrainz conserva la URL de la misma edición y acepta espacios válidos del catálogo',()=>{
+ const id='musicbrainz:11111111-1111-4111-8111-111111111111';
+ const recording='musicbrainz:22222222-2222-4222-8222-222222222222';
+ const artworkUrl='/catalog/musicbrainz/artwork?id='+id.slice(12);
+ const origin='https://pulso.test';
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'location');
+ Object.defineProperty(globalThis,'location',{configurable:true,value:{origin}});
+ try{
+  const record={...snapshot,edition:{...snapshot.edition,id,trackCount:1,title:'Título\nválido',artworkUrl},
+   tracks:[{...tracks[0],releaseId:id,trackId:recording,title:'Pista\tválida'}]};
+  const copied=copySavedAlbum(record,id);
+  assert.equal(copied?.edition.artworkUrl,origin+artworkUrl);
+  assert.equal(copied.tracks[0].title,'Pista\tválida');
+  assert.equal(libraryAlbumCards([{
+   ...local(1),album:null,catalogRelease:undefined,
+   catalogChoice:{id:'musicbrainz:'+id.slice(12)+':1:1:'+recording.slice(12),source:'musicbrainz',
+    title:'Pista',artist:'Artista',album:'Título',duration:45},
+  }],[])[0]?.editionId,id);
+  assert.equal(copySavedAlbum({...record,edition:{...record.edition,artworkUrl:artworkUrl.replace(id.slice(12),recording.slice(12))}},id),null);
+ }finally{
+  if(previous)Object.defineProperty(globalThis,'location',previous);else Reflect.deleteProperty(globalThis,'location');
+ }
+});
+
+test('Los alias válidos conservan la edición anterior y respetan las correcciones manuales',()=>{
+ const id='11111111-1111-4111-8111-111111111111';
+ const fingerprint={sha256:'a'.repeat(64),bytes:123};
+ const choice={id:'itunes:42:1:1:81',source:'itunes' as const,title:'Pista 1',artist:'Artista',album:'Álbum',duration:45};
+ const track:Track={...local(1,43),id,audioFingerprint:{algorithm:'sha256',...fingerprint}};
+ const key=songChoiceKey(choice)!;
+ const aliases=new Map([[key,{...fingerprint,key,trackId:id,version:1}]]);
+ assert.equal(createSongResolver([track],aliases)(choice),id);
+ for(const edited of [{title:'Otra canción'},{artist:'Otro intérprete'},{album:'Otra edición'}]){
+  const correction={...track,...edited,manualOverrides:edited};
+  assert.equal(createSongResolver([correction],aliases)(choice),null);
+ }
+ assert.equal(createSongResolver([{...track,title:'Otra canción',manualOverrides:{title:'Otra canción'}}])(choice),null);
+ assert.equal(createSongResolver([{...local(1),album:'Otra edición',title:'Otro título'}])(choice),null);
+});
+
+test('Almacenamiento muestra la copia Spotify asociada por alias en el álbum guardado',()=>{
+ const album=copySavedAlbum(snapshot)!;
+ const id='11111111-1111-4111-8111-111111111111';
+ const fingerprint={sha256:'b'.repeat(64),bytes:123};
+ const track:Track={...local(1),id,audioFingerprint:{algorithm:'sha256',...fingerprint},
+  catalogRelease:{source:'spotify',releaseId:'A'.repeat(22),trackId:'B'.repeat(22),itunesReleaseId:42,position:1,title:'Álbum',artist:'Artista'}};
+ const key=songChoiceKey({id:'itunes:42:1:1:81',source:'itunes',title:'Pista 1',artist:'Artista',album:'Álbum',duration:45})!;
+ const aliases=new Map([[key,{...fingerprint,key,trackId:id,version:1}]]);
+ const groups=groupStorageDownloads([track],[],[{id:track.assetId,bytes:123} as LocalAsset],[album],aliases);
+ assert.deepEqual(groups.map(group=>[group.id,group.trackIds]),[['album:'+savedAlbumGroupKey(42),[id]]]);
 });
