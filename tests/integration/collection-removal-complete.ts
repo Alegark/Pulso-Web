@@ -57,4 +57,44 @@ async function writerTests(){
 async function forgetFailure(){const tracks:Track[]=[];for(const n of [151,152]){const r=await importFileDetailed(wav(n),ctx.signal,()=>{},{backend:n%2?'idb':'opfs',libraryMode:'cache'});assert(r.kind==='confirmed','forget import');tracks.push(r.result.track);}const list=await createPlaylist('Forget fault');for(let i=0;i<2;i++)await changePlaylist(list.id,i+1,{type:'add',trackId:tracks[i].id});const p=await previewCollectionRemoval({kind:'playlist',id:list.id,revision:3},ctx);let saved:Parameters<CollectionCleanupHost['record']>[0]|null=null;const h:CollectionCleanupHost={...host,async record(t){saved=t;return host.record(t);},async forget(){return false;}};const out=await confirmCollectionRemoval(p.token,{confirm:true,acceptPossibleOnlyCopyLoss:true},ctx,h);assert(out.reason==='tracking-uncertain'&&out.removed===0&&out.freedBytes===0,'forget stop');assert(saved&&sessionStorage.getItem('pulso-web:copy-removal:pending:v1'),'pointer retained');const journal=await readRecord<{state:string}>('settings',journalKey((saved as {operationId:string}).operationId));assert(journal?.state==='removed','terminal journal preserved');const after=await Promise.all(tracks.map(t=>readRecord<Track>('tracks',t.id)));assert(after.filter(t=>t?.assetId!==null).length===1,'one unattempted asset intact');return out;}
 async function forgedMarker(){const r=await importFileDetailed(wav(161),ctx.signal,()=>{},{backend:'idb',libraryMode:'cache'});assert(r.kind==='confirmed','marker import');const d=await discoverCopyRemoval({namespace:'local',trackId:r.result.track.id,expectedTrackRevision:r.result.track.revision},host.readContext());assert(d.kind==='candidate','marker discover');const h=await host.reserve(d.target);assert(h.kind==='reserved','marker reserve');try{const p=await planUnreferencedCopyRemoval(d.candidate,h.context);assert(p.kind==='ready','marker plan');const out=await confirmCopyRemoval(p.plan,{planRevision:p.planRevision,declaration:'accept-possible-only-original-loss',confirmRemoveThisCopy:true},h.context);assert(out.state==='removed','marker terminal');const key=markerKey(d.target);const marker=await readRecord<Record<string,unknown>>('settings',key);assert(marker,'marker exists');const forged={...marker,operationId:crypto.randomUUID()};await writeRecord('settings',key,forged);assert(!await acknowledgeUnreferencedCopyRemoval(out,h.context),'forged marker rejected');assert(JSON.stringify(await readRecord('settings',key))===JSON.stringify(forged),'foreign marker retained');assert(await readRecord('settings',journalKey(p.tracking.operationId)),'journal retained');return {rejected:true,markerPreserved:true,journalPreserved:true};}finally{await h.release();}}
 async function postCommit(mode:'abort'|'guard'){const tracks:Track[]=[];for(const n of [171,172]){const r=await importFileDetailed(wav(n),ctx.signal,()=>{},{backend:n%2?'idb':'opfs',libraryMode:'cache'});assert(r.kind==='confirmed','commit fixture');tracks.push(r.result.track);}const list=await createPlaylist('Commit race');for(let i=0;i<2;i++)await changePlaylist(list.id,i+1,{type:'add',trackId:tracks[i].id});const controller=new AbortController();let live=true,records=0,reserves=0;const local={signal:controller.signal,current:()=>live};const p=await previewCollectionRemoval({kind:'playlist',id:list.id,revision:3},local);const h:CollectionCleanupHost={...host,async record(t){records++;return host.record(t);},async reserve(a){reserves++;return host.reserve(a);}};(globalThis as unknown as {__collectionAfterCommit?:()=>void}).__collectionAfterCommit=()=>{if(mode==='abort')controller.abort();else live=false;};try{const out=await confirmCollectionRemoval(p.token,{confirm:true,acceptPossibleOnlyCopyLoss:true},local,h);assert(out.metadata==='committed'&&out.cleanup==='stopped'&&out.removed===0&&out.freedBytes===0,'commit winner '+JSON.stringify(out));assert(!await readRecord('playlists',list.id),'metadata committed');for(const t of tracks){assert((await readRecord<Track>('tracks',t.id))?.assetId===t.assetId,'asset still linked');const asset=await readRecord<import('../../src/library/library').LocalAsset>('assets',t.assetId!);assert(asset,'asset exists');const reader=await openAssetReader(asset);try{assert((await reader.verifyDetailed(true)).state==='valid','original bytes verified');}finally{reader.release();}}assert(records===0&&reserves===0,'no physical admission');return out;}finally{delete (globalThis as unknown as {__collectionAfterCommit?:()=>void}).__collectionAfterCommit;}}
-Object.assign(window,{collectionCompleteRun:run,collectionAdversarialRun:adversarial,racePrepare,raceMutate,raceFinish,fenceStart,fenceWait,fenceRelease,fenceFinish,albumRun,uncertainAckRun,writerTests,forgetFailure,forgedMarker,postCommit});
+async function mixedSavedAlbumRun(){
+ const {ACTIVE_LIBRARY_ACCOUNT}=await import('../../src/accounts/library-local');
+ const {saveAlbumRecord,readSavedAlbums,savedAlbumGroupKey}=await import('../../src/library/saved-albums');
+ const {rememberSongAlias}=await import('../../src/library/selected-song');
+ const {albumTrackChoice}=await import('../../src/library/album-acquisition');
+ const accountId='11111111-1111-4111-8111-111111111111';
+ await writeRecord('settings',ACTIVE_LIBRARY_ACCOUNT,accountId);
+ const tracks:Track[]=[];
+ for(const salt of [181,182]){
+  const result=await importFileDetailed(wav(salt),ctx.signal,()=>{},{backend:'idb'});
+  assert(result.kind==='confirmed','saved album import');
+  tracks.push(result.result.track);
+ }
+ const makeAlbum=(id:number,title:string,count:number)=>({
+  edition:{id,title,artist:'Own artist',trackCount:count,releaseDate:null},
+  tracks:tracks.slice(0,count).map((_,index)=>({releaseId:id,trackId:200+index,disc:1,position:index+1,title:'Own track '+index,artist:'Own artist',durationMs:1000})),
+ });
+ for(const album of [makeAlbum(42,'Own standard',2),makeAlbum(99,'Own deluxe',1)]){
+  for(const [index,song] of album.tracks.entries()){
+   const track=tracks[index],fp=track.audioFingerprint;
+   assert(fp,'fingerprint');
+   await rememberSongAlias(albumTrackChoice(song,album.edition.title),track.id,fp.sha256,fp.bytes,ctx.current);
+  }
+  assert(await saveAlbumRecord(accountId,album,ctx.current),'album record');
+ }
+ const [shared,exclusive]=tracks;
+ const preview=await previewCollectionRemoval({kind:'album',scope:'global-library',key:savedAlbumGroupKey(42)},ctx);
+ assert(preview.tracks===2&&preview.copiesEligible===1&&preview.retainedShared===1,'mixed preview');
+ const result=await confirmCollectionRemoval(preview.token,{confirm:true,acceptPossibleOnlyCopyLoss:true},ctx,host);
+ assert(result.metadata==='committed'&&result.cleanup==='complete'&&result.removed===1&&result.skipped===1&&result.freedBytes===16044,'mixed cleanup '+JSON.stringify(result));
+ assert((await readRecord<Track>('tracks',exclusive.id))?.assetId===null,'exclusive track detached');
+ assert(!await readRecord('assets',exclusive.assetId!),'exclusive manifest removed');
+ const retained=await readRecord<import('../../src/library/library').LocalAsset>('assets',shared.assetId!);
+ assert(retained,'shared asset retained');
+ const reader=await openAssetReader(retained);
+ try{assert((await reader.verifyDetailed(true)).state==='valid','shared bytes preserved');}finally{reader.release();}
+ const remaining=await readSavedAlbums(accountId);
+ assert(remaining.length===1&&remaining[0].edition.id===99,'second album retained');
+ return {removed:result.removed,sharedBytes:retained.bytes,freedBytes:result.freedBytes};
+}
+Object.assign(window,{collectionCompleteRun:run,collectionAdversarialRun:adversarial,mixedSavedAlbumRun,racePrepare,raceMutate,raceFinish,fenceStart,fenceWait,fenceRelease,fenceFinish,albumRun,uncertainAckRun,writerTests,forgetFailure,forgedMarker,postCommit});

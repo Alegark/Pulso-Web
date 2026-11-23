@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {albumRemovalMembership,copySavedAlbum,libraryAlbumCards,resolvedAlbumTracks,readSavedAlbumsFrom,savedAlbumGroupKey} from '../../src/library/saved-albums';
-import {createSongResolver,songChoiceKey} from '../../src/library/selected-song';
+import {createSongResolver,readSongAliasesFrom,songChoiceKey} from '../../src/library/selected-song';
 import {groupStorageDownloads} from "../../src/library/storage-groups";
 import {indexCopyProtection} from '../../src/library/listening-cache';
 import type {LocalAsset} from "../../src/library/library";
@@ -28,7 +28,7 @@ test('El registro de álbum se valida al escribir y al leer y conserva el orden'
  assert.deepEqual(album,snapshot);
  assert.notEqual(album?.tracks,tracks);
  for(const invalid of [
-  {...snapshot,version:2},{...snapshot,savedAt:'ayer'},
+  {...snapshot,version:2},{...snapshot,savedAt:'ayer'},{...snapshot,edition:{...snapshot.edition,title:'Álbum\u0001'}},
   {...snapshot,tracks:tracks.slice(1)},
   {...snapshot,tracks:[tracks[0],...tracks.slice(0,3)]},
   {...snapshot,tracks:[{...tracks[0],releaseId:43},...tracks.slice(1)]},
@@ -159,4 +159,25 @@ test('Retirar una edición conserva la pertenencia y la copia que completa otra 
  assert.deepEqual([asset].filter(protectsOtherAlbum).map(copy=>copy.bytes),[123]);
  const remaining=libraryAlbumCards([track],[albumB],aliases);
  assert.deepEqual(remaining.map(card=>[card.count,card.trackIds]),[[1,[id]]]);
+});
+
+
+test('Al superar la cota de alias se descarta la lectura completa y no se resuelve por etiquetas',async()=>{
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'IDBKeyRange');
+ Object.defineProperty(globalThis,'IDBKeyRange',{configurable:true,value:{bound:()=>({})}});
+ try{
+  const response=(count:number,values:unknown[])=>{
+   assert.equal(count,2001);
+   const request={result:values,onsuccess:null as (()=>void)|null};
+   queueMicrotask(()=>request.onsuccess?.());
+   return request;
+  };
+  const rows=Array.from({length:2001},(_,index)=>index);
+  const store={getAllKeys:(_:unknown,count:number)=>response(count,rows),getAll:(_:unknown,count:number)=>response(count,rows)} as unknown as IDBObjectStore;
+  await assert.rejects(readSongAliasesFrom(store),/song-alias-limit/);
+  const choice={id:'itunes:42:1:1:81',source:'itunes' as const,title:'Pista 1',artist:'Artista',album:'Álbum',duration:45};
+  assert.equal(createSongResolver([local(1)],null)(choice),null);
+ }finally{
+  if(previous)Object.defineProperty(globalThis,'IDBKeyRange',previous);else Reflect.deleteProperty(globalThis,'IDBKeyRange');
+ }
 });

@@ -55,7 +55,7 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   if(seed||ambiguous||exactAlias||singleAlias||twoTrackAliasPlaylist||spotifyAlbum||aliasOtherAsset||corrupt||purge){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async ({ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,spotifyAlbum,aliasOtherAsset,corrupt,purge,idb})=>{const module=await import('/__musicflow/importer/seed.js');return purge?module.seedPhysicalPurge():corrupt?module.seedCorruptManifest():aliasOtherAsset?module.seedAliasWithOtherValidAsset():spotifyAlbum?module.seedSpotifyAlbum(idb):twoTrackAliasPlaylist?module.seedTwoTrackAliasPlaylist(idb):singleAlias?module.seedSingleExactAlias():exactAlias?module.seedExactAlias():ambiguous?module.seedAmbiguous():module.seed(idb);},{ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,spotifyAlbum,aliasOtherAsset,corrupt,purge,idb});}
   if(artistCatalogueSetup){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async()=>{const module=await import('/__musicflow/importer/seed.js');await module.seedArtistCatalogueSetup();});}
   await page.goto(origin+'/');
-  if(!/^6[0-5] /.test(groupName))await nav('Buscar').click();
+  if(!/^6[0-6] /.test(groupName))await nav('Buscar').click();
   await idle();
   if(sw){await page.evaluate(async()=>{await navigator.serviceWorker.register('/sw.js',{type:'module'});await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(r=>navigator.serviceWorker.addEventListener('controllerchange',r,{once:true}));});await idle();}
  }
@@ -80,7 +80,7 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
    // Search keeps singles in Songs; an artist's catalogue still lists releases.
    await panel().locator('[data-catalog-kind="artist"]').first().click();await page.locator('.artist-album-grid').getByRole('button').filter({hasText:'MUSIC_FLOW Album'}).first().click();return;
   }
-  if(/^6[0-5] /.test(groupName)){
+  if(/^6[0-6] /.test(groupName)){
    await page.waitForFunction(()=>{const panel=MUSIC_FLOW.panel();return !panel.suggestionsPending&&panel.suggestions.some(row=>row.kind==='album');});
   }
   await panel().locator('[data-catalog-kind="album"]').first().click();
@@ -459,6 +459,33 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   await details.getByText('Llegaste al máximo de 500 álbumes guardados. Quita alguno de Biblioteca para guardar este.',{exact:true}).waitFor();
   assert.equal(sends(),remote);
   return {favorite:true,aliasRefreshed:true,limit:500,telegramSearches:0};
+ });
+ await group('66 loose album card, detail and removal agree after a saved album absorbs part of a tag group',async()=>{
+  await fresh();await completeRequiredSetup();
+  const ids=await page.evaluate(async forceIdb=>(await import('/__musicflow/importer/seed.js')).seedPartiallyCoveredTagAlbum(forceIdb),process.env.MUSIC_FLOW_ENGINE==='webkit');
+  await page.reload();
+  await page.waitForFunction(()=>{try{return MUSIC_FLOW.panel().canSearch;}catch{return false;}});
+  await nav('Biblioteca').click();
+  const cards=page.locator('.library-grid .collection-card').filter({hasText:'MUSIC_FLOW Album'});
+  await cards.nth(1).waitFor();
+  assert.equal(await cards.count(),2);
+  await cards.nth(1).click();
+  const detail=page.locator('.library-detail:visible');
+  await detail.getByRole('heading',{name:'MUSIC_FLOW Album',exact:true}).waitFor();
+  const titles=await detail.locator('.collection-track-main strong').allTextContents();
+  assert.deepEqual(titles,['MUSIC_FLOW Alternate']);
+  await detail.getByRole('button',{name:'Opciones de colección'}).click();
+  await button('Retirar álbum').click();
+  const dialog=page.getByRole('dialog',{name:'Eliminar álbum'});
+  assert.equal(await dialog.locator('dd').first().textContent(),'1');
+  await dialog.getByRole('checkbox').check();
+  await dialog.getByRole('button',{name:'Eliminar álbum',exact:true}).click();
+  await dialog.getByText('La colección se eliminó.',{exact:true}).waitFor();
+  const records=await state();
+  assert(records.settings.some(row=>row?.trackId===ids.loose&&row.added===false));
+  assert(!records.settings.some(row=>row?.trackId===ids.covered&&row.added===false));
+  await dialog.getByRole('button',{name:'Cerrar',exact:true}).click();
+  return {looseTracks:1,coveredTrackRetained:true,compilationPartition:true};
  });
  await runArtistGroups({group,fresh,pipeline,idle,input,panel,button,nav,report,origin,ready,fixture,playing,state,page:()=>page,context:()=>context});
  await close();

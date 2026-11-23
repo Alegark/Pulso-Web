@@ -383,7 +383,10 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   }
   const hasMissing=mode==='missing'||mode==='stale-checkpoint';
   const expectedSummary=hasMissing?'9 de 10 guardadas · 1 no existe':'30 de 30 guardadas';
-  await page.getByRole('status').filter({hasText:/^Descarga (finalizada|detenida) ·/}).waitFor({state:'attached',timeout:135000});
+  const downloadState=page.getByRole('status').filter({hasText:mode==='full'?/^Descarga (finalizada|detenida|pendiente) ·/:/^Descarga (finalizada|detenida) ·/});
+  await downloadState.waitFor({state:'attached',timeout:135000});
+  const reportedState=await downloadState.textContent();
+  assert.doesNotMatch(reportedState??'',/^Descarga pendiente ·/,reportedState??'');
   assert.equal(await handle.getByText(expectedSummary,{exact:true}).count(),1,await handle.innerText());
   receipt.completedMs=elapsed(downloadStart);
   await openDetails();

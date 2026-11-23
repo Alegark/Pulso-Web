@@ -133,7 +133,7 @@ export function resolvedAlbumTracks(detail:AlbumDetail,resolve:ReturnType<typeof
  });
 }
 
-export function libraryAlbumCards(tracks:readonly Track[],albums:readonly SavedAlbum[],aliases?:SongAliases,allTracks=tracks){
+export function libraryAlbumCards(tracks:readonly Track[],albums:readonly SavedAlbum[],aliases?:SongAliases|null,allTracks=tracks){
  const resolve=createSongResolver(allTracks,aliases);
  const included=new Set(tracks.map(track=>track.id));
  const saved=albums.map(album=>({

@@ -145,25 +145,17 @@ function resolveAlias(track:Track,raw:Alias,choice:SongChoice):string|null{
 export type SongAliases=ReadonlyMap<string,unknown>;
 export async function readSongAliasesFrom(store:IDBObjectStore):Promise<SongAliases>{
  const range=IDBKeyRange.bound(['music-catalog-alias',1],['music-catalog-alias',1,[]]);
- const [keys,values]=await Promise.all([request(store.getAllKeys(range)),request(store.getAll(range))]);
+ const [keys,values]=await Promise.all([request(store.getAllKeys(range,2001)),request(store.getAll(range,2001))]);
+ if(keys.length>2000||keys.length!==values.length)throw Error('song-alias-limit');
  const entries=new Map<string,unknown>();
  keys.forEach((key,index)=>{
   if(Array.isArray(key)&&key.length===3&&typeof key[2]==='string')entries.set(key[2],values[index]);
  });
  return entries;
 }
-export async function readSongAliases():Promise<SongAliases>{
- const db=await openExistingDatabase();
- try{
-  const tx=admittedTransaction(db,'settings'),done=transactionDone(tx);
-  const entries=await readSongAliasesFrom(tx.objectStore('settings'));
-  await done;
-  return entries;
- }finally{closeDatabase(db);}
-}
-
 /** Identical precedence for album projections and playback. Copies are verified separately. */
-export function createSongResolver(tracks:readonly Track[],aliases:SongAliases=new Map()){
+export function createSongResolver(tracks:readonly Track[],aliases:SongAliases|null=new Map()){
+ if(aliases===null)return (_choice:SongChoice):string|null=>null;
  const byTrack=new Map(tracks.map(track=>[track.id,track]));
  const exact=new Map<string,Track[]>();
  const durations=new Map<number,Track[]>();

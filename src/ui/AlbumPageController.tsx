@@ -26,7 +26,7 @@ const catalog=new AlbumCatalog((...args)=>fetch(...args));
 const detailKey=(detail:AlbumDetail)=>JSON.stringify(detail.tracks.map(track=>albumTrackChoice(track,detail.edition.title))); 
 interface Props {
  savedAlbums?:readonly SavedAlbum[]; fixedDetail?:SavedAlbum; libraryView?:boolean; albumOptions?:React.ReactNode;
- localTracks?:readonly Track[]; songAliases?:SongAliases; localAvailability?:ReadonlyMap<string,AvailabilityRecord>; canSaveAlbum?:boolean;
+ localTracks?:readonly Track[]; songAliases?:SongAliases|null; localAvailability?:ReadonlyMap<string,AvailabilityRecord>; canSaveAlbum?:boolean;
  saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures)=>Promise<SaveAlbumResult>;
  accountId?:string;resumeDownload?:()=>void;metadataOnly?:boolean;coordinator:AlbumCoordinator;captureInspection?:()=>SongCopyInspection|null;selectedKey:string|null;actionKey?:string|null;libraryTrackIds?:ReadonlySet<string>;playerTrackId?:string|null;title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;searchBatch?:{data:unknown;pending:boolean};backLabel?:string;scope:string;visible:boolean;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;providers:readonly OrderedProvider[];capture:()=>SongPlaybackAttempt|null;management:(id:string)=>SongManagement|null;onBack:()=>void;onChoose:(choice:SongChoice)=>void;songActions:React.ReactNode}
 const metadataIdentity=(props:Props)=>JSON.stringify([props.title,props.artist,props.editionId??null,props.scope]);
@@ -77,7 +77,7 @@ export function AlbumPageController(props:Props){
   if(!props.visible||fixedDetail)return;
   const identity=metadataIdentity(props);
   if(detail&&loadedMetadata.current===identity)return;
-  const abort=new AbortController();metadata.current=abort;setDetail(null);setEditions([]);setRetryTarget(undefined);setStatus('Buscando ediciones…');
+  const abort=new AbortController();metadata.current=abort;setSaveNotice('');setDetail(null);setEditions([]);setRetryTarget(undefined);setStatus('Buscando ediciones…');
   const live=()=>mounted.current&&metadata.current===abort&&!abort.signal.aborted&&latest.current.visible&&metadataIdentity(latest.current)===identity;
   if(props.editionId){void load({id:props.editionId,title:props.title,artist:props.artist??'',trackCount:0,releaseDate:null},abort,live);return()=>abort.abort();}
   if(relevantBatch?.pending)return()=>abort.abort();
@@ -105,7 +105,7 @@ export function AlbumPageController(props:Props){
   }
   if(!result.ok){if(result.reason!=='cancelled'){setStatus(catalogError(result.reason,true,undefined,result.httpStatus,usedBackup));setRetryTarget(edition);}return;}loadedMetadata.current=metadataIdentity(props);setDetail(result.value);setCopies({});inspectedEdition.current=null;const saved=props.coordinator.rows.get(result.value.edition.id),compatible=saved?.key===runKey(result.value);rows.current=compatible?saved.rows.map(r=>({...r})):result.value.tracks.map(()=>({state:'unattempted',trackId:null,confirmed:false,message:''}));setProgress(compatible?{rows:rows.current,message:'Comprueba las copias antes de continuar.'}:null);setStatus('');
  }
- const chooseEdition=(edition:AlbumEdition)=>{if(!active())return;stop();metadata.current?.abort();const abort=new AbortController();metadata.current=abort;setDetail(null);const identity=metadataIdentity(props);const live=()=>mounted.current&&metadata.current===abort&&!abort.signal.aborted&&latest.current.visible&&metadataIdentity(latest.current)===identity;void load(edition,abort,live);};
+ const chooseEdition=(edition:AlbumEdition)=>{if(!active())return;stop();metadata.current?.abort();const abort=new AbortController();metadata.current=abort;setSaveNotice('');setDetail(null);const identity=metadataIdentity(props);const live=()=>mounted.current&&metadata.current===abort&&!abort.signal.aborted&&latest.current.visible&&metadataIdentity(latest.current)===identity;void load(edition,abort,live);};
  const localTrackIndex=React.useMemo(()=>new Map(props.localTracks?.map(track=>[track.id,track])),[props.localTracks]);
  const running=props.coordinator.running;
  const inspectionMatches=React.useMemo(()=>!running&&detail&&props.libraryView?resolvedAlbumTracks(detail,

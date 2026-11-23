@@ -164,7 +164,10 @@ export async function savedAlbumContracts(){
  ensure(!(await readSavedAlbums(account)).some(album=>album.edition.id===id));
  ensure(await saveAlbumRecord(account,detail,()=>true,update)===null);
  ensure((await saveAlbumRecord(account,detail,()=>true))?.version===1);
- return {lock:true,account:true,failures:true,conflict:true,removed:true,corrupt:true};
+ let checks=0;
+ const newDetail={edition:{...detail.edition,id:79},tracks:detail.tracks.map(track=>({...track,releaseId:79}))};
+ ensure(await saveAlbumRecord(account,newDetail,()=>++checks<4).catch(error=>error.message)==='account-changed');
+ return {lock:true,account:true,countGuard:true,failures:true,conflict:true,removed:true,corrupt:true};
 }
 
 export async function correctAlbumTrack(id:string){
@@ -229,4 +232,26 @@ export async function seedSavedAlbumLimit(){
   }
   await done;
  }finally{closeDatabase(db);}
+}
+
+export async function seedPartiallyCoveredTagAlbum(forceIdb:boolean){
+ const {unknownLocalAlbum}=await import('../../../src/library/album-metadata');
+ const {activeLibraryAccount}=await import('../../../src/accounts/library-local');
+ const {saveAlbumRecord}=await import('../../../src/library/saved-albums');
+ const {writeRecord}=await import('../../../src/storage/database');
+ const account=await activeLibraryAccount();
+ if(!account)throw Error('TESTONLY account missing');
+ const {tracks:[covered,loose]}=await seed(forceIdb);
+ const first=await readRecord<Track>('tracks',covered),second=await readRecord<Track>('tracks',loose);
+ if(!first?.audioFingerprint||!second||!first.artist||!first.album)throw Error('TESTONLY album missing');
+ const known=unknownLocalAlbum('absent');
+ known.source.compilation={state:'known',value:true,evidence:{kind:'embedded-id3',tag:'TCMP'}};
+ await writeRecord('tracks',covered,{...first,localAlbum:known});
+ await writeRecord('tracks',loose,{...second,album:first.album,manualOverrides:{...second.manualOverrides,album:first.album},localAlbum:unknownLocalAlbum('absent')});
+ const choice={id:'itunes:42:1:1:81',source:'itunes' as const,title:first.title,artist:first.artist,album:first.album,duration:45};
+ await rememberSongAlias(choice,covered,first.audioFingerprint.sha256,first.audioFingerprint.bytes,()=>true);
+ const saved=await saveAlbumRecord(account,{edition:{id:42,title:first.album,artist:first.artist,trackCount:1,releaseDate:null},
+  tracks:[{releaseId:42,trackId:81,disc:1,position:1,title:first.title,artist:first.artist,durationMs:45000}]},()=>true);
+ if(!saved)throw Error('TESTONLY album save failed');
+ return {covered,loose};
 }

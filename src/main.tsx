@@ -1,4 +1,4 @@
-import {libraryAlbumCards,readSavedAlbums,saveAlbumRecord,savedAlbumGroupKey,SavedAlbumLimitError,type SaveAlbumResult,type SavedAlbum,type SavedAlbumFailures} from './library/saved-albums';
+import {libraryAlbumCards,readSavedAlbumsFrom,saveAlbumRecord,savedAlbumGroupKey,SavedAlbumLimitError,type SaveAlbumResult,type SavedAlbum,type SavedAlbumFailures} from './library/saved-albums';
 import type {AlbumDetail} from './library/album-catalog';
 import type {LibraryAlbumPage} from './ui/MusicSearchController';
 import type {SongImportRejection} from './library/selected-song';
@@ -7,7 +7,7 @@ import {songTiming} from './diagnostics/song-timing';
 import {RateLimited,rateLimitedMessage} from './http/rate-limit.mjs';
 import {queuePositionKey,queuePositionRecord,withQueuePosition,type QueuePosition} from './ui/queue-position';
 import {ShellNotice} from './ui/ShellNotice';
-import {readSavedArtists,setSavedArtist} from './library/saved-artists';
+import {readSavedArtistsFrom,setSavedArtist} from './library/saved-artists';
 import {SavedArtistDetail} from './ui/SavedArtistDetail';
 import type {CatalogArtist} from './library/album-catalog';
 import {createDownloadRemovalController} from './ui/download-removal-state';
@@ -43,7 +43,7 @@ import {waitForSongAdmission} from './library/song-admission';
 import {readSongCopyStatus,type SongCopyInspection} from './library/song-copy-status';
 import {readLibraryTrackIds,addTrackToLibrary} from './library/library-membership';
 import type {BotDownloadedAudio} from './telegram/bot-search-protocol';
-import {readSongAlias,readSongAliases,readSongDisplayArtist,rememberSongAlias,type SongAliases,type SongPlaybackAttempt,type SongChoice,type SongManagement} from './library/selected-song';
+import {readSongAlias,readSongAliasesFrom,readSongDisplayArtist,rememberSongAlias,type SongAliases,type SongPlaybackAttempt,type SongChoice,type SongManagement} from './library/selected-song';
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {Ownership} from './playback/ownership';
@@ -625,7 +625,7 @@ function captureSongManagement(trackId:string,parked?:ReadonlySet<string>):SongM
 let preparedLibraryAccount:string|null=null;
 let refreshTail=Promise.resolve(),lastLibrarySyncSignature='';
 let savedArtists:CatalogArtist[]=[],savedArtistRevision=0;
-let savedAlbums:SavedAlbum[]=[],savedAlbumRevision=0,songAliases:SongAliases=new Map();
+let savedAlbums:SavedAlbum[]=[],savedAlbumRevision=0,songAliases:SongAliases|null=new Map();
 async function saveCatalogAlbum(detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures):Promise<SaveAlbumResult>{
  const accountId=accountController.getSnapshot().user?.id;
  const mutation=captureForeignMutationCurrent();
@@ -659,6 +659,19 @@ librarySync.subscribe(()=>emit());
 addEventListener('online',()=>void librarySync.sync());
 addEventListener('focus',()=>void librarySync.sync());
 librarySync.startPolling();
+async function readLibraryOrganization(accountId:string){
+ const db=await openExistingDatabase();
+ try{
+  const tx=admittedTransaction(db,'settings'),done=transactionDone(tx),store=tx.objectStore('settings');
+  const [artists,albums,aliases]=await Promise.all([
+   readSavedArtistsFrom(store,accountId).catch(()=>null),
+   readSavedAlbumsFrom(store,accountId).catch(()=>null),
+   readSongAliasesFrom(store).catch(()=>null),
+  ]);
+  await done;
+  return {artists,albums,aliases};
+ }finally{closeDatabase(db);}
+}
 function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failurePhase?:'refresh',fromSync=false,afterImport=false){
  const accountId=accountController.getSnapshot().user?.id??null,auth=accountEpoch;const scope=scopeId,proof=control.proof,admission=databaseGeneration,activityScope=control.activity.scope(),diagnostic=parent===undefined?beginDiagnostic('refresh-library'):parent;
  const current=()=>auth===accountEpoch&&accountId===(accountController.getSnapshot().user?.id??null)&&scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&activityScope();
@@ -693,12 +706,12 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
   }));
  }
  const artistRevision=savedArtistRevision,albumRevision=savedAlbumRevision;
- const [nextSavedArtists,nextSavedAlbums,nextSongAliases]=accountId?await Promise.all([readSavedArtists(accountId).catch(()=>null),readSavedAlbums(accountId).catch(()=>null),readSongAliases().catch(()=>null)]):[[],[],new Map()];
+ const organization=accountId?await readLibraryOrganization(accountId).catch(()=>null):{artists:[],albums:[],aliases:new Map()};
  let estimate;try{estimate=await navigator.storage.estimate();}catch{estimate=null;}
  if(!current())return;
- if(nextSavedArtists&&artistRevision===savedArtistRevision)savedArtists=nextSavedArtists;
- if(nextSavedAlbums&&albumRevision===savedAlbumRevision)savedAlbums=nextSavedAlbums;
- if(nextSongAliases)songAliases=nextSongAliases;
+ if(organization?.artists&&artistRevision===savedArtistRevision)savedArtists=organization.artists;
+ if(organization?.albums&&albumRevision===savedAlbumRevision)savedAlbums=organization.albums;
+ songAliases=organization?.aliases??null;
  diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'succeeded'});
  storedAssets=[...assets.values()].filter(validAsset);tracks=nextTracks;addedTrackIds=nextAddedTrackIds;playlists=nextPlaylists;operations=nextOperations;importProblems=nextProblems;storageEstimate=estimate;
  availability=nextAvailability;
@@ -1252,6 +1265,11 @@ function App(){
  const selected=playlists.find(l=>l.id===listId);
  const libraryTracks=React.useMemo(()=>tracks.filter(t=>addedTrackIds.has(t.id)),[tracks,addedTrackIds]);
  const libraryAlbums=React.useMemo(()=>libraryAlbumCards(libraryTracks,savedAlbums,songAliases,tracks),[libraryTracks,savedAlbums,songAliases,tracks]);
+ const looseLibraryAlbums=React.useMemo(()=>libraryAlbums.filter(group=>!group.saved),[libraryAlbums]);
+ const albumCoverTracks=(ids:readonly string[])=>{
+  const id=ids.find(id=>availability.get(id)?.state==='available')??ids[0];
+  return id?[id]:[];
+ };
  const recent=React.useMemo(()=>recentTracks(libraryTracks),[libraryTracks]);const homeLists=React.useMemo(()=>homePlaylists(playlists),[playlists]);
  const catalogCovers=React.useMemo(()=>{
   const covers=new Map<string,string>();
@@ -1296,7 +1314,7 @@ function App(){
  const baseRows=React.useMemo(()=>page!=='buscar'&&selected?selected.entries.flatMap((entry,index)=>{const track=trackIndex.get(entry.trackId);return track?[{track,key:entry.id,playlistIndex:index}]:[];}):(favorites?tracks.filter(t=>t.favorite):libraryTracks).map(track=>({track,key:track.id,playlistIndex:-1})),[selected,libraryTracks,tracks,trackIndex,page,favorites]);
  const baseTracks=React.useMemo(()=>baseRows.map(row=>row.track),[baseRows]);
  const albumMetadata=React.useMemo(()=>new Map(tracks.map(t=>[t.id,resolveLocalAlbumMetadata(t)])),[tracks]);
- const groups=React.useMemo(()=>groupMode==='artists'?groupArtists(baseTracks):groupMode==='albums'?groupAlbums(baseTracks):[],[groupMode,baseTracks]);
+ const groups=React.useMemo(()=>groupMode==='artists'?groupArtists(baseTracks):groupMode==='albums'?(destination==='biblioteca'&&!selected&&!favorites?looseLibraryAlbums:groupAlbums(baseTracks)):[],[groupMode,baseTracks,destination,selected,favorites,looseLibraryAlbums]);
  const activeGroup=selectGroup(groups,groupKey);
  React.useEffect(()=>{if(groupKey&&!activeGroup)setGroupKey('');},[groupKey,activeGroup]);
  const visible=React.useMemo(()=>{const ids=activeGroup?new Set(activeGroup.trackIds):null;const rows=baseRows.filter(({track:t})=>(!ids||ids.has(t.id))&&matchesShellTrack(t,views[destination],availability));return groupMode==='albums'&&activeGroup&&!activeGroup.unknown?orderAlbumRows(rows):rows;},[baseRows,activeGroup,views,destination,groupMode,availability]);
@@ -1305,11 +1323,11 @@ function App(){
  const routeTotals=React.useMemo(()=>{function routeSelection(route:'buscar'|'biblioteca'){
   const v=views[route],list=route==='biblioteca'?playlists.find(l=>l.id===v.listId):undefined;
   const rows=list?list.entries.flatMap(e=>{const t=trackIndex.get(e.trackId);return t?[t]:[];}):v.favorites?tracks.filter(t=>t.favorite):libraryTracks;
-  const gs=v.groupMode==='artists'?groupArtists(rows):v.groupMode==='albums'?groupAlbums(rows):[];
+  const gs=v.groupMode==='artists'?groupArtists(rows):v.groupMode==='albums'?(route==='biblioteca'&&!list&&!v.favorites?looseLibraryAlbums:groupAlbums(rows)):[];
   const g=selectGroup(gs,v.groupKey),ids=g?new Set(g.trackIds):null;
   return rows.filter(t=>(!ids||ids.has(t.id))&&matchesShellTrack(t,v,availability)).length;
  }
- return {biblioteca:routeSelection('biblioteca'),buscar:routeSelection('buscar')};},[views,playlists,libraryTracks,trackIndex,tracks,availability]);
+ return {biblioteca:routeSelection('biblioteca'),buscar:routeSelection('buscar')};},[views,playlists,libraryTracks,trackIndex,tracks,availability,looseLibraryAlbums]);
  const libraryPagination=useLibraryPage(routeTotals.biblioteca,JSON.stringify(views.biblioteca));
  const searchPagination=useLibraryPage(routeTotals.buscar,JSON.stringify(views.buscar));
  const pagination=destination==='buscar'?searchPagination:libraryPagination;
@@ -1514,7 +1532,7 @@ function App(){
  <div className="library-grid">{(libraryTab===null||libraryTab==='playlists')&&<><button className="collection-card" onClick={event=>{showLibrary({favorites:true},event.currentTarget);}}><span className="collection-card__art favorite-art"><CollectionCover favorite trackIds={[]}/></span><strong>Favoritos</strong><span>Playlist automática · {tracks.filter(t=>t.favorite).length} canciones</span></button>{playlists.map(list=><button className="collection-card" key={list.id} onClick={event=>{showLibrary({listId:list.id},event.currentTarget);}}><span className="collection-card__art"><CollectionCover trackIds={list.entries.map(entry=>entry.trackId)} enabled={page==='biblioteca'&&!settingsOpen&&!libraryDetail}/></span><strong>{list.name}</strong><span>Playlist · {list.entries.length} canciones</span></button>)}</>}
  {(libraryTab===null||libraryTab==='albums')&&libraryAlbums.map(group=><button className="collection-card" key={group.key} onClick={event=>{
   showLibrary(group.saved?{}:{groupMode:'albums',groupKey:group.key},event.currentTarget,group.saved?{album:{title:group.label,artist:group.artist,editionId:group.editionId,artworkUrl:group.artworkUrl},saved:true,scope:libraryAlbumScope,opener:event.currentTarget}:null);
- }}><span className="collection-card__art"><CollectionCover variant="album" artworkUrl={group.saved?group.artworkUrl:group.trackIds.map(id=>catalogCovers.get(id)).find(Boolean)} trackIds={[...group.trackIds.filter(id=>availability.get(id)?.state==='available'),...group.trackIds.filter(id=>availability.get(id)?.state!=='available')]} enabled={page==='biblioteca'&&!settingsOpen&&!libraryDetail&&!libraryArtist}/></span><strong>{group.label}</strong><span>Álbum · {group.count} canciones</span></button>)}
+ }}><span className="collection-card__art"><CollectionCover variant="album" artworkUrl={group.saved?group.artworkUrl:group.trackIds.map(id=>catalogCovers.get(id)).find(Boolean)} trackIds={albumCoverTracks(group.trackIds)} enabled={page==='biblioteca'&&!settingsOpen&&!libraryDetail&&!libraryArtist}/></span><strong>{group.label}</strong><span>Álbum · {group.count} canciones</span></button>)}
  {(libraryTab===null||libraryTab==='artists')&&savedArtists.map(artist=><button className="collection-card" key={'artist:'+artist.id} onClick={event=>{
   libraryArtistReturn.current={opener:event.currentTarget,scroll:window.scrollY};
   setLibraryArtistSelection({id:artist.id,accountId:account.user!.id,proof:control.proof});
@@ -1532,7 +1550,7 @@ function App(){
   }}/>}
  <div ref={setLibraryAlbumTarget} hidden={!albumPage} className="library-detail"/>
  <div hidden={!libraryDetail||!!albumPage} className="library-detail"><BackButton className="collection-back" onClick={closeLibraryDetail}>Volver a Biblioteca</BackButton><CollectionHeader title={collectionTitle} kind={selected?'Playlist personal':favorites?'Playlist automática':activeGroup?.kind==='album'?'Álbum':'Colección'} count={visible.length} duration={visible.length&&visible.every(({track})=>Number.isFinite(track.duration)&&track.duration>0)?visible.reduce((sum,{track})=>sum+track.duration,0):null}
-  artwork={<CollectionCover variant={activeGroup?.kind==='album'&&!selected&&!favorites?'album':'playlist'} artworkUrl={activeGroup?.kind==='album'&&!selected&&!favorites?activeGroup.trackIds.map(id=>catalogCovers.get(id)).find(Boolean):undefined} trackIds={visible.map(({track})=>track.id)} favorite={!selected&&favorites} enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>}
+  artwork={<CollectionCover variant={activeGroup?.kind==='album'&&!selected&&!favorites?'album':'playlist'} artworkUrl={activeGroup?.kind==='album'&&!selected&&!favorites?activeGroup.trackIds.map(id=>catalogCovers.get(id)).find(Boolean):undefined} trackIds={activeGroup?.kind==='album'&&!selected&&!favorites?albumCoverTracks(activeGroup.trackIds):visible.map(({track})=>track.id)} favorite={!selected&&favorites} enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>}
   playing={owner&&collectionQueueMatches&&player.state==='playing'} canPlay={owner&&!busy&&databaseState==='ready'&&!copyRemovalBlocked()&&sourceReview.canPrepare()&&!!visible.length} busy={busy} onPlay={()=>void playCollection()}
   shuffle={collectionQueueMatches&&!!player.shuffleOrder} canShuffle={owner&&!busy&&!collectionBlocked()&&collectionQueueMatches&&!!player.current} onShuffle={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked())player.setShuffle(!player.shuffleOrder);}}
   download={<div className="collection-download-slot" ref={setCollectionDownloadTarget}/>}
