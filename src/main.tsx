@@ -533,7 +533,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
     if(checked.state==='missing')return null;
     if(checked.state!=='valid')throw Error('No se pudo verificar la copia local. Revisa Almacenamiento antes de repetir la descarga.');
     if(!validAudioFingerprint(track.audioFingerprint)||checked.asset.sha256!==track.audioFingerprint.sha256||checked.asset.bytes!==track.audioFingerprint.bytes)throw Error('La copia local no coincide con la identidad de audio guardada. Revisa Almacenamiento.');
-    if(repair&&(choice.source==='itunes'||choice.source==='musicbrainz')&&!catalogRecordingId(track)){
+    if(repair&&(choice.source==='itunes'||choice.source==='musicbrainz')&&catalogRecordingId(track)!==choice.id){
      await rememberSongAlias(choice,track.id,track.audioFingerprint.sha256,track.audioFingerprint.bytes,()=>live()&&token.current());
     }
     return track.id;

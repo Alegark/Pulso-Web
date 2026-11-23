@@ -378,6 +378,9 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   await button('Volver a Biblioteca').click();await card.waitFor();
   assert.equal(await card.count(),1);
   await card.click();await detail.getByText('2 de 4 descargadas',{exact:true}).waitFor();
+  await detail.locator('.album-tracks > li').first().getByRole('button').click();
+  await page.waitForFunction(()=>MUSIC_FLOW.audio[0]&&!MUSIC_FLOW.audio[0].paused);
+  await idle();
   await button('Retirar álbum').click();
   const dialog=page.getByRole('dialog',{name:'Eliminar álbum'});
   await dialog.getByRole('checkbox').check();
@@ -388,6 +391,7 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   assert.equal(result.assets.length,2);
   assert(result.tracks.some(track=>track.catalogChoice?.source==='spotify'));
   assert(!result.settings.some(row=>row?.edition?.id===42));
+  assert(result.settings.some(row=>row?.key?.startsWith('["itunes:42:1:1:81"')&&row.trackId===result.tracks.find(track=>track.catalogChoice?.source==='spotify')?.id));
   assert(result.settings.some(row=>row?.trackId===result.tracks.find(track=>track.catalogChoice?.source==='spotify')?.id&&row?.added===false));
   return {spotify:true,partial:2,protectedCopies:2,returnedToLibrary:true};
  });
@@ -403,8 +407,17 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   await button('Descargar faltantes').click();
   await detail.getByText('2 de 2 descargadas',{exact:true}).waitFor();
   assert.equal(sends(),before);
-  assert.equal((await state()).assets.length,1);
-  return {cached:2,retained:2,telegramSearches:0};
+  const retained=await state();
+  assert.equal(retained.assets.length,1);
+  await idle();
+  await page.evaluate(async id=>(await import('/__musicflow/importer/seed.js')).correctAlbumTrack(id),retained.tracks[0].id);
+  await page.reload();
+  await page.waitForFunction(()=>{try{return MUSIC_FLOW.panel().canSearch;}catch{return false;}});
+  await nav('Biblioteca').click();
+  await page.locator('.library-grid .collection-card').filter({hasText:'Álbum · 2 canciones'}).click();
+  await detail.getByText('No descargada',{exact:true}).nth(1).waitFor();
+  await detail.getByText('0 de 2 descargadas',{exact:true}).waitFor();
+  return {cached:2,retained:2,manualCorrectionRejected:true,telegramSearches:0};
  });
  await runArtistGroups({group,fresh,pipeline,idle,input,panel,button,nav,report,origin,ready,fixture,playing,state,page:()=>page,context:()=>context});
  await close();

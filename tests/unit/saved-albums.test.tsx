@@ -99,7 +99,7 @@ test('MusicBrainz conserva la URL de la misma edición y acepta espacios válido
   assert.equal(copied?.edition.artworkUrl,origin+artworkUrl);
   assert.equal(copied.tracks[0].title,'Pista\tválida');
   assert.equal(libraryAlbumCards([{
-   ...local(1),album:null,catalogRelease:undefined,
+   ...local(1),album:' ',catalogRelease:undefined,
    catalogChoice:{id:'musicbrainz:'+id.slice(12)+':1:1:'+recording.slice(12),source:'musicbrainz',
     title:'Pista',artist:'Artista',album:'Título',duration:45},
   }],[])[0]?.editionId,id);

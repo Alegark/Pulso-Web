@@ -103,7 +103,7 @@ export async function saveAlbumRecord(accountId:string,detail:AlbumDetail,curren
     const [active,raw]=await Promise.all([request(store.get(ACTIVE_LIBRARY_ACCOUNT)),request(store.get(key))]);
     if(!current()||active!==accountId)throw Error('account-changed');
     const previous=copySavedAlbum(raw,record.edition.id);
-    if(failure&&(!previous||previous.savedAt!==failure.savedAt||JSON.stringify(previous.tracks)!==JSON.stringify(record.tracks))){
+    if(failure&&(!previous||previous.savedAt!==failure.savedAt||JSON.stringify([previous.edition,previous.tracks])!==JSON.stringify([record.edition,record.tracks]))){
      await done;
      return null;
     }

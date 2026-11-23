@@ -109,6 +109,7 @@ export async function seedSpotifyAlbum(forceIdb=false){
  const spotifyId='A'.repeat(22);
  const catalogChoice={source:'spotify' as const,id:'spotify:'+spotifyId,title:track.title,artist:track.artist,album:track.album,duration:track.duration};
  await writeRecord('tracks',id,{...track,manualOverrides:{},catalogChoice});
+ await writeRecord('settings',libraryMembershipKey(id),makeLibraryMembership(id,true));
  const account=await activeLibraryAccount()??'11111111-1111-4111-8111-111111111111';
  const input=JSON.stringify([track.title,track.artist,track.album,catalogChoice.duration,catalogChoice.id,catalogChoice.source,
   catalogChoice.title,catalogChoice.artist,catalogChoice.album,catalogChoice.duration]);
@@ -144,6 +145,10 @@ export async function savedAlbumContracts(){
  const update={savedAt:saved.savedAt,failedTracks:['itunes:77:1:1:78']};
  const changed=await saveAlbumRecord(account,detail,()=>true,update);
  ensure(changed?.savedAt===saved.savedAt&&changed?.failedTracks.length===1);
+ const replaced={...detail,tracks:[{...detail.tracks[0],title:'Synthetic replacement'}]};
+ await writeRecord('settings',savedAlbumKey(account,id),{...changed,...replaced});
+ ensure(await saveAlbumRecord(account,detail,()=>true,update)===null);
+ await writeRecord('settings',savedAlbumKey(account,id),changed);
  const context={current:()=>true,signal:new AbortController().signal};
  const selection={kind:'album' as const,scope:'global-library' as const,key:savedAlbumGroupKey(id)};
  const consent={confirm:true as const,acceptPossibleOnlyCopyLoss:true as const};
@@ -160,4 +165,10 @@ export async function savedAlbumContracts(){
  ensure(await saveAlbumRecord(account,detail,()=>true,update)===null);
  ensure((await saveAlbumRecord(account,detail,()=>true))?.version===1);
  return {lock:true,account:true,failures:true,conflict:true,removed:true,corrupt:true};
+}
+
+export async function correctAlbumTrack(id:string){
+ const track=await readRecord<Track>('tracks',id);
+ if(!track)throw Error('fixture track missing');
+ await editTrack(id,track.revision,{title:'Síntesis corregida'});
 }
