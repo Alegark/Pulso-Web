@@ -848,3 +848,24 @@ El manifiesto autoritativo de 288 archivos y 67415 bytes quedó en `.local/test-
 - Investigar el HTTP 503 observado con sesión iniciada en `/api/account-profile` y `/api/account-library`.
 - Investigar la regresión desde `ac89e5a` en Chromium para `artwork`, `artwork-containers`, `opfs` y `library`.
 - Resolver el fallo del entorno WPE de WebKit en la batería general.
+
+### Álbumes de iTunes con videos y extras publicados · 2026-11-23
+
+Cloudflare Workers Free, USD 0, sirve [v58](https://pulso-web.pruebassoftware.workers.dev/releases/9a6348b7f4ade06d.html), versión `69b2d84d-991b-4b18-b47a-db799ea6d27e`, despliegue `45917b70-09ae-4f13-9854-c0e703bd4ec9` al 100 % desde `2026-11-23T16:38:27.515Z` según el MCP oficial. Coincidieron los bytes y el SHA-256 del Worker, los 13 bindings, los límites y la configuración de ejecución. Se conservaron Turnstile y los secretos. El freeze retuvo 11 publicaciones anteriores y el inventario heredado. Se retiraron 0 rutas. Cloudflare solicitó 7 archivos. [PR #18](https://github.com/Alegark/Pulso-Web/pull/18), apilada sobre #17. Commit de producto publicado: `38dd3c6f3d28956c615f8d880fcc70cb28ae46c3`.
+
+El detalle de iTunes acepta videos y extras cuando se puede verificar la cobertura de las canciones por disco. Muestra sólo las canciones ordenadas y avisa cuando el catálogo entrega una lista incompleta o incoherente. En iTunes US, Femme Fatale Vol. 2 devolvió 20 canciones y Weezer (Deluxe Edition) devolvió 24 con el parser publicado. Ambas consultas fueron GET anónimos, separados por al menos 3,1 s.
+
+Pasaron los tipos de aplicación y pruebas, lint, 915 pruebas unitarias, 73 de servidor, 10 de Python, build de producción y simulación de Wrangler. En Chromium y WebKit pasaron 86/86 casos de descarga y reanudación, 12/12 escenarios de Telegram sintético y 12/12 casos de página de álbum, con 43, 6 y 6 por motor.
+
+HTTPS confirmó `latest.json`, el HTTP 307 hacia la ruta sin `.html`, el HTTP 200 y el meta `pulso-release` con valor `9a6348b7f4ade06d`. Coincidieron bytes y SHA-256 de 288/288 rutas estáticas, incluido `sw.js`. Las 52 entradas históricas, incluidas v57, v56 y v55, sirvieron el bundle actual con cabeceras de navegación. Se conservaron `turnstileSiteKey` y `challenges.cloudflare.com` en la CSP. Perfil y biblioteca anónimos devolvieron HTTP 401.
+
+El manifiesto autoritativo de 291 archivos y 69040 bytes quedó en `.local/test-evidence/album-catalog-extras-release/site-manifest.json`, SHA-256 `b5afeef132c3a6efc5bf869c5476ffc53f29a716445fbac05ab8388272047832`, con fecha MCP `2026-11-23T16:38:27.515Z`. Los recibos compactos quedan en el mismo directorio. P0-W sigue abierto.
+
+- Medir el comportamiento y verificar la aceptación de álbumes en iPhone físico. Sigue pendiente la aceptación con Telegram real.
+- Revisar el filtro por conteo del respaldo de MusicBrainz cuando el catálogo de iTunes incluye extras en su total.
+- Resolver los videos intercalados cuyos conteos contradicen los de las canciones. La versión publicada rechaza esas respuestas como incompletas.
+- Inspeccionar etiquetas antes de descargar el archivo completo, incluidos M4A con el átomo `moov` al final.
+- Evaluar modo inline, consultas en paralelo y cambios de coincidencia según el diagnóstico real.
+- Investigar el HTTP 503 observado con sesión iniciada en `/api/account-profile` y `/api/account-library`.
+- Investigar la regresión desde `ac89e5a` en Chromium para `artwork`, `artwork-containers`, `opfs` y `library`.
+- Resolver el fallo del entorno WPE de WebKit en la batería general.
