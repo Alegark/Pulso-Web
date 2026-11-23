@@ -47,7 +47,7 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   context.on('page',p=>p.on('pageerror',e=>report.pageErrors.push({group:groupName,message:e.message})));
   if(artistCatalogueSetup)await context.addInitScript(()=>Object.defineProperty(navigator,'onLine',{get:()=>false}));
   page=await context.newPage();page.setDefaultTimeout(18000);
-  if(seed||ambiguous||exactAlias||singleAlias||twoTrackAliasPlaylist||spotifyAlbum||aliasOtherAsset||corrupt||purge){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async ({ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,spotifyAlbum,aliasOtherAsset,corrupt,purge,idb})=>{const module=await import('/__musicflow/importer/seed.js');return purge?module.seedPhysicalPurge():corrupt?module.seedCorruptManifest():aliasOtherAsset?module.seedAliasWithOtherValidAsset():spotifyAlbum?module.seedSpotifyAlbum(idb):twoTrackAliasPlaylist?module.seedTwoTrackAliasPlaylist(idb):singleAlias?module.seedSingleExactAlias():exactAlias?module.seedExactAlias():ambiguous?module.seedAmbiguous():module.seed();},{ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,spotifyAlbum,aliasOtherAsset,corrupt,purge,idb});}
+  if(seed||ambiguous||exactAlias||singleAlias||twoTrackAliasPlaylist||spotifyAlbum||aliasOtherAsset||corrupt||purge){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async ({ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,spotifyAlbum,aliasOtherAsset,corrupt,purge,idb})=>{const module=await import('/__musicflow/importer/seed.js');return purge?module.seedPhysicalPurge():corrupt?module.seedCorruptManifest():aliasOtherAsset?module.seedAliasWithOtherValidAsset():spotifyAlbum?module.seedSpotifyAlbum(idb):twoTrackAliasPlaylist?module.seedTwoTrackAliasPlaylist(idb):singleAlias?module.seedSingleExactAlias():exactAlias?module.seedExactAlias():ambiguous?module.seedAmbiguous():module.seed(idb);},{ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,spotifyAlbum,aliasOtherAsset,corrupt,purge,idb});}
   if(artistCatalogueSetup){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async()=>{const module=await import('/__musicflow/importer/seed.js');await module.seedArtistCatalogueSetup();});}
   await page.goto(origin+'/');
   if(!/^6[0-5] /.test(groupName))await nav('Buscar').click();
@@ -74,7 +74,12 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
  async function openAlbum(){await input().press('Enter');if(groupName.startsWith('50 ')){await input().fill('MUSIC_FLOW Artist');
    // Search keeps singles in Songs; an artist's catalogue still lists releases.
    await panel().locator('[data-catalog-kind="artist"]').first().click();await page.locator('.artist-album-grid').getByRole('button').filter({hasText:'MUSIC_FLOW Album'}).first().click();return;
-  }await panel().locator('[data-catalog-kind="album"]').first().click();}
+  }
+  if(/^6[0-5] /.test(groupName)){
+   await page.waitForFunction(()=>{const panel=MUSIC_FLOW.panel();return !panel.suggestionsPending&&panel.suggestions.some(row=>row.kind==='album');});
+  }
+  await panel().locator('[data-catalog-kind="album"]').first().click();
+ }
  async function catalogue(query='MUSIC_FLOW Song'){const n=report.lrclib.filter(r=>r.method==='GET').length;await input().fill(query);await wait(()=>report.lrclib.filter(r=>r.method==='GET').length>n,'metadata response');await page.waitForFunction(()=>MUSIC_FLOW.panel().suggestions.length>0&&!MUSIC_FLOW.panel().suggestionsPending);await input().press('Enter');await panel().locator('.music-search-catalog').waitFor();}
   const select=()=>panel().locator('.music-search-catalog [data-catalog-kind="track"]').first().click();
  const playing=()=>page.waitForFunction(()=>MUSIC_FLOW.audio.length===1&&!MUSIC_FLOW.audio[0].paused&&MUSIC_FLOW.audio[0].currentTime>0.03&&/Reproduciendo/.test(MUSIC_FLOW.panel().status??''));
