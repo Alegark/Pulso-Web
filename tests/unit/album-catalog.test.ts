@@ -32,6 +32,35 @@ for (const { name, input, positions } of extrasCases) {
     assert.deepEqual(result.value.tracks.map(t => [t.disc, t.position, t.title]), positions.map(position => [1, position, `Track ${position}`]))
   })
 }
+test('keeps songs on both discs when the second disc ends with a video', () => {
+  const input = detailBody(4, { ...video(3, 3), discNumber: 2, discCount: 2 }, track(2, 2, 2), track(1, 1, 1), track(2, 1, 2))
+  const result = parseAlbumDetail(input, 42)
+  assert.ok(result.ok)
+  assert.equal(result.value.edition.trackCount, 3)
+  assert.deepEqual(result.value.tracks.map(t => [t.disc, t.position]), [[1, 1], [2, 1], [2, 2]])
+})
+const inconsistentExtras = [
+  ['missing positions on a disc with only a video', detailBody(12, track(1, 1, 2), track(1, 2, 2), { ...video(10, 10), discNumber: 2, discCount: 2 })],
+  ['video with a larger count at the last required song position', detailBody(3, song(1, 2), video(2, 3))],
+  ['video with a larger count between songs', detailBody(4, song(1, 3), video(2, 4), song(3, 3))],
+  ['video just beyond its declared count', detailBody(3, song(1, 2), video(2, 1))],
+  ['video far beyond its declared count', detailBody(3, song(1, 2), song(2, 2), video(50, 1))],
+  ['video count larger than the collection count', detailBody(3, song(1, 2), song(2, 2), video(3, 10))],
+  ['different counts declared by videos on the same disc', detailBody(5, song(1, 2), song(2, 2), video(3, 4), video(4, 5))],
+  ['sum of disc counts larger than the collection count', detailBody(5,
+    track(1, 1, 1), { ...video(2, 4), discCount: 2 },
+    track(2, 1, 2), track(2, 2, 2),
+  )],
+  ['lookup with no track rows', detailBody(3)],
+  ['song beyond its declared count', detailBody(2, song(2, 1))],
+  ['two videos at the same position', detailBody(3, song(1, 1), video(2, 3), { ...video(2, 3), trackId: 42 })],
+  ['video with a smaller count at a required song position', detailBody(3, song(2, 2), video(1, 1))],
+] as const
+for (const [name, input] of inconsistentExtras) {
+  test(`rejects ${name}`, () => {
+    assert.deepEqual(parseAlbumDetail(input, 42), { ok: false, reason: 'incomplete' })
+  })
+}
 test('rejects unverifiable coverage and collection totals with extras', () => {
   const incomplete = [
     detailBody(4, song(1, 3), song(3, 3), video(4, 4)),
