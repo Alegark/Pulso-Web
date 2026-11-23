@@ -2409,3 +2409,7 @@ T8 registra el fallo de ediciones que incluyen videos u otros extras contados po
 ### 2026-11-23 · Revisión de catálogos con extras · PR #18
 
 T8 registra la exigencia de cobertura para discos con sólo extras, la compatibilidad del conteo de cada extra con el de las canciones y el tope de la suma de conteos por disco. Se ajustó el mensaje de lista incompleta o incoherente. Pasaron 915/915 unitarias, lint, typecheck, build, 6/6 casos de la página en cada motor (Chromium y WebKit) y 5/5 lookups públicos. Queda pendiente el caso de videos intercalados cuyo conteo difiere del de las canciones, que se rechaza de forma segura. La publicación y la aceptación física siguen pendientes. P0-W permanece abierto.
+
+## 2026-11-23 · Revisión de álbumes guardados
+
+La PR 19 incorpora la revisión de T10 sobre navegación de Biblioteca, disponibilidad compartida, alias aditivos, suspensión de inspecciones durante descargas y retirada con CAS. Candidato local con 922 unitarias, 73 pruebas de servidor, 10 Python, Chromium 5/5, WebKit 4/4, build y simulación Wrangler. T10 conserva los detalles de reanudación, la repetición de descarga de playlist, el bloqueo histórico del onboarding y los bytes medidos de limpieza. P0-W sigue abierto. La validación física y la restauración de álbumes guardados entre dispositivos siguen pendientes.
