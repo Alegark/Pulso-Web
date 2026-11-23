@@ -2401,3 +2401,7 @@ Cloudflare v51 sirve `/releases/4e40ed99fc572945.html`, deployment `dce085cc-315
 ### Reanudación desde un checkpoint antiguo publicada · 2026-11-20
 
 Cloudflare v52 sirve `/releases/17532d32a861e539.html`, deployment `6c20b481-8b46-49b3-8db0-23a7596b2a7b`. En navegador local con datos sintéticos, un toque guardó 9 de 10 canciones con SHA-256 verificado y marcó únicamente la ausente. HTTPS verificó 257/257 rutas estáticas. Chromium y WebKit públicos cargaron el shell y confirmaron que la ventana de descargas permanecía oculta en reposo. T11-T12 registra el cambio, las pruebas locales y el manifiesto. La comprobación con Telegram real en iPhone físico sigue pendiente y P0-W permanece abierto.
+
+## 2026-11-23 · Detalle de álbumes con extras de iTunes
+
+T8 registra el fallo de ediciones que incluyen videos u otros extras contados por iTunes. El detalle devuelve sólo canciones y exige cobertura verificable por disco. La interfaz distingue una lista incompleta y conserva su diagnóstico. Pasaron 902 unitarias, lint, typecheck, build y los tres casos de página en cada motor (Chromium y WebKit). `album-source` pasó 10/10 en Chromium. WebKit repitió los mismos cuatro fallos de importación y OPFS de la base, con 6/10 casos aprobados. La revisión del filtro de MusicBrainz por conteo, la publicación y la aceptación física siguen pendientes. P0-W permanece abierto.
