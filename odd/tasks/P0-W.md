@@ -2417,3 +2417,7 @@ La PR 19 incorpora la revisión de T10 sobre navegación de Biblioteca, disponib
 ## 2026-11-23 · Protección de copias entre ediciones guardadas
 
 La segunda revisión de la PR 19 preserva pertenencia y audio compartidos al retirar una edición. T10 registra la reproducción del fallo en `a2b926c`, el cotejo antes de confirmar y la verificación de huella del álbum restante. El código revisado pasó 923 unitarias, 73 pruebas de servidor, 10 Python, Chromium 7/7, WebKit 6/6, build y simulación Wrangler. La descarga completa de playlist obtuvo 2/3 en tres ejecuciones y T10 registra la espera que falló. P0-W permanece abierto.
+
+## 2026-11-23 · Coherencia de los álbumes sueltos y cota de alias
+
+La tercera revisión de la PR 19 usa el mismo grupo de Biblioteca para la tarjeta, el detalle y la retirada de los álbumes sueltos. T10 registra la lectura conjunta de organización en IndexedDB, la protección frente a un listado de alias incompleto y la retirada física que preserva la copia compartida de otra edición. Pasaron tipos, lint, 924 unitarias, 73 de servidor, 10 Python, Chromium 8/8, WebKit 7/7, descarga completa de playlist 3/3, reanudación 2/2, build y simulación Wrangler. T10 conserva los tiempos, los avisos CSP ya presentes y los bytes retirados. P0-W y la validación física siguen abiertos.
