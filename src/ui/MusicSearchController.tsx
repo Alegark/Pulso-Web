@@ -17,7 +17,7 @@ import {parseBotSearchTarget,BOT_SEARCH_LIMIT_DIAGNOSTICS,isBotSearchLimitError,
 import {musicSearchCatalog} from '../library/music-search-catalog';
 import {compatibleSongMetadata} from '../library/song-copy-status';
 import {searchArtwork,songArtwork} from '../library/catalog-artwork';
-import {samePendingSong,songChoiceKey,readSongAliasKeys,rememberSongAlias,type SongChoice,type SongPlaybackAttempt,type SongManagement,type SongCopyInspection} from '../library/selected-song';
+import {samePendingSong,songChoiceKey,readSongAliasKeys,type SongChoice,type SongPlaybackAttempt,type SongManagement,type SongCopyInspection} from '../library/selected-song';
 import {MusicSearchPanel,type MusicSearchResultRow} from './MusicSearchPanel';
 import {albumCoordinator} from '../library/album-download';
 import type {SavedAlbum} from '../library/saved-albums';
@@ -291,8 +291,7 @@ export function MusicSearchController(props:Props){
   try{
    const local=await attempt.lookup(choice,abort.signal);if(!live(f))return;
    if(local){
-    const cached=props.tracks.find(track=>track.id===local);
-    if(cached?.audioFingerprint)await rememberSongAlias(choice,local,cached.audioFingerprint.sha256,cached.audioFingerprint.bytes,()=>live(f));
+    await attempt.rememberAlias?.(choice,local,abort.signal);
     if(!live(f))return;
     const player=latest.current;
     if(player.scopeKey===f.scope&&player.client===f.client&&f.attempt.current()&&player.playerPlaying&&player.playerTrackId===local){f.trackId=local;f.phase='done';setDownload(null);setNotice('Esta canción ya se está reproduciendo. Se conserva la reproducción actual.');pulse();return;}

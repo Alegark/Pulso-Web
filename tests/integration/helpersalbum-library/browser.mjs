@@ -50,7 +50,7 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   if(seed||ambiguous||exactAlias||singleAlias||twoTrackAliasPlaylist||spotifyAlbum||aliasOtherAsset||corrupt||purge){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async ({ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,spotifyAlbum,aliasOtherAsset,corrupt,purge,idb})=>{const module=await import('/__musicflow/importer/seed.js');return purge?module.seedPhysicalPurge():corrupt?module.seedCorruptManifest():aliasOtherAsset?module.seedAliasWithOtherValidAsset():spotifyAlbum?module.seedSpotifyAlbum(idb):twoTrackAliasPlaylist?module.seedTwoTrackAliasPlaylist(idb):singleAlias?module.seedSingleExactAlias():exactAlias?module.seedExactAlias():ambiguous?module.seedAmbiguous():module.seed();},{ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,spotifyAlbum,aliasOtherAsset,corrupt,purge,idb});}
   if(artistCatalogueSetup){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async()=>{const module=await import('/__musicflow/importer/seed.js');await module.seedArtistCatalogueSetup();});}
   await page.goto(origin+'/');
-  if(!/^6[0-3] /.test(groupName))await nav('Buscar').click();
+  if(!/^6[0-5] /.test(groupName))await nav('Buscar').click();
   await idle();
   if(sw){await page.evaluate(async()=>{await navigator.serviceWorker.register('/sw.js',{type:'module'});await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(r=>navigator.serviceWorker.addEventListener('controllerchange',r,{once:true}));});await idle();}
  }
@@ -312,9 +312,14 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   assert.equal(report.rpc.length,requests);
   await context.setOffline(false);
   // Restore the synthetic connection in the same context if the driver suspended it.
-  fixture.set({mode:'download-multi'});
+  fixture.set({mode:'download-multi',hold:'file'});
   const before=sends();
   await button('Descargar faltantes').click();
+  await wait(()=>fixture.pendingCount===1,'held album continuation');
+  await button('Volver a Biblioteca').click();
+  await saved().click();
+  await detail().getByText('1 de 4 descargadas',{exact:true}).waitFor();
+  fixture.resume();
   await detail().getByText('4 de 4 descargadas',{exact:true}).waitFor({timeout:60000});
   await idle();
   assert.equal(sends()-before,1);
@@ -342,7 +347,7 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   const row=detail().locator('.album-tracks > li').filter({hasText:'MUSIC_FLOW Second'});
   await row.getByRole('button').click();
   await page.waitForFunction(()=>MUSIC_FLOW.audio[0]&&!MUSIC_FLOW.audio[0].paused);
-  return {roster:4,offlineDownloaded:3,additionalTelegramSearches:1,finalAssets:4,coverTiles:1,playlistTiles:4,homeNavigation:true};
+  return {roster:4,offlineDownloaded:3,additionalTelegramSearches:1,finalAssets:4,coverTiles:1,playlistTiles:4,homeNavigation:true,reopenedWhileDownloading:true};
  });
  await group('61 removing an explicitly saved album with zero copies removes only its record',async()=>{
   await fresh();await completeRequiredSetup();albumMode='mixed';
@@ -418,6 +423,32 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   await detail.getByText('No descargada',{exact:true}).nth(1).waitFor();
   await detail.getByText('0 de 2 descargadas',{exact:true}).waitFor();
   return {cached:2,retained:2,manualCorrectionRejected:true,telegramSearches:0};
+ });
+ await group('64 removing one saved edition retains shared audio and rejects a stale preview',async()=>{
+  await fresh();await completeRequiredSetup();
+  return page.evaluate(async()=>(await import('/__musicflow/importer/seed.js')).sharedSavedAlbumRemoval());
+ });
+ await group('65 favorite immediately after binding an alias and actionable album limit',async()=>{
+  await fresh({seed:true,idb:process.env.MUSIC_FLOW_ENGINE==='webkit'});await completeRequiredSetup();albumMode='mixed';
+  await input().fill('MUSIC_FLOW Album');await openAlbum();
+  const details=page.locator('.album-page');
+  const row=details.locator('.album-tracks > li').first();
+  await row.getByText('Descargada',{exact:false}).waitFor();
+  const before=(await state()).tracks.find(track=>track.title===title);
+  assert(before&&!before.catalogChoice&&!before.favorite);
+  await row.getByRole('button').click();await playing();
+  await button('Abrir reproductor desde título').click();
+  await page.locator('.np-favorite').click();
+  await page.locator('.np-favorite[aria-pressed="true"]').waitFor();
+  const after=(await state()).tracks.find(track=>track.id===before.id);
+  assert(after.favorite&&after.catalogChoice?.source==='itunes'&&after.revision===before.revision+2);
+  await page.locator('.player-surface').getByRole('button',{name:'Cerrar reproductor',exact:true}).click();
+  await page.evaluate(async()=>(await import('/__musicflow/importer/seed.js')).seedSavedAlbumLimit());
+  const remote=sends();
+  await button('Añadir álbum').click();
+  await details.getByText('Llegaste al máximo de 500 álbumes guardados. Quita alguno de Biblioteca para guardar este.',{exact:true}).waitFor();
+  assert.equal(sends(),remote);
+  return {favorite:true,aliasRefreshed:true,limit:500,telegramSearches:0};
  });
  await runArtistGroups({group,fresh,pipeline,idle,input,panel,button,nav,report,origin,ready,fixture,playing,state,page:()=>page,context:()=>context});
  await close();

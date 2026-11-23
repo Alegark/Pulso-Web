@@ -1,4 +1,4 @@
-import {libraryAlbumCards,readSavedAlbums,saveAlbumRecord,savedAlbumGroupKey,type SavedAlbum,type SavedAlbumFailures} from './library/saved-albums';
+import {libraryAlbumCards,readSavedAlbums,saveAlbumRecord,savedAlbumGroupKey,SavedAlbumLimitError,type SaveAlbumResult,type SavedAlbum,type SavedAlbumFailures} from './library/saved-albums';
 import type {AlbumDetail} from './library/album-catalog';
 import type {LibraryAlbumPage} from './ui/MusicSearchController';
 import type {SongImportRejection} from './library/selected-song';
@@ -460,6 +460,9 @@ function captureBotAudioSave(){
 let selectedSongIntent=0;
 let miniPlayerArtistHint:{entryId:string;artist:string}|null=null;
 function cancelSelectedSongIntent(){++selectedSongIntent;emit();}
+async function rememberCurrentSongAlias(...args:Parameters<typeof rememberSongAlias>){
+ if(await rememberSongAlias(...args))await refresh(false,false,null);
+}
 function captureSongDownload():SongPlaybackAttempt|null {return captureSongPlayback('download');}
 function captureBatchDownload(recoverPending=false):SongPlaybackAttempt|null {return captureSongPlayback('batch',recoverPending);}
 function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',recoverPending=false):SongPlaybackAttempt|null {
@@ -496,6 +499,18 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
   }finally{token.end();}
  };
  return Object.freeze({current,waitForDownload,
+  async rememberAlias(choice:SongChoice,trackId:string,signal:AbortSignal){
+   if(choice.source==='local')return;
+   const live=()=>current()&&!signal.aborted;
+   const token=live()?control.activity.begin():null;
+   if(!token)return;
+   try{
+    const track=await readRecord<Track>('tracks',trackId);
+    if(live()&&token.current()&&validAudioFingerprint(track?.audioFingerprint)){
+     await rememberCurrentSongAlias(choice,trackId,track.audioFingerprint.sha256,track.audioFingerprint.bytes,()=>live()&&token.current());
+    }
+   }finally{token.end();}
+  },
   async inspectDownload(trackId:string,signal:AbortSignal){
    const account=accountController.getSnapshot().user?.id;
    if(!account)return null;
@@ -534,7 +549,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
     if(checked.state!=='valid')throw Error('No se pudo verificar la copia local. Revisa Almacenamiento antes de repetir la descarga.');
     if(!validAudioFingerprint(track.audioFingerprint)||checked.asset.sha256!==track.audioFingerprint.sha256||checked.asset.bytes!==track.audioFingerprint.bytes)throw Error('La copia local no coincide con la identidad de audio guardada. Revisa Almacenamiento.');
     if(repair&&(choice.source==='itunes'||choice.source==='musicbrainz')&&catalogRecordingId(track)!==choice.id){
-     await rememberSongAlias(choice,track.id,track.audioFingerprint.sha256,track.audioFingerprint.bytes,()=>live()&&token.current());
+     await rememberCurrentSongAlias(choice,track.id,track.audioFingerprint.sha256,track.audioFingerprint.bytes,()=>live()&&token.current());
     }
     return track.id;
    }finally{token.end();}
@@ -551,7 +566,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
    if(purpose==='batch'&&rememberedId!==trackId)return {state:'uncertain' as const,trackId};
    if(!current()||signal.aborted)return {state:'saved' as const,trackId};
    const token=control.activity.begin();if(!token)return {state:'uncertain' as const,trackId};
-   try{await rememberSongAlias(choice,trackId,audio.sha256,audio.bytes,()=>current()&&!signal.aborted&&token.current());return {state:'saved' as const,trackId};}
+   try{await rememberCurrentSongAlias(choice,trackId,audio.sha256,audio.bytes,()=>current()&&!signal.aborted&&token.current());return {state:'saved' as const,trackId};}
    catch{return {state:'uncertain' as const,trackId};}finally{token.end();}
   },
   async play(trackId:string,caller:()=>boolean,signal:AbortSignal){
@@ -611,20 +626,20 @@ let preparedLibraryAccount:string|null=null;
 let refreshTail=Promise.resolve(),lastLibrarySyncSignature='';
 let savedArtists:CatalogArtist[]=[],savedArtistRevision=0;
 let savedAlbums:SavedAlbum[]=[],savedAlbumRevision=0,songAliases:SongAliases=new Map();
-async function saveCatalogAlbum(detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures):Promise<SavedAlbum|null>{
+async function saveCatalogAlbum(detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures):Promise<SaveAlbumResult>{
  const accountId=accountController.getSnapshot().user?.id;
  const mutation=captureForeignMutationCurrent();
- if(!accountId||!current()||!mutation())return null;
+ if(!accountId||!current()||!mutation())return {state:'unavailable'};
  const token=control.activity.begin();
- if(!token)return null;
+ if(!token)return {state:'unavailable'};
  const live=()=>current()&&mutation()&&token.current()&&accountController.getSnapshot().user?.id===accountId;
  try{
   const record=await saveAlbumRecord(accountId,detail,live,failure);
-  if(!record||!live())return null;
+  if(!record||!live())return {state:'unavailable'};
   savedAlbums=[...savedAlbums.filter(album=>album.edition.id!==record.edition.id),record];
   savedAlbumRevision++;emit();
-  return record;
- }catch{return null;}finally{token.end();}
+  return {state:'saved',album:record};
+ }catch(error){return {state:error instanceof SavedAlbumLimitError?'limit':'unavailable'};}finally{token.end();}
 }
 async function saveCatalogArtist(artist:CatalogArtist,save:boolean,current:()=>boolean):Promise<boolean>{
  const accountId=accountController.getSnapshot().user?.id;
@@ -1403,7 +1418,7 @@ function App(){
  const selectedSavedAlbum=selectedAlbum?savedAlbums.find(album=>album.edition.id===selectedAlbum.album.editionId):undefined;
  function closeAlbumPage(){
   if(!selectedAlbum)return;
-  if(selectedAlbum.saved||selectedSavedAlbum){closeLibraryDetail();return;}
+  if(selectedAlbum.saved||selectedSavedAlbum||!activeGroup){closeLibraryDetail();return;}
   setLibraryAlbumSelection(null);
   const current=shellResponse();
   requestAnimationFrame(()=>{if(current()&&selectedAlbum.opener.isConnected)selectedAlbum.opener.focus({preventScroll:true});});
@@ -1499,7 +1514,7 @@ function App(){
  <div className="library-grid">{(libraryTab===null||libraryTab==='playlists')&&<><button className="collection-card" onClick={event=>{showLibrary({favorites:true},event.currentTarget);}}><span className="collection-card__art favorite-art"><CollectionCover favorite trackIds={[]}/></span><strong>Favoritos</strong><span>Playlist automática · {tracks.filter(t=>t.favorite).length} canciones</span></button>{playlists.map(list=><button className="collection-card" key={list.id} onClick={event=>{showLibrary({listId:list.id},event.currentTarget);}}><span className="collection-card__art"><CollectionCover trackIds={list.entries.map(entry=>entry.trackId)} enabled={page==='biblioteca'&&!settingsOpen&&!libraryDetail}/></span><strong>{list.name}</strong><span>Playlist · {list.entries.length} canciones</span></button>)}</>}
  {(libraryTab===null||libraryTab==='albums')&&libraryAlbums.map(group=><button className="collection-card" key={group.key} onClick={event=>{
   showLibrary(group.saved?{}:{groupMode:'albums',groupKey:group.key},event.currentTarget,group.saved?{album:{title:group.label,artist:group.artist,editionId:group.editionId,artworkUrl:group.artworkUrl},saved:true,scope:libraryAlbumScope,opener:event.currentTarget}:null);
- }}><span className="collection-card__art"><CollectionCover variant="album" artworkUrl={group.saved?group.artworkUrl:group.trackIds.map(id=>catalogCovers.get(id)).find(Boolean)} trackIds={group.trackIds} enabled={page==='biblioteca'&&!settingsOpen&&!libraryDetail&&!libraryArtist}/></span><strong>{group.label}</strong><span>Álbum · {group.count} canciones</span></button>)}
+ }}><span className="collection-card__art"><CollectionCover variant="album" artworkUrl={group.saved?group.artworkUrl:group.trackIds.map(id=>catalogCovers.get(id)).find(Boolean)} trackIds={[...group.trackIds.filter(id=>availability.get(id)?.state==='available'),...group.trackIds.filter(id=>availability.get(id)?.state!=='available')]} enabled={page==='biblioteca'&&!settingsOpen&&!libraryDetail&&!libraryArtist}/></span><strong>{group.label}</strong><span>Álbum · {group.count} canciones</span></button>)}
  {(libraryTab===null||libraryTab==='artists')&&savedArtists.map(artist=><button className="collection-card" key={'artist:'+artist.id} onClick={event=>{
   libraryArtistReturn.current={opener:event.currentTarget,scroll:window.scrollY};
   setLibraryArtistSelection({id:artist.id,accountId:account.user!.id,proof:control.proof});

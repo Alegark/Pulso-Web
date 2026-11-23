@@ -2,7 +2,7 @@ import React from "react";
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {copySavedAlbum,libraryAlbumCards,resolvedAlbumTracks,readSavedAlbumsFrom,savedAlbumGroupKey} from '../../src/library/saved-albums';
+import {albumRemovalMembership,copySavedAlbum,libraryAlbumCards,resolvedAlbumTracks,readSavedAlbumsFrom,savedAlbumGroupKey} from '../../src/library/saved-albums';
 import {createSongResolver,songChoiceKey} from '../../src/library/selected-song';
 import {groupStorageDownloads} from "../../src/library/storage-groups";
 import type {LocalAsset} from "../../src/library/library";
@@ -135,4 +135,23 @@ test('Almacenamiento muestra la copia Spotify asociada por alias en el álbum gu
  const aliases=new Map([[key,{...fingerprint,key,trackId:id,version:1}]]);
  const groups=groupStorageDownloads([track],[],[{id:track.assetId,bytes:123} as LocalAsset],[album],aliases);
  assert.deepEqual(groups.map(group=>[group.id,group.trackIds]),[['album:'+savedAlbumGroupKey(42),[id]]]);
+});
+
+
+test('Retirar una edición conserva la pertenencia y la copia que completa otra edición',()=>{
+ const albumA=copySavedAlbum({...snapshot,edition:{...snapshot.edition,trackCount:1},tracks:[tracks[0]]})!;
+ const albumB=copySavedAlbum({...albumA,edition:{...albumA.edition,id:99,title:'Álbum deluxe'},
+  tracks:[{...albumA.tracks[0],releaseId:99}]})!;
+ const id='11111111-1111-4111-8111-111111111111';
+ const fingerprint={sha256:'a'.repeat(64),bytes:123};
+ const track:Track={...local(1),id,audioFingerprint:{algorithm:'sha256',...fingerprint}};
+ const key=songChoiceKey({id:'itunes:99:1:1:81',source:'itunes',title:'Pista 1',artist:'Artista',album:'Álbum deluxe',duration:45})!;
+ const aliases=new Map([[key,{...fingerprint,key,trackId:id,version:1}]]);
+ const cards=libraryAlbumCards([track],[albumA,albumB],aliases);
+ const removal=albumRemovalMembership(cards,savedAlbumGroupKey(42));
+ assert.deepEqual(removal.selected?.trackIds,[id]);
+ assert.deepEqual([...removal.otherSavedTrackIds],[id]);
+ assert.deepEqual(removal.detach,[]);
+ const remaining=libraryAlbumCards([track],[albumB],aliases);
+ assert.deepEqual(remaining.map(card=>[card.count,card.trackIds]),[[1,[id]]]);
 });

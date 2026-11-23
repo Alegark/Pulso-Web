@@ -23,6 +23,7 @@ export type SongChoice=Pick<MusicCatalogChoice,'id'|'title'|'displayTitle'|'arti
 export type SongImportRejection=Extract<SongRejection,'import-tag-mismatch'|'import-duration-mismatch'>;
 export interface SongPlaybackAttempt {
  current():boolean;
+ rememberAlias?(choice:SongChoice,trackId:string,signal:AbortSignal):Promise<void>;
  addToLibrary(trackId:string,current:()=>boolean,signal:AbortSignal):Promise<boolean>;
  lookup(choice:SongChoice,signal:AbortSignal,repair?:boolean):Promise<string|null>;
  save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(bytes:number)=>void,operationId?:string):Promise<{state:'saved'|'failed'|'uncertain';trackId:string|null;retryWrite?:boolean;storageUnavailable?:boolean;rejection?:SongImportRejection}>;
@@ -204,43 +205,45 @@ export async function readSongAlias(choice:SongChoice,current:()=>boolean,allowC
  try{
   if(!current())throw Error('cancelled');
   const tx=admittedTransaction(db,['settings','tracks']),done=transactionDone(tx),store=tx.objectStore('settings');
-  const raw=await request<unknown>(store.get(aliasKey(key)));
-  if(raw!==undefined){
-   const saved=alias(raw,key);
-   if(!saved)throw Error('Alias musical inválido; revisa el almacenamiento.');
-   const track=await request<Track|undefined>(tx.objectStore('tracks').get(saved.trackId));
-   if(!current())throw Error('cancelled');
-   if(track&&track.accountId===accountId){
-    if(track.id!==saved.trackId)throw Error('La identidad de la ficha local ha cambiado.');
-    const id=resolveAlias(track,saved,choice);
-    if(id){await done;return current()?id:null;}
+  try{
+   const raw=await request<unknown>(store.get(aliasKey(key)));
+   if(raw!==undefined){
+    const saved=alias(raw,key);
+    if(!saved)throw Error('Alias musical inválido; revisa el almacenamiento.');
+    const track=await request<Track|undefined>(tx.objectStore('tracks').get(saved.trackId));
+    if(!current())throw Error('cancelled');
+    if(track&&track.accountId===accountId){
+     if(track.id!==saved.trackId)throw Error('La identidad de la ficha local ha cambiado.');
+     const id=resolveAlias(track,saved,choice);
+     if(id){await done;return current()?id:null;}
+    }
    }
-  }
-  if(!allowCompatible){await done;return null;}
-  const owned=await new Promise<Track[]>((resolve,reject)=>{
-   const tracks:Track[]=[];
-   const cursorRequest=tx.objectStore('tracks').openCursor();
-   cursorRequest.onerror=()=>reject(cursorRequest.error);
-   cursorRequest.onsuccess=()=>{
-    try{
-     if(!current())throw Error('cancelled');
-     const cursor=cursorRequest.result;
-     if(!cursor){resolve(tracks);return;}
-     const track=cursor.value as Track|undefined;
-     if(track&&track.accountId===accountId&&cursor.primaryKey===track.id)tracks.push(track);
-     if(tracks.length>LIBRARY_LIMITS.tracks){resolve([]);return;}
-     cursor.continue();
-    }catch(error){reject(error);}
-   };
-  });
-  const tracks=accountId?await projectSpotifyReleases(store,owned,accountId):owned;
-  await done;
-  if(!current())throw Error('cancelled');
-  return createSongResolver(tracks)(choice);
+   if(!allowCompatible){await done;return null;}
+   const owned=await new Promise<Track[]>((resolve,reject)=>{
+    const tracks:Track[]=[];
+    const cursorRequest=tx.objectStore('tracks').openCursor();
+    cursorRequest.onerror=()=>reject(cursorRequest.error);
+    cursorRequest.onsuccess=()=>{
+     try{
+      if(!current())throw Error('cancelled');
+      const cursor=cursorRequest.result;
+      if(!cursor){resolve(tracks);return;}
+      const track=cursor.value as Track|undefined;
+      if(track&&track.accountId===accountId&&cursor.primaryKey===track.id)tracks.push(track);
+      if(tracks.length>LIBRARY_LIMITS.tracks){resolve([]);return;}
+      cursor.continue();
+     }catch(error){reject(error);}
+    };
+   });
+   const tracks=accountId?await projectSpotifyReleases(store,owned,accountId):owned;
+   await done;
+   if(!current())throw Error('cancelled');
+   return createSongResolver(tracks)(choice);
+  }catch(error){try{tx.abort();}catch{/* Already settled. */}await done.catch(()=>{});throw error;}
  }finally{closeDatabase(db);}
 }
-export async function rememberSongAlias(choice:SongChoice,trackId:string,sha256:string,bytes:number,current:()=>boolean):Promise<void> {
- const key=songChoiceKey(choice);if(!key||choice.source==='local')return;
+export async function rememberSongAlias(choice:SongChoice,trackId:string,sha256:string,bytes:number,current:()=>boolean):Promise<boolean> {
+ const key=songChoiceKey(choice);if(!key||choice.source==='local')return false;
  const db=await openExistingDatabase();let tx:IDBTransaction|undefined;
  try{
   if(!current())throw Error('cancelled');tx=admittedTransaction(db,['settings','tracks','assets'],'readwrite');const done=transactionDone(tx);
@@ -249,12 +252,17 @@ export async function rememberSongAlias(choice:SongChoice,trackId:string,sha256:
    const asset=track?.assetId?await request<LocalAsset|undefined>(tx.objectStore('assets').get(track.assetId)):undefined;
    if(!current()||!track||track.id!==trackId||!validAsset(asset)||asset.sha256!==sha256||asset.bytes!==bytes||track.audioFingerprint?.sha256!==sha256)throw Error('conflict');
    const displayArtist=(choice.source==='itunes'||choice.source==='musicbrainz')?choice.searchArtist:choice.source==='lrclib'?choice.artist:undefined;
+   const store=tx.objectStore('settings'),saved=alias(await request(store.get(aliasKey(key))),key);
+   const next:Alias={version:1,key,trackId,sha256,bytes,...(displayArtist?.trim()&&displayArtist.length<=300?{displayArtist:displayArtist.trim()}: {})};
+   if(!current())throw Error('cancelled');
    if(!track.catalogChoice){
     const {id,source,title,artist,album,duration,searchArtist}=choice;
     tx.objectStore('tracks').put({...track,catalogChoice:{id,source,title,artist,album,duration,...(searchArtist?{searchArtist}:{})},revision:track.revision+1},track.id);
    }
-   tx.objectStore('settings').put({version:1,key,trackId,sha256,bytes,...(displayArtist?.trim()&&displayArtist.length<=300?{displayArtist:displayArtist.trim()}: {})} satisfies Alias,aliasKey(key));
-   if(!current())throw Error('cancelled');await done;
+   const aliasChanged=saved?.trackId!==trackId||saved.sha256!==sha256||saved.bytes!==bytes||saved.displayArtist!==next.displayArtist;
+   if(aliasChanged)store.put(next,aliasKey(key));
+   await done;
+   return aliasChanged||!track.catalogChoice;
   }catch(error){try{tx.abort();}catch{/* commit winner */}await done.catch(()=>{});throw error;}
  }finally{closeDatabase(db);}
 }

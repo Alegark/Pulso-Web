@@ -13,7 +13,7 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
   const publish=(blob:Blob)=>{if(!alive)return;if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=URL.createObjectURL(blob);setView({key,url:objectUrl});};
   if(enabled)void (async()=>{try{
    if(trackId){
-    const local=await readArtwork(trackId,!!storedUrl);
+    const local=await readArtwork(trackId,!!imageUrl);
     if(!alive||local.state==='unavailable')return;
     if(local.state==='ready'){
      publish(local.blob);
@@ -23,7 +23,7 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
    if(!imageUrl||navigator.onLine===false)return;
    const blob=await catalogArtwork(imageUrl);if(!alive||!blob)return;
    if(trackId){
-    const latest=await readArtwork(trackId,!!storedUrl);
+    const latest=await readArtwork(trackId,!!imageUrl);
     if(!alive||latest.state==='unavailable'||'manual' in latest&&latest.manual||latest.state==='ready'&&!preferUrl)return;
    }
    publish(blob);

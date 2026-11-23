@@ -19,6 +19,10 @@ export interface SavedAlbum extends AlbumDetail {
 }
 
 const LIMIT=500;
+export class SavedAlbumLimitError extends Error {
+ constructor(){super('saved-album-limit');}
+}
+export type SaveAlbumResult={state:'saved';album:SavedAlbum}|{state:'limit'|'unavailable'};
 export interface SavedAlbumFailures { savedAt:string; failedTracks:string[] }
 
 const prefix = (accountId:string) => ['saved-catalog-album',accountId];
@@ -26,7 +30,7 @@ export const savedAlbumKey = (accountId:string,id:CatalogId):IDBValidKey => [...
 export const savedAlbumGroupKey = (id:CatalogId) => JSON.stringify(['saved-catalog-album',id]);
 const range = (accountId:string) => IDBKeyRange.bound(prefix(accountId),[...prefix(accountId),[]]);
 const positive = (v:unknown,max=Number.MAX_SAFE_INTEGER):v is number => typeof v==='number'&&Number.isSafeInteger(v)&&v>0&&v<=max;
-const text = (v:unknown):v is string => typeof v==='string'&&!!v.trim()&&v.length<=300;
+const text = (v:unknown):v is string => typeof v==='string'&&!!v.trim()&&v.length<=300&&!/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(v);
 const date = (v:unknown):v is string => typeof v==='string'&&v.length===24&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
 const fields = (value:unknown,allowed:readonly string[]) => {
  const row=dataRecord(value);
@@ -110,7 +114,8 @@ export async function saveAlbumRecord(accountId:string,detail:AlbumDetail,curren
     if(previous&&!failure){await done;return previous;}
     if(raw===undefined){
      const count=await request(store.count(range(accountId)));
-     if(!current()||count>=LIMIT)throw Error('saved-album-limit');
+     if(!current())throw Error('account-changed');
+     if(count>=LIMIT)throw new SavedAlbumLimitError();
     }
     const next=previous?{...previous,failedTracks:record.failedTracks}:record;
     store.put(next,key);
@@ -145,4 +150,13 @@ export function libraryAlbumCards(tracks:readonly Track[],albums:readonly SavedA
   return {...group,saved:false as const,count:group.trackIds.length,trackIds:ordered.map(t=>t.id),
    editionId:editions.size===1?[...editions][0]:undefined};
  })];
+}
+
+
+// Includes shared tracks even when two different roster entries resolve to the same TrackId.
+export function albumRemovalMembership(cards:ReturnType<typeof libraryAlbumCards>,key:string){
+ const selected=cards.find(card=>card.key===key);
+ const otherSavedTrackIds=new Set(cards.flatMap(card=>card.saved&&card.key!==key?card.trackIds:[]));
+ const detach=selected?.trackIds.filter(id=>!otherSavedTrackIds.has(id))??[];
+ return {selected,otherSavedTrackIds,detach};
 }

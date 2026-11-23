@@ -172,3 +172,61 @@ export async function correctAlbumTrack(id:string){
  if(!track)throw Error('fixture track missing');
  await editTrack(id,track.revision,{title:'Síntesis corregida'});
 }
+
+export async function sharedSavedAlbumRemoval(){
+ const {saveAlbumRecord,readSavedAlbums,savedAlbumGroupKey}=await import('../../../src/library/saved-albums');
+ const {activeLibraryAccount}=await import('../../../src/accounts/library-local');
+ const {previewCollectionRemoval,confirmCollectionRemoval}=await import('../../../src/library/collection-removal');
+ const {albumTrackChoice}=await import('../../../src/library/album-acquisition');
+ const {readSongCopyStatus}=await import('../../../src/library/song-copy-status');
+ const accountId=await activeLibraryAccount();
+ if(!accountId)throw Error('TESTONLY account missing');
+ const context={current:()=>true,signal:new AbortController().signal};
+ const bytes=await(await fetch('/__musicflow/tone.wav')).arrayBuffer();
+ const imported=await importFileDetailed(new File([bytes],'tone.wav',{type:'audio/wav'}),context.signal,()=>{},{backend:'idb',accountId});
+ if(imported.kind!=='confirmed')throw Error('TESTONLY import failed');
+ const track=imported.result.track,fingerprint=track.audioFingerprint;
+ if(!fingerprint)throw Error('TESTONLY fingerprint missing');
+ const album=(id:number,title:string)=>({edition:{id,title,artist:'Artista',trackCount:1,releaseDate:null},
+  tracks:[{releaseId:id,trackId:81,disc:1,position:1,title:'Canción',artist:'Artista',durationMs:45000}]});
+ const a=album(42,'Edición estándar'),b=album(99,'Edición ampliada');
+ const choiceA=albumTrackChoice(a.tracks[0],a.edition.title),choiceB=albumTrackChoice(b.tracks[0],b.edition.title);
+ for(const choice of [choiceA,choiceB])await rememberSongAlias(choice,track.id,fingerprint.sha256,fingerprint.bytes,context.current);
+ const selection={kind:'album' as const,scope:'global-library' as const,key:savedAlbumGroupKey(42)};
+ const consent={confirm:true as const,acceptPossibleOnlyCopyLoss:true as const};
+ const unused=()=>{throw Error('Shared audio must never enter physical cleanup');};
+ const host={readContext:unused,reserve:unused,record:unused,forget:unused};
+ const ensure=(value:unknown)=>{if(!value)throw Error('shared saved album contract');};
+ await saveAlbumRecord(accountId,a,context.current);
+ const stale=await previewCollectionRemoval(selection,context);
+ ensure(stale.copiesEligible===1);
+ await saveAlbumRecord(accountId,b,context.current);
+ ensure((await confirmCollectionRemoval(stale.token,consent,context,host)).reason==='collection-changed');
+ const fresh=await previewCollectionRemoval(selection,context);
+ ensure(fresh.copiesEligible===0&&fresh.retainedShared===1);
+ const result=await confirmCollectionRemoval(fresh.token,consent,context,host);
+ ensure(result.metadata==='committed'&&result.cleanup==='complete'&&result.removed===0&&result.freedBytes===0&&result.skipped===1);
+ const saved=await readSavedAlbums(accountId);
+ const copy=await readSongCopyStatus(choiceB,context.current);
+ ensure(saved.length===1&&saved[0].edition.id===99&&copy.state==='available'&&copy.inLibrary&&copy.trackId===track.id);
+ return {cas:true,shared:1,physicalBytes:fingerprint.bytes,complete:true};
+}
+
+export async function seedSavedAlbumLimit(){
+ const {activeLibraryAccount}=await import('../../../src/accounts/library-local');
+ const {savedAlbumKey}=await import('../../../src/library/saved-albums');
+ const {admittedTransaction,openExistingDatabase,closeDatabase}=await import('../../../src/storage/database');
+ const {transactionDone}=await import('../../../src/storage/transaction-done');
+ const account=await activeLibraryAccount();
+ if(!account)throw Error('TESTONLY account missing');
+ const db=await openExistingDatabase();
+ try{
+  const tx=admittedTransaction(db,'settings','readwrite'),done=transactionDone(tx),store=tx.objectStore('settings');
+  for(let id=1000;id<1500;id++){
+   store.put({version:1,savedAt:'2026-11-23T00:00:00.000Z',failedTracks:[],
+    edition:{id,title:'Disco sintético',artist:'Artista',trackCount:1,releaseDate:null},
+    tracks:[{releaseId:id,trackId:id+500,disc:1,position:1,title:'Pista',artist:'Artista',durationMs:45000}]},savedAlbumKey(account,id));
+  }
+  await done;
+ }finally{closeDatabase(db);}
+}

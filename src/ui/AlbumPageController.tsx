@@ -18,7 +18,7 @@ import type {TelegramSessionClient} from '../telegram/session-client';
 import './album-page.css';
 import {CollectionCover} from './CollectionCover';
 import type {Track} from '../library/library';
-import {resolvedAlbumTracks,type SavedAlbum,type SavedAlbumFailures} from '../library/saved-albums';
+import {resolvedAlbumTracks,type SavedAlbum,type SavedAlbumFailures,type SaveAlbumResult} from '../library/saved-albums';
 import {createSongResolver,type SongAliases} from '../library/selected-song';
 import type {AvailabilityRecord} from '../library/shell-selectors';
 import {PlaybackIndicator} from './PlaybackIndicator';
@@ -27,7 +27,7 @@ const detailKey=(detail:AlbumDetail)=>JSON.stringify(detail.tracks.map(track=>al
 interface Props {
  savedAlbums?:readonly SavedAlbum[]; fixedDetail?:SavedAlbum; libraryView?:boolean; albumOptions?:React.ReactNode;
  localTracks?:readonly Track[]; songAliases?:SongAliases; localAvailability?:ReadonlyMap<string,AvailabilityRecord>; canSaveAlbum?:boolean;
- saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures)=>Promise<SavedAlbum|null>;
+ saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures)=>Promise<SaveAlbumResult>;
  accountId?:string;resumeDownload?:()=>void;metadataOnly?:boolean;coordinator:AlbumCoordinator;captureInspection?:()=>SongCopyInspection|null;selectedKey:string|null;actionKey?:string|null;libraryTrackIds?:ReadonlySet<string>;playerTrackId?:string|null;title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;searchBatch?:{data:unknown;pending:boolean};backLabel?:string;scope:string;visible:boolean;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;providers:readonly OrderedProvider[];capture:()=>SongPlaybackAttempt|null;management:(id:string)=>SongManagement|null;onBack:()=>void;onChoose:(choice:SongChoice)=>void;songActions:React.ReactNode}
 const metadataIdentity=(props:Props)=>JSON.stringify([props.title,props.artist,props.editionId??null,props.scope]);
 const catalogError=(reason:AlbumFailure,detail:boolean,stage?:AlbumStage,httpStatus?:number,backup=false)=>{
@@ -45,6 +45,7 @@ export function AlbumPageController(props:Props){
  const [inspecting,setInspecting]=React.useState(false),[copies,setCopies]=React.useState<Record<string,{state:'available'|'missing'|'unknown';trackId:string|null;inLibrary:boolean|null}>>({});
  const inspectionTail=React.useRef<Promise<void>>(Promise.resolve()),inspectedEdition=React.useRef<AlbumDetail|null>(null),finishedInspection=React.useRef<AlbumDetail|null>(null);
  const loadedMetadata=React.useRef<string|null>(null);
+ const [saveNotice,setSaveNotice]=React.useState('');
  const [saving,setSaving]=React.useState(false),savingRef=React.useRef(false);
  const [progress,setProgress]=React.useState<AlbumProgress|null>(null),[busy,setBusy]=React.useState(false);
  const [,refreshCoordinator]=React.useReducer(n=>n+1,0);
@@ -143,14 +144,17 @@ export function AlbumPageController(props:Props){
   if(!active()||flight.current||savingRef.current||props.coordinator.running||!detail||download&&inspecting)return;
   const metadataOperation=metadata.current;
   const sameEdition=()=>mounted.current&&latest.current.visible&&latest.current.scope===props.scope&&metadata.current===metadataOperation;
-  savingRef.current=true;setSaving(true);
+  savingRef.current=true;setSaving(true);setSaveNotice('');
   const {id:editionId,title,artist}=detail.edition;
   let saved=savedAlbum;
   try{
-   if(!saved&&props.saveAlbum)saved=await props.saveAlbum(detail,sameEdition).catch(()=>null)??undefined;
-   if(props.saveAlbum&&!saved){
-    if(sameEdition())announceDownloadMessage('No se pudo guardar el álbum en Biblioteca.');
-    return;
+   if(!saved&&props.saveAlbum){
+    const result=await props.saveAlbum(detail,sameEdition).catch(()=>null);
+    if(result?.state==='saved')saved=result.album;
+    else{
+     if(sameEdition())setSaveNotice(result?.state==='limit'?'Llegaste al máximo de 500 álbumes guardados. Quita alguno de Biblioteca para guardar este.':'No se pudo guardar el álbum en Biblioteca.');
+     return;
+    }
    }
    if(!download||!sameEdition()||!await downloadWithCurrentApp(props.accountId,{kind:'album',editionId,title,artist},sameEdition))return;
   }finally{savingRef.current=false;if(mounted.current)setSaving(false);}
@@ -192,9 +196,13 @@ export function AlbumPageController(props:Props){
  });
  React.useEffect(()=>{if(!op.current||op.current.signal.aborted||!flight.current)return;let valid=false;try{valid=flight.current.current();}catch{/* Fail closed without tying work to route visibility. */}if(!valid)stop();});
  const renderedOperation=op.current;
- const available=(id:string,index:number)=>copies[id]?.state==='available'||busy&&progress?.rows[index]?.confirmed===true;
+ const activeRun=props.coordinator.active;
+ const ownRun=running&&detail&&activeRun?.editionId===detail.edition.id&&activeRun.key===runKey(detail);
+ const activeProgress=busy||!!ownRun;
+ const visibleRows=ownRun?props.coordinator.rows.get(detail.edition.id)?.rows:progress?.rows;
+ const available=(id:string,index:number)=>copies[id]?.state==='available'||activeProgress&&visibleRows?.[index]?.confirmed===true;
  const member=(id:string,index:number)=>{
-  if(busy&&progress?.rows[index]?.confirmed)return true;
+  if(activeProgress&&visibleRows?.[index]?.confirmed)return true;
   const copy=copies[id];
   return copy?.trackId&&props.libraryTrackIds?props.libraryTrackIds.has(copy.trackId):copy?.inLibrary===true;
  };
@@ -221,10 +229,11 @@ export function AlbumPageController(props:Props){
      <CollectionDownloadButton coordinator={props.coordinator} label={albumAction} showLabel={props.libraryView} disabled={busy||saving||inspecting||!!props.saveAlbum&&!props.canSaveAlbum} onStart={()=>void addAlbum()}/>}
     {!props.coordinator.running&&!saving&&props.albumOptions}
    </div>
+   {saveNotice&&<p role="status">{saveNotice}</p>}
    {inspecting&&<p role="status">Comprobando copias locales…</p>}
    <h3 className="album-tracks-heading">Canciones</h3>
    <ol className="album-tracks">{detail.tracks.map((track,index)=>{
-    const choice=albumTrackChoice(track,detail.edition.title),copy=copies[choice.id],row=progress?.rows[index];
+    const choice=albumTrackChoice(track,detail.edition.title),copy=copies[choice.id],row=visibleRows?.[index];
     const present=available(choice.id,index),pending=props.libraryView&&!!savedAlbum&&!present;
     const failed=row?.state==='failed'||savedAlbum?.failedTracks.includes(choice.id);
     const trackId=copy?.trackId??row?.trackId;
