@@ -2413,3 +2413,7 @@ T8 registra la exigencia de cobertura para discos con sólo extras, la compatibi
 ## 2026-11-23 · Revisión de álbumes guardados
 
 La PR 19 incorpora la revisión de T10 sobre navegación de Biblioteca, disponibilidad compartida, alias aditivos, suspensión de inspecciones durante descargas y retirada con CAS. Candidato local con 922 unitarias, 73 pruebas de servidor, 10 Python, Chromium 5/5, WebKit 4/4, build y simulación Wrangler. T10 conserva los detalles de reanudación, la repetición de descarga de playlist, el bloqueo histórico del onboarding y los bytes medidos de limpieza. P0-W sigue abierto. La validación física y la restauración de álbumes guardados entre dispositivos siguen pendientes.
+
+## 2026-11-23 · Protección de copias entre ediciones guardadas
+
+La segunda revisión de la PR 19 preserva pertenencia y audio compartidos al retirar una edición. T10 registra la reproducción del fallo en `a2b926c`, el cotejo antes de confirmar y la verificación de huella del álbum restante. El código revisado pasó 923 unitarias, 73 pruebas de servidor, 10 Python, Chromium 7/7, WebKit 6/6, build y simulación Wrangler. La descarga completa de playlist obtuvo 2/3 en tres ejecuciones y T10 registra la espera que falló. P0-W permanece abierto.
