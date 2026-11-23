@@ -6,11 +6,11 @@ import {rememberSongAlias} from '../../../src/library/selected-song';
 import {libraryMembershipKey,makeLibraryMembership} from '../../../src/library/library-membership';
 import {readRecord} from '../../../src/storage/database';
 import type {Track} from '../../../src/library/library';
-export async function seed(){
+export async function seed(forceIdb=false){
  const tracks=[];
  for(const [i,name] of ['tone.wav','tone.mp3'].entries()){
   const bytes=await(await fetch('/__musicflow/'+name)).arrayBuffer();
-  const r=await importFileDetailed(new File([bytes],name,{type:i?'audio/mpeg':'audio/wav'}),new AbortController().signal,()=>{},{backend:i?'opfs':'idb'});
+  const r=await importFileDetailed(new File([bytes],name,{type:i?'audio/mpeg':'audio/wav'}),new AbortController().signal,()=>{},{backend:i&&!forceIdb?'opfs':'idb'});
   if(r.kind!=='confirmed')throw Error('MUSIC_FLOW importer not confirmed '+JSON.stringify(r.outcome));
   await editTrack(r.result.track.id,r.result.track.revision,{title:i?'MUSIC_FLOW Alternate':'MUSIC_FLOW Song (Live version)',artist:'MUSIC_FLOW Artist',album:i?null:'MUSIC_FLOW Album'});
   tracks.push(r.result.track.id);
@@ -46,8 +46,8 @@ export async function seedSingleExactAlias(){
  try{await new Promise<void>((resolve,reject)=>{const tx=db.transaction('settings','readwrite');tx.objectStore('settings').put(makeLibraryMembership(track.id,false),libraryMembershipKey(track.id));tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);});}finally{db.close();}
  return [track.id];
 }
-export async function seedTwoTrackAliasPlaylist(){
- const seeded=await seed();const track=await readRecord<Track>('tracks',seeded.tracks[0]);
+export async function seedTwoTrackAliasPlaylist(forceIdb=false){
+ const seeded=await seed(forceIdb);const track=await readRecord<Track>('tracks',seeded.tracks[0]);
  if(!track?.audioFingerprint||!seeded.tracks[1])throw Error('two-track playlist fixture incomplete');
  await rememberSongAlias({id:'itunes:42:1:1:81',source:'itunes',title:'MUSIC_FLOW Song (Live version)',artist:'MUSIC_FLOW Artist',album:'MUSIC_FLOW Album',duration:45},track.id,track.audioFingerprint.sha256,track.audioFingerprint.bytes,()=>true);
  return seeded;

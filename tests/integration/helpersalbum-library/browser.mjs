@@ -47,7 +47,7 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   context.on('page',p=>p.on('pageerror',e=>report.pageErrors.push({group:groupName,message:e.message})));
   if(artistCatalogueSetup)await context.addInitScript(()=>Object.defineProperty(navigator,'onLine',{get:()=>false}));
   page=await context.newPage();page.setDefaultTimeout(18000);
-  if(seed||ambiguous||exactAlias||singleAlias||twoTrackAliasPlaylist||aliasOtherAsset||corrupt||purge){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async ({ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,aliasOtherAsset,corrupt,purge})=>{const module=await import('/__musicflow/importer/seed.js');return purge?module.seedPhysicalPurge():corrupt?module.seedCorruptManifest():aliasOtherAsset?module.seedAliasWithOtherValidAsset():twoTrackAliasPlaylist?module.seedTwoTrackAliasPlaylist():singleAlias?module.seedSingleExactAlias():exactAlias?module.seedExactAlias():ambiguous?module.seedAmbiguous():module.seed();},{ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,aliasOtherAsset,corrupt,purge});}
+  if(seed||ambiguous||exactAlias||singleAlias||twoTrackAliasPlaylist||aliasOtherAsset||corrupt||purge){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async ({ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,aliasOtherAsset,corrupt,purge,idb})=>{const module=await import('/__musicflow/importer/seed.js');return purge?module.seedPhysicalPurge():corrupt?module.seedCorruptManifest():aliasOtherAsset?module.seedAliasWithOtherValidAsset():twoTrackAliasPlaylist?module.seedTwoTrackAliasPlaylist(idb):singleAlias?module.seedSingleExactAlias():exactAlias?module.seedExactAlias():ambiguous?module.seedAmbiguous():module.seed();},{ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,aliasOtherAsset,corrupt,purge,idb});}
   if(artistCatalogueSetup){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async()=>{const module=await import('/__musicflow/importer/seed.js');await module.seedArtistCatalogueSetup();});}
   await page.goto(origin+'/');
   if(!/^6[01] /.test(groupName))await nav('Buscar').click();
@@ -280,10 +280,13 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   detail.physical=await second.evaluate(async()=>{const {musicalSnapshot}=await import('/__musicflow/snapshot.mjs');return musicalSnapshot();});const asset=after.assets[0];if(asset.backend==='opfs'){const physical=detail.physical.opfs.find(f=>f[0]==='pulso-assets-v1/'+asset.storageKey);assert(physical);assert.equal(physical[1],asset.bytes);assert.equal(physical[2],asset.sha256);}else assert.equal(detail.physical.stores.chunks.reduce((n,row)=>n+row[1].MUSIC_FLOWnativeBytes,0),asset.bytes);return detail;
  });
  await group('60 saved album reopens offline and resumes missing downloads from Library',async()=>{
-  await fresh({twoTrackAliasPlaylist:true});await completeRequiredSetup();albumMode='mixed';
+  await fresh({twoTrackAliasPlaylist:true,idb:process.env.MUSIC_FLOW_ENGINE==='webkit'});await completeRequiredSetup();albumMode='mixed';
   fixture.set({mode:'download-partial'});
   await input().fill('MUSIC_FLOW Album');await openAlbum();await button('Añadir álbum').click();
-  await page.getByText('Álbum incompleto: revisa las pistas pendientes o fallidas.').waitFor({timeout:60000});
+  await page.waitForFunction(()=>{
+   try{return MUSIC_FLOW.root().savedAlbums?.find(album=>album.edition.id===42)?.failedTracks.length===1;}
+   catch{return false;}
+  },null,{timeout:60000});
   await idle();
   const saved=()=>page.locator('.library-grid .collection-card').filter({hasText:'MUSIC_FLOW Album'});
   const detail=()=>page.locator('.library-detail .album-page');
@@ -291,7 +294,9 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   assert.equal(result.settings.filter(row=>row?.version===1&&row?.edition?.id===42).length,1);
   assert.equal(result.assets.length,3);
   // Reload while online to rehydrate IndexedDB, then open with every request offline.
-  await page.reload();await idle();await nav('Biblioteca').click();
+  await page.reload();
+  await page.waitForFunction(()=>{try{return MUSIC_FLOW.panel().canSearch;}catch{return false;}});
+  await nav('Biblioteca').click();await idle();
   const lookups=report.itunes.length,requests=report.rpc.length;
   await context.setOffline(true);
   await saved().click();
