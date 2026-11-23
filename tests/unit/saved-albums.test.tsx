@@ -5,6 +5,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {albumRemovalMembership,copySavedAlbum,libraryAlbumCards,resolvedAlbumTracks,readSavedAlbumsFrom,savedAlbumGroupKey} from '../../src/library/saved-albums';
 import {createSongResolver,songChoiceKey} from '../../src/library/selected-song';
 import {groupStorageDownloads} from "../../src/library/storage-groups";
+import {indexCopyProtection} from '../../src/library/listening-cache';
 import type {LocalAsset} from "../../src/library/library";
 import type {Track} from '../../src/library/library';
 import {CollectionCover} from '../../src/ui/CollectionCover';
@@ -152,6 +153,10 @@ test('Retirar una edición conserva la pertenencia y la copia que completa otra 
  assert.deepEqual(removal.selected?.trackIds,[id]);
  assert.deepEqual([...removal.otherSavedTrackIds],[id]);
  assert.deepEqual(removal.detach,[]);
+ const asset={id:track.assetId,...fingerprint} as LocalAsset;
+ const protectsOtherAlbum=indexCopyProtection([track],row=>removal.otherSavedTrackIds.has(row.id));
+ assert.equal(protectsOtherAlbum(asset),true);
+ assert.deepEqual([asset].filter(protectsOtherAlbum).map(copy=>copy.bytes),[123]);
  const remaining=libraryAlbumCards([track],[albumB],aliases);
  assert.deepEqual(remaining.map(card=>[card.count,card.trackIds]),[[1,[id]]]);
 });
