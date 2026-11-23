@@ -1,4 +1,5 @@
 import type {SongRejection} from '../diagnostics/contract';
+import {catalogRecordingId} from './catalog-release';
 import {MB_UUID} from './catalog-id';
 import {LIBRARY_LIMITS} from '../accounts/library-document.mjs';
 import {activeLibraryAccount} from '../accounts/library-local';
@@ -151,23 +152,24 @@ export async function readSongAlias(choice:SongChoice,current:()=>boolean,allowC
  }finally{closeDatabase(db);}
 }
 async function compatibleLocalSong(db:IDBDatabase,choice:SongChoice,accountId:string|undefined,current:()=>boolean):Promise<string|null> {
- if(!choice.artist||choice.duration===null||!current())return null;
+ if(!current())return null;
  const tx=admittedTransaction(db,'tracks','readonly'),done=transactionDone(tx);
  // Inspect the whole bounded account before choosing. Detached identities also
  // participate in ambiguity and can be used as the destination of a download.
  const result=await new Promise<{id:string|null;ambiguous:boolean}>((resolve,reject)=>{
   const req=tx.objectStore('tracks').openCursor();
-  let owned=0,id:string|null=null,ambiguous=false;
+  let owned=0,id:string|null=null,ambiguous=false,exact:string|null=null,exactAmbiguous=false;
   req.onerror=()=>reject(req.error);
   req.onsuccess=()=>{
    try{
     if(!current())throw Error('cancelled');
-    const cursor=req.result;if(!cursor){resolve({id,ambiguous});return;}
+    const cursor=req.result;if(!cursor){resolve(exact?{id:exact,ambiguous:exactAmbiguous}:{id,ambiguous});return;}
     const track=cursor.value as Track|undefined;
     if(track&&track.accountId===accountId){
      if(++owned>LIBRARY_LIMITS.tracks){resolve({id:null,ambiguous:false});return;}
-     if(!ambiguous&&cursor.primaryKey===track.id&&compatibleSongMetadata(track,choice)){
-      ambiguous=id!==null;id=track.id;
+     if(cursor.primaryKey===track.id){
+      if(catalogRecordingId(track)===choice.id){exactAmbiguous=exact!==null;exact=track.id;}
+      else if(!ambiguous&&compatibleSongMetadata(track,choice)){ambiguous=id!==null;id=track.id;}
      }
     }
     cursor.continue();

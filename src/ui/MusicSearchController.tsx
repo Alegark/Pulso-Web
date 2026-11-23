@@ -20,6 +20,7 @@ import {searchArtwork,songArtwork} from '../library/catalog-artwork';
 import {samePendingSong,songChoiceKey,readSongAliasKeys,rememberSongAlias,type SongChoice,type SongPlaybackAttempt,type SongManagement,type SongCopyInspection} from '../library/selected-song';
 import {MusicSearchPanel,type MusicSearchResultRow} from './MusicSearchPanel';
 import {albumCoordinator} from '../library/album-download';
+import type {SavedAlbum} from '../library/saved-albums';
 import {AlbumPageController} from './AlbumPageController';
 import {ArtistPage} from './ArtistCatalogView';
 import {AlbumCatalog,albumHintsFromSongs,catalogSongsFromBatch,type AlbumEdition,type CatalogArtist} from '../library/album-catalog';
@@ -30,8 +31,22 @@ const suggestionsClient=createMusicSuggestionsClient();
 const metadataCatalog=new AlbumCatalog((...args)=>fetch(...args));
 const pendingArtworkBatch={data:null,pending:true} as const;
 // Retain unresolved album delivery across navigation and account/scope remounts.
+export interface LibraryAlbumPage {
+ title:string;
+ artist:string|null;
+ editionId:CatalogId;
+ artworkUrl?:string;
+ fixedDetail?:SavedAlbum;
+ options?:React.ReactNode;
+ onBack:()=>void;
+}
+
 interface Props {
  accountId?:string;
+ libraryAlbum?:LibraryAlbumPage;
+ savedAlbums?:readonly SavedAlbum[];
+ canSaveAlbum?:boolean;
+ saveAlbum?:React.ComponentProps<typeof AlbumPageController>['saveAlbum'];
  savedArtists?:readonly CatalogArtist[];canSaveArtist?:boolean;saveArtist?:(artist:CatalogArtist,save:boolean)=>Promise<boolean>;
  captureSongPlayback?:()=>SongPlaybackAttempt|null;captureSongDownload?:()=>SongPlaybackAttempt|null;captureSongCopyInspection?:()=>SongCopyInspection|null;
  libraryTrackIds?:ReadonlySet<string>;playlists?:readonly Playlist[];playerTrackId?:string|null;playerPlaying?:boolean;captureSongManagement?:(id:string)=>SongManagement|null;
@@ -71,7 +86,8 @@ export function BotProviderNotice({text}:{text:string}) {return <p role="status"
 interface SongFlight {key:string;choice:SongChoice;target:BotSearchTarget;attempt:SongPlaybackAttempt;abort:AbortController;scope:string;client:TelegramSessionClient|null;networkCurrent:(()=>boolean)|null;revision:number|undefined;queryId:string|null;trackId?:string;saveOnly:boolean;phase:'lookup'|'update'|'query'|'choice'|'download'|'saving'|'play'|'done'|'error'}
 export function MusicSearchController(props:Props){
  const [query,setQuery]=React.useState('');
- const [album,setAlbum]=React.useState<{title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;resume?:(()=>void)}|null>(null);
+ const [searchAlbum,setAlbum]=React.useState<{title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;resume?:(()=>void)}|null>(null);
+ const album=props.libraryAlbum??searchAlbum;
  const [artist,setArtist]=React.useState<CatalogArtist|null>(null);
  const [editions,setEditions]=React.useState<readonly AlbumEdition[]>([]),[artists,setArtists]=React.useState<readonly CatalogArtist[]>([]),[catalogQuery,setCatalogQuery]=React.useState<string|null>(null),[catalogPending,setCatalogPending]=React.useState(false),[catalogError,setCatalogError]=React.useState<string|null>(null);
  const artistOpener=React.useRef<HTMLButtonElement|null>(null),albumOpener=React.useRef<HTMLButtonElement|null>(null);
@@ -302,7 +318,7 @@ export function MusicSearchController(props:Props){
   }catch(error){if(flightCurrent(f)){f.phase='error';setDownload(null);setNotice(error instanceof Error?error.message:'No se pudo comprobar la copia local.');pulse();}}
  }
  React.useEffect(()=>{
-  if(!props.accountId||!current()||!ready||albumCoordinator.running||ownPending||localPending||flight.current&&!['done','error'].includes(flight.current.phase))return;
+  if(props.libraryAlbum||!props.accountId||!current()||!ready||albumCoordinator.running||ownPending||localPending||flight.current&&!['done','error'].includes(flight.current.phase))return;
   const pending=pendingDownloadAfterUpdate(props.accountId);
   if(pending?.kind==='song'&&!props.captureSongDownload?.()?.current())return;
   const song=takeDownloadAfterUpdate(props.accountId,'song');
@@ -311,9 +327,9 @@ export function MusicSearchController(props:Props){
    void chooseChoice(song.choice,undefined,true).finally(release);return;
   }
   const resume=takeDownloadAfterUpdate(props.accountId,'album');
-  if(resume)setAlbum({title:resume.title,artist:resume.artist,editionId:resume.editionId,resume:reserveDownloadHandoff(props.accountId)});
+  if(resume&&!props.libraryAlbum)setAlbum({title:resume.title,artist:resume.artist,editionId:resume.editionId,resume:reserveDownloadHandoff(props.accountId)});
  });
- React.useEffect(()=>album?.resume,[album?.resume]);
+ React.useEffect(()=>searchAlbum?.resume,[searchAlbum?.resume]);
  function cancelSong(){if(!current())return;if(singleAttempt.current){singleAttempt.current.abort();singleAttempt.current=null;setResolvingSingle(false);setNotice('Comprobación detenida.');return;}const f=flight.current;if(!f||f!==selected||['done','error'].includes(f.phase))return;downloadNotifications.dismiss('song',f);f.abort.abort();if(f.phase!=='saving'){f.phase='error';setDownload(null);}setNotice('Operación detenida. Una copia ya confirmada se conserva; no se iniciará música.');pulse();}
  const selected=flight.current,management=selected?.trackId?props.captureSongManagement?.(selected.trackId):null;
  const manage=async(kind:'add'|'playlist'|'play',id?:string)=>{
@@ -355,5 +371,7 @@ export function MusicSearchController(props:Props){
   automaticSelection results={results} selectedResultId={selectedResult} onSelectResult={()=>{}}
   status={rateNotice??notice??(displayedQuery&&state?.queryId===displayedQuery&&!state.error&&results.length?'Respuesta del bot recibida. Revisa las opciones; la identidad musical sigue sin confirmar.':null)} error={state?.error?searchErrorText(state.error):null} uncertain={state?.delivery==='uncertain'} current={current}/></div>
   {artist&&<div hidden={!!album}><ArtistPage key={artist.id} artist={artist} saved={props.savedArtists?.some(row=>row.id===artist.id)} onSave={props.saveArtist} saveDisabled={!props.canSaveArtist} scope={props.scopeKey} visible={props.visible&&!album} onBack={()=>{if(!current())return;navigationReturn.current={scope:props.scopeKey,kind:'search',opener:artistOpener.current,position:artistScroll.current};setArtist(null);}} onAlbum={(row,opener)=>{if(!current()||ownPending||localPending)return;albumOpener.current=opener;albumScroll.current=[window.scrollX,window.scrollY];setAlbum({title:row.title,artist:row.artist,editionId:row.id,artworkUrl:row.artworkUrl});}}/></div>}
-  {album&&<AlbumPageController accountId={props.accountId} resumeDownload={album.resume} coordinator={albumCoordinator} title={album.title} artist={album.artist} editionId={album.editionId} artworkUrl={album.artworkUrl} playerTrackId={props.playerPlaying?props.playerTrackId??null:null} searchBatch={artist?undefined:artworkBatch?.scope===props.scopeKey&&artworkBatch.query===normalizeMusicSuggestionsQuery(query)?artworkBatch:normalizeMusicSuggestionsQuery(query)?pendingArtworkBatch:undefined} backLabel={artist?'Volver al artista':undefined} scope={props.scopeKey} visible={props.visible} captureInspection={props.captureSongCopyInspection} actionKey={selected?.choice.id??null} selectedKey={selected?.phase==='done'&&selected.trackId?selected.choice.id:null} libraryTrackIds={props.libraryTrackIds} client={client} revision={props.bots?.revision} provider={selectedProvider?.supported?provider:null} providers={providers} capture={()=>current()?(props.captureSongDownload??props.captureSongPlayback)?.()??null:null} management={id=>props.captureSongManagement?.(id)??null} songActions={songActions} onChoose={choice=>{if(current())void chooseChoice(choice);}} onBack={()=>{if(!current())return;edit();navigationReturn.current={scope:props.scopeKey,kind:artist?'artist':'search',opener:albumOpener.current,position:albumScroll.current};setAlbum(null);}}/>}</>;
+  {album&&<AlbumPageController accountId={props.accountId} resumeDownload={props.libraryAlbum?undefined:searchAlbum?.resume} savedAlbums={props.savedAlbums}
+    fixedDetail={props.libraryAlbum?.fixedDetail} libraryView={!!props.libraryAlbum} albumOptions={props.libraryAlbum?.options}
+    localTracks={props.tracks} canSaveAlbum={props.canSaveAlbum} saveAlbum={props.saveAlbum} coordinator={albumCoordinator} title={album.title} artist={album.artist} editionId={album.editionId} artworkUrl={album.artworkUrl} playerTrackId={props.playerPlaying?props.playerTrackId??null:null} searchBatch={artist?undefined:artworkBatch?.scope===props.scopeKey&&artworkBatch.query===normalizeMusicSuggestionsQuery(query)?artworkBatch:normalizeMusicSuggestionsQuery(query)?pendingArtworkBatch:undefined} backLabel={artist?'Volver al artista':undefined} scope={props.scopeKey} visible={props.visible} captureInspection={props.captureSongCopyInspection} actionKey={selected?.choice.id??null} selectedKey={selected?.phase==='done'&&selected.trackId?selected.choice.id:null} libraryTrackIds={props.libraryTrackIds} client={client} revision={props.bots?.revision} provider={selectedProvider?.supported?provider:null} providers={providers} capture={()=>current()?(props.captureSongDownload??props.captureSongPlayback)?.()??null:null} management={id=>props.captureSongManagement?.(id)??null} songActions={songActions} onChoose={choice=>{if(current())void chooseChoice(choice);}} onBack={()=>{if(!current())return;edit();if(props.libraryAlbum){props.libraryAlbum.onBack();return;}navigationReturn.current={scope:props.scopeKey,kind:artist?'artist':'search',opener:albumOpener.current,position:albumScroll.current};setAlbum(null);}}/>}</>;
 }

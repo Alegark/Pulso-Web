@@ -5,7 +5,7 @@ import {ACTIVE_LIBRARY_ACCOUNT} from '../accounts/library-local';
 import {admittedTransaction, closeDatabase, openExistingDatabase, request} from '../storage/database';
 import {transactionDone} from '../storage/transaction-done';
 import {WRITER_LOCK} from '../storage/asset-reader';
-import {groupAlbums} from './groups';
+import {libraryAlbumCards,readSavedAlbumsFrom,savedAlbumKey,type SavedAlbum} from './saved-albums';
 import {indexCopyProtection,listeningCacheAssets} from './listening-cache';
 import {copyLibraryMembership, libraryMembershipKey, makeLibraryMembership} from './library-membership';
 import {describeRemovalData, validateTrack} from './local-copy-removal-snapshot';
@@ -24,7 +24,7 @@ export interface CollectionOutcome {readonly metadata:'committed'|'not-committed
 /** Host must create a fresh context AFTER reservation; release settles its resources. */
 export interface CollectionCleanupHost {readContext():RemovalReadContext;settlementReadContext?():RemovalReadContext;reserve(target:Readonly<LocalAsset>):Promise<{kind:'reserved';context:RemovalContext;release():Promise<void>}|{kind:'blocked';reason:string}>;record(tracking:RemovalTracking):Promise<boolean>;forget(tracking:RemovalTracking):Promise<boolean>}
 type Row={key:IDBValidKey; value:unknown};
-type Snapshot={accountId?:string;tracks:Track[]; playlists:Playlist[]; assets:LocalAsset[]; membership:Map<string,boolean>; queued:Set<string>; canonical:string};
+type Snapshot={accountId?:string;tracks:Track[]; playlists:Playlist[]; assets:LocalAsset[]; membership:Map<string,boolean>; queued:Set<string>; savedAlbums:SavedAlbum[]; canonical:string};
 type Data={selection:CollectionSelection; snapshot:Snapshot; affected:string[]; targets:{asset:LocalAsset;track:Track}[]; context:CollectionContext};
 const previews=new WeakMap<CollectionPreviewToken,Data>();
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
@@ -52,8 +52,9 @@ async function snapshot(tx:IDBTransaction,c:CollectionContext,includeCatalog:boo
  const accountId=await request<string|undefined>(store.get(ACTIVE_LIBRARY_ACCOUNT));
  const view=includeCatalog&&accountId?await projectSpotifyReleases(store,tracks,accountId):tracks;
  const catalogEvidence=includeCatalog?view.flatMap(t=>t.catalogRelease?[[t.id,t.catalogRelease]]:[]):[];
- const canonical=describeRemovalData([tr,pl,as,relevant,rawQueue,accountId,catalogEvidence]);
- return {accountId,tracks:view,playlists,assets,membership,queued,canonical};
+ const savedAlbums=includeCatalog&&accountId?await readSavedAlbumsFrom(store,accountId):[];
+ const canonical=describeRemovalData([tr,pl,as,relevant,rawQueue,accountId,catalogEvidence,savedAlbums]);
+ return {accountId,tracks:view,playlists,assets,membership,queued,savedAlbums,canonical};
 }
 function affectedFor(s:Snapshot,selection:CollectionSelection):string[] {
  if(selection.kind==='playlist') {const p=s.playlists.find(p=>p.id===selection.id&&p.revision===selection.revision&&p.accountId===s.accountId);if(!p)throw new Error('collection-changed');return [...new Set(p.entries.map(e=>e.trackId))];}
@@ -63,8 +64,8 @@ function affectedFor(s:Snapshot,selection:CollectionSelection):string[] {
   const ids=new Set(assets.map(a=>a.id));return s.tracks.filter(t=>t.assetId!==null&&ids.has(t.assetId)).map(t=>t.id);
  }
  if(selection.scope!=='global-library')throw new Error('collection-invalid');
- const group=groupAlbums(s.tracks.filter(t=>s.membership.get(t.id)&&t.accountId===s.accountId)).find(g=>g.key===selection.key);
- if(!group||group.unknown)throw new Error('collection-changed');return [...new Set(group.trackIds)];
+ const group=libraryAlbumCards(s.tracks.filter(t=>s.membership.get(t.id)&&t.accountId===s.accountId),s.savedAlbums).find(g=>g.key===selection.key);
+ if(!group)throw new Error('collection-changed');return [...new Set(group.trackIds)];
 }
 async function read(c:CollectionContext,includeCatalog:boolean):Promise<Snapshot>{check(c);const db=await openExistingDatabase();try{check(c);const tx=admittedTransaction(db,['tracks','playlists','assets','settings']);const done=transactionDone(tx);try{const s=await snapshot(tx,c,includeCatalog);await done;check(c);return s;}catch(e){try{tx.abort();}catch{}await done.catch(()=>{});throw e;}}finally{closeDatabase(db);}}
 export async function previewCollectionRemoval(selection:CollectionSelection,c:CollectionContext):Promise<CollectionPreview>{
@@ -96,7 +97,13 @@ export async function confirmCollectionRemoval(token:CollectionPreviewToken,cons
    const abort=()=>{try{native.abort();}catch{}};c.signal.addEventListener('abort',abort,{once:true});
    try{const s=await snapshot(tx,c,d.selection.kind==='album');if(s.canonical!==d.snapshot.canonical)throw new Error('collection-changed');const ids=affectedFor(s,d.selection);if(describeRemovalData(ids)!==describeRemovalData(d.affected))throw new Error('collection-changed');check(c);
     if(d.selection.kind==='playlist')tx.objectStore('playlists').delete(d.selection.id);
-    else if(d.selection.kind==='album')for(const id of ids)tx.objectStore('settings').put(makeLibraryMembership(id,false),libraryMembershipKey(id));
+    else if(d.selection.kind==='album'){
+     const store=tx.objectStore('settings');
+     const {key}=d.selection;
+     const group=libraryAlbumCards(s.tracks.filter(t=>s.membership.get(t.id)&&t.accountId===s.accountId),s.savedAlbums).find(g=>g.key===key);
+     if(group?.saved&&s.accountId)store.delete(savedAlbumKey(s.accountId,group.editionId));
+     for(const id of ids)store.put(makeLibraryMembership(id,false),libraryMembershipKey(id));
+    }
     dispatched=true;await done;return {metadata:'committed',cleanup:'not-started',freedBytes:0,removed:0,skipped:0,skipReasons:[],reason:null} as CollectionOutcome;
    }finally{c.signal.removeEventListener('abort',abort);}
   }catch(e){if(tx&&done){try{tx.abort();}catch{}let aborted=false;await done.catch(()=>{aborted=true;});if(dispatched&&!aborted)return {...rejected('commit-settlement-unknown'),metadata:'unknown'} as CollectionOutcome;}return rejected(e instanceof Error?e.message:'collection-failed');}

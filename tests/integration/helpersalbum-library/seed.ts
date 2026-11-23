@@ -91,3 +91,11 @@ export async function importArtistFixture(){
  if(attempt.kind!=='confirmed'||attempt.result.track.artist!=='MUSIC_FLOW Artist')throw Error('artist fixture import');
  return attempt.result.track.id;
 }
+
+export async function playlistWithLocalCopies(ids:string[]){
+ let playlist=await createPlaylist('MUSIC_FLOW Portadas');
+ for(const trackId of ids){
+  await changePlaylist(playlist.id,playlist.revision,{type:'add',trackId});
+  playlist={...playlist,revision:playlist.revision+1};
+ }
+}

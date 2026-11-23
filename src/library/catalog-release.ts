@@ -1,4 +1,4 @@
-import {spotifyArtworkUrl} from './catalog-id';
+import {musicBrainzId,spotifyArtworkUrl,type CatalogId} from './catalog-id';
 import {artworkUrl} from './player-artwork-provider';
 import type {Track} from './library';
 import {musicCatalogKey} from './music-search-catalog';
@@ -43,4 +43,23 @@ export function searchedITunesRelease(track:Track):number|null {
   track.album&&musicCatalogKey(track.album)!==musicCatalogKey(track.catalogChoice.album))return null;
  const id=Number(/^itunes:([1-9][0-9]*):[1-9][0-9]*:[1-9][0-9]*:[1-9][0-9]*$/.exec(track.catalogChoice.id)?.[1]);
  return positive(id)?id:null;
+}
+
+/** Exact recording IDs are shared by choices and locally attached releases. */
+export function catalogRecordingId(track:Track):string|null {
+ const release=copyCatalogRelease(track.catalogRelease);
+ if(release?.source==='itunes')return `itunes:${release.releaseId}:${release.disc}:${release.position}:${release.trackId}`;
+ const choice=track.catalogChoice;
+ return choice&&(choice.source==='itunes'||choice.source==='musicbrainz')?choice.id:null;
+}
+
+export function albumEditionId(track:Track):CatalogId|null {
+ const release=trackCatalogRelease(track);
+ if(release?.source==='itunes')return release.releaseId;
+ if(release?.source==='spotify'&&release.itunesReleaseId)return release.itunesReleaseId;
+ const id=searchedITunesRelease(track);
+ if(id!==null)return id;
+ if(Object.keys(track.manualOverrides??{}).length||track.catalogChoice?.source!=='musicbrainz')return null;
+ const releaseId=track.catalogChoice.id.split(':').slice(0,2).join(':');
+ return musicBrainzId(releaseId)?releaseId:null;
 }

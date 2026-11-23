@@ -1,5 +1,5 @@
 import {resolveLocalAlbumMetadata} from './album-metadata';
-import {displayTrackAlbum,searchedITunesRelease,trackCatalogRelease} from './catalog-release';
+import {albumEditionId,displayTrackAlbum,searchedITunesRelease,trackCatalogRelease} from './catalog-release';
 import type {Track} from './library';
 
 export type MetadataProvenance = 'manual' | 'tags' | 'catalog';
@@ -67,6 +67,8 @@ function albumKeys(tracks: readonly Track[], sources: ReturnType<typeof resolveL
    if(editions?.size===1)return [...editions][0];
   }
   if(release)return JSON.stringify(['album-catalog',release.source,release.releaseId]);
+  const editionId=albumEditionId(track);
+  if(editionId!==null)return JSON.stringify(['album-catalog',typeof editionId==='number'?'itunes':'musicbrainz',editionId]);
   const album = albumIdentity(track.album);
   const source = sources[index];
   const credit = source.albumArtist.state === 'known' ? source.albumArtist.value : track.artist;
@@ -83,7 +85,7 @@ function albumKeys(tracks: readonly Track[], sources: ReturnType<typeof resolveL
   values.add(flag.value);
  });
  return bases.map((base, index) => {
-  if (crossed[index]||releases[index]||albumIdentity(tracks[index].album) === null) return base;
+  if (crossed[index]||releases[index]||albumEditionId(tracks[index])!==null||albumIdentity(tracks[index].album) === null) return base;
   const flag = sources[index].compilation;
   const values = declarations.get(base);
   const compilation = flag.state === 'known' ? flag.value : values?.size === 1 ? [...values][0] : null;
