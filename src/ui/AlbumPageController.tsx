@@ -24,7 +24,7 @@ interface Props {accountId?:string;resumeDownload?:()=>void;metadataOnly?:boolea
 const metadataIdentity=(props:Props)=>JSON.stringify([props.title,props.artist,props.editionId??null,props.scope]);
 const catalogError=(reason:AlbumFailure,detail:boolean,stage?:AlbumStage,httpStatus?:number,backup=false)=>{
  const prefix=detail?'No se pudo verificar la lista completa de pistas.':'No se pudo consultar el catálogo de álbumes.';
- const message=reason==='rate-limited'?'El catálogo ha limitado temporalmente las consultas.':reason==='timeout'?'La consulta tardó demasiado.':reason==='network'||reason==='http'?'Comprueba la conexión e inténtalo de nuevo.':'La respuesta del catálogo no se pudo verificar.';
+ const message=reason==='rate-limited'?'El catálogo ha limitado temporalmente las consultas.':reason==='timeout'?'La consulta tardó demasiado.':reason==='network'||reason==='http'?'Comprueba la conexión e inténtalo de nuevo.':reason==='incomplete'?'Al catálogo le faltan pistas de esta edición.':'La respuesta del catálogo no se pudo verificar.';
  const entry=location.pathname.match(/\/releases\/([a-f0-9]{16})\.html$/)?.[1]??'local';
  const diagnostic=[detail?'album-detail':stage??'album-search',backup?'musicbrainz-relay':catalogTransportMode(),reason,...(Number.isInteger(httpStatus)&&httpStatus!>=400&&httpStatus!<=599?[String(httpStatus)]:[]),entry].join(' · ');
  return `${prefix} ${message} Diagnóstico: ${diagnostic}.`;

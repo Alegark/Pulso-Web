@@ -102,7 +102,7 @@ export function catalogSongsFromBatch(data:unknown):readonly CatalogSongHint[] {
  return Object.freeze([...found.values()].filter((song):song is CatalogSongHint=>song!==null));
 }
 
-/** Rejects ambiguous, missing, inconsistent or extra positions; preserves repeated track IDs. */
+/** Verifies song coverage per disc while allowing non-song catalog extras. */
 export function parseAlbumDetail(data: unknown, id: number): AlbumResult<AlbumDetail> {
   if (!bounded(data)) return fail('invalid')
   const all = rows(data)
@@ -112,30 +112,38 @@ export function parseAlbumDetail(data: unknown, id: number): AlbumResult<AlbumDe
   const e = collections.length === 1 ? edition(collection) : null
   if (!e || e.id !== id) return fail('invalid')
   const raw = all.filter(r => r.wrapperType === 'track')
-  if (raw.length !== e.trackCount || all.length !== raw.length + 1) return fail('incomplete')
-  const discs = new Map<number, { count: number; tracks: AlbumTrack[] }>()
+  if (raw.length > e.trackCount || all.length !== raw.length + 1) return fail('incomplete')
+  const discs = new Map<number, { songCount: number | null; positions: Set<number>; tracks: AlbumTrack[] }>()
   let discCount = 0
   for (const r of raw) {
-    if (!owns(r, ['wrapperType', 'kind', 'collectionId', 'trackId', 'discNumber', 'discCount', 'trackNumber', 'trackCount', 'trackName', 'artistName']) || r.kind !== 'song' || r.collectionId !== id || !pos(r.trackId) || !pos(r.discNumber) || !pos(r.discCount) || r.discCount > 20 || r.discNumber > r.discCount || !pos(r.trackNumber) || !pos(r.trackCount) || r.trackCount > LIMIT || !text(r.trackName) || !text(r.artistName) || !( !Object.hasOwn(r, 'trackTimeMillis') || r.trackTimeMillis == null || (typeof r.trackTimeMillis === 'number' && Number.isSafeInteger(r.trackTimeMillis) && r.trackTimeMillis >= 0 && r.trackTimeMillis <= 86400000))) return fail('invalid')
+    if (!owns(r, ['wrapperType', 'kind', 'collectionId', 'trackId', 'discNumber', 'discCount', 'trackNumber', 'trackCount', 'trackName', 'artistName']) || !text(r.kind) || r.collectionId !== id || !pos(r.trackId) || !pos(r.discNumber) || !pos(r.discCount) || r.discCount > 20 || r.discNumber > r.discCount || !pos(r.trackNumber) || r.trackNumber > LIMIT || !pos(r.trackCount) || r.trackCount > LIMIT || !text(r.trackName) || !text(r.artistName) || !( !Object.hasOwn(r, 'trackTimeMillis') || r.trackTimeMillis == null || (typeof r.trackTimeMillis === 'number' && Number.isSafeInteger(r.trackTimeMillis) && r.trackTimeMillis >= 0 && r.trackTimeMillis <= 86400000))) return fail('invalid')
     if (discCount && discCount !== r.discCount) return fail('incomplete')
     discCount = r.discCount
-    const group = discs.get(r.discNumber) ?? { count: r.trackCount, tracks: [] }
-    if (group.count !== r.trackCount) return fail('incomplete')
+    const group = discs.get(r.discNumber) ?? { songCount: null, positions: new Set<number>(), tracks: [] }
+    if (group.positions.has(r.trackNumber)) return fail('incomplete')
+    group.positions.add(r.trackNumber)
+    discs.set(r.discNumber, group)
+    if (r.kind !== 'song') continue
+    if (r.trackNumber > r.trackCount || (group.songCount !== null && group.songCount !== r.trackCount)) return fail('incomplete')
+    group.songCount = r.trackCount
     const primary = Object.hasOwn(collection, 'artistId') && Object.hasOwn(r, 'artistId') && pos(collection.artistId) && r.artistId === collection.artistId ? { primaryArtist: e.artist } : {}
     group.tracks.push(Object.freeze({ releaseId: id, trackId: r.trackId, disc: r.discNumber, position: r.trackNumber, title: r.trackName, artist: r.artistName, durationMs: Object.hasOwn(r, 'trackTimeMillis') && r.trackTimeMillis ? r.trackTimeMillis as number : null, ...primary }))
-    discs.set(r.discNumber, group)
   }
   if (!discCount || discs.size !== discCount) return fail('incomplete')
   const tracks: AlbumTrack[] = []
   for (let d = 1; d <= discCount; d++) {
     const group = discs.get(d)
-    if (!group || group.tracks.length !== group.count) return fail('incomplete')
+    if (!group) return fail('incomplete')
+    if (group.songCount === null) continue
+    for (let position = 1; position <= group.songCount; position++) {
+      if (!group.positions.has(position)) return fail('incomplete')
+    }
     group.tracks.sort((a, b) => a.position - b.position)
-    if (group.tracks.some((track, i) => track.position !== i + 1)) return fail('incomplete')
     tracks.push(...group.tracks)
   }
+  if (!tracks.length) return fail('incomplete')
   Object.freeze(tracks)
-  return { ok: true, value: Object.freeze({ edition: e, tracks }) }
+  return { ok: true, value: Object.freeze({ edition: Object.freeze({ ...e, trackCount: tracks.length }), tracks }) }
 }
 
 /** No network or timers until search/load is called. Caller chooses an edition explicitly. */
