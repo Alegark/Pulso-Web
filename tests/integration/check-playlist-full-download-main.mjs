@@ -257,7 +257,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    if(kind==='callback')return route.fulfill({json:{}});
    if(kind!=='read'||!Number.isSafeInteger(offset)||limit!==524288)return route.fulfill({status:400});
    const {payload,fault}=candidate;
-   if(queued&&gateOn&&trackId===tracks[0].track.id){
+   if(queued&&gateOn&&trackId===tracks[mode==='queue-cancel'?2:0].track.id){
     notifyBlocked();await readGate;
     return route.fulfill({body:payload.subarray(offset,offset+limit),contentType:'application/octet-stream'}).catch(()=>{});
    }
@@ -472,7 +472,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    const save=page.getByRole('button',{name:'Guardar álbum',exact:true});
    await save.tap();await page.locator('.album-saved').getByText('En Biblioteca').waitFor();
    assert.equal(trace.some(event=>String(event.trackId).startsWith('album-')),false);
-   assert.equal(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).cursor,checkpointKey),0);
+   assert.equal(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).cursor,checkpointKey),mode==='queue-cancel'?2:0);
    await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).tap();
    await page.getByRole('button',{name:'Álbumes',exact:true}).tap();
    const savedCard=page.locator('.library-grid button').filter({hasText:albumTitle});
@@ -544,7 +544,11 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    const data=await inspect(page,[...tracks.map(row=>row.track.id),cTrack.id]);
    const verifiedIds=new Set(tracks.filter((_,index)=>data.copies[index]).map(({track})=>track.id));
    const verified=entries.filter(id=>verifiedIds.has(id)).length;
-   if(mode==='queue-cancel')assert.equal(verified,1);
+   if(mode==='queue-cancel'){
+    assert.deepEqual([...verifiedIds],tracks.slice(0,2).map(({track})=>track.id));
+    assert.equal(data.copies[0].sha256,tracks[0].expected.sha256,'Cancel keeps the copy made by the active playlist');
+    assert.equal(verified,3);
+   }
    else{
     assert.equal(verified,30);
     assert.equal(verifiedIds.size,tracks.length,'Repeated playlist occurrence reuses the verified asset');
