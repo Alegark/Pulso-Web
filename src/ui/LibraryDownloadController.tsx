@@ -415,6 +415,9 @@ export function LibraryDownloadController(props:{captureAlbum?:()=>SongPlaybackA
   }catch{return;}
   if(!job||intent&&(job.kind!=='album'||intent.kind!=='album'||job.album.edition.id!==intent.editionId))return;
   const queued=job;
+  // Telegram can reconnect before the destination bundle restores local
+  // storage. Retain the handoff until the original admission can be captured.
+  if(intent&&!(props.captureAlbum??props.capture)?.()?.current())return;
   const ownerCurrent=props.captureOwner?.()??props.captureLifetime?.();
   const sameOwner=()=>pageLive.current&&latest.current.accountId===account&&(ownerCurrent?.()??true);
   const current=()=>{
@@ -430,11 +433,11 @@ export function LibraryDownloadController(props:{captureAlbum?:()=>SongPlaybackA
     if(current())setNotice(`No se pudo iniciar «${title}».`);return;
    }
    if(!current()||albumCoordinator.running)return;
-   if(intent)takeDownloadAfterUpdate(account,'album');
    const p=latest.current,providers=orderedProviders(p.bots);
    if(!p.connected||!p.client||!providers.length){announceDownloadMessage(`No se pudo iniciar «${title}». Conecta Telegram y configura un bot de música.`);return;}
    const attempt=(p.captureAlbum??p.capture)?.();
    if(!attempt?.current()){announceDownloadMessage(`No se pudo iniciar «${title}». Comprueba Almacenamiento.`);return;}
+   if(intent)takeDownloadAfterUpdate(account,'album');
    return runAlbumDownload({detail:album,saved:album,accountId:account,scope:account,coordinator:albumCoordinator,
     attempt,client:p.client,revision:p.bots?.revision,provider:providers[0].providerRef,providers,
     management:id=>latest.current.captureAlbumManagement?.(id)??null,saveAlbum:p.saveAlbum});
