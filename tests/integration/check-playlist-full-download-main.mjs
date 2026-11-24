@@ -177,7 +177,7 @@ function assertTransport(trace,tracks,served,mode){
    'corrupt-same-bot':['corrupt'],'empty-next-bot':['empty'],'truncated-next-bot':['truncated'],
    flood:['flood'],network:mode==='resume'?['interrupted','network']:['network'],
   };
-  assert.deepEqual(reads.filter(event=>event.fault).map(event=>event.fault),failures[scenario]??[],track.title+' injected events');
+  assert.deepEqual(reads.filter(event=>event.fault&&event.fault!=='interrupted-parallel').map(event=>event.fault),failures[scenario]??[],track.title+' injected events');
   assert.deepEqual(callbacks.map(({key,option})=>[key,option]),scenario==='menu'?[[goodKey,2]]:[],track.title+' menu selection');
   const accepted=reads.filter(event=>event.key===goodKey&&!event.fault);
   if(scenario==='preexisting'||scenario==='missing')assert.equal(reads.length,0,track.title+' unexpected read');
@@ -215,7 +215,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    trackName:title,collectionName:albumTitle,artistName,trackTimeMillis:2000};
  });
  const cTrack={...tracks[0].track,id:uuid(950),title:'Pulso Luz Tres'};
- let gateOn=false;
+ let gateOn=false,resumeCommitted=false;
  let sawWriteFailure=false,unblockRead,notifyBlocked,page;
  const blocked=new Promise(ok=>{notifyBlocked=ok;});
  const readGate=new Promise(ok=>{unblockRead=ok;});
@@ -261,8 +261,12 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     notifyBlocked();await readGate;
     return route.fulfill({body:payload.subarray(offset,offset+limit),contentType:'application/octet-stream'}).catch(()=>{});
    }
-   if(mode==='resume'&&fault==='network'&&!faulted.has('interrupted')){
-    faulted.add('interrupted');event.fault='interrupted';notifyBlocked();
+   if(mode==='resume'&&fault==='network'&&!resumeCommitted){
+    // Telegram may request both chunks concurrently. Keep the whole old
+    // transfer interrupted so only a resumed transfer consumes the 503.
+    if(!faulted.has('interrupted')){
+     faulted.add('interrupted');event.fault='interrupted';notifyBlocked();
+    }else event.fault='interrupted-parallel';
     await readGate;
     return route.abort().catch(()=>{});
    }
@@ -567,8 +571,8 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    receipt.interruptedAtMs=elapsed(downloadStart);
    await checkNoReview();
    assert.deepEqual(await page.evaluate(()=>window.__playlistFull.activations),[startLabel]);
-   await page.reload();
-   unblockRead();
+   await page.reload({waitUntil:'commit'});
+   resumeCommitted=true;unblockRead();
    await page.locator('.shell-nav').waitFor();
   }
   const hasMissing=mode==='missing'||mode==='stale-checkpoint';
