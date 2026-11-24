@@ -423,9 +423,24 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await tapAt(locator,x,y);await onTap();await afterTap?.();
     }
    };
+   const discography=async()=>{
+    await searchArtist.tap();await artistHeading();
+    await sweep(page.locator('.artist-album-grid button').filter({hasText:albumTitle}),albumHeading,()=>back('Volver al artista'));
+   };
    if(mode==='tap-baseline'||mode==='tap-active'){
     await search('Pulso Luz');await searchAlbum.waitFor();
-    await tapAt(searchAlbum,.12,.5);await albumHeading();await back('Volver a búsqueda');
+    if(mode==='tap-active'){
+     await sweep(searchAlbum,albumHeading,()=>back('Volver a búsqueda'));
+     await sweep(searchArtist,artistHeading,()=>back('Volver a búsqueda'));
+     await discography();await back('Volver a búsqueda');
+     const title=ready.track.title;
+     await search(title);
+     const cached=page.locator('[data-catalog-kind=track]').filter({hasText:title});
+     await sweep(cached,()=>cached.and(page.locator('[aria-pressed=true]')).waitFor());
+     await page.getByText(/Reproduciendo la canción desde la copia|Esta canción ya se está reproduciendo|Canción disponible/).first().waitFor({state:'attached'});
+    }else{
+     await tapAt(searchAlbum,.12,.5);await albumHeading();await back('Volver a búsqueda');
+    }
     await search('Luz');await searchAlbum.waitFor();
     await searchArtist.waitFor();await searchSong.waitFor();
     const aSong=page.locator('[data-catalog-kind=track]').filter({hasText:tracks[0].track.title});
@@ -442,10 +457,13 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await sweep(searchAlbum,albumHeading,()=>back('Volver a búsqueda'));
      await sweep(searchArtist,artistHeading,()=>back('Volver a búsqueda'));
      await sweep(searchSong,()=>page.locator('[data-suggestion-id][aria-pressed=true]').filter({hasText:cTrack.title}).waitFor());
+     await discography();await back('Volver a búsqueda');
      gateOn=false;unblockRead();
-     await page.waitForFunction(()=>window.__playlistFull.audio?.currentTime>0.1);
+     await page.getByText(/Reproduciendo la canción desde la copia|Canción disponible/).first().waitFor({state:'attached'});
+     const playing=await inspect(page,[tracks[0].track.id]);
+     assert.equal(playing.copies[0].sha256,tracks[0].expected.sha256);
      assert.equal(trace.filter(event=>event.kind==='read').length,1);
-     receipt.tap={searchAlbum:9,searchArtist:9,searchTrack:9,playedAfterNavigation:true};
+     receipt.tap={idle:{searchAlbum:9,searchArtist:9,searchTrack:9,discography:9},activeSong:{searchAlbum:9,searchArtist:9,searchTrack:9,discography:9},copyVerifiedAfterNavigation:true};
     }
     receipt.status='PASS';receipt.totalMs=elapsed(started);return receipt;
    }
@@ -461,9 +479,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     await sweep(searchArtist,artistHeading,()=>back('Volver a búsqueda'));
     const searchTrackSelected=()=>page.locator('[data-suggestion-id][aria-pressed=true]').filter({hasText:cTrack.title}).waitFor();
     await sweep(searchSong,searchTrackSelected);
-    await searchArtist.tap();await artistHeading();
-    const artistAlbum=page.locator('.artist-album-grid button').filter({hasText:albumTitle});
-    await sweep(artistAlbum,albumHeading,()=>back('Volver al artista'));
+    await discography();
     await page.getByRole('button',{name:'Guardar artista',exact:true}).tap();
     await page.getByRole('button',{name:'Quitar de mis artistas',exact:true}).waitFor();
     await back('Volver a búsqueda');
