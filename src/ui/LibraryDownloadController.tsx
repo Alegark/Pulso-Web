@@ -50,8 +50,8 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   account:Parameters<typeof downloadWithCurrentApp>[0],
   action:Parameters<typeof downloadWithCurrentApp>[1],
   current:()=>boolean,
- ){
-  if(versionCheck.current||downloadVersionCheckInProgress())return false;
+ ):Promise<boolean|'busy'>{
+  if(versionCheck.current||downloadVersionCheckInProgress())return 'busy';
   const token={};versionCheck.current=token;
   try{return await downloadWithCurrentApp(account,action,current);}
   finally{if(versionCheck.current===token)versionCheck.current=null;}
@@ -117,7 +117,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   const current=()=>checking.current===abort&&!abort.signal.aborted&&pageLive.current&&latest.current.accountId===account&&
    !flight.current&&!albumCoordinator.running&&!albumCoordinator.dispatching&&!albumCoordinator.songFlight&&(guard?.()??true);
   try{
-   if(retry!=='no'&&!await checkVersion(account,{kind:'repair',trackId,title,retry},current))return;
+   if(retry!=='no'&&await checkVersion(account,{kind:'repair',trackId,title,retry},current)!==true)return;
    setReview({trackId,title,state:'checking'});
    const marker=pendingLibraryTrack(account,trackId),operationId=marker?.kind==='save'?marker.operationId:undefined;
    if(retry!=='no'&&(!p.client||!p.connected||!orderedProviders(p.bots).length)){
@@ -167,7 +167,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   admission.current=check;
   if(automatic)setRetaking(true);
   try{
-   if(await checkVersion(account,{kind:'library',request,checkpointId:restore?.id,...(automatic?{automatic:true}:{})},current))
+   if(await checkVersion(account,{kind:'library',request,checkpointId:restore?.id,...(automatic?{automatic:true}:{})},current)===true)
     return start(request,restore,undefined,automatic,automatic);
    else if(!automatic&&admission.current===check&&latest.current.accountId===account)
     setNotice(accessMessage()??`No se pudo iniciar «${request.title}».`);
@@ -548,7 +548,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
    if(!intent){
     const allowed=await checkVersion(account,action,stillReady);
     if(!stillReady())return 'deferred';
-    if(!allowed){readinessLost||=downloadVersionCheckInProgress();return 'deferred';}
+    if(allowed!==true){readinessLost||=allowed==='busy';return 'deferred';}
    }
    if(job.kind==='library'){
     if(intent&&!takeDownloadAfterUpdate(account,'library')){readinessLost=true;return 'deferred';}
