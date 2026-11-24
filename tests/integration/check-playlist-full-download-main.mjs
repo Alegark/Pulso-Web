@@ -635,7 +635,15 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    assert.equal(await keep.evaluate(button=>document.activeElement===button),true);
    await page.keyboard.press('Shift+Tab');
    assert.equal(await remove.evaluate(button=>document.activeElement===button),true);
-   await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
+   if(mode==='queue'){
+    await dialog.evaluate(node=>{node.tabIndex=-1;node.focus();});
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await remove.evaluate(button=>document.activeElement===button),true);
+    await dialog.evaluate(node=>node.close());
+    await dialog.waitFor({state:'detached'});
+   }else{
+    await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
+   }
    await collection.getByRole('button',{name:'Gestionar descarga en cola de '+playlistC}).tap();
    await remove.tap();
    await back('Volver a Biblioteca');
@@ -643,9 +651,9 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    await collection.getByRole('button',{name:'Gestionar descarga de '+playlistName}).tap();
    if(mode==='queue-cancel'){
     await page.getByRole('button',{name:'Cancelar descarga',exact:true}).tap();
-   }else{
+   }else if(mode==='queue-reload'){
     await page.getByRole('button',{name:'Seguir descargando',exact:true}).tap();
-    if(mode==='queue-reload')await page.reload();
+    await page.reload();
    }
    gateOn=false;unblockRead();
    await page.waitForFunction(account=>{
@@ -653,6 +661,10 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     const checkpoint=localStorage.getItem('pulso:library-download:v1:'+account);
     return queue===null&&checkpoint===null;
    },accountId,{timeout:135000});
+   if(mode==='queue'){
+    await page.getByRole('dialog',{name:playlistName}).waitFor({state:'detached'});
+    await page.waitForFunction(title=>document.activeElement?.textContent===title&&document.activeElement?.matches('.collection-header h3'),playlistName);
+   }
    const queueSearches=trace.filter(event=>event.kind==='search').map(event=>event.trackId);
    assert.deepEqual(queueSearches.filter(id=>String(id).startsWith('album-')),['album-0','album-1']);
    assert.deepEqual(queueSearches.slice(-2),['album-0','album-1']);
