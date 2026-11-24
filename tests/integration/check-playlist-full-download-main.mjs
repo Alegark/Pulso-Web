@@ -730,12 +730,13 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await page.evaluate(()=>{window.testBlockInspection=true;window.testSkippedInspection=false;});
      await openSavedAlbum();
      await page.waitForFunction(()=>window.testSkippedInspection);
-     const badges=page.locator('.album-page .album-track-badges');
+     const libraryAlbum=page.locator('.album-page').filter({has:page.getByRole('button',{name:'Descargar faltantes',exact:true})});
+     const badges=libraryAlbum.locator('.album-track-badges');
      assert.deepEqual(await badges.allTextContents(),['Copia sin comprobar','Copia sin comprobar']);
      await page.evaluate(()=>window.testSetSongFlight(true));
      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
      await page.evaluate(()=>{window.testBlockInspection=false;window.testSetSongFlight(false);});
-     await page.getByText('No descargada',{exact:true}).first().waitFor();
+     await libraryAlbum.getByText('No descargada',{exact:true}).first().waitFor();
      assert.deepEqual(await badges.allTextContents(),['No descargada','No descargada']);
     }else if(mode==='queue-single-edition'){
      await search(single.collectionName);
