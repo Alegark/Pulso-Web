@@ -18,11 +18,12 @@ assert.equal(await realpath(evidence),evidence);
 process.env.PULSO_TEST_EVIDENCE_DIR=evidence;
 const work=await createTestWorkspace('playlist-full-download');
 const checkpointKey='pulso:library-download:v1:'+accountId;
-const modes=['full','resume','missing','stale-checkpoint','benchmark','turnaround','queue','queue-cancel','queue-reload','tap-baseline','tap-active'];
+const modes=['full','resume','missing','stale-checkpoint','benchmark','turnaround','queue','queue-cancel','queue-reload','queue-admission','queue-song-save','queue-song-order','queue-cancel-empty','tap-baseline','tap-active'];
 const selectedMode=process.env.PLAYLIST_FULL_MODE;
 const selectedModes=selectedMode?.split(',');
 const selectedEngine=process.env.PLAYLIST_FULL_ENGINE;
 const baseline=process.env.PLAYLIST_TURNAROUND_BASE==='1';
+const cancelMode=mode=>mode==='queue-cancel'||mode==='queue-cancel-empty';
 const isQueueMode=mode=>mode.startsWith('queue')||mode.startsWith('tap-');
 const turnaroundScenarios=['mismatch','muted','reuse','tags-compound','tags-unrelated'];
 const selectedScenarios=process.env.PLAYLIST_TURNAROUND_SCENARIOS?.split(',')??turnaroundScenarios;
@@ -50,6 +51,18 @@ const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
  if(callbackTimeout&&id.endsWith('/src/telegram/bot-search-protocol.ts')){
   assert.ok(code.includes('callbackBudgetMs:65000'));
   return code.replace('callbackBudgetMs:65000','callbackBudgetMs:1500');
+ }
+ if(selectedModes?.includes('queue-admission')&&id.endsWith('/src/main.tsx'))return code+
+  "\nwindow.testMetadataAdmission=blocked=>setMetadataRescanBlocking(blocked,()=>true);";
+ if(selectedModes?.includes('queue-song-save')&&id.endsWith('/src/ui/MusicSearchController.tsx')){
+  const saveAudio='const saved=await f.attempt.save';
+  assert.ok(code.includes(saveAudio));
+  return code.replace(saveAudio,'window.testSongSaving=true; '+saveAudio);
+ }
+ if(selectedModes?.includes('queue-song-order')&&id.endsWith('/src/library/ordered-bot-acquisition.ts')){
+  const beforeDownload='const prior=client.searchSnapshot(),allowed=client.captureSearchActionCurrent();';
+  assert.ok(code.includes(beforeDownload));
+  return code.replace(beforeDownload,'if(!p.accept)await window.testSongGap?.(); '+beforeDownload);
  }
  if(selectedMode==='turnaround'&&id.endsWith('/src/main.tsx'))return code+
   '\nwindow.testTurnaroundDiagnostics=()=>{diagnostics.setEnabled(true);return diagnostics.getSnapshot().songs;};';
@@ -215,6 +228,9 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    trackName:title,collectionName:albumTitle,artistName,trackTimeMillis:2000};
  });
  const cTrack={...tracks[0].track,id:uuid(950),title:'Pulso Luz Tres'};
+ const cAudio=candidates.get(92).payload;
+ candidates.set(703,{trackId:cTrack.id,payload:cAudio});
+ replies.set(cTrack.title+' '+cTrack.artist,{trackId:cTrack.id,plan:[{audio:[{key:703,title:cTrack.title,artist:cTrack.artist,duration:2,mime:'audio/wav',bytes:cAudio.length}]}]});
  let gateOn=false,resumeCommitted=false;
  let sawWriteFailure=false,unblockRead,notifyBlocked,page;
  const blocked=new Promise(ok=>{notifyBlocked=ok;});
@@ -257,7 +273,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    if(kind==='callback')return route.fulfill({json:{}});
    if(kind!=='read'||!Number.isSafeInteger(offset)||limit!==524288)return route.fulfill({status:400});
    const {payload,fault}=candidate;
-   if(queued&&gateOn&&trackId===tracks[mode==='queue-cancel'?2:0].track.id){
+   if(queued&&gateOn&&trackId===tracks[cancelMode(mode)?2:0].track.id){
     notifyBlocked();await readGate;
     return route.fulfill({body:payload.subarray(offset,offset+limit),contentType:'application/octet-stream'}).catch(()=>{});
    }
@@ -427,6 +443,105 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     await searchArtist.tap();await artistHeading();
     await sweep(page.locator('.artist-album-grid button').filter({hasText:albumTitle}),albumHeading,()=>back('Volver al artista'));
    };
+   const queueKey='pulso:collection-download-queue:v1:'+accountId;
+   const queuedTitles=()=>page.evaluate(key=>JSON.parse(localStorage.getItem(key)??'[]').map(job=>job.title),queueKey);
+   const openNextPlaylist=async()=>{
+    await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).tap();
+    await page.getByRole('button',{name:'Playlists',exact:true}).tap();
+    await page.locator('.library-grid button').filter({hasText:playlistC}).tap();
+    await byHeading(playlistC).waitFor();
+   };
+   const enqueueNext=async()=>{
+    await openNextPlaylist();
+    await collection.getByRole('button',{name:startLabel,exact:true}).tap();
+   };
+   const verifyNext=async()=>{
+    await page.waitForFunction(({queueKey,checkpointKey})=>!localStorage.getItem(queueKey)&&!localStorage.getItem(checkpointKey),{queueKey,checkpointKey});
+    const {copies}=await inspect(page,[cTrack.id]);
+    assert.equal(copies[0]?.sha256,createHash('sha256').update(cAudio).digest('hex'));
+   };
+   if(mode==='queue-admission'){
+    await openNextPlaylist();
+    await page.evaluate(()=>window.testMetadataAdmission(true));
+    await collection.getByRole('button',{name:startLabel,exact:true}).tap();
+    await page.getByRole('button',{name:'Gestionar descarga en cola de '+playlistC}).waitFor();
+    // Give the normal dispatcher time to run its update and admission checks.
+    await page.waitForTimeout(700);
+    assert.deepEqual(await queuedTitles(),[playlistC]);
+    assert.equal(trace.length,0);
+    await page.evaluate(()=>window.testMetadataAdmission(false));
+    await verifyNext();
+   }
+   if(mode==='queue-cancel-empty'){
+    gateOn=true;await collection.getByRole('button',{name:startLabel,exact:true}).tap();await blocked;
+    await collection.getByRole('button',{name:'Gestionar descarga de '+playlistName}).tap();
+    await page.getByRole('button',{name:'Cancelar descarga',exact:true}).tap();
+    gateOn=false;unblockRead();
+    await page.waitForFunction(key=>!localStorage.getItem(key),checkpointKey,{timeout:4500});
+    assert.equal(await page.getByRole('button',{name:resumeLabel,exact:true}).count(),0);
+    const {copies}=await inspect(page,[tracks[0].track.id]);
+    assert.equal(copies[0]?.sha256,tracks[0].expected.sha256);
+    await enqueueNext();
+    await verifyNext();
+   }
+   if(mode==='queue-song-save'||mode==='queue-song-order'){
+    await search('Luz');
+    await searchAlbum.waitFor();await searchArtist.waitFor();
+    const song=page.locator('[data-catalog-kind=track]').filter({hasText:tracks[0].track.title});
+    const saveAlbum=()=>page.getByRole('button',{name:'Guardar álbum',exact:true}).tap();
+    if(mode==='queue-song-save'){
+     // Pause a transaction after the owner's activity token is taken, without
+     // holding the actual writer lock or blocking the Telegram worker.
+     await page.evaluate(()=>{
+      const original=navigator.locks.request.bind(navigator.locks);
+      navigator.locks.request=async(name,...args)=>{
+       if(name==='pulso-web:local:asset-writer'&&window.testHoldWriter){
+        window.testHoldWriter=false;
+        await new Promise(resolve=>{window.testReleaseWriter=resolve;});
+       }
+       return original(name,...args);
+      };
+     });
+     gateOn=true;await song.tap();await blocked;
+     await searchAlbum.tap();await albumHeading();
+     await page.evaluate(()=>{window.testHoldWriter=true;});
+     await saveAlbum();
+     await page.waitForFunction(()=>!!window.testReleaseWriter);
+     gateOn=false;unblockRead();
+     await back('Volver a búsqueda');
+     await page.waitForFunction(()=>window.testSongSaving===true);
+     await page.evaluate(()=>window.testReleaseWriter());
+     await page.getByText(/Reproduciendo la canción desde la copia|Canción disponible/).first().waitFor();
+    }else{
+     await page.evaluate(()=>{
+      window.testSongGap=()=>new Promise(resolve=>{window.testReleaseSong=resolve;});
+     });
+     await song.tap();await page.waitForFunction(()=>!!window.testReleaseSong);
+     await searchAlbum.tap();await albumHeading();
+     await saveAlbum();await page.locator('.album-saved').waitFor();
+     const otherSong=page.getByRole('button',{name:/Pulso Luz Uno/});
+     const otherSongEnabled=await otherSong.isEnabled();
+     await page.getByRole('button',{name:'Añadir álbum',exact:true}).tap();
+     await back('Volver a búsqueda');await searchArtist.tap();await artistHeading();
+     await page.getByRole('button',{name:'Guardar artista',exact:true}).tap();
+     await page.getByRole('button',{name:'Quitar de mis artistas',exact:true}).waitFor();
+     await enqueueNext();
+     const during=trace.filter(event=>event.kind==='search').map(event=>event.trackId);
+     assert.deepEqual(during,[tracks[0].track.id]);
+     assert.deepEqual(await queuedTitles(),[albumTitle,playlistC]);
+     assert.equal(otherSongEnabled,false);
+     await page.evaluate(()=>{delete window.testSongGap;window.testReleaseSong();});
+     await verifyNext();
+     assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.trackId),
+      [tracks[0].track.id,'album-0','album-1',cTrack.id]);
+    }
+    const {copies}=await inspect(page,[tracks[0].track.id]);
+    assert.equal(copies[0]?.sha256,tracks[0].expected.sha256);
+   }
+   if(['queue-admission','queue-song-save','queue-song-order','queue-cancel-empty'].includes(mode)){
+    assert.deepEqual(errors,[]);
+    receipt.status='PASS';receipt.totalMs=elapsed(started);return receipt;
+   }
    if(mode==='tap-baseline'||mode==='tap-active'){
     await search('Pulso Luz');await searchAlbum.waitFor();
     if(mode==='tap-active'){
