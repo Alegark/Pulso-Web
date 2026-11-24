@@ -43,6 +43,7 @@ export function AlbumPageController(props:Props){
  const [inspectionRevision,bumpInspection]=React.useReducer(n=>n+1,0);
  const [inspecting,setInspecting]=React.useState(false),[copies,setCopies]=React.useState<Record<string,{state:'available'|'missing'|'unknown';trackId:string|null;inLibrary:boolean|null}>>({});
  const inspectionTail=React.useRef<Promise<void>>(Promise.resolve()),inspectedEdition=React.useRef<AlbumDetail|null>(null),finishedInspection=React.useRef<AlbumDetail|null>(null);
+ const completedInspection=React.useRef<string|null>(null);
  const loadedMetadata=React.useRef<string|null>(null);
  const [saveNotice,setSaveNotice]=React.useState('');
  const [saving,setSaving]=React.useState(false),savingRef=React.useRef(false);
@@ -120,13 +121,18 @@ export function AlbumPageController(props:Props){
   return track?[track.id,track.revision,track.assetId,availability?.generation,availability?.state]:null;
  }));
  const inspectionSelection=props.libraryView?null:props.selectedKey;
+ const inspectionKey=JSON.stringify([props.scope,inspectionSelection,inspectionRevision,inspectionSignature]);
  React.useEffect(()=>{
   if(props.metadataOnly||!detail||!props.visible){inspectedEdition.current=null;setInspecting(false);return;}
   if(running||props.songPending){
    if(finishedInspection.current!==detail)inspectedEdition.current=null;
    setInspecting(false);return;
   }
-  const abort=new AbortController(),first=inspectedEdition.current!==detail;inspectedEdition.current=detail;
+  const first=inspectedEdition.current!==detail;
+  // A song can finish using copies that this detail just verified. Only
+  // restart a completed scan when its inputs changed during the song.
+  if(!first&&finishedInspection.current===detail&&completedInspection.current===inspectionKey)return;
+  const abort=new AbortController();inspectedEdition.current=detail;
   if(first)setCopies({});
   const targets=first||props.libraryView?detail.tracks:detail.tracks.filter(t=>albumTrackChoice(t,detail.edition.title).id===props.selectedKey);
   finishedInspection.current=null;setInspecting(true);
@@ -143,9 +149,9 @@ export function AlbumPageController(props:Props){
    }
   };
   const task=inspectionTail.current.catch(()=>{}).then(run);inspectionTail.current=task;
-  void task.finally(()=>{if(!abort.signal.aborted&&mounted.current){finishedInspection.current=detail;setInspecting(false);}});
+  void task.finally(()=>{if(!abort.signal.aborted&&mounted.current){finishedInspection.current=detail;completedInspection.current=inspectionKey;setInspecting(false);}});
   return()=>abort.abort();
- },[detail,props.scope,props.visible,props.metadataOnly,inspectionSelection,inspectionRevision,inspectionSignature,running,props.songPending]);
+ },[detail,props.visible,props.metadataOnly,inspectionKey,running,props.songPending]);
  const savedAlbum=props.savedAlbums?.find(album=>album.edition.id===detail?.edition.id);
  async function addAlbum(download=true,restoring=false){
   if(!active()||savingRef.current||!detail||download&&inspecting)return;
