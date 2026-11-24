@@ -413,7 +413,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
   if(p.libraryPending||!p.connected||p.connectionPhase!=='connected'||!p.client||!orderedProviders(p.bots).length||
    p.storageReady?.()===false)return false;
   const search=p.client.searchSnapshot();
-  if(search.pending||search.cancelling||search.retryBlocked||search.retryAt!==null&&search.retryAt>Date.now())return false;
+  if(!search.available||search.pending||search.cancelling||search.retryBlocked||search.retryAt!==null&&search.retryAt>Date.now())return false;
   if(job.kind==='album')return !!(p.captureAlbum??p.capture)?.()?.current();
   return tracksLoaded(job.request,p.tracks)&&
    !!(p.captureBatch??p.capture)?.(false)?.current();
@@ -429,7 +429,13 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
    if(readLibraryDownloadCheckpoint(account))return;
    queued=createCollectionDownloadQueue(localStorage,account).read()[0];
   }catch{return;}
-  if(!queued||intent&&(queued.kind!=='album'||intent.kind!=='album'||queued.album.edition.id!==intent.editionId)||!queueReady(queued))return;
+  if(!queued||intent&&(queued.kind!=='album'||intent.kind!=='album'||queued.album.edition.id!==intent.editionId))return;
+  const retryAt=props.client?.searchSnapshot().retryAt;
+  if(retryAt&&retryAt>Date.now()){
+   const retry=setTimeout(()=>wake(value=>value+1),retryAt-Date.now()+1);
+   return()=>clearTimeout(retry);
+  }
+  if(!queueReady(queued))return;
   const job=queued;
   const ownerCurrent=props.captureOwner?.()??props.captureLifetime?.();
   const sameOwner=()=>pageLive.current&&latest.current.accountId===account&&(ownerCurrent?.()??true);
