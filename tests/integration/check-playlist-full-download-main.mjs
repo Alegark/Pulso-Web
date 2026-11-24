@@ -536,9 +536,13 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    const albumCopies=await inspect(page,albumIds);
    assert.deepEqual(albumCopies.copies.map(copy=>copy.sha256),[701,702].map(key=>createHash('sha256').update(candidates.get(key).payload).digest('hex')));
    const data=await inspect(page,[...tracks.map(row=>row.track.id),cTrack.id]);
-   const verified=data.copies.slice(0,tracks.length).filter(Boolean).length;
+   const verifiedIds=new Set(tracks.filter((_,index)=>data.copies[index]).map(({track})=>track.id));
+   const verified=entries.filter(id=>verifiedIds.has(id)).length;
    if(mode==='queue-cancel')assert.equal(verified,1);
-   else assert.equal(verified,30);
+   else{
+    assert.equal(verified,30);
+    assert.equal(verifiedIds.size,tracks.length,'Repeated playlist occurrence reuses the verified asset');
+   }
    assert.equal(data.copies.at(-1),null);
    assert.deepEqual(data.unfinished,[]);
    assert.deepEqual(errors,[]);

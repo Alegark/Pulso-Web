@@ -10,7 +10,6 @@ export type CollectionDownloadJob=
 export const albumDownloadKey=(id:CatalogId)=>'album:'+id;
 export const libraryDownloadKey=(key:string)=>'library:'+key;
 export const collectionQueueStorageKey=(account:string)=>'pulso:collection-download-queue:v1:'+account;
-const limit=50;
 
 function copyJob(value:unknown):CollectionDownloadJob|null{
  const job=value as CollectionDownloadJob|null;
@@ -31,7 +30,7 @@ export function createCollectionDownloadQueue(storage:Pick<Storage,'getItem'|'se
   const raw=storage.getItem(key);
   if(!raw)return [];
   const rows:unknown=JSON.parse(raw);
-  if(!Array.isArray(rows)||rows.length>limit)throw Error('Invalid download queue');
+  if(!Array.isArray(rows))throw Error('Invalid download queue');
   const jobs=new Map<string,CollectionDownloadJob>();
   for(const value of rows){
    const job=copyJob(value);
@@ -50,7 +49,6 @@ export function createCollectionDownloadQueue(storage:Pick<Storage,'getItem'|'se
    if(!job)throw Error('Invalid queued collection');
    const position=jobs.findIndex(item=>item.key===job.key);
    if(position>=0)return position+1;
-   if(jobs.length>=limit)throw Error('Full download queue');
    jobs.push(job);write(jobs);return jobs.length;
   },
   remove(key:string,expectedId?:string){
