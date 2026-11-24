@@ -284,12 +284,14 @@ export function CollectionDownloadButton({label,disabled,complete,onStart,showLa
  const {running,notice,active,queued,queueAccount,removeQueued}=useAlbumDownloadState(coordinator);
  const dialog=useRef<HTMLDialogElement>(null),keep=useRef<HTMLButtonElement>(null),cancel=useRef<HTMLButtonElement>(null);
  const opener=useRef<HTMLButtonElement>(null);
+ const focusAfterDisable=useRef<(()=>void)|null>(null);
  const [confirmation,setConfirmation]=useState<{title:string;run?:NonNullable<AlbumCoordinator['active']>}|null>(null);
  const headingId=useId();
  const ownRun=collectionKey&&active?.collectionKey===collectionKey&&active.accountId===accountId?active:undefined;
  const waiting=collectionKey&&queueAccount===accountId?queued?.find(item=>item.key===collectionKey):undefined;
  const managed=!!(ownRun||waiting);
  const showProgress=!!ownRun||running&&!collectionKey;
+ const buttonDisabled=!showProgress&&!managed&&!!(disabled||complete);
  const {saved,total}=downloadCounts(notice);
  const name=showProgress?ownRun?`Gestionar descarga de ${ownRun.title}`:`Ver descargas · ${saved} de ${total} guardadas`:
   waiting?`Gestionar descarga en cola de ${waiting.title}`:complete?'Todas las canciones descargadas':label;
@@ -302,26 +304,45 @@ export function CollectionDownloadButton({label,disabled,complete,onStart,showLa
   const section=view?.closest('.library-view')??button?.closest('main');
   return()=>{
    node.close();
-   requestAnimationFrame(()=>{
-    if(document.querySelector('dialog[open],[aria-modal="true"]'))return;
-    if(button?.isConnected&&!button.disabled&&button.getClientRects().length){button.focus({preventScroll:true});return;}
-    const focused=document.activeElement;
-    if(focused&&focused!==document.body&&focused!==button&&focused.isConnected&&focused.getClientRects().length)return;
+   const canReturn=()=>!document.querySelector('dialog[open],[aria-modal="true"]')&&
+    (document.activeElement===document.body||document.activeElement===button||node.contains(document.activeElement));
+   const focusHeading=()=>{
+    focusAfterDisable.current=null;
+    if(!canReturn())return;
     const heading=[view?.querySelector<HTMLElement>('h2,h3'),...section?.querySelectorAll<HTMLElement>('h2[tabindex="-1"]')??[]]
      .find(element=>element?.getClientRects().length);
     if(!heading)return;
     const previous=heading.getAttribute('tabindex');
     heading.tabIndex=-1;heading.focus({preventScroll:true});
     if(previous===null)heading.removeAttribute('tabindex');else heading.setAttribute('tabindex',previous);
+   };
+   requestAnimationFrame(()=>{
+    if(!canReturn())return;
+    if(button?.isConnected&&!button.disabled&&button.getClientRects().length){
+     // Availability can finish refreshing after the download has settled.
+     // Move off the opener if that later render disables or removes it.
+     focusAfterDisable.current=focusHeading;
+     button.focus({preventScroll:true});
+    }else focusHeading();
    });
   };
  },[confirmation]);
+ useLayoutEffect(()=>{
+  if(buttonDisabled)focusAfterDisable.current?.();
+ },[buttonDisabled]);
+ useLayoutEffect(()=>()=>{
+  const fallback=focusAfterDisable.current;
+  if(fallback)requestAnimationFrame(fallback);
+ },[]);
  useEffect(()=>{
   if(confirmation&&(confirmation.run?ownRun!==confirmation.run:!waiting||!!ownRun))setConfirmation(null);
  },[confirmation,ownRun,waiting]);
  return <>
   <button ref={opener} type="button" className="collection-download" aria-label={name} title={name}
-   aria-haspopup={managed?'dialog':undefined} disabled={!showProgress&&!managed&&(disabled||complete)} onClick={()=>{
+   aria-haspopup={managed?'dialog':undefined} disabled={buttonDisabled} onBlur={event=>{
+    if(event.relatedTarget&&event.relatedTarget!==document.body)focusAfterDisable.current=null;
+   }} onClick={()=>{
+    focusAfterDisable.current=null;
     if(ownRun||waiting)setConfirmation({title:ownRun?.title??waiting!.title,run:ownRun});
     else if(showProgress)openDownloadDock();
     else onStart();

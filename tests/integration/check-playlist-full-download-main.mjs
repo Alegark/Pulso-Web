@@ -846,7 +846,8 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
  }catch(error){
   receipt.error=String(error.stack??error);
   receipt.pageErrors=errors;
-  if(queued)receipt.stage=await page?.evaluate(account=>({headings:[...document.querySelectorAll('h2')].filter(element=>element.getClientRects().length).map(element=>element.textContent),checkpoint:JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)??'null')?.cursor,queued:JSON.parse(localStorage.getItem('pulso:collection-download-queue:v1:'+account)??'[]').map(item=>item.title)}),accountId).catch(()=>null);
+  if(queued)receipt.stage=await page?.evaluate(account=>({focus:{tag:document.activeElement?.tagName,name:document.activeElement?.getAttribute('aria-label'),className:document.activeElement?.className},
+   headings:[...document.querySelectorAll('h2')].filter(element=>element.getClientRects().length).map(element=>element.textContent),checkpoint:JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)??'null')?.cursor,queued:JSON.parse(localStorage.getItem('pulso:collection-download-queue:v1:'+account)??'[]').map(item=>item.title)}),accountId).catch(()=>null);
   receipt.dock=await page?.getByRole('region',{name:'Descargas',exact:true}).allTextContents().catch(()=>[]);
   receipt.imports=await page?.evaluate(()=>window.__playlistFull.imports).catch(()=>[]);
  }finally{
