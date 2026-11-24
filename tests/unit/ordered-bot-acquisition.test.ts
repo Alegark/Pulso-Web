@@ -65,12 +65,12 @@ test('unsupported first provider is skipped while preserving configured order an
  const bots={providers:[{providerRef:'unsupported',username:'unknown',label:'Unknown'},{providerRef:'kd',username:'KDMUSIC_BOT',label:'KD'},{providerRef:'iv',username:'ivkmbot',label:'IV'},{providerRef:'kd',username:'kdmusic_bot',label:'KD'}]};
  assert.deepEqual(orderedProviders(bots as never),[{providerRef:'kd',label:'KD'},{providerRef:'iv',label:'IV'}]);
 });
-test('album cancellation after dispatch quarantines the row before any retry',async()=>{
+test('album cancellation before storage leaves an unconfirmed row eligible for retry',async()=>{
  const f=fixture(['success']),abort=new AbortController(),prior=f.client.downloadBot.bind(f.client),uncertain=new Set<number>();
  f.client.downloadBot=async(ref,allowed,started)=>{const value=await prior(ref,allowed,started);abort.abort();return value;};
  let result:AlbumProgress|undefined;const attempt:SongPlaybackAttempt={current:()=>true,lookup:async()=>null,save:async()=>{throw Error('must not save');},addToLibrary:async()=>{throw Error('must not add');},play:async()=>{throw Error('must not play');}};
  await acquireAlbum({detail:{edition:{id:1,title:'Album',artist:'Artist',trackCount:1,releaseDate:null},tracks:[{releaseId:1,trackId:1,disc:1,position:1,title:'Song',artist:'Artist',durationMs:60000}]},attempt,client:f.client,provider:'one',providers,revision:4,management:()=>null,signal:abort.signal,current:()=>true,rows:[{state:'unattempted',trackId:null,confirmed:false,message:''}],uncertainTracks:uncertain,update:v=>{result=v;}});
- assert.equal(result?.rows[0].state,'uncertain');assert.equal(uncertain.has(1),true);assert.deepEqual(f.searches,['one']);
+ assert.equal(result?.rows[0].state,'unattempted');assert.equal(uncertain.size,0);assert.deepEqual(f.searches,['one']);
 });
 
 test('album retries a network-only interruption once the delivery has settled',async()=>{
@@ -135,7 +135,7 @@ test('acknowledged incompatible full credit reports artist only and never return
 
 
 function collectionProgress():CollectionBotProgress{
- return {completed:new Set(),ambiguous:new Set(),responded:false,reasons:[]};
+ return {completed:new Set(),reasons:[]};
 }
 function collect(client:TelegramSessionClient,collection=collectionProgress()){
  return acquireFromOrderedBots({client,collection,providers,revision:4,target,signal:new AbortController().signal,
@@ -150,9 +150,9 @@ test('collection tries the next provider after an isolated timeout or unsupporte
  }
 });
 
-test('collection treats a timeout as a channel interruption only after all bots are inconclusive',async()=>{
+test('collection continues after all bots time out or reject the song while Telegram remains available',async()=>{
  const silent=fixture(['timeout','uncertain']);
- assert.equal((await collect(silent.client)).state,'unavailable');
+ assert.deepEqual(await collect(silent.client),{state:'known-failure',reasons:['no-compatible-row']});
  assert.deepEqual(silent.searches,['one','two']);
  const answered=fixture(['empty','timeout']);
  assert.deepEqual(await collect(answered.client),{state:'known-failure',reasons:['no-compatible-row']});
@@ -164,7 +164,7 @@ test('collection treats a timeout as a channel interruption only after all bots 
 
 test('collection remembers an answered provider across a channel pause and preserves its reason',async()=>{
  const progress=collectionProgress(),f=fixture(['empty','rate-limit']);
- assert.equal((await collect(f.client,progress)).state,'unavailable');
+ assert.equal((await collect(f.client,progress)).state,'telegram');
  assert.deepEqual(f.searches,['one','two']);
  const resumed=fixture(['timeout']);
  assert.deepEqual(await collect(resumed.client,progress),{state:'known-failure',reasons:['no-compatible-row']});

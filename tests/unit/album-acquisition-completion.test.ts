@@ -69,3 +69,23 @@ test('terminal byte-validation failure continues only after settlement of the ex
   assert.equal(looked,2);assert.notEqual(result?.rows[0].reason,'not-found');assert.equal(result?.rows[0].state,'failed');assert.equal(result?.rows[1].confirmed,true);assert.equal(mock.searches,1);assert.equal(mock.downloads,1);
  }
 });
+
+test('aborting a lookup leaves that album track eligible after resume',async()=>{
+ const abort=new AbortController(),uncertainTracks=new Set<number>();
+ let progress:AlbumProgress|undefined;
+ const mock=noMatchingClient();
+ const options={detail,client:mock.client,provider:'provider',revision:1,management:()=>null,
+  current:()=>true,uncertainTracks,update:(value:AlbumProgress)=>{progress=value;}};
+ const stopped=await acquireAlbum({...options,attempt:attempt(async()=>{
+  abort.abort();throw new DOMException('lookup was aborted','AbortError');
+ }),signal:abort.signal,rows:initial()});
+ assert.equal(stopped,'interrupted');
+ assert.deepEqual([...uncertainTracks],[]);
+ assert.equal(progress?.rows[0].state,'unattempted');
+ addCurrent=async()=>true;
+ const resumed=await acquireAlbum({...options,attempt:attempt(async choice=>choice.title==='Track 1'?null:'verified'),
+  signal:new AbortController().signal,rows:progress!.rows});
+ assert.equal(resumed,'completed');
+ assert.equal(mock.searches,1);
+ assert.equal(progress?.rows[1].confirmed,true);
+});

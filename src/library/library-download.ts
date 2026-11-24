@@ -132,7 +132,7 @@ export async function downloadLibrarySelection(p:{
     Object.assign(row,parkedSong);
    }else{
     const pause=wait.pauseForTrack();
-    const collection:CollectionBotProgress={completed:new Set(),ambiguous:new Set(),responded:false,reasons:[]};
+    const collection:CollectionBotProgress={completed:new Set(),reasons:[]};
     let interrupted=false,suspended=false,lastSuspension=-1;
     const status=(message:string,waiting=false)=>{if(row.message!==message){row.message=message;update(message,waiting);}};
     const measurement=beginSongAggregate();
@@ -156,7 +156,7 @@ export async function downloadLibrarySelection(p:{
      const audioCurrent=()=>captured()&&p.client.botsSnapshot().revision===bots.revision;
      const crossedSuspension=()=>wait.generation()!==generation&&wait.generation()!==lastSuspension;
      const result=await downloadSong({...p,providers,revision:bots.revision,collection,measurement,choice,trackId:track.id,index:i,current:live,
-      networkCurrent:()=>audioCurrent()&&wait.online(),audioCurrent,suspended:crossedSuspension,remoteClock,
+      networkCurrent:()=>audioCurrent()&&wait.online(),audioCurrent,remoteClock,
       waitForDownload,previousAttempts:attempts.get(track.id),onFailedCandidates:candidates=>attempts.set(track.id,candidates),
       mark:value=>{pending=value;mark(i,value);},message:status,progress:()=>{}});
      if(!live())return stop();

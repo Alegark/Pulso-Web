@@ -38,7 +38,7 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<'completed'|'inte
    };
    let id:string|null=null,downloaded=false;
    if(p.attempt.waitForDownload&&!await p.attempt.waitForDownload(p.signal)){interruption=storageStopped;break;}
-   try{id=await p.attempt.lookup(choice,p.signal,true);}catch{park();update(row.message);continue;}
+   try{id=await p.attempt.lookup(choice,p.signal,true);}catch{if(!live())break;park();update(row.message);continue;}
    if(!live())break;
    if(!id&&previouslyParked){park();update(row.message);continue;}
    row.confirmed=false;
@@ -48,14 +48,10 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<'completed'|'inte
      row.state='failed';row.message='No hay bots disponibles';update(row.message);continue;
     }
     let pending:PendingDownload|undefined;
-    const result=await downloadSong({client:p.client,providers,revision:p.revision,signal:p.signal,current:live,networkCurrent,remoteClock,interruptOnTelegram:p.interruptOnTelegram,
+    const result=await downloadSong({client:p.client,providers,revision:p.revision,signal:p.signal,current:live,networkCurrent:()=>networkCurrent()&&globalThis.navigator?.onLine!==false,remoteClock,interruptOnTelegram:p.interruptOnTelegram,
      attempt:p.attempt,choice,index:i,mark:value=>{pending=value;},message:message=>{row.message=message;update(message);},progress:()=>{}});
     if(result.state==='stopped'||result.state==='telegram'||!live()){
      if(pending?.kind==='save')park();
-     else if(pending?.kind==='network'){
-      const remote=p.client.searchSnapshot();
-      if(remote.pending||remote.cancelling||remote.retryBlocked||remote.delivery==='uncertain')park();
-     }
      interruption=result.state==='telegram'?'Telegram se interrumpió. Las copias ya confirmadas se conservan.':storageStopped;
      break;
     }
