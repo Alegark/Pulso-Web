@@ -706,6 +706,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      assert.equal(await page.evaluate(key=>localStorage.getItem(key),checkpointKey),paused);
      assert.equal(await handle.getAttribute('aria-expanded'),'true','Tapping the paused playlist opens its progress');
      await handle.tap();
+     await page.setViewportSize({width:390,height:1100});
      await enqueueNext();
      await back('Volver a Biblioteca');
      await page.locator('.library-grid button').filter({hasText:playlistName}).tap();
