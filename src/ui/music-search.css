@@ -65,7 +65,7 @@
 .catalog-clear svg { inline-size: 20px; block-size: 20px; }
 .music-search .music-search-query-bar .catalog-cancel { background: transparent; border-color: transparent; color: var(--pulso-foreground); font-weight: 500; padding-inline: .25rem; font-size: .9rem; }
 .catalog-search-status { color: var(--pulso-muted); font-size: .8rem; }
-.catalog-search-status:not(:empty) { padding-block: .35rem; min-block-size: 1.25rem; }
+.catalog-search-status { padding-block: .35rem; min-block-size: 1.95rem; }
 .pulso-app .music-search .music-search-catalog { margin-block-start: .25rem; }
 .music-search .music-search-actions { flex-wrap: nowrap; overflow-x: auto; gap: .4rem; padding-block: .25rem; margin-block: 0 .75rem; scrollbar-width: thin; }
 .music-search .music-search-actions button { flex: 0 0 auto; white-space: nowrap; padding: .45rem .85rem; font-size: .8rem; border-radius: 2rem; }
@@ -85,6 +85,7 @@
 .music-search-catalog [data-suggestion-id]:focus-visible { outline-offset: -3px; }
 .music-search .music-search-actions { scroll-padding-inline: .25rem; overscroll-behavior-inline: contain; }
 .music-search button { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.pulso-app .music-search [data-suggestion-id]:active:not(:disabled) { transform: none; }
 .music-search button:active:not(:disabled) { background: var(--pulso-soft); color: var(--pulso-foreground); }
 .music-search summary { min-block-size: 44px; padding-block: .65rem; }
 .pulso-app .music-search .music-search-bot { margin-block-start: 1.25rem; }

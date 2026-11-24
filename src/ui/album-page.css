@@ -54,3 +54,15 @@
 
 .album-art, .artist-album-art { overflow: hidden; }
 .pulso-app .album-page .album-actions .collection-download:has(span) { width: auto; gap: .5rem; }
+
+.artist-album-grid button, .library-grid .collection-card {
+ touch-action: manipulation;
+ -webkit-user-select: none;
+ user-select: none;
+}
+.pulso-app .artist-album-grid button:active:not(:disabled),
+.pulso-app .library-grid .collection-card:active:not(:disabled) {
+ transform: none;
+ background: var(--pulso-soft);
+}
+.album-saved { align-self: center; color: var(--pulso-muted); }
