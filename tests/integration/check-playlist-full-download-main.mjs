@@ -423,6 +423,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     await search('Pulso Luz');await searchAlbum.waitFor();
     await tapAt(searchAlbum,.12,.5);await albumHeading();await back('Volver a búsqueda');
     await search('Luz');await searchAlbum.waitFor();
+    await searchArtist.waitFor();await searchSong.waitFor();
     const aSong=page.locator('[data-catalog-kind=track]').filter({hasText:tracks[0].track.title});
     gateOn=true;await aSong.tap();await blocked;
     if(mode==='tap-baseline'){
@@ -433,6 +434,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      assert.equal(navigated,false);
      assert.ok(hits.every(hit=>hit.disabled));
     }else{
+     await input.fill('Pulso Luz');
      await sweep(searchAlbum,albumHeading,()=>back('Volver a búsqueda'));
      await sweep(searchArtist,artistHeading,()=>back('Volver a búsqueda'));
      await sweep(searchSong,()=>page.locator('[data-suggestion-id][aria-pressed=true]').filter({hasText:cTrack.title}).waitFor());

@@ -147,7 +147,21 @@ export function MusicSearchController(props:Props){
  const results=displayedQuery!==null&&state?.queryId===displayedQuery?state.rows.map(row=>resultView(row,state.expectedTarget)):[];
  const revokeMetadata=()=>{++metadataEpoch.current;const attempt=metadataAttempt.current;metadataAttempt.current=null;attempt?.abort.abort();setSuggesting(false);};
  const bump=()=>{++viewEpoch.current;pulse();};
- const edit=(queryChanged=false)=>{setBlockedChoice(null);if(flight.current)downloadNotifications.dismiss('song',flight.current);singleAttempt.current?.abort();singleAttempt.current=null;setResolvingSingle(false);catalogAbort.current?.abort();catalogAbort.current=null;setCatalogPending(false);flight.current?.abort.abort();flight.current=null;downloadAbort.current?.abort();setDownload(null);setSongError(null);bump();chosenDraft.current=null;if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);}setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);if(action?.())client?.clearSearch(action);};
+ const edit=(queryChanged=false)=>{
+  setBlockedChoice(null);
+  singleAttempt.current?.abort();singleAttempt.current=null;setResolvingSingle(false);
+  catalogAbort.current?.abort();catalogAbort.current=null;setCatalogPending(false);
+  bump();chosenDraft.current=null;
+  if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);}
+  const song=flight.current;
+  // Updating the draft revokes its catalogue requests. The song already
+  // selected by a gesture keeps its own download and playback authority.
+  if(queryChanged&&song&&!['done','error'].includes(song.phase))return;
+  if(song)downloadNotifications.dismiss('song',song);
+  song?.abort.abort();flight.current=null;downloadAbort.current?.abort();
+  setDownload(null);setSongError(null);setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);
+  if(action?.())client?.clearSearch(action);
+ };
  React.useEffect(()=>{
   singleAttempt.current?.abort();singleAttempt.current=null;setResolvingSingle(false);
   const f=flight.current;if(f){f.abort.abort();f.networkCurrent=null;f.queryId=null;}bump();setDownload(null);setDisplayedQuery(null);setSelectedResult(null);
