@@ -233,7 +233,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    trackName:title,collectionName:albumTitle,artistName,trackTimeMillis:2000};
  });
  const cTrack={...tracks[0].track,id:uuid(950),title:'Pulso Luz Tres'};
- const cAudio=candidates.get(231).payload;
+ const cAudio=candidates.get(tracks.at(-1).goodKey).payload;
  candidates.set(703,{trackId:cTrack.id,payload:cAudio});
  replies.set(cTrack.title+' '+cTrack.artist,{trackId:cTrack.id,plan:[{audio:[{key:703,title:cTrack.title,artist:cTrack.artist,duration:2,mime:'audio/wav',bytes:cAudio.length}]}]});
  let gateOn=false,resumeCommitted=false;
