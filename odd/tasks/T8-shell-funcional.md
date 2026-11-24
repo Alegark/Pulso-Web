@@ -537,3 +537,11 @@ En WebKit a 390 × 844 con entrada táctil, la base `7d41d25` alcanzó el botón
 Las tarjetas de artista y álbum conservan el gesto de navegación durante el trabajo de audio. Cambiar el texto de búsqueda cancela las consultas de metadatos anteriores y conserva la canción ya admitida. Si el carril está ocupado, tocar otra canción selecciona su ficha y muestra cuándo se puede reproducir. Se reserva espacio de desplazamiento para las barras fijas y las tarjetas conservan su tamaño al presionarlas.
 
 Chromium y WebKit locales usaron toques nativos de Playwright y catálogo/Telegram sintéticos. Los barridos en reposo, con una canción y con una colección activa verificaron los puntos de las tarjetas y conservaron la copia iniciada. La suite general de interfaz obtuvo 11/12 por motor. El control de apertura del minirreproductor quedó fuera del viewport con texto al 200 % tanto en el candidato como en `7d41d25`. El teclado y la ejecución en segundo plano de iOS se comprobarán en iPhone físico.
+
+## 2026-11-24 · Selección de canción durante la navegación
+
+Buscar protege la selección explícita durante la resolución de metadatos, las consultas, las pausas del bot, la lectura del audio y el guardado. Abrir un detalle, editar la consulta o intentar seleccionar otra canción conserva el trabajo iniciado. Se pueden guardar metadatos de álbum y artista mientras la canción espera a Telegram. Los recorridos `queue-song-save`, `queue-song-order` y `tap-active` usaron catálogo y Telegram sintéticos en Chromium y WebKit.
+
+El barrido general de interfaz pasó 11/12 por motor. El minirreproductor fuera del viewport al 200 % y los avisos de `ResizeObserver` en WebKit se reprodujeron también en `7d41d25`.
+
+El diálogo de la colección sincroniza el cierre nativo y recorre sus dos acciones con Tab o Shift+Tab incluso si el foco está en el propio diálogo. Al cerrar recupera el botón habilitado. Si el botón se deshabilita cuando se actualiza la disponibilidad, el foco pasa al encabezado de la vista. La prueba del dock verificó la devolución y la deshabilitación posterior en ambos motores.

@@ -2425,3 +2425,7 @@ La tercera revisión de la PR 19 usa el mismo grupo de Biblioteca para la tarjet
 ## 2026-11-24 · Toques y cola de descargas de colección
 
 T8, T10 y T11-T12 registran la reproducción táctil, el guardado de una edición durante una descarga y la cola persistente por cuenta. Chromium y WebKit locales verificaron el guardado sin audio, la playlist de 30 entradas y el álbum en cola mediante transportes de prueba. P0-W continúa abierto. Sigue pendiente la aceptación en iPhone físico con Telegram real.
+
+### 2026-11-24 · Revisión independiente de la cola
+
+T11-T12 registra las cuatro regresiones de admisión, reserva de canción, guardado y cancelación, reproducidas en `af313ac` y verificadas con transportes de prueba en Chromium y WebKit. T8 y T10 registran la continuidad al navegar, la retirada de colecciones y la inspección pasiva. P0-W sigue abierto y la aceptación física con Telegram real queda pendiente.
