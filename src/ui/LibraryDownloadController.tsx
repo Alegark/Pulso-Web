@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {downloadNotifications} from '../pwa/download-notifications';
 import {createPortal} from 'react-dom';
-import {announceDownloadMessage,CollectionDownloadButton,DownloadDock,useAlbumDownloadState} from './DownloadDock';
+import {announceDownloadMessage,CollectionDownloadButton,DownloadDock,openDownloadDock,useAlbumDownloadState} from './DownloadDock';
 import {downloadHandoffInProgress,downloadWithCurrentApp,pendingDownloadAfterUpdate,takeDownloadAfterUpdate} from '../service-worker/download-update';
 import {registerUpdateBlocker} from '../service-worker/update-blockers';
 import {subscribeLibraryDownloads,subscribeLibraryTrackReviews,releaseUncertainSingleDownload,downloadLibrarySelection,type LibraryDownloadRequest} from '../library/library-download';
@@ -64,7 +64,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
   }
   if(albumCoordinator.active?.collectionKey===job.key)return;
   try{
-   if(readLibraryDownloadCheckpoint(account)?.collectionKey===job.key)return;
+   if(readLibraryDownloadCheckpoint(account)?.collectionKey===job.key){openDownloadDock();return;}
    createCollectionDownloadQueue(localStorage,account).add(job);
    const queued=publishQueue(account).filter(item=>item.key!==albumCoordinator.active?.collectionKey);
    const position=queued.findIndex(item=>item.key===job.key)+1;
@@ -432,7 +432,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
   if(!queued||intent&&(queued.kind!=='album'||intent.kind!=='album'||queued.album.edition.id!==intent.editionId))return;
   const retryAt=props.client?.searchSnapshot().retryAt;
   if(retryAt&&retryAt>Date.now()){
-   const retry=setTimeout(()=>wake(value=>value+1),retryAt-Date.now()+1);
+   const retry=setTimeout(()=>wake(value=>value+1),Math.min(2_147_483_647,retryAt-Date.now()+1));
    return()=>clearTimeout(retry);
   }
   if(!queueReady(queued))return;
