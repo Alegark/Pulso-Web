@@ -18,7 +18,7 @@ assert.equal(await realpath(evidence),evidence);
 process.env.PULSO_TEST_EVIDENCE_DIR=evidence;
 const work=await createTestWorkspace('playlist-full-download');
 const checkpointKey='pulso:library-download:v1:'+accountId;
-const modes=['full','resume','missing','stale-checkpoint','benchmark','turnaround','queue','queue-cancel','queue-reload','queue-admission','queue-song-save','queue-song-order','queue-cancel-empty','tap-baseline','tap-active'];
+const modes=['full','resume','missing','stale-checkpoint','benchmark','turnaround','queue','queue-cancel','queue-reload','queue-admission','queue-song-save','queue-song-order','queue-cancel-empty','queue-removal-storage','tap-baseline','tap-active'];
 const selectedMode=process.env.PLAYLIST_FULL_MODE;
 const selectedModes=selectedMode?.split(',');
 const selectedEngine=process.env.PLAYLIST_FULL_ENGINE;
@@ -52,8 +52,13 @@ const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
   assert.ok(code.includes('callbackBudgetMs:65000'));
   return code.replace('callbackBudgetMs:65000','callbackBudgetMs:1500');
  }
- if(selectedModes?.includes('queue-admission')&&id.endsWith('/src/main.tsx'))return code+
-  "\nwindow.testMetadataAdmission=blocked=>setMetadataRescanBlocking(blocked,()=>true);";
+ if(id.endsWith('/src/main.tsx')){
+  if(selectedModes?.includes('queue-admission'))code+="\nwindow.testMetadataAdmission=blocked=>setMetadataRescanBlocking(blocked,()=>true);";
+  if(selectedModes?.includes('queue-removal-storage'))code=code.replace(
+   "const downloadStorageReady=()=>databaseState==='ready';",
+   "const downloadStorageReady=()=>databaseState==='ready'&&!window.testDownloadStorageUnavailable;");
+  if(selectedModes?.some(mode=>mode==='queue-admission'||mode==='queue-removal-storage'))return code;
+ }
  if(selectedModes?.includes('queue-song-save')&&id.endsWith('/src/ui/MusicSearchController.tsx')){
   const saveAudio='const saved=await f.attempt.save';
   assert.ok(code.includes(saveAudio));
@@ -228,13 +233,18 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    trackName:title,collectionName:albumTitle,artistName,trackTimeMillis:2000};
  });
  const cTrack={...tracks[0].track,id:uuid(950),title:'Pulso Luz Tres'};
- const cAudio=candidates.get(92).payload;
+ const cAudio=candidates.get(231).payload;
  candidates.set(703,{trackId:cTrack.id,payload:cAudio});
  replies.set(cTrack.title+' '+cTrack.artist,{trackId:cTrack.id,plan:[{audio:[{key:703,title:cTrack.title,artist:cTrack.artist,duration:2,mime:'audio/wav',bytes:cAudio.length}]}]});
  let gateOn=false,resumeCommitted=false;
  let sawWriteFailure=false,unblockRead,notifyBlocked,page;
  const blocked=new Promise(ok=>{notifyBlocked=ok;});
  const readGate=new Promise(ok=>{unblockRead=ok;});
+ const waitForBlockedRead=async()=>{
+  let timer;
+  try{await Promise.race([blocked,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Missing gated audio read')),15000);})]);}
+  finally{clearTimeout(timer);}
+ };
  let cloud={accountId,revision:1,document:{version:1,tracks:tracks.map(row=>row.track),
   playlists:[{id:uuid(99),name:playlistName,entries:entries.map((trackId,i)=>({trackId,id:uuid(100+i)}))},
    ...(queued?[{id:uuid(951),name:playlistC,entries:[{trackId:cTrack.id,id:uuid(952)}]}]:[])]}};
@@ -472,8 +482,44 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     await page.evaluate(()=>window.testMetadataAdmission(false));
     await verifyNext();
    }
+   if(mode==='queue-removal-storage'){
+    await search('Pulso Luz');await searchAlbum.tap();await albumHeading();
+    await page.getByRole('button',{name:'Guardar álbum',exact:true}).tap();
+    await page.locator('.album-saved').waitFor();
+    await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).tap();
+    await page.getByRole('button',{name:'Álbumes',exact:true}).tap();
+    await page.locator('.library-grid button').filter({hasText:albumTitle}).tap();await albumHeading();
+    const missing=page.getByRole('button',{name:'Descargar faltantes',exact:true});
+    await page.evaluate(()=>{
+     window.testDownloadStorageUnavailable=true;
+     Object.defineProperty(navigator,'onLine',{configurable:true,value:false});
+    });
+    await missing.tap();
+    await dock.getByText(/Reintenta la apertura de Almacenamiento/).waitFor();
+    assert.deepEqual(await queuedTitles(),[]);
+    await page.evaluate(()=>{window.testDownloadStorageUnavailable=false;});
+    await missing.tap();
+    assert.deepEqual(await queuedTitles(),[albumTitle]);
+    const confirmRemoval=async kind=>{
+     const dialog=page.getByRole('dialog',{name:'Eliminar '+kind,exact:true});
+     await dialog.getByRole('checkbox').check();
+     await dialog.getByRole('button',{name:'Eliminar '+kind,exact:true}).tap();
+     await dialog.getByText('La colección se eliminó.',{exact:true}).waitFor();
+     await dialog.getByRole('button',{name:'Cerrar',exact:true}).tap();
+    };
+    await page.getByRole('button',{name:'Retirar álbum',exact:true}).tap();
+    await confirmRemoval('álbum');
+    assert.deepEqual(await queuedTitles(),[]);
+    await enqueueNext();
+    assert.deepEqual(await queuedTitles(),[playlistC]);
+    await collection.getByRole('button',{name:'Opciones de playlist',exact:true}).tap();
+    await page.getByRole('button',{name:'Eliminar playlist',exact:true}).tap();
+    await confirmRemoval('playlist');
+    assert.deepEqual(await queuedTitles(),[]);
+    assert.equal(trace.length,0);
+   }
    if(mode==='queue-cancel-empty'){
-    gateOn=true;await collection.getByRole('button',{name:startLabel,exact:true}).tap();await blocked;
+    gateOn=true;await collection.getByRole('button',{name:startLabel,exact:true}).tap();await waitForBlockedRead();
     await collection.getByRole('button',{name:'Gestionar descarga de '+playlistName}).tap();
     await page.getByRole('button',{name:'Cancelar descarga',exact:true}).tap();
     gateOn=false;unblockRead();
@@ -502,7 +548,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
        return original(name,...args);
       };
      });
-     gateOn=true;await song.tap();await blocked;
+     gateOn=true;await song.tap();await waitForBlockedRead();
      await searchAlbum.tap();await albumHeading();
      await page.evaluate(()=>{window.testHoldWriter=true;});
      await saveAlbum();
@@ -538,7 +584,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     const {copies}=await inspect(page,[tracks[0].track.id]);
     assert.equal(copies[0]?.sha256,tracks[0].expected.sha256);
    }
-   if(['queue-admission','queue-song-save','queue-song-order','queue-cancel-empty'].includes(mode)){
+   if(['queue-admission','queue-song-save','queue-song-order','queue-cancel-empty','queue-removal-storage'].includes(mode)){
     assert.deepEqual(errors,[]);
     receipt.status='PASS';receipt.totalMs=elapsed(started);return receipt;
    }
@@ -559,7 +605,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     await search('Luz');await searchAlbum.waitFor();
     await searchArtist.waitFor();await searchSong.waitFor();
     const aSong=page.locator('[data-catalog-kind=track]').filter({hasText:tracks[0].track.title});
-    gateOn=true;await aSong.tap();await blocked;
+    gateOn=true;await aSong.tap();await waitForBlockedRead();
     if(mode==='tap-baseline'){
      const hits=[];
      for(const x of [.12,.5,.88])for(const y of [.14,.5,.86])hits.push(await tapAt(searchAlbum,x,y));
