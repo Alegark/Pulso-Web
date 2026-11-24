@@ -340,6 +340,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
  },[props.accountId,props.connectionPhase,props.bots,props.connected,download.dispatching,download.songFlight]);
  useEffect(()=>registerUpdateBlocker(()=>flight.current!==null||waiting.current!==null),[]);
  useEffect(()=>{
+  pageLive.current=true;
   const unsubscribe=subscribeLibraryDownloads(request=>void startRef.current(request));
   const unsubscribeReview=subscribeLibraryTrackReviews((id,title)=>void reviewRef.current(id,title));
   const suspend=()=>{
@@ -367,6 +368,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
   };
   addEventListener('storage',changed);
   return()=>{
+   pageLive.current=false;
    unsubscribe();unsubscribeReview();removeEventListener('pagehide',suspend);removeEventListener('pageshow',restored);
    removeEventListener('online',foreground);removeEventListener('offline',networkChanged);document.removeEventListener('visibilitychange',foreground);removeEventListener('storage',changed);
   };
@@ -460,19 +462,18 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
   const ownerCurrent=props.captureOwner?.()??props.captureLifetime?.();
   const sameOwner=()=>pageLive.current&&latest.current.accountId===account&&(ownerCurrent?.()??true);
   const token={account,key:job.key,cancelled:false};
-  const matchingIntent=()=>{
-   const intent=pendingDownloadAfterUpdate(account);
-   if(job.kind==='album'&&intent?.kind==='album'&&job.album.edition.id===intent.editionId)return intent;
-   if(job.kind==='library'&&intent?.kind==='library'&&!intent.checkpointId&&job.id===intent.request.id)return intent;
-  };
+  const matchesIntent=(intent:ReturnType<typeof pendingDownloadAfterUpdate>)=>
+   job.kind==='album'&&intent?.kind==='album'&&job.album.edition.id===intent.editionId||
+   job.kind==='library'&&intent?.kind==='library'&&!intent.checkpointId&&job.id===intent.request.id;
   // Use live authority and the persisted head/checkpoint at each async boundary.
   // This token may pass its own dispatch reservation but never another's.
   const ready=()=>{
    const p=latest.current;
+   const intent=pendingDownloadAfterUpdate(account);
    if(token.cancelled||!sameOwner()||!hasControl()||document.visibilityState==='hidden'||navigator.onLine===false||
     albumCoordinator.running||albumCoordinator.songFlight||flight.current||checking.current||waiting.current||admission.current||
     albumCoordinator.dispatching&&dispatch.current!==token||downloadHandoffInProgress(account)||
-    pendingDownloadAfterUpdate(account)&&!matchingIntent()||
+    intent&&!matchesIntent(intent)||
     p.libraryPending||!p.connected||p.connectionPhase!=='connected'||!orderedProviders(p.bots).length||
     p.storageReady?.()===false||!telegramReady(p.client))return false;
    if(readLibraryDownloadCheckpoint(account)||queue.read()[0]?.id!==job.id)return false;
@@ -494,7 +495,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
    if(paused)return;
   }catch{pause();return;}
 
-  const intent=matchingIntent();
+  const intent=pendingDownloadAfterUpdate(account);
   const client=props.client;
   const sessionCurrent=client?.captureBotsCurrent();
   const revision=props.bots?.revision;
@@ -594,7 +595,8 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
    pendingDownload={pending?{saved:pending.saved??0,total:pending.trackIds.length,title:pending.title,reason:pending.pauseMessage,retaking,onContinue:()=>{
     autoArmed.current=false;void startChecked(resumeRequest(pending),pending);
    }}:undefined}/>
-  {collection?.target&&(!pending||download.running||collection.id)&&createPortal(<CollectionDownloadButton label={collection.label} paused={!!pending?.collectionKey&&pending.collectionKey===libraryDownloadKey(collection.id??'')}
+  {collection?.target&&(!pending||download.running||collection.id)&&createPortal(<CollectionDownloadButton label={collection.label}
+   paused={collection.id!==undefined&&pending?.collectionKey===libraryDownloadKey(collection.id)}
    accountId={props.accountId} collectionKey={collection.id?libraryDownloadKey(collection.id):undefined}
    disabled={!!waiting.current||collection.disabled||!collection.request.trackIds.length}
    complete={collection.complete} onStart={()=>{
