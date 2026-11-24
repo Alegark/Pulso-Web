@@ -448,7 +448,9 @@ try{
       assert.deepEqual(navigations,['/testonly-seed','/',next.entry]);
      }else{
       await handle.getByText('0/2',{exact:true}).waitFor();
-      await page.locator('.album-actions').getByRole('button',{name:/Ver descargas/}).click();
+      await page.locator('.album-actions').getByRole('button',{name:'Gestionar descarga de Álbum de prueba'}).click();
+      await page.getByRole('button',{name:'Seguir descargando',exact:true}).click();
+      await handle.click();
       await dock.getByRole('button',{name:'Detener',exact:true}).waitFor();
       await panel.getByText('Álbum de prueba',{exact:true}).waitFor();
       releaseSearch();
@@ -632,8 +634,11 @@ try{
      await handle.getByText('2/4',{exact:true}).waitFor();
      assert.equal(await handle.getAttribute('aria-expanded'),'false');
      await page.screenshot({path:`${screenshots}/${engine}-390x844-plegada.png`});
-     await header.getByRole('button',{name:/Ver descargas/}).click();
-     assert.equal(await handle.evaluate(el=>el===document.activeElement),true);
+     await header.getByRole('button',{name:/Gestionar descarga de/}).click();
+     const keep=page.getByRole('button',{name:'Seguir descargando',exact:true});
+     assert.equal(await keep.evaluate(el=>el===document.activeElement),true);
+     await keep.click();
+     await handle.click();
      await dock.getByRole('button',{name:'Detener',exact:true}).waitFor();
      await panel.getByText('Pista 3',{exact:true}).first().waitFor();
      await handle.click();

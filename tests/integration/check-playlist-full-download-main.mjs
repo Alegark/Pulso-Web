@@ -18,17 +18,19 @@ assert.equal(await realpath(evidence),evidence);
 process.env.PULSO_TEST_EVIDENCE_DIR=evidence;
 const work=await createTestWorkspace('playlist-full-download');
 const checkpointKey='pulso:library-download:v1:'+accountId;
-const modes=['full','resume','missing','stale-checkpoint','benchmark','turnaround'];
+const modes=['full','resume','missing','stale-checkpoint','benchmark','turnaround','queue','queue-cancel','queue-reload','tap-baseline','tap-active'];
 const selectedMode=process.env.PLAYLIST_FULL_MODE;
+const selectedModes=selectedMode?.split(',');
 const selectedEngine=process.env.PLAYLIST_FULL_ENGINE;
 const baseline=process.env.PLAYLIST_TURNAROUND_BASE==='1';
+const isQueueMode=mode=>mode.startsWith('queue')||mode.startsWith('tap-');
 const turnaroundScenarios=['mismatch','muted','reuse','tags-compound','tags-unrelated'];
 const selectedScenarios=process.env.PLAYLIST_TURNAROUND_SCENARIOS?.split(',')??turnaroundScenarios;
 const callbackTimeout=selectedScenarios.length===1&&selectedScenarios[0]==='callback-timeout';
 assert.ok(callbackTimeout||selectedScenarios.every(scenario=>turnaroundScenarios.includes(scenario)));
 const repeatFrom=Number(process.env.PLAYLIST_FULL_REPEAT_FROM??'1');
 const repeats=Number(process.env.PLAYLIST_FULL_REPEATS??'3');
-assert.ok(!selectedMode||modes.includes(selectedMode));
+assert.ok(!selectedModes||selectedModes.every(mode=>modes.includes(mode)));
 assert.ok(!selectedEngine||['chromium','webkit'].includes(selectedEngine));
 assert.ok(Number.isSafeInteger(repeatFrom)&&repeatFrom>=1&&Number.isSafeInteger(repeats)&&repeats>=1&&repeatFrom+repeats<=4);
 
@@ -201,16 +203,38 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   audio:candidates.get(ready.goodKey).payload.toString('base64')};
  const faulted=new Set(), transfers=new Map();
  const writeTitle=tracks.find(row=>row.scenario==='write')?.track.title;
+ const queued=isQueueMode(mode);
+ const albumTitle='Pulso Luz B',artistName='Pulso Luz Artista',playlistC='Pulso Luz C';
+ const album={wrapperType:'collection',collectionType:'Album',collectionId:421,collectionName:albumTitle,artistId:424,artistName,trackCount:2};
+ const artist={wrapperType:'artist',artistId:424,artistName};
+ const albumSongs=['Pulso Luz Uno','Pulso Luz Dos'].map((title,i)=>{
+  const source=candidates.get([82,92][i]),key=701+i;
+  candidates.set(key,{trackId:'album-'+i,payload:source.payload});
+  replies.set(title+' '+artistName,{trackId:'album-'+i,plan:[{audio:[{key,title,artist:artistName,duration:2,mime:'audio/wav',bytes:source.payload.length}]}]});
+  return {wrapperType:'track',kind:'song',collectionId:album.collectionId,trackId:800+i,discNumber:1,discCount:1,trackNumber:i+1,trackCount:2,
+   trackName:title,collectionName:albumTitle,artistName,trackTimeMillis:2000};
+ });
+ const cTrack={...tracks[0].track,id:uuid(950),title:'Pulso Luz Tres'};
+ let gateOn=false;
  let sawWriteFailure=false,unblockRead,notifyBlocked,page;
  const blocked=new Promise(ok=>{notifyBlocked=ok;});
  const readGate=new Promise(ok=>{unblockRead=ok;});
  let cloud={accountId,revision:1,document:{version:1,tracks:tracks.map(row=>row.track),
-  playlists:[{id:uuid(99),name:playlistName,entries:entries.map((trackId,i)=>({trackId,id:uuid(100+i)}))}]}};
+  playlists:[{id:uuid(99),name:playlistName,entries:entries.map((trackId,i)=>({trackId,id:uuid(100+i)}))},
+   ...(queued?[{id:uuid(951),name:playlistC,entries:[{trackId:cTrack.id,id:uuid(952)}]}]:[])]}};
+ if(queued)cloud.document.tracks.push(cTrack);
  try{
   await context.route('**/*',async route=>{
    const url=new URL(route.request().url());
+   if(queued&&url.hostname.endsWith('lrclib.net'))return route.fulfill({headers:{'access-control-allow-origin':origin},json:[]});
    if(url.origin!==origin){external.add(url.origin);return route.abort();}
    if(url.pathname==='/testonly-seed')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>seed</title>'});
+   if(queued&&url.pathname==='/catalog-config.json')return route.fulfill({json:{version:1,itunes:true,artwork:false}});
+   if(queued&&url.pathname.startsWith('/catalog/itunes/')){
+    const entity=url.searchParams.get('entity'),lookup=url.pathname.endsWith('/lookup');
+    const results=entity==='musicArtist'?[artist]:entity==='album'?(lookup?[artist,album]:[album]):lookup?[album,...albumSongs]:albumSongs;
+    return route.fulfill({json:{resultCount:results.length,results}});
+   }
    if(url.pathname==='/__setup-event')return route.fulfill({json:{}});
    if(url.pathname!=='/__playlist-full-rpc')return route.fallback();
    const {kind,peer,query,key,offset,limit,option}=route.request().postDataJSON();
@@ -233,6 +257,10 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    if(kind==='callback')return route.fulfill({json:{}});
    if(kind!=='read'||!Number.isSafeInteger(offset)||limit!==524288)return route.fulfill({status:400});
    const {payload,fault}=candidate;
+   if(queued&&gateOn&&trackId===tracks[0].track.id){
+    notifyBlocked();await readGate;
+    return route.fulfill({body:payload.subarray(offset,offset+limit),contentType:'application/octet-stream'}).catch(()=>{});
+   }
    if(mode==='resume'&&fault==='network'&&!faulted.has('interrupted')){
     faulted.add('interrupted');event.fault='interrupted';notifyBlocked();
     await readGate;
@@ -251,7 +279,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     transfer.hash.update(body);
     transfer.bytes+=body.length;
     if(transfer.bytes===payload.length){
-     served.set(key,{bytes:transfer.bytes,sha256:transfer.hash.digest('hex'),mime:trackById.get(trackId).expected.mime});
+     served.set(key,{bytes:transfer.bytes,sha256:transfer.hash.digest('hex'),mime:trackById.get(trackId)?.expected.mime??'audio/wav'});
      transfers.delete(key);
     }
    }
@@ -267,7 +295,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    }
    return route.fulfill({json:cloud});
   });
-  if(writeTitle){
+  if(writeTitle&&!queued){
    // Inject once inside the native import worker, at the same byte-write boundary
    // used by the backend. A durable quota exhaustion would intentionally stop the batch.
    await context.route(/\/assets\/import\.worker-[^/]+\.js$/,async route=>{
@@ -361,6 +389,162 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   const handle=dock.locator('.download-dock__handle');
   // Inspect the final rows after completion with an untrusted DOM click.
   const openDetails=()=>handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();});
+  if(queued){
+   const input=page.locator('.music-search input[type=search]');
+   const search=async(query)=>{
+    await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).tap();
+    await input.fill(query);
+   };
+   const searchAlbum=page.locator('[data-catalog-kind=album]').filter({hasText:albumTitle});
+   const searchArtist=page.locator('[data-catalog-kind=artist]').filter({hasText:artistName});
+   const searchSong=page.locator('[data-catalog-kind=track]').filter({hasText:cTrack.title});
+   const byHeading=name=>page.getByRole('heading',{name,exact:true});
+   const tapAt=async(locator,x,y)=>{
+    await locator.evaluate(button=>button.scrollIntoView({block:'center'}));
+    const hit=await locator.evaluate((button,[x,y])=>{
+     const box=button.getBoundingClientRect(),left=box.x+box.width*x,top=box.y+box.height*y;
+     const target=document.elementFromPoint(left,top);
+     return {x:left,y:top,hit:button.contains(target),target:target?.className,disabled:button.disabled};
+    },[x,y]);
+    assert.equal(hit.hit,true,JSON.stringify(hit));
+    await page.touchscreen.tap(hit.x,hit.y);
+    return hit;
+   };
+   const albumHeading=()=>byHeading(albumTitle).waitFor({timeout:4000});
+   const artistHeading=()=>byHeading(artistName).waitFor({timeout:4000});
+   const back=async name=>page.getByRole('button',{name,exact:true}).tap();
+   const sweep=async(locator,onTap,afterTap)=> {
+    for(const x of [.12,.5,.88])for(const y of [.14,.5,.86]){
+     if(await input.isVisible())await input.evaluate(element=>element.focus({preventScroll:true}));
+     await tapAt(locator,x,y);await onTap();await afterTap?.();
+    }
+   };
+   if(mode==='tap-baseline'||mode==='tap-active'){
+    await search('Pulso Luz');await searchAlbum.waitFor();
+    await tapAt(searchAlbum,.12,.5);await albumHeading();await back('Volver a búsqueda');
+    await search('Luz');await searchAlbum.waitFor();
+    const aSong=page.locator('[data-catalog-kind=track]').filter({hasText:tracks[0].track.title});
+    gateOn=true;await aSong.tap();await blocked;
+    if(mode==='tap-baseline'){
+     const hits=[];
+     for(const x of [.12,.5,.88])for(const y of [.14,.5,.86])hits.push(await tapAt(searchAlbum,x,y));
+     const navigated=await byHeading(albumTitle).isVisible();
+     receipt.baseline={engine,navigated,hits,activeSongReads:trace.filter(event=>event.kind==='read').length};
+     assert.equal(navigated,false);
+     assert.ok(hits.every(hit=>hit.disabled));
+    }else{
+     await sweep(searchAlbum,albumHeading,()=>back('Volver a búsqueda'));
+     await sweep(searchArtist,artistHeading,()=>back('Volver a búsqueda'));
+     await sweep(searchSong,()=>page.locator('[data-suggestion-id][aria-pressed=true]').filter({hasText:cTrack.title}).waitFor());
+     gateOn=false;unblockRead();
+     await page.waitForFunction(()=>window.__playlistFull.audio?.currentTime>0.1);
+     assert.equal(trace.filter(event=>event.kind==='read').length,1);
+     receipt.tap={searchAlbum:9,searchArtist:9,searchTrack:9,playedAfterNavigation:true};
+    }
+    receipt.status='PASS';receipt.totalMs=elapsed(started);return receipt;
+   }
+   gateOn=true;
+   await collection.getByRole('button',{name:startLabel,exact:true}).tap();
+   let timer;
+   try{await Promise.race([blocked,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Missing first playlist read')),15000);})]);}
+   finally{clearTimeout(timer);}
+   await search('Pulso Luz');
+   if(mode==='queue'){
+    // Use the same full card hit test with focus and a live collection.
+    await sweep(searchAlbum,albumHeading,()=>back('Volver a búsqueda'));
+    await sweep(searchArtist,artistHeading,()=>back('Volver a búsqueda'));
+    const searchTrackSelected=()=>page.locator('[data-suggestion-id][aria-pressed=true]').filter({hasText:cTrack.title}).waitFor();
+    await sweep(searchSong,searchTrackSelected);
+    await searchArtist.tap();await artistHeading();
+    const artistAlbum=page.locator('.artist-album-grid button').filter({hasText:albumTitle});
+    await sweep(artistAlbum,albumHeading,()=>back('Volver al artista'));
+    await page.getByRole('button',{name:'Guardar artista',exact:true}).tap();
+    await page.getByRole('button',{name:'Quitar de mis artistas',exact:true}).waitFor();
+    await back('Volver a búsqueda');
+   }
+   await searchAlbum.tap();await albumHeading();
+   const save=page.getByRole('button',{name:'Guardar álbum',exact:true});
+   await save.tap();await page.locator('.album-saved').getByText('En Biblioteca').waitFor();
+   assert.equal(trace.some(event=>String(event.trackId).startsWith('album-')),false);
+   assert.equal(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).cursor,checkpointKey),0);
+   await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).tap();
+   await page.getByRole('button',{name:'Álbumes',exact:true}).tap();
+   const savedCard=page.locator('.library-grid button').filter({hasText:albumTitle});
+   if(mode==='queue'){
+    await sweep(savedCard,albumHeading,()=>back('Volver a Biblioteca'));
+    await page.getByRole('button',{name:'Artistas',exact:true}).tap();
+    await page.locator('.library-grid button').filter({hasText:artistName}).tap();
+    await artistHeading();
+    const savedArtistAlbum=page.locator('.artist-album-grid button').filter({hasText:albumTitle});
+    await sweep(savedArtistAlbum,albumHeading,()=>back('Volver al artista'));
+    await back('Volver a Biblioteca');
+    await page.getByRole('button',{name:'Álbumes',exact:true}).tap();
+   }
+   await savedCard.tap();await albumHeading();
+   await page.getByRole('button',{name:'Descargar faltantes',exact:true}).tap();
+   await page.getByText('En cola · posición 1',{exact:true}).first().waitFor({state:'attached'});
+   await back('Volver a Biblioteca');
+   await page.getByRole('button',{name:'Playlists',exact:true}).tap();
+   const listC=page.locator('.library-grid button').filter({hasText:playlistC});
+   await listC.tap();await byHeading(playlistC).waitFor();
+   await collection.getByRole('button',{name:startLabel,exact:true}).tap();
+   await openDetails();
+   const queue=dock.getByRole('region',{name:'Cola de descargas'});
+   assert.deepEqual(await queue.locator('li bdi').allTextContents(),[albumTitle,playlistC]);
+   await handle.tap();
+   await collection.getByRole('button',{name:'Gestionar descarga en cola de '+playlistC}).tap();
+   const dialog=page.getByRole('dialog',{name:playlistC});
+   const keep=dialog.getByRole('button',{name:'Mantener en cola'}),remove=dialog.getByRole('button',{name:'Quitar de la cola'});
+   assert.equal(await keep.evaluate(button=>document.activeElement===button),true);
+   await page.keyboard.press('Shift+Tab');
+   assert.equal(await remove.evaluate(button=>document.activeElement===button),true);
+   await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
+   await collection.getByRole('button',{name:'Gestionar descarga en cola de '+playlistC}).tap();
+   await remove.tap();
+   await back('Volver a Biblioteca');
+   await page.locator('.library-grid button').filter({hasText:playlistName}).tap();
+   await collection.getByRole('button',{name:'Gestionar descarga de '+playlistName}).tap();
+   if(mode==='queue-cancel'){
+    await page.getByRole('button',{name:'Cancelar descarga',exact:true}).tap();
+   }else{
+    await page.getByRole('button',{name:'Seguir descargando',exact:true}).tap();
+    if(mode==='queue-reload')await page.reload();
+   }
+   gateOn=false;unblockRead();
+   await page.waitForFunction(account=>{
+    const queue=localStorage.getItem('pulso:collection-download-queue:v1:'+account);
+    const checkpoint=localStorage.getItem('pulso:library-download:v1:'+account);
+    return queue===null&&checkpoint===null;
+   },accountId,{timeout:135000});
+   const queueSearches=trace.filter(event=>event.kind==='search').map(event=>event.trackId);
+   assert.deepEqual(queueSearches.filter(id=>String(id).startsWith('album-')),['album-0','album-1']);
+   assert.deepEqual(queueSearches.slice(-2),['album-0','album-1']);
+   const albumIds=await page.evaluate(async titles=>{
+    const db=await new Promise((ok,fail)=>{
+     const request=indexedDB.open('pulso-web-local-v1');
+     request.onsuccess=()=>ok(request.result);request.onerror=()=>fail(request.error);
+    });
+    try{
+     const tracks=await new Promise((ok,fail)=>{
+      const request=db.transaction('tracks').objectStore('tracks').getAll();
+      request.onsuccess=()=>ok(request.result);request.onerror=()=>fail(request.error);
+     });
+     return titles.map(title=>tracks.find(track=>track.title===title&&track.assetId)?.id);
+    }finally{db.close();}
+   },albumSongs.map(song=>song.trackName));
+   assert.ok(albumIds.every(Boolean),'Album songs have stored assets');
+   const albumCopies=await inspect(page,albumIds);
+   assert.deepEqual(albumCopies.copies.map(copy=>copy.sha256),[701,702].map(key=>createHash('sha256').update(candidates.get(key).payload).digest('hex')));
+   const data=await inspect(page,[...tracks.map(row=>row.track.id),cTrack.id]);
+   const verified=data.copies.slice(0,tracks.length).filter(Boolean).length;
+   if(mode==='queue-cancel')assert.equal(verified,1);
+   else assert.equal(verified,30);
+   assert.equal(data.copies.at(-1),null);
+   assert.deepEqual(data.unfinished,[]);
+   assert.deepEqual(errors,[]);
+   receipt.summary={playlistVerified:verified,albumQueries:2,albumVerified:albumIds.length,removedPlaylistDownloaded:false};
+   receipt.status='PASS';receipt.totalMs=elapsed(started);return receipt;
+  }
   const downloadStart=performance.now();
   const initialLabel=oldCheckpoint?resumeLabel:startLabel;
   await (oldCheckpoint?dock:collection).getByRole('button',{name:initialLabel,exact:true}).tap();
@@ -416,7 +600,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   await checkNoReview();
   assertTransport(trace,tracks,served,mode);
   const outcomes=await page.evaluate(()=>window.__playlistFull.imports);
-  if(writeTitle){
+  if(writeTitle&&!queued){
    assert.equal(sawWriteFailure,true);
    assert.equal(outcomes.filter(outcome=>outcome.code==='storage-unavailable'&&outcome.phase==='write'&&outcome.writeState==='not-published').length,1,JSON.stringify(outcomes));
   }
@@ -459,6 +643,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
  }catch(error){
   receipt.error=String(error.stack??error);
   receipt.pageErrors=errors;
+  if(queued)receipt.stage=await page?.evaluate(account=>({headings:[...document.querySelectorAll('h2')].filter(element=>element.getClientRects().length).map(element=>element.textContent),checkpoint:JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)??'null')?.cursor,queued:JSON.parse(localStorage.getItem('pulso:collection-download-queue:v1:'+account)??'[]').map(item=>item.title)}),accountId).catch(()=>null);
   receipt.dock=await page?.getByRole('region',{name:'Descargas',exact:true}).allTextContents().catch(()=>[]);
   receipt.imports=await page?.evaluate(()=>window.__playlistFull.imports).catch(()=>[]);
  }finally{
@@ -738,7 +923,7 @@ try{
   report.engines[engine]=browser.version();
   try{
    for(const mode of modes){
-    if(selectedMode&&selectedMode!==mode||!selectedMode&&['benchmark','turnaround'].includes(mode))continue;
+    if(selectedModes&&!selectedModes.includes(mode)||!selectedModes&&(['benchmark','turnaround'].includes(mode)||isQueueMode(mode)))continue;
     if(mode==='turnaround'){
      for(const scenario of selectedScenarios){
       const result=await checkTurnaround(browser,engine,origin,scenario);
