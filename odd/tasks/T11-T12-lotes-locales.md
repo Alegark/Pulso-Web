@@ -869,3 +869,13 @@ El manifiesto autoritativo de 291 archivos y 69040 bytes quedó en `.local/test-
 - Investigar el HTTP 503 observado con sesión iniciada en `/api/account-profile` y `/api/account-library`.
 - Investigar la regresión desde `ac89e5a` en Chromium para `artwork`, `artwork-containers`, `opfs` y `library`.
 - Resolver el fallo del entorno WPE de WebKit en la batería general.
+
+## 2026-11-24 · Cola de descargas de álbumes y playlists
+
+La cola FIFO conserva por cuenta la identidad de cada colección y su selección validada. El coordinador ejecuta el álbum con su ficha guardada aunque se abandone la página. Cada inicio pasa por la comprobación de versión, la autoridad de pestaña, la disponibilidad de Almacenamiento y Telegram con bots configurados. Las inspecciones de copias se actualizan al liquidar un trabajo. Los cambios de la lista de espera no reinician esas inspecciones.
+
+El dock muestra «En cola · posición N» y permite retirar una colección pendiente. Volver a pulsar el control de la colección abre un diálogo modal con foco inicial en conservarla. Al detener una playlist con otra colección en espera, el checkpoint se libera después de conservar su posible recibo por pista; las copias verificadas quedan en Biblioteca. Conservar un checkpoint sin otro trabajo en espera mantiene la continuación manual anterior. Tras recargar, el checkpoint automático de la playlist tiene prioridad sobre la cola.
+
+En la app compilada con Telegram sintético, Chromium y WebKit verificaron el flujo de la playlist A de 30 entradas, el álbum B y la retirada de C. B terminó con dos huellas verificadas también al cancelar A y al recargar con B en cola. La playlist completa, la pista ausente y el checkpoint antiguo pasaron en ambos motores. La expectativa de tres búsquedas en el fixture de recarga fallaba también en `7d41d25` porque dos fragmentos solicitados juntos consumían las dos inyecciones de fallo antes de reiniciar. El fixture separa ahora la interrupción de la conexión anterior y el fallo 503 de la transferencia restaurada. La variante corregida terminó con 30/30 en ambos motores. La cancelación conservó la copia que A acababa de publicar y B terminó automáticamente.
+
+Pasaron la suite del dock, los siete casos focales de `check-playlist-resume-main` en cada motor, 929 unitarias, 73 de servidor, 10 de Python, tipos, lint y build de producción. La reanudación de álbum tras actualizar espera a que el bundle de destino pueda capturar la autoridad de Almacenamiento y conserva la intención durante esa espera. La evidencia local se guarda en `.local/test-evidence/album-tap-save-queue/summary.json`. La aceptación con Telegram real y un iPhone físico queda pendiente.

@@ -2421,3 +2421,7 @@ La segunda revisión de la PR 19 preserva pertenencia y audio compartidos al ret
 ## 2026-11-23 · Coherencia de los álbumes sueltos y cota de alias
 
 La tercera revisión de la PR 19 usa el mismo grupo de Biblioteca para la tarjeta, el detalle y la retirada de los álbumes sueltos. T10 registra la lectura conjunta de organización en IndexedDB, la protección frente a un listado de alias incompleto y la retirada física que preserva la copia compartida de otra edición. Pasaron tipos, lint, 924 unitarias, 73 de servidor, 10 Python, Chromium 8/8, WebKit 7/7, descarga completa de playlist 3/3, reanudación 2/2, build y simulación Wrangler. T10 conserva los tiempos, los avisos CSP ya presentes y los bytes retirados. P0-W y la validación física siguen abiertos.
+
+## 2026-11-24 · Toques y cola de descargas de colección
+
+T8, T10 y T11-T12 registran la reproducción táctil, el guardado de una edición durante una descarga y la cola persistente por cuenta. Chromium y WebKit locales verificaron el guardado sin audio, la playlist de 30 entradas y el álbum en cola mediante transportes de prueba. P0-W continúa abierto. Sigue pendiente la aceptación en iPhone físico con Telegram real.
