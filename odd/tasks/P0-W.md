@@ -2429,3 +2429,7 @@ T8, T10 y T11-T12 registran la reproducción táctil, el guardado de una edició
 ### 2026-11-24 · Revisión independiente de la cola
 
 T11-T12 registra las cuatro regresiones de admisión, reserva de canción, guardado y cancelación, reproducidas en `af313ac` y verificadas con transportes de prueba en Chromium y WebKit. T8 y T10 registran la continuidad al navegar, la retirada de colecciones y la inspección pasiva. P0-W sigue abierto y la aceptación física con Telegram real queda pendiente.
+
+### 2026-11-24 · Segunda revisión de la cola de colecciones
+
+T11-T12 registra la conservación de álbumes interrumpidos, la cancelación antes del inicio, los despertares de Telegram, el límite de reintento por fallo persistente y la retirada de checkpoints pausados. Pasaron 13 casos nuevos por motor y se verificó con Telegram sintético que el álbum retomó tras reconectar sin duplicar su primera copia. Pasaron los 13 escenarios de playlist por motor y los 43 de reanudación por motor. Se mantuvo el mismo fallo de interfaz al 200 % de `7d41d25`. P0-W continúa abierto y queda pendiente la aceptación física con Telegram real.
