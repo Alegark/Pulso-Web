@@ -44,17 +44,14 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
  const setPending=(checkpoint:LibraryDownloadCheckpoint|null)=>setPendingState({account:latest.current.accountId,checkpoint});
  const [review,setReview]=useState<{trackId:string;title:string;state:'checking'|'saved'|'missing'|'uncertain';kind?:HeldDownload['kind'];canPreserveRetry?:boolean;settled?:boolean}|null>(null);
  const checking=useRef<AbortController|null>(null);
- const versionCheck=useRef<object|null>(null);
 
  async function checkVersion(
   account:Parameters<typeof downloadWithCurrentApp>[0],
   action:Parameters<typeof downloadWithCurrentApp>[1],
   current:()=>boolean,
  ):Promise<boolean|'busy'>{
-  if(versionCheck.current||downloadVersionCheckInProgress())return 'busy';
-  const token={};versionCheck.current=token;
-  try{return await downloadWithCurrentApp(account,action,current);}
-  finally{if(versionCheck.current===token)versionCheck.current=null;}
+  if(downloadVersionCheckInProgress())return 'busy';
+  return downloadWithCurrentApp(account,action,current);
  }
  const waiting=useRef<{request:LibraryDownloadRequest;restore?:LibraryDownloadCheckpoint;saveOnly:boolean;account:string|undefined}|null>(null);
 
@@ -391,7 +388,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   try{publishQueue(props.accountId);}catch{albumCoordinator.queued=[];notifyAlbumDownload(albumCoordinator);setNotice('No se pudo leer la cola de descargas.');}
   if(props.accountId)try{setPending(readLibraryDownloadCheckpoint(props.accountId));}catch{setNotice('No se pudo leer el progreso guardado de la descarga.');}
   return()=>{
-   if(versionCheck.current){latest.current.onStopUpdate?.();versionCheck.current=null;}
+   if(downloadVersionCheckInProgress())latest.current.onStopUpdate?.();
    admission.current=null;checking.current?.abort();checking.current=null;
    const active=flight.current;flight.current=null;active?.abort();
    if(albumCoordinator.active?.accountId===props.accountId)albumCoordinator.active?.abort.abort();
