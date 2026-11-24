@@ -55,7 +55,13 @@ export function AlbumPageController(props:Props){
  React.useEffect(()=>{
   if(props.metadataOnly)return;
   const synchronize=()=>{if(!detail)return;const saved=props.coordinator.rows.get(detail.edition.id);if(saved&&saved.key===runKey(detail)){rows.current=saved.rows.map(r=>({...r}));setProgress({rows:rows.current,message:saved.message??'Comprueba las copias antes de continuar.'});}};
-  const listener=()=>{refreshCoordinator();synchronize();if(detail&&!props.coordinator.running){inspectedEdition.current=null;bumpInspection();}};
+  let wasRunning=props.coordinator.running;
+  const listener=()=>{
+   const running=props.coordinator.running;
+   refreshCoordinator();synchronize();
+   if(detail&&wasRunning&&!running){inspectedEdition.current=null;bumpInspection();}
+   wasRunning=running;
+  };
   props.coordinator.listeners.add(listener);synchronize();
   // Initial subscription must not abort the first full copy inspection.
   return()=>{props.coordinator.listeners.delete(listener);};

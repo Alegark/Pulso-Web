@@ -25,7 +25,7 @@ export interface CollectionDownloadAction {
  disabled:boolean;
 }
 
-export function LibraryDownloadController(props:{saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure:SavedAlbumFailures)=>Promise<SaveAlbumResult>;captureAlbumManagement?:(id:string)=>SongManagement|null;captureOwner?:()=>()=>boolean;storageReady?:()=>boolean;updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;collection?:CollectionDownloadAction;storageTarget?:HTMLElement|null;accountId?:string;captureLifetime?:()=>()=>boolean;onReviewStorage?:()=>void;onReviewed?:(operationId?:string)=>void;tracks:readonly Track[];client:TelegramSessionClient|null;bots:BotsSnapshot|null;connected:boolean;connectionPhase?:'initializing'|'connected'|'disconnected'|'blocked';capture?:()=>SongPlaybackAttempt|null;capturePlay?:()=>SongPlaybackAttempt|null;captureBatch?:(recoverPending?:boolean)=>SongPlaybackAttempt|null}){
+export function LibraryDownloadController(props:{captureAlbum?:()=>SongPlaybackAttempt|null;saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure:SavedAlbumFailures)=>Promise<SaveAlbumResult>;captureAlbumManagement?:(id:string)=>SongManagement|null;captureOwner?:()=>()=>boolean;storageReady?:()=>boolean;updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;collection?:CollectionDownloadAction;storageTarget?:HTMLElement|null;accountId?:string;captureLifetime?:()=>()=>boolean;onReviewStorage?:()=>void;onReviewed?:(operationId?:string)=>void;tracks:readonly Track[];client:TelegramSessionClient|null;bots:BotsSnapshot|null;connected:boolean;connectionPhase?:'initializing'|'connected'|'disconnected'|'blocked';capture?:()=>SongPlaybackAttempt|null;capturePlay?:()=>SongPlaybackAttempt|null;captureBatch?:(recoverPending?:boolean)=>SongPlaybackAttempt|null}){
  const download=useAlbumDownloadState();
  const latest=useRef(props);latest.current=props;
  const flight=useRef<AbortController|null>(null);
@@ -433,7 +433,7 @@ export function LibraryDownloadController(props:{saveAlbum?:(detail:AlbumDetail,
    if(intent)takeDownloadAfterUpdate(account,'album');
    const p=latest.current,providers=orderedProviders(p.bots);
    if(!p.connected||!p.client||!providers.length){announceDownloadMessage(`No se pudo iniciar «${title}». Conecta Telegram y configura un bot de música.`);return;}
-   const attempt=p.capture?.();
+   const attempt=(p.captureAlbum??p.capture)?.();
    if(!attempt?.current()){announceDownloadMessage(`No se pudo iniciar «${title}». Comprueba Almacenamiento.`);return;}
    return runAlbumDownload({detail:album,saved:album,accountId:account,scope:account,coordinator:albumCoordinator,
     attempt,client:p.client,revision:p.bots?.revision,provider:providers[0].providerRef,providers,
