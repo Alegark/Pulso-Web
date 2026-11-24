@@ -304,17 +304,17 @@ export function CollectionDownloadButton({label,disabled,complete,onStart,showLa
   const section=view?.closest('.library-view')??button?.closest('main');
   return()=>{
    node.close();
-   const canReturn=()=>!document.querySelector('dialog[open],[aria-modal="true"]')&&
-    (document.activeElement===document.body||document.activeElement===button||node.contains(document.activeElement));
+   const canReturn=()=>{
+    const focused=document.activeElement;
+    return !document.querySelector('dialog[open],[aria-modal="true"]')&&
+     (!focused||focused===document.documentElement||focused===document.body||focused===button||node.contains(focused));
+   };
    const focusHeading=()=>{
     focusAfterDisable.current=null;
     if(!canReturn())return;
     const heading=[view?.querySelector<HTMLElement>('h2,h3'),...section?.querySelectorAll<HTMLElement>('h2[tabindex="-1"]')??[]]
      .find(element=>element?.getClientRects().length);
-    if(!heading)return;
-    const previous=heading.getAttribute('tabindex');
-    heading.tabIndex=-1;heading.focus({preventScroll:true});
-    if(previous===null)heading.removeAttribute('tabindex');else heading.setAttribute('tabindex',previous);
+    heading?.focus({preventScroll:true});
    };
    requestAnimationFrame(()=>{
     if(!canReturn())return;
