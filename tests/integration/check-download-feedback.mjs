@@ -92,6 +92,17 @@ await handle.click();
 await dock.locator('li[data-failed=true]').getByText('No existe en tus bots',{exact:true}).waitFor();
 await dock.waitFor({state:'detached',timeout:6500});
 report.cases.push(`${name}: route persistence, native tap, resize and 320px/text 200%, stop, localized failure, timed dismissal`);
+await page.evaluate(()=>feedbackUI.confirmation());
+const activeButton=page.getByRole('button',{name:'Gestionar descarga de Playlist de prueba'});
+await activeButton.click();
+const confirmation=page.getByRole('dialog',{name:'Playlist de prueba'});
+await confirmation.waitFor();
+await page.evaluate(()=>feedbackUI.settleConfirmation());
+await confirmation.waitFor({state:'detached'});
+await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Descargar playlist');
+await page.evaluate(()=>feedbackUI.completeConfirmation());
+await page.waitForFunction(()=>document.activeElement?.matches('.collection-header h3'));
+report.cases.push(`${name}: focus returns to the opener and follows later availability changes`);
 }finally{await browser.close();}}
 assert.deepEqual(report.errors,[]);assert.deepEqual(report.external,[]);report.status='PASS';}catch(e){report.status='FAIL';report.error=String(e.stack||e);}finally{
  let serverStopped=true;

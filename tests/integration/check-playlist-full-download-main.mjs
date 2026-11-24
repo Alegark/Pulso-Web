@@ -709,7 +709,11 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    },accountId,{timeout:135000});
    if(mode==='queue'){
     await page.getByRole('dialog',{name:playlistName}).waitFor({state:'detached'});
-    await page.waitForFunction(title=>document.activeElement?.textContent===title&&document.activeElement?.matches('.collection-header h3'),playlistName);
+    await page.waitForFunction(title=>{
+     const header=document.querySelector('.collection-header'),button=header?.querySelector('.collection-download');
+     const heading=header?.querySelector('h3');
+     return heading?.textContent===title&&document.activeElement===(button&&!button.disabled?button:heading);
+    },playlistName);
    }
    const queueSearches=trace.filter(event=>event.kind==='search').map(event=>event.trackId);
    assert.deepEqual(queueSearches.filter(id=>String(id).startsWith('album-')),['album-0','album-1']);
@@ -846,7 +850,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
  }catch(error){
   receipt.error=String(error.stack??error);
   receipt.pageErrors=errors;
-  if(queued)receipt.stage=await page?.evaluate(account=>({focus:{tag:document.activeElement?.tagName,name:document.activeElement?.getAttribute('aria-label'),className:document.activeElement?.className},
+  if(queued)receipt.stage=await page?.evaluate(account=>({focus:{tag:document.activeElement?.tagName,name:document.activeElement?.getAttribute('aria-label'),className:document.activeElement?.className,downloadDisabled:document.querySelector('.collection-header .collection-download')?.disabled},
    headings:[...document.querySelectorAll('h2')].filter(element=>element.getClientRects().length).map(element=>element.textContent),checkpoint:JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)??'null')?.cursor,queued:JSON.parse(localStorage.getItem('pulso:collection-download-queue:v1:'+account)??'[]').map(item=>item.title)}),accountId).catch(()=>null);
   receipt.dock=await page?.getByRole('region',{name:'Descargas',exact:true}).allTextContents().catch(()=>[]);
   receipt.imports=await page?.evaluate(()=>window.__playlistFull.imports).catch(()=>[]);
