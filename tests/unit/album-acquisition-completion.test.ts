@@ -11,13 +11,27 @@ const attempt=(lookup:SongPlaybackAttempt['lookup']):SongPlaybackAttempt=>({curr
 const manager=(add:SongManagement['add']):SongManagement=>({current:()=>true,playReady:false,add,addToPlaylist:async()=>false,play:async()=>'failed'});
 test('cached album verifies each occurrence and passes original live guard through add, without play',async()=>{
  let result:AlbumProgress|undefined;const calls:string[]=[];addCurrent=async current=>{assert.equal(current?.(),true);return true;};
- await acquireAlbum({detail,attempt:attempt(async c=>{calls.push(c.id);return 'track';}),client:null,provider:null,revision:0,management:()=>manager(async current=>{assert.equal(current?.(),true);return true;}),signal:new AbortController().signal,current:()=>true,rows:initial(),update:v=>{result=v;}});
+ const outcome=await acquireAlbum({detail,attempt:attempt(async c=>{calls.push(c.id);return 'track';}),client:null,provider:null,revision:0,management:()=>manager(async current=>{assert.equal(current?.(),true);return true;}),signal:new AbortController().signal,current:()=>true,rows:initial(),update:v=>{result=v;}});
+ assert.equal(outcome,'completed');
  assert.equal(calls.length,2);assert.equal(result?.rows.filter(r=>r.confirmed).length,2);assert.equal(result?.message,'Álbum listo en Biblioteca.');
 });
 test('cancelled add observes original guard and cannot report completion',async()=>{
  const controller=new AbortController();let result:AlbumProgress|undefined;addCurrent=async current=>{controller.abort();return !!current?.();};
- await acquireAlbum({detail,attempt:attempt(async()=> 'track'),client:null,provider:null,revision:0,management:()=>manager(async current=>{controller.abort();return !!current?.();}),signal:controller.signal,current:()=>true,rows:initial(),update:v=>{result=v;}});
+ const outcome=await acquireAlbum({detail,attempt:attempt(async()=> 'track'),client:null,provider:null,revision:0,management:()=>manager(async current=>{controller.abort();return !!current?.();}),signal:controller.signal,current:()=>true,rows:initial(),update:v=>{result=v;}});
+ assert.equal(outcome,'interrupted');
  assert.equal(result?.rows.filter(r=>r.confirmed).length,0);assert.match(result!.message,/detenida/);
+});
+test('album storage admission loss returns interrupted and keeps earlier verified copies',async()=>{
+ addCurrent=async()=>true;
+ let admissions=0;
+ let progress:AlbumProgress|undefined;
+ const outcome=await acquireAlbum({detail,attempt:{
+  ...attempt(async()=> 'verified-first'),waitForDownload:async()=>++admissions===1,
+ },client:null,provider:null,revision:0,management:()=>null,signal:new AbortController().signal,
+ current:()=>true,rows:initial(),update:value=>{progress=value;}});
+ assert.equal(outcome,'interrupted');
+ assert.deepEqual(progress?.rows.map(row=>row.confirmed),[true,false]);
+ assert.equal(progress?.waiting,true);
 });
 test('uncertain row is checked locally before continuing and is never dispatched again',async()=>{
  addCurrent=async()=>true;const rows=initial();rows[0].state='uncertain';let looked=0;let result:AlbumProgress|undefined;

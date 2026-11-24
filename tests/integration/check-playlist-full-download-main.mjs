@@ -18,7 +18,10 @@ assert.equal(await realpath(evidence),evidence);
 process.env.PULSO_TEST_EVIDENCE_DIR=evidence;
 const work=await createTestWorkspace('playlist-full-download');
 const checkpointKey='pulso:library-download:v1:'+accountId;
-const modes=['full','resume','missing','stale-checkpoint','benchmark','turnaround','queue','queue-cancel','queue-reload','queue-admission','queue-song-save','queue-song-order','queue-cancel-empty','queue-removal-storage','tap-baseline','tap-active'];
+const reviewModes=['queue-album-interruption','queue-stop-update','queue-retry-at','queue-disconnected',
+ 'queue-claim-error','queue-album-read-error','queue-cancel-save','queue-paused-removal','queue-missing-track',
+ 'queue-album-refresh','queue-album-external-removal','queue-single-edition','queue-inspection'];
+const modes=['full','resume','missing','stale-checkpoint','benchmark','turnaround','queue','queue-cancel','queue-reload','queue-admission','queue-song-save','queue-song-order','queue-cancel-empty','queue-removal-storage','tap-baseline','tap-active',...reviewModes];
 const selectedMode=process.env.PLAYLIST_FULL_MODE;
 const selectedModes=selectedMode?.split(',');
 const selectedEngine=process.env.PLAYLIST_FULL_ENGINE;
@@ -44,9 +47,32 @@ const startLabel='Descargar playlist completa';
 const resumeLabel='Continuar';
 const reviewButtons='[aria-label="Revisión de descarga"], .download-dock__storage, .download-dock__review, [role="dialog"], dialog[open]';
 
+const reviewBuild=selectedModes?.some(mode=>reviewModes.includes(mode));
 const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
  if(id==='./temporary-sdk')return resolve('tests/integration/playlist-full-download-sdk.ts');
 },transform(code,id){
+ if(reviewBuild){
+  const insert=(source,replacement)=>{
+   assert.ok(code.includes(source),id+' fixture boundary');
+   return code.replace(source,replacement);
+  };
+  if(selectedModes.includes('queue-inspection')&&id.endsWith('/src/main.tsx')){
+   return insert('function captureSongCopyInspection():SongCopyInspection|null {',
+    'function captureSongCopyInspection():SongCopyInspection|null { if(window.testBlockInspection){window.testSkippedInspection=true;return null;}')+
+    '\nwindow.testSetSongFlight=active=>{albumCoordinator.songFlight=active?{}:undefined;for(const notify of albumCoordinator.listeners)notify();};';
+  }
+  if(id.endsWith('/src/telegram/session-client.ts'))
+   return insert('private publishSearch(){','private publishSearch(){window.testQueueTelegram=this;');
+  if(id.endsWith('/src/library/album-acquisition.ts'))
+   return insert("if(added){row.confirmed=true;", "if(added){window.testAlbumTrackConfirmed?.(i);row.confirmed=true;");
+  if(id.endsWith('/src/library/saved-albums.ts'))
+   return insert('export async function readSavedAlbum(accountId:string,id:CatalogId):Promise<SavedAlbum|null> {',
+    "export async function readSavedAlbum(accountId:string,id:CatalogId):Promise<SavedAlbum|null> { if(window.testAlbumReadError)throw new DOMException('Synthetic album read failure','QuotaExceededError');");
+  if(selectedModes.includes('queue-cancel-save')&&id.endsWith('/src/library/download-song.ts'))
+   return insert('try{local=await attempt.save(', 'try{await window.testBeforeCollectionSave?.();local=await attempt.save(');
+  if(id.endsWith('/src/service-worker/download-update.ts'))
+   return insert(' if(!current())return false;', ' if(!current())return false;\n if(window.testDispatchGate)await window.testDispatchGate(current);\n if(!current())return false;');
+ }
  // Shorten the real callback timer only for the separate recovery regression run.
  if(callbackTimeout&&id.endsWith('/src/telegram/bot-search-protocol.ts')){
   assert.ok(code.includes('callbackBudgetMs:65000'));
@@ -225,6 +251,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
  const albumTitle='Pulso Luz B',artistName='Pulso Luz Artista',playlistC='Pulso Luz C';
  const album={wrapperType:'collection',collectionType:'Album',collectionId:421,collectionName:albumTitle,artistId:424,artistName,trackCount:2};
  const artist={wrapperType:'artist',artistId:424,artistName};
+ const single={...album,collectionId:422,collectionName:'Brillo singular',trackCount:1};
  const albumSongs=['Pulso Luz Uno','Pulso Luz Dos'].map((title,i)=>{
   const source=candidates.get([82,92][i]),key=701+i;
   candidates.set(key,{trackId:'album-'+i,payload:source.payload});
@@ -232,11 +259,18 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   return {wrapperType:'track',kind:'song',collectionId:album.collectionId,trackId:800+i,discNumber:1,discCount:1,trackNumber:i+1,trackCount:2,
    trackName:title,collectionName:albumTitle,artistName,trackTimeMillis:2000};
  });
+ const singleSong={...albumSongs[0],collectionId:single.collectionId,trackId:899,trackCount:1,trackName:single.collectionName};
+ replies.set(single.collectionName+' '+artistName,{trackId:'single',plan:[{audio:[{
+  key:701,title:single.collectionName,artist:artistName,duration:2,mime:'audio/wav',bytes:candidates.get(701).payload.length,
+ }]}]});
  const cTrack={...tracks[0].track,id:uuid(950),title:'Pulso Luz Tres'};
  const cAudio=candidates.get(tracks.at(-1).goodKey).payload;
  candidates.set(703,{trackId:cTrack.id,payload:cAudio});
  replies.set(cTrack.title+' '+cTrack.artist,{trackId:cTrack.id,plan:[{audio:[{key:703,title:cTrack.title,artist:cTrack.artist,duration:2,mime:'audio/wav',bytes:cAudio.length}]}]});
- let gateOn=false,resumeCommitted=false;
+ let gateOn=false,resumeCommitted=false,holdLatest=false,latestHits=0;
+ let releaseLatest,releaseSingle;
+ const latestGate=new Promise(ok=>{releaseLatest=ok;});
+ const singleGate=new Promise(ok=>{releaseSingle=ok;});
  let sawWriteFailure=false,unblockRead,notifyBlocked,page;
  const blocked=new Promise(ok=>{notifyBlocked=ok;});
  const readGate=new Promise(ok=>{unblockRead=ok;});
@@ -255,9 +289,19 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    if(queued&&url.hostname.endsWith('lrclib.net'))return route.fulfill({headers:{'access-control-allow-origin':origin},json:[]});
    if(url.origin!==origin){external.add(url.origin);return route.abort();}
    if(url.pathname==='/testonly-seed')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>seed</title>'});
+   if(reviewModes.includes(mode)&&url.pathname==='/latest.json'){
+    latestHits++;
+    if(holdLatest)await latestGate;
+    return route.fulfill({status:404}).catch(()=>{});
+   }
    if(queued&&url.pathname==='/catalog-config.json')return route.fulfill({json:{version:1,itunes:true,artwork:false}});
    if(queued&&url.pathname.startsWith('/catalog/itunes/')){
     const entity=url.searchParams.get('entity'),lookup=url.pathname.endsWith('/lookup');
+    if(mode==='queue-single-edition'&&(url.searchParams.get('id')===String(single.collectionId)||url.searchParams.get('term')?.includes('Brillo'))){
+     if(lookup)await singleGate;
+     const results=lookup?[single,singleSong]:entity==='album'?[single]:[];
+     return route.fulfill({json:{resultCount:results.length,results}}).catch(()=>{});
+    }
     const results=entity==='musicArtist'?[artist]:entity==='album'?(lookup?[artist,album]:[album]):lookup?[album,...albumSongs]:albumSongs;
     return route.fulfill({json:{resultCount:results.length,results}});
    }
@@ -470,6 +514,243 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     const {copies}=await inspect(page,[cTrack.id]);
     assert.equal(copies[0]?.sha256,createHash('sha256').update(cAudio).digest('hex'));
    };
+   if(reviewModes.includes(mode)){
+    const queueIds=()=>page.evaluate(key=>JSON.parse(localStorage.getItem(key)??'[]').map(job=>job.id),queueKey);
+    const openSavedAlbum=async()=>{
+     await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).tap();
+     await page.getByRole('button',{name:'Álbumes',exact:true}).tap();
+     await page.locator('.library-grid button').filter({hasText:albumTitle}).tap();await albumHeading();
+    };
+    const saveAlbum=async()=>{
+     await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).tap();
+     const previousAlbum=page.getByRole('button',{name:'Volver a búsqueda',exact:true});
+     if(await previousAlbum.isVisible())await previousAlbum.tap();
+     await input.fill('Pulso Luz');await searchAlbum.tap();await albumHeading();
+     await page.getByRole('button',{name:'Guardar álbum',exact:true}).tap();
+     await page.locator('.album-saved').waitFor();
+    };
+    const enqueueAlbum=()=>page.getByRole('button',{name:'Descargar faltantes',exact:true}).tap();
+    const reconnect=async()=>{
+     assert.equal(await page.evaluate(()=>window.testQueueTelegram.snapshot().phase),'error');
+     await page.evaluate(()=>window.testQueueTelegram.restore());
+     await page.waitForFunction(()=>window.testQueueTelegram.snapshot().phase==='connected');
+    };
+    const verifyAlbum=async(expected=albumSongs)=>{
+     const ids=await page.evaluate(async titles=>{
+      const db=await new Promise((ok,fail)=>{
+       const req=indexedDB.open('pulso-web-local-v1');req.onsuccess=()=>ok(req.result);req.onerror=()=>fail(req.error);
+      });
+      try{
+       const rows=await new Promise((ok,fail)=>{
+        const req=db.transaction('tracks').objectStore('tracks').getAll();req.onsuccess=()=>ok(req.result);req.onerror=()=>fail(req.error);
+       });
+       return titles.map(title=>rows.filter(track=>track.title===title&&track.assetId).map(track=>track.id));
+      }finally{db.close();}
+     },expected.map(song=>song.trackName));
+     assert.ok(ids.every(group=>group.length===1),JSON.stringify(ids));
+     const verified=await inspect(page,ids.flat());
+     assert.equal(new Set(verified.copies.map(copy=>copy.id)).size,expected.length);
+     assert.deepEqual(verified.copies.map(copy=>copy.sha256),expected.map(song=>
+      createHash('sha256').update(candidates.get(701+albumSongs.indexOf(song)).payload).digest('hex')));
+     assert.deepEqual(verified.unfinished,[]);
+     return verified.copies.map(copy=>copy.id);
+    };
+    const online=value=>page.evaluate(value=>{
+     Object.defineProperty(navigator,'onLine',{configurable:true,value});
+     dispatchEvent(new Event(value?'online':'offline'));
+    },value);
+    const changeSavedAlbum=deleteAlbum=>page.evaluate(async ({accountId,editionId,deleteAlbum})=>{
+     const db=await new Promise((ok,fail)=>{
+      const req=indexedDB.open('pulso-web-local-v1');req.onsuccess=()=>ok(req.result);req.onerror=()=>fail(req.error);
+     });
+     try{await new Promise((ok,fail)=>{
+      const tx=db.transaction('settings','readwrite'),store=tx.objectStore('settings');
+      tx.oncomplete=ok;tx.onabort=()=>fail(tx.error);
+      const key=['saved-catalog-album',accountId,editionId];
+      if(deleteAlbum)store.delete(key);
+      else{
+       const req=store.get(key);
+       req.onsuccess=()=>store.put({...req.result,savedAt:new Date().toISOString(),
+        edition:{...req.result.edition,trackCount:1},tracks:req.result.tracks.slice(1)},key);
+      }
+     });}finally{db.close();}
+    },{accountId,editionId:album.collectionId,deleteAlbum});
+    if(mode.startsWith('queue-album-')){
+     await saveAlbum();await openSavedAlbum();
+     if(mode==='queue-album-interruption'){
+      await page.evaluate(()=>{
+       window.testAlbumTrackConfirmed=index=>{if(index===0){
+        delete window.testAlbumTrackConfirmed;window.testQueueTelegram.stop('network');
+       }};
+      });
+      await enqueueAlbum();
+      await page.waitForFunction(()=>window.testQueueTelegram.snapshot().phase==='error');
+      await dock.locator('progress').waitFor({state:'hidden'});
+      await page.waitForTimeout(100);
+      assert.deepEqual(await queuedTitles(),[albumTitle],'Interrupted album must keep its persistent entry');
+      const before=await verifyAlbum(albumSongs.slice(0,1));
+      await reconnect();
+      await page.waitForFunction(key=>!localStorage.getItem(key),queueKey);
+      const after=await verifyAlbum();
+      assert.equal(after[0],before[0],'Reconnect uses the same first asset');
+      assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.trackId),['album-0','album-1']);
+     }else if(mode==='queue-album-read-error'){
+      await page.evaluate(()=>{window.testAlbumReadError=true;});
+      const hits=latestHits;
+      await enqueueAlbum();
+      await dock.getByText(/No se pudo (comprobar|continuar)/).waitFor();
+      await page.waitForTimeout(700);
+      assert.equal(latestHits-hits,1,'Persistent album read error must not loop over latest.json');
+      assert.deepEqual(await queuedTitles(),[albumTitle]);
+      await page.evaluate(()=>{window.testAlbumReadError=false;});
+      await dock.getByRole('button',{name:'Reintentar descarga en cola'}).tap();
+      await page.waitForFunction(key=>!localStorage.getItem(key),queueKey);
+      await verifyAlbum();
+     }else{
+      await online(false);await enqueueAlbum();
+      await dock.getByText(/Sin conexión/).waitFor();
+      await openDetails();
+      assert.equal(await handle.locator('path').getAttribute('d'),'M12 4v12m-5-5 5 5 5-5M5 20h14');
+      assert.equal(await dock.locator('.download-dock__panel > strong').textContent(),albumTitle);
+      await handle.tap();
+      if(mode==='queue-album-refresh'){
+       const before=await queueIds();
+       await page.getByRole('button',{name:'Retirar álbum',exact:true}).tap();
+       const dialog=page.getByRole('dialog',{name:'Eliminar álbum',exact:true});
+       await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Eliminar álbum',exact:true}).tap();
+       await dialog.getByRole('button',{name:'Cerrar',exact:true}).tap();
+       await dialog.waitFor({state:'detached'});
+       assert.deepEqual(await queueIds(),[]);
+       await saveAlbum();await openSavedAlbum();await enqueueAlbum();
+       assert.notDeepEqual(await queueIds(),before);
+       await changeSavedAlbum(false);
+      }else await changeSavedAlbum(true);
+      await enqueueNext();
+      await online(true);await verifyNext();
+      if(mode==='queue-album-refresh')await verifyAlbum(albumSongs.slice(1));
+      assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.trackId),
+       mode==='queue-album-refresh'?['album-1',cTrack.id]:[cTrack.id]);
+     }
+    }else if(mode==='queue-stop-update'){
+     const hits=latestHits;
+     holdLatest=true;
+     await enqueueNext();
+     await dock.getByText('Comprobando la versión antes de descargar…',{exact:true}).waitFor();
+     await dock.getByRole('button',{name:'Detener',exact:true}).tap();
+     holdLatest=false;releaseLatest();
+     await page.waitForTimeout(500);
+     assert.deepEqual(await queuedTitles(),[],'Stopping version check must cancel the dispatch');
+     assert.equal(trace.length,0);
+     assert.equal(latestHits-hits,1);
+     await collection.getByRole('button',{name:startLabel,exact:true}).tap();await verifyNext();
+    }else if(mode==='queue-retry-at'||mode==='queue-disconnected'){
+     await page.evaluate(mode=>{
+      window.testDispatchGate=current=>new Promise(resolve=>{
+       delete window.testDispatchGate;
+       window.testReleaseDispatch=()=>{current();resolve();};
+       const client=window.testQueueTelegram;
+       if(mode==='queue-retry-at'){client.remoteRetryAt=Date.now()+2600;client.publishSearch();}
+       else client.stop('network');
+      });
+     },mode);
+     await enqueueNext();
+     await page.waitForFunction(()=>!!window.testReleaseDispatch);
+     assert.deepEqual(await queuedTitles(),[playlistC]);
+     assert.equal(trace.length,0);
+     await page.evaluate(()=>window.testReleaseDispatch());
+     if(mode==='queue-disconnected')await reconnect();
+     await verifyNext();
+     if(mode==='queue-retry-at')assert.equal(await page.evaluate(()=>Date.now()>=window.testQueueTelegram.searchSnapshot().retryAt),true);
+    }else if(mode==='queue-claim-error'){
+     await page.evaluate(key=>{
+      const original=Storage.prototype.setItem;
+      Storage.prototype.setItem=function(name,value){
+       if(name===key&&!window.testAllowClaim)throw new DOMException('Synthetic quota','QuotaExceededError');
+       return original.call(this,name,value);
+      };
+     },checkpointKey);
+     const hits=latestHits;
+     await enqueueNext();await dock.getByText(/No se pudo (conservar|continuar)/).waitFor();
+     await page.waitForTimeout(700);
+     assert.equal(latestHits-hits,1,'Persistent checkpoint failure must not loop over latest.json');
+     assert.deepEqual(await queuedTitles(),[playlistC]);
+     assert.equal(trace.length,0);
+     await page.evaluate(()=>{window.testAllowClaim=true;});
+     await dock.getByRole('button',{name:'Reintentar descarga en cola'}).tap();await verifyNext();
+    }else if(mode==='queue-cancel-save'){
+     await page.evaluate(()=>{window.testBeforeCollectionSave=()=>new Promise(resolve=>{
+      delete window.testBeforeCollectionSave;window.testReleaseSave=resolve;
+     });});
+     await collection.getByRole('button',{name:startLabel,exact:true}).tap();
+     await page.waitForFunction(()=>!!window.testReleaseSave);
+     const held=await page.evaluate(key=>{
+      const checkpoint=JSON.parse(localStorage.getItem(key));
+      return {pending:checkpoint.pending,trackId:checkpoint.trackIds[checkpoint.cursor]};
+     },checkpointKey);
+     assert.equal(held.pending.kind,'save');
+     await collection.getByRole('button',{name:'Gestionar descarga de '+playlistName}).tap();
+     await page.getByRole('button',{name:'Cancelar descarga',exact:true}).tap();
+     await page.evaluate(()=>window.testReleaseSave());
+     await page.waitForFunction(({key,queue})=>!localStorage.getItem(key)&&!localStorage.getItem(queue),{key:checkpointKey,queue:queueKey});
+     assert.equal(await page.evaluate(key=>localStorage.getItem(key),'pulso:library-download-held:v1:'+accountId+':'+held.trackId),held.pending.operationId);
+     await enqueueNext();await verifyNext();
+    }else if(mode==='queue-paused-removal'){
+     gateOn=true;await collection.getByRole('button',{name:startLabel,exact:true}).tap();await waitForBlockedRead();
+     await openDetails();await dock.getByRole('button',{name:'Detener',exact:true}).tap();
+     gateOn=false;unblockRead();
+     await dock.getByRole('button',{name:resumeLabel,exact:true}).waitFor();
+     const paused=await page.evaluate(key=>localStorage.getItem(key),checkpointKey);
+     if(await handle.getAttribute('aria-expanded')==='true')await handle.tap();
+     await collection.getByRole('button',{name:startLabel,exact:true}).tap();
+     assert.equal(await page.getByRole('dialog').count(),0);
+     assert.equal(await page.evaluate(key=>localStorage.getItem(key),checkpointKey),paused);
+     assert.equal(await handle.getAttribute('aria-expanded'),'true','Tapping the paused playlist opens its progress');
+     await handle.tap();
+     await enqueueNext();
+     await back('Volver a Biblioteca');
+     await page.locator('.library-grid button').filter({hasText:playlistName}).tap();
+     await collection.getByRole('button',{name:'Opciones de playlist',exact:true}).tap();
+     await collection.getByRole('button',{name:'Eliminar playlist',exact:true}).tap();
+     const dialog=page.getByRole('dialog',{name:'Eliminar playlist',exact:true});
+     await dialog.getByRole('checkbox').check();
+     await dialog.getByRole('button',{name:'Eliminar playlist',exact:true}).tap();
+     await dialog.getByRole('button',{name:'Cerrar',exact:true}).tap();
+     await verifyNext();
+    }else if(mode==='queue-missing-track'){
+     await online(false);
+     await page.evaluate(({key,title,trackId})=>{
+      const id=crypto.randomUUID();
+      localStorage.setItem(key,JSON.stringify([{kind:'library',key:'library:playlist:missing',id,title,request:{id,title,trackIds:[trackId],play:false}}]));
+      dispatchEvent(new StorageEvent('storage',{key}));
+     },{key:queueKey,title:'Selección retirada',trackId:uuid(999)});
+     await enqueueNext();await online(true);await verifyNext();
+     assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.trackId),[cTrack.id]);
+    }else if(mode==='queue-inspection'){
+     await saveAlbum();
+     await page.evaluate(()=>{window.testBlockInspection=true;window.testSkippedInspection=false;});
+     await openSavedAlbum();
+     await page.waitForFunction(()=>window.testSkippedInspection);
+     const badges=page.locator('.album-page .album-track-badges');
+     assert.deepEqual(await badges.allTextContents(),['Copia sin comprobar','Copia sin comprobar']);
+     await page.evaluate(()=>window.testSetSongFlight(true));
+     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+     await page.evaluate(()=>{window.testBlockInspection=false;window.testSetSongFlight(false);});
+     await page.getByText('No descargada',{exact:true}).first().waitFor();
+     assert.deepEqual(await badges.allTextContents(),['No descargada','No descargada']);
+    }else if(mode==='queue-single-edition'){
+     await search(single.collectionName);
+     const row=page.locator('[data-suggestion-id="single-edition:422"]');
+     await row.tap();
+     await page.getByRole('button',{name:'Cancelar carga',exact:true}).waitFor();
+     await enqueueNext();
+     assert.deepEqual(await queuedTitles(),[playlistC]);
+     assert.equal(trace.length,0);
+     releaseSingle();await verifyNext();
+     assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.trackId),['single',cTrack.id]);
+    }
+    assert.deepEqual(errors,[]);
+    receipt.status='PASS';receipt.totalMs=elapsed(started);return receipt;
+   }
    if(mode==='queue-admission'){
     await openNextPlaylist();
     await page.evaluate(()=>window.testMetadataAdmission(true));
@@ -854,7 +1135,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    headings:[...document.querySelectorAll('h2')].filter(element=>element.getClientRects().length).map(element=>element.textContent),checkpoint:JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)??'null')?.cursor,queued:JSON.parse(localStorage.getItem('pulso:collection-download-queue:v1:'+account)??'[]').map(item=>item.title)}),accountId).catch(()=>null);
   receipt.dock=await page?.getByRole('region',{name:'Descargas',exact:true}).allTextContents().catch(()=>[]);
   receipt.imports=await page?.evaluate(()=>window.__playlistFull.imports).catch(()=>[]);
- }finally{
+ }finally{releaseLatest();releaseSingle();
   unblockRead();
   await context.close();
  }
