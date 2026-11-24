@@ -97,8 +97,17 @@ export function takeDownloadAfterUpdate<K extends DownloadAction['kind']>(accoun
 // Consuming a song or album intent removes it from sessionStorage before its
 // metadata and local copies are ready. Keep its priority during that gap.
 const resolvingHandoffs=new Map<string,object>();
+const handoffListeners=new Set<()=>void>();
+export function subscribeDownloadHandoffs(listener:()=>void){
+ handoffListeners.add(listener);
+ return ()=>{handoffListeners.delete(listener);};
+}
 export function reserveDownloadHandoff(account:string){
  const token={};resolvingHandoffs.set(account,token);
- return ()=>{if(resolvingHandoffs.get(account)===token)resolvingHandoffs.delete(account);};
+ return ()=>{
+  if(resolvingHandoffs.get(account)!==token)return;
+  resolvingHandoffs.delete(account);
+  for(const notify of handoffListeners)notify();
+ };
 }
 export function downloadHandoffInProgress(account:string){return resolvingHandoffs.has(account);}

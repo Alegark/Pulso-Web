@@ -16,15 +16,16 @@ export interface AlbumRow {state:AlbumRowState;trackId:string|null;confirmed:boo
 export interface AlbumProgress {rows:AlbumRow[];message:string;waiting?:boolean}
 export interface AlbumAcquisition {
  detail:AlbumDetail;attempt:SongPlaybackAttempt;client:TelegramSessionClient|null;provider:string|null;providers?:readonly OrderedProvider[];revision:number|undefined;
- management:(id:string)=>SongManagement|null;signal:AbortSignal;current:()=>boolean;update:(value:AlbumProgress)=>void;rows:AlbumRow[];remoteClock?:{settledAt:number};uncertainTracks?:Set<CatalogId>;
+ management:(id:string)=>SongManagement|null;signal:AbortSignal;current:()=>boolean;update:(value:AlbumProgress)=>void;rows:AlbumRow[];remoteClock?:{settledAt:number};uncertainTracks?:Set<CatalogId>;interruptOnTelegram?:boolean;
 }
-export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
+export async function acquireAlbum(p:AlbumAcquisition):Promise<'completed'|'interrupted'> {
  const rows=p.rows.map(row=>row.confirmed?{...row,state:'ready' as const,confirmed:false,message:'Pendiente de verificar de nuevo.'}:{...row});
  const live=()=>{try{return !p.signal.aborted&&p.current()&&p.attempt.current();}catch{return false;}};
- const update=(message:string)=>p.update({rows:rows.map(row=>({...row})),message});
+ const update=(message:string,waiting=false)=>p.update({rows:rows.map(row=>({...row})),message,waiting});
  const remoteClock=p.remoteClock??{settledAt:0},networkCurrent=p.client?.captureBotsCurrent();
  const providers=p.providers??(p.provider?[{providerRef:p.provider,label:'Bot'}]:[]);
- let storageStopped=false;
+ let interruption:string|undefined;
+ const storageStopped='No se pudo continuar con el almacenamiento actual.';
  update('Comprobando copias…');
  try {
   for(let i=0;i<p.detail.tracks.length;i++){
@@ -36,7 +37,7 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
     p.uncertainTracks?.add(track.trackId);
    };
    let id:string|null=null,downloaded=false;
-   if(p.attempt.waitForDownload&&!await p.attempt.waitForDownload(p.signal)){storageStopped=true;break;}
+   if(p.attempt.waitForDownload&&!await p.attempt.waitForDownload(p.signal)){interruption=storageStopped;break;}
    try{id=await p.attempt.lookup(choice,p.signal,true);}catch{park();update(row.message);continue;}
    if(!live())break;
    if(!id&&previouslyParked){park();update(row.message);continue;}
@@ -47,7 +48,7 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
      row.state='failed';row.message='No hay bots disponibles';update(row.message);continue;
     }
     let pending:PendingDownload|undefined;
-    const result=await downloadSong({client:p.client,providers,revision:p.revision,signal:p.signal,current:live,networkCurrent,remoteClock,
+    const result=await downloadSong({client:p.client,providers,revision:p.revision,signal:p.signal,current:live,networkCurrent,remoteClock,interruptOnTelegram:p.interruptOnTelegram,
      attempt:p.attempt,choice,index:i,mark:value=>{pending=value;},message:message=>{row.message=message;update(message);},progress:()=>{}});
     if(result.state==='stopped'||result.state==='telegram'||!live()){
      if(pending?.kind==='save')park();
@@ -55,7 +56,7 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
       const remote=p.client.searchSnapshot();
       if(remote.pending||remote.cancelling||remote.retryBlocked||remote.delivery==='uncertain')park();
      }
-     storageStopped=live();
+     interruption=result.state==='telegram'?'Telegram se interrumpió. Las copias ya confirmadas se conservan.':storageStopped;
      break;
     }
     Object.assign(row,result);
@@ -73,7 +74,8 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
    update(row.message);
   }
   if(!live())update('Operación detenida. Las copias ya confirmadas se conservan.');
-  else if(storageStopped)update('No se pudo continuar con el almacenamiento actual.');
+  else if(interruption)update(interruption,true);
   else update(rows.every(row=>row.confirmed)?'Álbum listo en Biblioteca.':'Álbum incompleto: revisa las pistas pendientes o fallidas.');
- }catch{update('No se pudo continuar con el almacenamiento actual.');}
+  return live()&&!interruption?'completed':'interrupted';
+ }catch{update(storageStopped,true);return 'interrupted';}
 }

@@ -10,6 +10,7 @@ export const parkedSong={state:'uncertain',reason:'parked',message:'Pendiente en
 export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBots>[0],'target'|'accept'|'excludedDigests'|'excludedRowKeys'>&{
  choice:SongChoice;attempt:SongPlaybackAttempt;waitForDownload?:SongPlaybackAttempt['waitForDownload'];trackId?:string;index:number;
  previousAttempts?:readonly SavedCandidate[];onFailedCandidates?:(candidates:SavedCandidate[])=>void;
+ interruptOnTelegram?:boolean;
  mark:(pending:PendingDownload)=>void;message:(message:string)=>void;
 }):Promise<(Partial<AlbumRow>&{state:AlbumRow['state']}) | {state:'stopped'} | {state:'telegram'}>{
  const {choice,attempt,signal,current,trackId}=p;
@@ -68,7 +69,7 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
  if(savedId)return {state:'downloaded',trackId:savedId,confirmed:true,message:'Descargada'};
  if(result.state==='parked')return parkedSong;
  if(result.state==='unavailable'||result.state==='uncertain'||result.state==='timed-out')
-  return p.collection&&result.state!=='timed-out'?{state:'telegram'}:{state:'failed',message:'Telegram no respondió a tiempo'};
+  return (p.collection||p.interruptOnTelegram)&&result.state!=='timed-out'?{state:'telegram'}:{state:'failed',message:'Telegram no respondió a tiempo'};
  if(result.state==='known-failure'&&(failedDigests.size||result.reasons.some(reason=>reason!=='no-compatible-row')))return {state:'failed',reason:'no-valid-file',message:'Ningún bot entregó un archivo válido'};
  if(result.state==='known-failure'&&result.reasons.length)return {state:'failed',reason:'not-found',message:'No existe en tus bots'};
  return {state:'failed',message:'No hay bots disponibles'};

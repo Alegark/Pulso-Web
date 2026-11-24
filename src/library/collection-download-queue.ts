@@ -3,6 +3,8 @@ import {copyLibraryDownloadCheckpoint} from './library-download-checkpoint';
 import type {LibraryDownloadRequest} from './library-download';
 import {copySavedAlbum,type SavedAlbum} from './saved-albums';
 
+export type CollectionDownloadOutcome='completed'|'cancelled-by-user'|'interrupted'|'deferred';
+
 export type CollectionDownloadJob=
  | {kind:'album';id:string;key:string;title:string;album:SavedAlbum}
  | {kind:'library';id:string;key:string;title:string;request:LibraryDownloadRequest};

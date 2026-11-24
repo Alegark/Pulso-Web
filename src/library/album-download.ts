@@ -1,7 +1,7 @@
 import type {AlbumDetail} from './album-catalog';
 import type {CatalogId} from './catalog-id';
 import {acquireAlbum,albumTrackChoice,type AlbumRow,type AlbumProgress} from './album-acquisition';
-import {albumDownloadKey} from './collection-download-queue';
+import {albumDownloadKey,type CollectionDownloadJob,type CollectionDownloadOutcome} from './collection-download-queue';
 import type {OrderedProvider} from './ordered-bot-acquisition';
 import type {SavedAlbum,SavedAlbumFailures,SaveAlbumResult} from './saved-albums';
 import type {SongManagement,SongPlaybackAttempt} from './selected-song';
@@ -17,7 +17,7 @@ export interface AlbumCoordinator {
  requestAlbum?:(album:SavedAlbum)=>void;
  queueAccount?:string;
  albumRowsAccount?:string;
- queued?:readonly {key:string;title:string}[];
+ queued?:readonly CollectionDownloadJob[];
  removeQueued?:(key:string)=>void;
 }
 export const albumCoordinator:AlbumCoordinator={running:false,uncertainTracks:new Set(),remoteClock:{settledAt:0},rows:new Map(),listeners:new Set()};
@@ -29,11 +29,14 @@ export async function runAlbumDownload(p:{
  attempt:SongPlaybackAttempt;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;
  providers:readonly OrderedProvider[];management:(id:string)=>SongManagement|null;
  saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure:SavedAlbumFailures)=>Promise<SaveAlbumResult>;
-}){
+ queued?:boolean;
+}):Promise<CollectionDownloadOutcome>{
  const {detail,attempt,client,revision,coordinator}=p;
- if(coordinator.running||!attempt.current())return false;
+ if(coordinator.running||!attempt.current())return 'deferred';
  const {id:editionId,title}=detail.edition,abort=new AbortController(),key=albumRunKey(detail,p.accountId);
- const run:AlbumDownloadRun={scope:p.scope,accountId:p.accountId,editionId,key,title,abort,collectionKey:albumDownloadKey(editionId)};
+ let cancelled=false;
+ const run:AlbumDownloadRun={scope:p.scope,accountId:p.accountId,editionId,key,title,abort,collectionKey:albumDownloadKey(editionId),
+  stop:()=>{cancelled=true;abort.abort();}};
  if(coordinator.albumRowsAccount!==p.accountId){
   coordinator.albumRowsAccount=p.accountId;
   coordinator.rows.clear();coordinator.uncertainTracks.clear();coordinator.remoteClock.settledAt=0;
@@ -51,7 +54,7 @@ export async function runAlbumDownload(p:{
   if(!valid)abort.abort();
  });
  try{
-  await acquireAlbum({detail,attempt,client,provider:p.provider,providers:p.providers.map(row=>({...row})),revision,management:p.management,
+  const outcome=await acquireAlbum({detail,attempt,client,provider:p.provider,providers:p.providers.map(row=>({...row})),revision,management:p.management,interruptOnTelegram:p.queued,
    signal:abort.signal,current,rows,remoteClock:coordinator.remoteClock,uncertainTracks:coordinator.uncertainTracks,update:value=>{
     if(coordinator.active!==run)return;
     rows=value.rows;
@@ -59,15 +62,16 @@ export async function runAlbumDownload(p:{
     coordinator.notice={title,titles,progress:value};notifyAlbumDownload(coordinator);
     downloadNotifications.notify('album',run,title,`${rows.filter(row=>row.confirmed).length} de ${rows.length} canciones guardadas`,false,current);
    }});
-  if(p.saved&&p.saveAlbum&&current()){
+  if(outcome==='completed'&&!abort.signal.aborted&&p.saved&&p.saveAlbum&&current()){
    const failures=new Set(p.saved.failedTracks);
    rows.forEach((row,index)=>{
     const id=albumTrackChoice(detail.tracks[index],title).id;
     if(row.state==='failed')failures.add(id);
     else if(row.confirmed)failures.delete(id);
    });
-   await p.saveAlbum(detail,current,{savedAt:p.saved.savedAt,failedTracks:[...failures]}).catch(()=>{});
+   await p.saveAlbum(detail,()=>current()&&!abort.signal.aborted,{savedAt:p.saved.savedAt,failedTracks:[...failures]}).catch(()=>{});
   }
+  return cancelled?'cancelled-by-user':abort.signal.aborted||!current()?'interrupted':outcome;
  }finally{
   unsubscribe?.();
   if(coordinator.active===run){
@@ -77,5 +81,4 @@ export async function runAlbumDownload(p:{
    notifyAlbumDownload(coordinator);
   }
  }
- return true;
 }

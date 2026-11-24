@@ -57,7 +57,7 @@ function readPosition():Point|null{
  return null;
 }
 
-export function DownloadDock({accountId,message,review,onReviewStorage,updateWait,onStopUpdate,pendingDownload}:{accountId?:string;updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;pendingDownload?:{saved:number;total:number;title?:string;reason?:string;retaking:boolean;onContinue:()=>void};message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
+export function DownloadDock({accountId,message,review,onReviewStorage,updateWait,onStopUpdate,pendingDownload,onRetryQueued}:{accountId?:string;updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;onRetryQueued?:()=>void;pendingDownload?:{saved:number;total:number;title?:string;reason?:string;retaking:boolean;onContinue:()=>void};message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
  const {active:activeRun,notice,queued,queueAccount,removeQueued}=useAlbumDownloadState();
  const scoped=(run:AlbumCoordinator['active'])=>run?.accountId===undefined||run.accountId===accountId?run:undefined;
  const active=scoped(activeRun),running=!!active;
@@ -232,13 +232,13 @@ export function DownloadDock({accountId,message,review,onReviewStorage,updateWai
      aria-label={running?`${expanded?'Plegar':'Ver'} descargas · ${saved} de ${total} guardadas`:undefined}
      onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={endPointer} onPointerCancel={endPointer} onLostPointerCapture={endPointer}
      onKeyDown={moveWithKey} onClick={event=>{if(event.detail&&ignoreClick.current){ignoreClick.current=false;return;}setExpanded(value=>!value);}}>
-      <DownloadIcon done={!pendingBatch&&!running&&saved===total}/>
+      <DownloadIcon done={!pendingBatch&&!running&&total>0&&saved===total}/>
       {running?<><span>{saved}/{total}</span><progress aria-hidden="true" value={saved} max={Math.max(1,total)}/></>:<span>{pendingMessage??(currentNotice?summary:`En cola (${waiting.length})`)}</span>}
       <span className="download-dock__chevron" aria-hidden="true">{expanded?'⌃':'⌄'}</span>
      </button>
      <span id={hintId} className="pulso-visually-hidden">Usa las flechas para mover la ventana.</span>
      {expanded&&<div id={panelId} className="download-dock__panel">
-      <strong><bdi dir="auto">{pendingBatch?.title??currentNotice?.title??active?.title??'Selección de Biblioteca'}</bdi></strong>
+      <strong><bdi dir="auto">{pendingBatch?.title??currentNotice?.title??active?.title??waiting[0]?.title??'Cola de descargas'}</bdi></strong>
       {!pendingBatch&&currentNotice&&<p>{running?summary:finished?.stopped?'Descarga detenida':'Descarga finalizada'}</p>}
       {running&&currentIndex>=0&&<p><bdi dir="auto">{currentNotice?.titles?.[currentIndex]??`Canción ${currentIndex+1}`}</bdi></p>}
       {detailMessage&&<p>{detailMessage}</p>}
@@ -269,6 +269,7 @@ export function DownloadDock({accountId,message,review,onReviewStorage,updateWai
      {!expanded&&(transient||pauseReason||currentNotice?.progress.waiting&&progressMessage)&&<p className="download-dock__message" role={pauseReason?undefined:'status'}>{detailMessage}</p>}
     </>:<p className="download-dock__message">{transient}</p>}
     {!updateMessage&&!reviewing&&pendingBatch&&!pendingBatch.retaking&&<div className="download-dock__footer"><button type="button" onClick={pendingBatch.onContinue}>Continuar</button></div>}
+    {!updateMessage&&!reviewing&&!running&&!pendingBatch&&onRetryQueued&&<div className="download-dock__footer"><button type="button" onClick={onRetryQueued}>Reintentar descarga en cola</button></div>}
     {(updateMessage||!reviewing&&expanded&&running&&active)&&<div className="download-dock__footer"><button type="button" onClick={()=>{
      if(updateMessage)onStopUpdate?.();
      else if(active&&albumCoordinator.active===active){if(active.stop)active.stop();else active.abort.abort();}
@@ -278,8 +279,8 @@ export function DownloadDock({accountId,message,review,onReviewStorage,updateWai
  </>,document.body);
 }
 
-export function CollectionDownloadButton({label,disabled,complete,onStart,showLabel=false,coordinator=albumCoordinator,collectionKey,accountId}:{
- label:string;disabled?:boolean;complete?:boolean;onStart:()=>void;showLabel?:boolean;coordinator?:AlbumCoordinator;collectionKey?:string;accountId?:string;
+export function CollectionDownloadButton({label,disabled,complete,onStart,paused=false,showLabel=false,coordinator=albumCoordinator,collectionKey,accountId}:{
+ label:string;paused?:boolean;disabled?:boolean;complete?:boolean;onStart:()=>void;showLabel?:boolean;coordinator?:AlbumCoordinator;collectionKey?:string;accountId?:string;
 }){
  const {running,notice,active,queued,queueAccount,removeQueued}=useAlbumDownloadState(coordinator);
  const dialog=useRef<HTMLDialogElement>(null),keep=useRef<HTMLButtonElement>(null),cancel=useRef<HTMLButtonElement>(null);
@@ -288,12 +289,12 @@ export function CollectionDownloadButton({label,disabled,complete,onStart,showLa
  const [confirmation,setConfirmation]=useState<{title:string;run?:NonNullable<AlbumCoordinator['active']>}|null>(null);
  const headingId=useId();
  const ownRun=collectionKey&&active?.collectionKey===collectionKey&&active.accountId===accountId?active:undefined;
- const waiting=collectionKey&&queueAccount===accountId?queued?.find(item=>item.key===collectionKey):undefined;
+ const waiting=!paused&&collectionKey&&queueAccount===accountId?queued?.find(item=>item.key===collectionKey):undefined;
  const managed=!!(ownRun||waiting);
- const showProgress=!!ownRun||running&&!collectionKey;
+ const showProgress=!!ownRun||paused||running&&!collectionKey;
  const buttonDisabled=!showProgress&&!managed&&!!(disabled||complete);
  const {saved,total}=downloadCounts(notice);
- const name=showProgress?ownRun?`Gestionar descarga de ${ownRun.title}`:`Ver descargas · ${saved} de ${total} guardadas`:
+ const name=showProgress?ownRun?`Gestionar descarga de ${ownRun.title}`:paused?label:`Ver descargas · ${saved} de ${total} guardadas`:
   waiting?`Gestionar descarga en cola de ${waiting.title}`:complete?'Todas las canciones descargadas':label;
  useLayoutEffect(()=>{
   const node=dialog.current;
@@ -348,7 +349,7 @@ export function CollectionDownloadButton({label,disabled,complete,onStart,showLa
     else onStart();
    }}>
    <DownloadIcon done={!showProgress&&!managed&&!!complete}/>
-   {showProgress?<span aria-hidden="true">{saved}/{total}</span>:showLabel&&<span>{name}</span>}
+   {showProgress&&!paused?<span aria-hidden="true">{saved}/{total}</span>:showLabel&&<span>{name}</span>}
   </button>
   {confirmation&&createPortal(<dialog ref={dialog} className="download-confirmation" aria-labelledby={headingId}
    onClose={event=>{if(!event.currentTarget.open)setConfirmation(null);}}

@@ -2,13 +2,13 @@ import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {downloadNotifications} from '../pwa/download-notifications';
 import {createPortal} from 'react-dom';
 import {announceDownloadMessage,CollectionDownloadButton,DownloadDock,openDownloadDock,useAlbumDownloadState} from './DownloadDock';
-import {downloadHandoffInProgress,downloadWithCurrentApp,pendingDownloadAfterUpdate,takeDownloadAfterUpdate} from '../service-worker/download-update';
+import {downloadHandoffInProgress,downloadWithCurrentApp,pendingDownloadAfterUpdate,subscribeDownloadHandoffs,takeDownloadAfterUpdate} from '../service-worker/download-update';
 import {registerUpdateBlocker} from '../service-worker/update-blockers';
 import {subscribeLibraryDownloads,subscribeLibraryTrackReviews,releaseUncertainSingleDownload,downloadLibrarySelection,type LibraryDownloadRequest} from '../library/library-download';
 import {canAutoResumeLibraryDownload,claimLibraryDownload,stopAutomaticLibraryDownload,clearHeldLibraryDownload,discardLibraryDownloadCheckpoint,readHeldLibraryDownload,readLibraryDownloadCheckpoint,writeLibraryDownloadCheckpoint,pendingLibraryTrack,releaseLibraryTrack,sameHeldDownload,writeHeldLibraryDownload,type HeldDownload,type LibraryDownloadCheckpoint} from '../library/library-download-checkpoint';
 import {inspectLibraryTrackDownload} from '../library/library-download-recovery';
 import {albumCoordinator,notifyAlbumDownload,runAlbumDownload} from '../library/album-download';
-import {albumDownloadKey,libraryDownloadKey,createCollectionDownloadQueue,collectionQueueStorageKey,type CollectionDownloadJob} from '../library/collection-download-queue';
+import {albumDownloadKey,libraryDownloadKey,createCollectionDownloadQueue,collectionQueueStorageKey,type CollectionDownloadJob,type CollectionDownloadOutcome} from '../library/collection-download-queue';
 import {readSavedAlbum,type SavedAlbum,type SavedAlbumFailures,type SaveAlbumResult} from '../library/saved-albums';
 import type {AlbumDetail} from '../library/album-catalog';
 import {orderedProviders} from '../library/ordered-bot-acquisition';
@@ -33,6 +33,8 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
  const autoArmed=useRef(true),pageLive=useRef(true),cleanedOrphan=useRef(false);
  const [retaking,setRetaking]=useState(false);
  const [,wake]=useState(0);
+ const dispatch=useRef<{account:string;key:string;cancelled:boolean}|null>(null);
+ const pausedHead=useRef<{id:string;untilReady:boolean}|null>(null);
  const ownedNotice=useRef<typeof albumCoordinator.notice>(undefined);
  const [notice,setNoticeMessage]=useState<{text:string}|null>(null);
  const setNotice=(text:string)=>setNoticeMessage(text?{text}:null);
@@ -56,6 +58,15 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
   try{createCollectionDownloadQueue(localStorage,account).remove(key,expectedId);publishQueue(account);return true;}
   catch{setNotice('No se pudo actualizar la cola de descargas.');}
  }
+ function removeCollection(key:string){
+  const account=latest.current.accountId;
+  if(!account||!hasControl()||albumCoordinator.active?.accountId===account&&albumCoordinator.active.collectionKey===key)return;
+  try{
+   const checkpoint=readLibraryDownloadCheckpoint(account);
+   if(checkpoint?.collectionKey===key&&discardLibraryDownloadCheckpoint(account,checkpoint))setPending(null);
+   removeQueued(key,account);
+  }catch{setNotice('No se pudo descartar el progreso de la descarga.');}
+ }
  function enqueue(job:CollectionDownloadJob){
   const account=latest.current.accountId;
   if(!account||!hasControl()){setNotice('Usa Pulso en esta pestaña para descargar.');return;}
@@ -69,15 +80,19 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
    const queued=publishQueue(account).filter(item=>item.key!==albumCoordinator.active?.collectionKey);
    const position=queued.findIndex(item=>item.key===job.key)+1;
    if(albumCoordinator.running||albumCoordinator.songFlight||pending||position>1)announceDownloadMessage(`En cola · posición ${position}`);
-   else if(latest.current.connectionPhase==='initializing')setNotice('Esperando a que Telegram termine de preparar tus bots…');
+   const p=latest.current;
+   if(navigator.onLine===false)setNotice('Sin conexión. La descarga queda en cola hasta que vuelva la red.');
+   else if(p.connectionPhase==='initializing')setNotice('Esperando a que Telegram termine de preparar tus bots…');
+   else if(!p.client||!p.connected)setNotice('Conecta Telegram para continuar las descargas en cola.');
+   else if(!orderedProviders(p.bots).length)setNotice('Configura un bot de música para continuar las descargas en cola.');
   }catch{setNotice('No se pudo guardar la descarga en la cola. Comprueba el espacio disponible.');}
  }
- const queueCallbacks=useRef({enqueue,removeQueued});queueCallbacks.current={enqueue,removeQueued};
+ const queueCallbacks=useRef({enqueue,removeCollection});queueCallbacks.current={enqueue,removeCollection};
  useEffect(()=>{
   albumCoordinator.requestAlbum=(album:SavedAlbum)=>queueCallbacks.current.enqueue({
    kind:'album',id:crypto.randomUUID(),key:albumDownloadKey(album.edition.id),title:album.edition.title,album,
   });
-  albumCoordinator.removeQueued=key=>queueCallbacks.current.removeQueued(key);
+  albumCoordinator.removeQueued=key=>queueCallbacks.current.removeCollection(key);
   return()=>{delete albumCoordinator.requestAlbum;delete albumCoordinator.removeQueued;delete albumCoordinator.queued;delete albumCoordinator.queueAccount;};
  },[]);
 
@@ -145,72 +160,71 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
    else if(!automatic&&admission.current===check&&latest.current.accountId===account)
     setNotice(accessMessage()??`No se pudo iniciar «${request.title}».`);
   }finally{
-   if(admission.current===check){admission.current=null;setRetaking(false);}
+   if(admission.current===check){admission.current=null;setRetaking(false);wake(value=>value+1);}
   }
  }
- function start(request:LibraryDownloadRequest,restore?:LibraryDownloadCheckpoint,reviewed?:HeldDownload|null,saveOnly=false,automatic=false,queued=false){
+ async function start(request:LibraryDownloadRequest,restore?:LibraryDownloadCheckpoint,reviewed?:HeldDownload|null,saveOnly=false,automatic=false,queued=false):Promise<CollectionDownloadOutcome>{
   const p=latest.current;
-  if(automatic&&p.accountId&&(downloadHandoffInProgress(p.accountId)||pendingDownloadAfterUpdate(p.accountId)))return;
+  if(automatic&&p.accountId&&(downloadHandoffInProgress(p.accountId)||pendingDownloadAfterUpdate(p.accountId)))return 'deferred';
   if(flight.current||albumCoordinator.running||albumCoordinator.songFlight||albumCoordinator.dispatching&&!queued){
    if(automatic)autoArmed.current=true;else setNotice('Hay otra descarga en curso.');
-   return;
+   return 'deferred';
   }
   const blocked=accessMessage();
-  if(blocked){if(!automatic)setNotice(blocked);return;}
+  if(blocked){if(!automatic)setNotice(blocked);return 'deferred';}
   const providers=orderedProviders(p.bots);
   const phase=p.connectionPhase??(p.connected?'connected':'disconnected');
   if(phase==='initializing'){
-   if(automatic){autoArmed.current=true;return;}
+   if(automatic){autoArmed.current=true;return 'deferred';}
    if(!request.repair)waiting.current={request,restore,saveOnly,account:p.accountId};
-   setNotice('Esperando a que Telegram termine de preparar tus bots…');return;
+   setNotice('Esperando a que Telegram termine de preparar tus bots…');return 'deferred';
   }
-  if(!p.client||!p.connected||phase!=='connected'){setNotice('Conecta Telegram y configura un bot para descargar en este dispositivo.');return;}
-  if(!p.bots||!providers.length){setNotice('Telegram está conectado. Configura un bot de música compatible.');return;}
+  if(!p.client||!p.connected||phase!=='connected'){setNotice('Conecta Telegram y configura un bot para descargar en este dispositivo.');return 'deferred';}
+  if(!p.bots||!providers.length){setNotice('Telegram está conectado. Configura un bot de música compatible.');return 'deferred';}
   const attempt=(request.play?(saveOnly?p.capture:p.capturePlay):p.captureBatch??p.capture)?.(!!restore);
   if(!attempt?.current()){
    if(automatic)autoArmed.current=true;
    else setNotice('Biblioteca está ocupada. Revisa Almacenamiento si hay una copia pendiente y vuelve a continuar.');
-   return;
+   return 'deferred';
   }
   const index=new Map(p.tracks.map(t=>[t.id,t]));
   const tracks=request.trackIds.map(id=>index.get(id)).filter((t):t is Track=>!!t);
-  if(tracks.length!==request.trackIds.length){setNotice('La selección cambió. Vuelve a elegirla.');return;}
+  if(tracks.length!==request.trackIds.length){setNotice('La selección cambió. Vuelve a elegirla.');return 'deferred';}
   let checkpoint=restore;
   const account=p.accountId;
   try{
    if(request.repair&&account){
     const trackId=request.trackIds[0],search=p.client.searchSnapshot();
     if(search.pending||search.cancelling||search.retryBlocked||search.retryAt!==null&&search.retryAt>Date.now()){
-     setNotice('Telegram todavía está resolviendo una operación. Espera antes de reintentar.');return;
+     setNotice('Telegram todavía está resolviendo una operación. Espera antes de reintentar.');return 'deferred';
     }
     if(search.error==='uncertain'){
      const allowed=p.client.captureSearchActionCurrent();
-     if(!allowed()){setNotice('Vuelve a conectar Telegram antes de reintentar esta canción.');return;}
+     if(!allowed()){setNotice('Vuelve a conectar Telegram antes de reintentar esta canción.');return 'deferred';}
      p.client.clearSearch(allowed);
     }
     if(reviewed===undefined||!releaseLibraryTrack(account,trackId,reviewed)||pendingLibraryTrack(account,trackId)){
-     setNotice('El estado de la pista cambió. Vuelve a revisarla.');return;
+     setNotice('El estado de la pista cambió. Vuelve a revisarla.');return 'deferred';
     }
     releaseUncertainSingleDownload(trackId);
     checkpoint={id:request.id,trackIds:[trackId],cursor:0,pending:null};
    }else if(!request.play&&account){
     const previous=readLibraryDownloadCheckpoint(account);
     if(!checkpoint&&previous){
-     setPending(previous);setNotice('Hay una descarga pendiente. Puedes continuar desde su última pista confirmada.');return;
+     setPending(previous);setNotice('Hay una descarga pendiente. Puedes continuar desde su última pista confirmada.');return 'deferred';
     }
     const job=createCollectionDownloadQueue(localStorage,account).read().find(item=>item.kind==='library'&&item.request.id===(restore?.queueId??request.id));
     const claimed=claimLibraryDownload(account,request.title,request.trackIds,restore?.id,automatic,job?{key:job.key,id:restore?.queueId??request.id}:undefined);
-    if(!claimed){setPending(previous);setNotice('La descarga cambió en esta pestaña.');return;}
+    if(!claimed){setPending(previous);setNotice('La descarga cambió en esta pestaña.');return 'deferred';}
     checkpoint=claimed;
-    if(job)removeQueued(job.key,account,job.id);
    }
    if(request.play&&account){
     if(pendingLibraryTrack(account,request.trackIds[0])){
-     void reviewRef.current(tracks[0].id,tracks[0].title);return;
+     void reviewRef.current(tracks[0].id,tracks[0].title);return 'deferred';
     }
     checkpoint={id:request.id,trackIds:[...request.trackIds],cursor:0,pending:null};
    }
-  }catch{setNotice('No se pudo conservar el progreso de la descarga. Comprueba el almacenamiento del navegador.');return;}
+  }catch(error){if(queued)throw error;setNotice('No se pudo conservar el progreso de la descarga. Comprueba el almacenamiento del navegador.');return 'deferred';}
   const collection=!request.repair&&!request.play;
   const owns=p.captureOwner?.()??p.captureLifetime?.();
   const ownerCurrent=()=>latest.current.accountId===account&&(owns?.()??true);
@@ -238,7 +252,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
   let readyId:string|null=null,finished=false,preserveHeld=false,confirmed=0,wasWaiting=false;
   const summary=()=>`${confirmed} de ${tracks.length} guardadas`;
   const notify=(body:string,pause=false)=>downloadNotifications.notify('collection',run,run.title,body,false,noticeCurrent,pause,account);
-  void downloadLibrarySelection({tracks,attempt,client:p.client,providers,revision:p.bots.revision,signal:abort.signal,current,onManualPause:manualPause,
+  return downloadLibrarySelection({tracks,attempt,client:p.client,providers,revision:p.bots.revision,signal:abort.signal,current,onManualPause:manualPause,
    checkpoint,saveCheckpoint:account&&checkpoint?next=>{
     if(!current())throw Error('Library download changed');
     if(request.repair||request.play){
@@ -292,16 +306,21 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
     const result=await attempt.play(readyId,()=>current()&&!abort.signal.aborted,abort.signal);
     if(result==='gesture-required')setNotice('Copia guardada. Pulsa Reproducir para escucharla.');
    }
-  }).catch(()=>{if(current())setNotice('No se pudo iniciar la reproducción.');}).finally(()=>{
-   if(!request.repair&&!request.play&&checkpoint&&account&&finished&&current())try{if(readLibraryDownloadCheckpoint(account)?.id===checkpoint.id)writeLibraryDownloadCheckpoint(account,null);}catch{/* Keep the settled pointer for a safe replay. */ }
-   if(discardCheckpoint&&collection&&account&&checkpoint&&ownerCurrent())try{
+   return discardCheckpoint?'cancelled-by-user':finished?'completed':'interrupted';
+  }).catch(():CollectionDownloadOutcome=>{if(current())setNotice('No se pudo iniciar la reproducción.');return 'interrupted';}).finally(()=>{
+   if(collection&&checkpoint&&account&&(finished&&current()||discardCheckpoint&&ownerCurrent()))try{
     const stored=readLibraryDownloadCheckpoint(account);
-    if(stored?.id===checkpoint.id)discardLibraryDownloadCheckpoint(account,stored);
+    if(stored?.id===checkpoint.id){
+     if(checkpoint.collectionKey&&checkpoint.queueId&&!removeQueued(checkpoint.collectionKey,account,checkpoint.queueId))throw Error('Queue settlement failed');
+     if(discardCheckpoint)discardLibraryDownloadCheckpoint(account,stored);
+     else writeLibraryDownloadCheckpoint(account,null);
+    }
    }catch{setNotice('No se pudo conservar el progreso de la descarga.');}
    if(flight.current===abort){
     flight.current=null;
     if(account&&latest.current.accountId===account)try{
      const stored=readLibraryDownloadCheckpoint(account);
+     if(checkpoint?.queueId&&stored?.id===checkpoint.id&&canAutoResumeLibraryDownload(stored))autoArmed.current=true;
      setPending(stored&&stored.id===checkpoint?.id&&pauseMessage?{...stored,pauseMessage}:stored);
     }catch{
      if(checkpoint&&pauseMessage)setPending({...checkpoint,pauseMessage});
@@ -310,7 +329,6 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
    }
    if(albumCoordinator.active===run){albumCoordinator.running=false;albumCoordinator.active=undefined;notifyAlbumDownload(albumCoordinator);}
   });
-  return true;
  }
  const startRef=useRef(startChecked);startRef.current=startChecked;
  useEffect(()=>{
@@ -329,13 +347,16 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
    flight.current?.abort();checking.current?.abort();
    if(albumCoordinator.active?.scope===latest.current.accountId)albumCoordinator.active?.abort.abort();
   };
+  const networkChanged=()=>wake(value=>value+1);
   const foreground=()=>{
-   if(document.visibilityState==='hidden')return;
-   autoArmed.current=true;wake(value=>value+1);
+   if(document.visibilityState==='hidden'){networkChanged();return;}
+   if(pausedHead.current?.untilReady)pausedHead.current=null;
+   autoArmed.current=true;networkChanged();
   };
   const restored=(event:PageTransitionEvent)=>{if(event.persisted){pageLive.current=true;foreground();}};
   document.addEventListener('visibilitychange',foreground);
   addEventListener('online',foreground);
+  addEventListener('offline',networkChanged);
   addEventListener('pageshow',restored);
   addEventListener('pagehide',suspend);
   const changed=(event:StorageEvent)=>{
@@ -347,11 +368,11 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
   addEventListener('storage',changed);
   return()=>{
    unsubscribe();unsubscribeReview();removeEventListener('pagehide',suspend);removeEventListener('pageshow',restored);
-   removeEventListener('online',foreground);document.removeEventListener('visibilitychange',foreground);removeEventListener('storage',changed);
+   removeEventListener('online',foreground);removeEventListener('offline',networkChanged);document.removeEventListener('visibilitychange',foreground);removeEventListener('storage',changed);
   };
  },[]);
  useEffect(()=>{
-  autoArmed.current=true;cleanedOrphan.current=false;setRetaking(false);
+  autoArmed.current=true;cleanedOrphan.current=false;pausedHead.current=null;setRetaking(false);
   waiting.current=null;setNotice('');setPending(null);setReview(null);
   try{publishQueue(props.accountId);}catch{albumCoordinator.queued=[];notifyAlbumDownload(albumCoordinator);setNotice('No se pudo leer la cola de descargas.');}
   if(props.accountId)try{setPending(readLibraryDownloadCheckpoint(props.accountId));}catch{setNotice('No se pudo leer el progreso guardado de la descarga.');}
@@ -376,6 +397,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
    props.storageReady?.()===false||props.captureLifetime&&!props.captureLifetime()())return;
   if(albumCoordinator.dispatching||albumCoordinator.songFlight)return;
   if(pendingUpdate?.kind==='library'){
+   if(!pendingUpdate.checkpointId&&download.queueAccount===account&&download.queued?.some(job=>job.id===pendingUpdate.request.id))return;
    if(admission.current||flight.current||albumCoordinator.running)return;
    const {request,checkpointId}=pendingUpdate;
    // Telegram can be ready before the previous playback queue and library
@@ -397,7 +419,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
    if(repair)void reviewRef.current(repair.trackId,repair.title,repair.retry);
    return;
   }
-  if(!autoArmed.current||!pending||!canAutoResumeLibraryDownload(pending)||!owns?.()||admission.current||
+  if(!telegramReady(props.client)||!autoArmed.current||!pending||!canAutoResumeLibraryDownload(pending)||!owns?.()||admission.current||
    flight.current||albumCoordinator.running||checking.current||waiting.current||document.visibilityState==='hidden'||navigator.onLine===false||
    !(props.captureBatch??props.capture)?.(true)?.current())return;
   if(!tracksLoaded(pending,props.tracks))return;
@@ -408,86 +430,133 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
   const trackIds=new Set(tracks.map(track=>track.id));
   return request.trackIds.every(id=>trackIds.has(id));
  }
- function queueReady(job:CollectionDownloadJob){
-  const p=latest.current;
-  if(p.libraryPending||!p.connected||p.connectionPhase!=='connected'||!p.client||!orderedProviders(p.bots).length||
-   p.storageReady?.()===false)return false;
-  const search=p.client.searchSnapshot();
-  if(!search.available||search.pending||search.cancelling||search.retryBlocked||search.retryAt!==null&&search.retryAt>Date.now())return false;
-  if(job.kind==='album')return !!(p.captureAlbum??p.capture)?.()?.current();
-  return tracksLoaded(job.request,p.tracks)&&
-   !!(p.captureBatch??p.capture)?.(false)?.current();
+ const retryAt=props.client?.searchSnapshot().retryAt;
+ // The cooldown belongs to Telegram, including while another job owns the dispatch.
+ useEffect(()=>{
+  if(!retryAt)return;
+  let timer:ReturnType<typeof setTimeout>;
+  const expire=()=>{
+   const remaining=retryAt-Date.now();
+   if(remaining>0)timer=setTimeout(expire,Math.min(2_147_483_647,remaining+1));
+   else wake(value=>value+1);
+  };
+  expire();
+  return()=>clearTimeout(timer);
+ },[retryAt]);
+ useEffect(()=>props.client?.subscribeSearch(()=>wake(value=>value+1)),[props.client]);
+ useEffect(()=>subscribeDownloadHandoffs(()=>wake(value=>value+1)),[]);
+ function telegramReady(client:TelegramSessionClient|null){
+  const search=client?.searchSnapshot();
+  return !!search?.available&&!search.pending&&!search.cancelling&&!search.retryBlocked&&
+   (search.retryAt===null||search.retryAt<=Date.now());
  }
  useEffect(()=>{
   const account=props.accountId;
-  if(!account||!pageLive.current||!hasControl()||download.running||download.songFlight||pending||flight.current||
-   checking.current||waiting.current||admission.current||download.dispatching||downloadHandoffInProgress(account)||
-   document.visibilityState==='hidden'||navigator.onLine===false)return;
-  const intent=pendingDownloadAfterUpdate(account);
-  let queued:CollectionDownloadJob|undefined;
-  try{
-   if(readLibraryDownloadCheckpoint(account))return;
-   queued=createCollectionDownloadQueue(localStorage,account).read()[0];
-  }catch{return;}
-  if(!queued||intent&&(queued.kind!=='album'||intent.kind!=='album'||queued.album.edition.id!==intent.editionId))return;
-  const retryAt=props.client?.searchSnapshot().retryAt;
-  if(retryAt&&retryAt>Date.now()){
-   const retry=setTimeout(()=>wake(value=>value+1),Math.min(2_147_483_647,retryAt-Date.now()+1));
-   return()=>clearTimeout(retry);
-  }
-  if(!queueReady(queued))return;
-  const job=queued;
+  if(!account||albumCoordinator.dispatching||!hasControl())return;
+  const queue=createCollectionDownloadQueue(localStorage,account);
+  const job=download.queueAccount===account?download.queued?.[0]:undefined;
+  if(!job)return;
+  if(pausedHead.current?.id!==job.id)pausedHead.current=null;
   const ownerCurrent=props.captureOwner?.()??props.captureLifetime?.();
   const sameOwner=()=>pageLive.current&&latest.current.accountId===account&&(ownerCurrent?.()??true);
-  const current=()=>{
-   if(!sameOwner())return false;
-   try{return createCollectionDownloadQueue(localStorage,account).read()[0]?.id===job.id;}
-   catch{return false;}
+  const token={account,key:job.key,cancelled:false};
+  const matchingIntent=()=>{
+   const intent=pendingDownloadAfterUpdate(account);
+   if(job.kind==='album'&&intent?.kind==='album'&&job.album.edition.id===intent.editionId)return intent;
+   if(job.kind==='library'&&intent?.kind==='library'&&!intent.checkpointId&&job.id===intent.request.id)return intent;
   };
+  // Use live authority and the persisted head/checkpoint at each async boundary.
+  // This token may pass its own dispatch reservation but never another's.
+  const ready=()=>{
+   const p=latest.current;
+   if(token.cancelled||!sameOwner()||!hasControl()||document.visibilityState==='hidden'||navigator.onLine===false||
+    albumCoordinator.running||albumCoordinator.songFlight||flight.current||checking.current||waiting.current||admission.current||
+    albumCoordinator.dispatching&&dispatch.current!==token||downloadHandoffInProgress(account)||
+    pendingDownloadAfterUpdate(account)&&!matchingIntent()||
+    p.libraryPending||!p.connected||p.connectionPhase!=='connected'||!orderedProviders(p.bots).length||
+    p.storageReady?.()===false||!telegramReady(p.client))return false;
+   if(readLibraryDownloadCheckpoint(account)||queue.read()[0]?.id!==job.id)return false;
+   return !!(job.kind==='album'?p.captureAlbum??p.capture:p.captureBatch??p.capture)?.()?.current();
+  };
+  const pause=(untilReady=false)=>{
+   if(!sameOwner()||pausedHead.current?.id===job.id)return;
+   pausedHead.current={id:job.id,untilReady};
+   setNotice(`No se pudo continuar «${job.title}». Revisa Telegram o Almacenamiento.`);
+  };
+  try{
+   const paused=pausedHead.current?.id===job.id?pausedHead.current:null;
+   if(paused&&!paused.untilReady)return;
+   if(!ready()){
+    // An interrupted head can resume when it next becomes ready.
+    if(paused)pausedHead.current=null;
+    return;
+   }
+   if(paused)return;
+  }catch{pause();return;}
+
+  const intent=matchingIntent();
+  const client=props.client;
+  const sessionCurrent=client?.captureBotsCurrent();
+  const revision=props.bots?.revision;
   let readinessLost=false;
   const stillReady=()=>{
-   if(!current())return false;
-   const ready=queueReady(job);
-   if(!ready)readinessLost=true;
-   return ready;
-  };
-  albumCoordinator.dispatching=true;
-  const run=async():Promise<'deferred'|'claimed'|'settled'>=>{
-   if(job.kind==='library'){
-    if(!await downloadWithCurrentApp(account,{kind:'library',request:job.request},stillReady)||!stillReady())return 'deferred';
-    return start(job.request,undefined,undefined,false,false,true)?'claimed':'deferred';
+   try{
+    const valid=ready();readinessLost||=!valid;return valid;
+   }catch{
+    // The updater calls this guard from a timer. Keep its promise settleable.
+    pause();return false;
    }
-   const {id:editionId,title,artist}=job.album.edition;
-   if(!intent&&!await downloadWithCurrentApp(account,{kind:'album',editionId,title,artist},stillReady))return 'deferred';
+  };
+  const run=async():Promise<CollectionDownloadOutcome>=>{
+   const action=job.kind==='library'?{kind:'library' as const,request:job.request}:
+    {kind:'album' as const,editionId:job.album.edition.id,title:job.album.edition.title,artist:job.album.edition.artist};
    if(!stillReady())return 'deferred';
-   const album=await readSavedAlbum(account,editionId);
+   if(!intent){
+    const allowed=await downloadWithCurrentApp(account,action,stillReady);
+    if(!stillReady()||!allowed)return 'deferred';
+   }
+   if(job.kind==='library'){
+    if(intent&&!takeDownloadAfterUpdate(account,'library'))return 'deferred';
+    if(!tracksLoaded(job.request,latest.current.tracks)){
+     setNotice(`«${job.title}» salió de la cola porque algunas pistas ya no están en Biblioteca.`);
+     return 'completed';
+    }
+    return start(job.request,undefined,undefined,false,false,true);
+   }
+   const album=await readSavedAlbum(account,job.album.edition.id);
    if(!stillReady())return 'deferred';
-   if(intent)takeDownloadAfterUpdate(account,'album');
-   if(!album)return 'settled';
+   if(intent&&!takeDownloadAfterUpdate(account,'album'))return 'deferred';
+   if(!album)return 'completed';
    const p=latest.current,providers=orderedProviders(p.bots);
    const attempt=(p.captureAlbum??p.capture)?.();
    if(!attempt?.current())return 'deferred';
-   const started=await runAlbumDownload({detail:album,saved:album,accountId:account,scope:account,coordinator:albumCoordinator,
+   return runAlbumDownload({detail:album,saved:album,accountId:account,scope:account,coordinator:albumCoordinator,queued:true,
     attempt,client:p.client,revision:p.bots?.revision,provider:providers[0].providerRef,providers,
-    management:id=>latest.current.captureAlbumManagement?.(id)??null,saveAlbum:p.saveAlbum}).catch(()=>{
-     if(sameOwner())announceDownloadMessage(`No se pudo completar «${title}».`);
-     return true;
-    });
-   return started?'settled':'deferred';
+    management:id=>latest.current.captureAlbumManagement?.(id)??null,saveAlbum:p.saveAlbum});
   };
-  // Library claims write their checkpoint before dequeuing. Album jobs stay
-  // on disk until settlement so a killed PWA can verify and reuse its copies.
-  void run().then(result=>{
-   if(result==='settled'&&sameOwner())removeQueued(job.key,account,job.id);
-  }).catch(()=>{
-   if(sameOwner())setNotice(`No se pudo comprobar «${job.title}». Revisa Almacenamiento.`);
-  }).finally(()=>{
-   albumCoordinator.dispatching=false;
-   // If the queue changed during the version check, consider the new head.
-   // A deferred head otherwise waits for the next readiness change.
-   if(!current()||readinessLost&&queueReady(job))wake(value=>value+1);
+  dispatch.current=token;albumCoordinator.dispatching=true;
+  notifyAlbumDownload(albumCoordinator);
+  void run().then(outcome=>{
+   const result=token.cancelled?'cancelled-by-user':outcome;
+   if(!sameOwner())return;
+   if(result==='completed'||result==='cancelled-by-user'){
+    if(job.kind==='library'&&readLibraryDownloadCheckpoint(account)?.queueId===job.id)return;
+    if(!removeQueued(job.key,account,job.id))pause();
+   }else if(result==='deferred'&&!readinessLost&&!pausedHead.current){
+    pause();
+   }else if(result==='interrupted'&&job.kind==='album'&&latest.current.client===client&&sessionCurrent?.()&&
+    latest.current.bots?.revision===revision&&client?.searchSnapshot().retryAt===retryAt){
+    pause(true);
+   }
+  }).catch(()=>pause()).finally(()=>{
+   dispatch.current=null;albumCoordinator.dispatching=false;
+   notifyAlbumDownload(albumCoordinator);
   });
  });
+ const retryQueued=()=>{
+  pausedHead.current=null;setNotice('');wake(value=>value+1);
+ };
+ const pausedJob=download.queueAccount===props.accountId?download.queued?.find(job=>job.id===pausedHead.current?.id):undefined;
  const collection=props.collection;
  function resumeRequest(checkpoint:LibraryDownloadCheckpoint):LibraryDownloadRequest{
   const selection=collection?.request;
@@ -495,6 +564,12 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
   return {id:checkpoint.id,trackIds:checkpoint.trackIds,title:checkpoint.title||(same?selection.title:'Selección de Biblioteca'),play:false};
  }
  const stopUpdate=()=>{
+  const queued=dispatch.current;
+  if(queued&&queued.account===latest.current.accountId){
+   queued.cancelled=true;
+   const active=albumCoordinator.active;
+   if(active?.accountId===queued.account&&active.collectionKey===queued.key)active.stop?.(true);
+  }
   const check=admission.current;
   if(check?.account&&check.id&&latest.current.accountId===check.account&&(props.captureOwner?.()()??props.captureLifetime?.()()??true))
    try{setPending(stopAutomaticLibraryDownload(check.account,check.id));}catch{setNotice('No se pudo conservar el progreso de la descarga.');}
@@ -515,11 +590,11 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
    <button type="button" onClick={()=>{checking.current?.abort();setReview(null);}}>Cerrar revisión</button>
  </div>;
  return <>
-  <DownloadDock key={props.accountId} accountId={props.accountId} updateWait={props.updateWait} onStopUpdate={stopUpdate} message={notice} review={reviewContent} onReviewStorage={props.onReviewStorage}
+  <DownloadDock key={props.accountId} accountId={props.accountId} updateWait={props.updateWait} onStopUpdate={stopUpdate} message={notice} onRetryQueued={pausedJob?retryQueued:undefined} review={reviewContent} onReviewStorage={props.onReviewStorage}
    pendingDownload={pending?{saved:pending.saved??0,total:pending.trackIds.length,title:pending.title,reason:pending.pauseMessage,retaking,onContinue:()=>{
     autoArmed.current=false;void startChecked(resumeRequest(pending),pending);
    }}:undefined}/>
-  {collection?.target&&(!pending||download.running||collection.id)&&createPortal(<CollectionDownloadButton label={collection.label}
+  {collection?.target&&(!pending||download.running||collection.id)&&createPortal(<CollectionDownloadButton label={collection.label} paused={!!pending?.collectionKey&&pending.collectionKey===libraryDownloadKey(collection.id??'')}
    accountId={props.accountId} collectionKey={collection.id?libraryDownloadKey(collection.id):undefined}
    disabled={!!waiting.current||collection.disabled||!collection.request.trackIds.length}
    complete={collection.complete} onStart={()=>{
@@ -531,7 +606,9 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;capture
    if(!props.accountId||flight.current||albumCoordinator.running)return;
    try{
     if(props.captureLifetime&&!props.captureLifetime()()){setNotice('Usa Pulso en esta pestaña para descartar la selección.');return;}
-    waiting.current=null;discardLibraryDownloadCheckpoint(props.accountId,pending);
+    waiting.current=null;
+    if(pending.collectionKey&&pending.queueId&&!removeQueued(pending.collectionKey,props.accountId,pending.queueId))return;
+    discardLibraryDownloadCheckpoint(props.accountId,pending);
     setPending(readLibraryDownloadCheckpoint(props.accountId));setNotice('');
    }catch{setNotice('No se pudo descartar el progreso de la selección.');}
   }}>Descartar selección pendiente</button>,props.storageTarget)}

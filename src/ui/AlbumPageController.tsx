@@ -138,20 +138,34 @@ export function AlbumPageController(props:Props){
   finishedInspection.current=null;setInspecting(true);
   const run=async()=>{
    if(abort.signal.aborted)return;
-   const inspector=latest.current.captureInspection?.();if(!inspector)return;
+   const inspector=latest.current.captureInspection?.();
+   if(!inspector)return;
+   const current=()=>!abort.signal.aborted&&mounted.current&&latest.current.visible&&
+    !latest.current.coordinator.running&&!latest.current.coordinator.songFlight&&inspector.current();
    for(const track of targets){
-    if(abort.signal.aborted||!mounted.current||!latest.current.visible||latest.current.coordinator.running||latest.current.coordinator.songFlight)break;
+    if(!current())return;
     const choice=albumTrackChoice(track,detail.edition.title);
     let value:{state:'available'|'missing'|'unknown';trackId:string|null;inLibrary:boolean|null}={state:'unknown',trackId:null,inLibrary:null};
-    try{if(inspector.current())value=await inspector.inspect(choice,abort.signal);}catch{/* Unknown is not a verified copy. */}
-    if(abort.signal.aborted||!mounted.current)break;
+    try{value=await inspector.inspect(choice,abort.signal);}catch{/* An unreadable copy stays unknown. */}
+    if(!current())return;
     setCopies(previous=>({...previous,[choice.id]:value}));
+   }
+   if(current()){
+    finishedInspection.current=detail;completedInspection.current=inspectionKey;
    }
   };
   const task=inspectionTail.current.catch(()=>{}).then(run);inspectionTail.current=task;
-  void task.finally(()=>{if(!abort.signal.aborted&&mounted.current){finishedInspection.current=detail;completedInspection.current=inspectionKey;setInspecting(false);}});
-  return()=>abort.abort();
- },[detail,props.visible,props.metadataOnly,inspectionKey,running,props.songPending]);
+  const settle=()=>{
+   if(abort.signal.aborted||!mounted.current)return;
+   if(finishedInspection.current!==detail)inspectedEdition.current=null;
+   setInspecting(false);
+  };
+  void task.then(settle,settle);
+  return()=>{
+   abort.abort();
+   if(finishedInspection.current!==detail)inspectedEdition.current=null;
+  };
+ },[detail,props.visible,props.metadataOnly,inspectionKey,running,props.songPending,props.coordinator.dispatching]);
  const savedAlbum=props.savedAlbums?.find(album=>album.edition.id===detail?.edition.id);
  async function addAlbum(download=true,restoring=false){
   if(!active()||savingRef.current||!detail||download&&inspecting)return;
