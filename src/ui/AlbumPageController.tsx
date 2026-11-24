@@ -124,7 +124,7 @@ export function AlbumPageController(props:Props){
  const inspectionKey=JSON.stringify([props.scope,inspectionSelection,inspectionRevision,inspectionSignature]);
  React.useEffect(()=>{
   if(props.metadataOnly||!detail||!props.visible){inspectedEdition.current=null;setInspecting(false);return;}
-  if(running||props.songPending){
+  if(running||props.coordinator.dispatching||props.songPending){
    if(finishedInspection.current!==detail)inspectedEdition.current=null;
    setInspecting(false);return;
   }
@@ -141,7 +141,7 @@ export function AlbumPageController(props:Props){
    const inspector=latest.current.captureInspection?.();
    if(!inspector)return;
    const current=()=>!abort.signal.aborted&&mounted.current&&latest.current.visible&&
-    !latest.current.coordinator.running&&!latest.current.coordinator.songFlight&&inspector.current();
+    !latest.current.coordinator.running&&!latest.current.coordinator.dispatching&&!latest.current.coordinator.songFlight&&inspector.current();
    for(const track of targets){
     if(!current())return;
     const choice=albumTrackChoice(track,detail.edition.title);
@@ -188,7 +188,7 @@ export function AlbumPageController(props:Props){
    }
    if(!download)return;
    if(saved&&props.coordinator.requestAlbum&&!restoring){
-    if(sameEdition())props.coordinator.requestAlbum(saved);
+    if(sameEdition())props.coordinator.requestAlbum(saved,props.libraryView);
     return;
    }
    const canStart=()=>sameEdition()&&!props.coordinator.running&&!props.coordinator.dispatching&&!props.coordinator.songFlight;

@@ -6,7 +6,7 @@ import {copySavedAlbum,type SavedAlbum} from './saved-albums';
 export type CollectionDownloadOutcome='completed'|'cancelled-by-user'|'interrupted'|'deferred';
 
 export type CollectionDownloadJob=
- | {kind:'album';id:string;key:string;title:string;album:SavedAlbum}
+ | {kind:'album';id:string;key:string;title:string;album:SavedAlbum;fromLibrary?:true}
  | {kind:'library';id:string;key:string;title:string;request:LibraryDownloadRequest};
 
 export const albumDownloadKey=(id:CatalogId)=>'album:'+id;
@@ -18,7 +18,7 @@ function copyJob(value:unknown):CollectionDownloadJob|null{
  if(!job||typeof job.id!=='string'||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(job.id)||typeof job.key!=='string'||job.key.length>1000||typeof job.title!=='string'||!job.title||job.title.length>640)return null;
  if(job.kind==='album'){
   const album=copySavedAlbum(job.album);
-  return album&&job.key===albumDownloadKey(album.edition.id)?{kind:'album',id:job.id,key:job.key,title:album.edition.title,album}:null;
+  return album&&job.key===albumDownloadKey(album.edition.id)?{kind:'album',id:job.id,key:job.key,title:album.edition.title,album,...(job.fromLibrary===true?{fromLibrary:true}:{})}:null;
  }
  if(job.kind!=='library'||!job.key.startsWith('library:')||job.request?.play!==false)return null;
  const request=copyLibraryDownloadCheckpoint({...job.request,cursor:0,pending:null});

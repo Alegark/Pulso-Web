@@ -114,7 +114,7 @@ const api={id,seed,rows,mutate,
   const host=document.createElement('div');document.body.append(host);createRoot(host).render(createElement('main',null,
    ...tracks.map((t:Track)=>createElement('li',{key:t.id},createElement(TrackActionsMenu,{title:t.title,artist:t.artist??'',active:true,
     children:createElement('button',{'data-menu-dismiss-after':'true',onClick:()=>requestLibraryTrackReview(t.id,t.title)},'Revisar descarga de esta canción')}))),
-   createElement(LibraryDownloadController,{accountId:id(120),tracks,client,bots,connected:true,captureBatch:()=>attempt})));
+   createElement(LibraryDownloadController,{libraryLoaded:true,accountId:id(120),tracks,client,bots,connected:true,captureBatch:()=>attempt})));
   Object.assign(window,{trackReviewFixture:{queries,held:(n:number)=>readHeldLibraryDownload(id(120),id(n))}});
  },
  async mountAutomaticBatch(mode:'alternate'|'exhausted'|'same-provider'|'transient'|'resume',seedOnly=false){
@@ -192,7 +192,7 @@ const api={id,seed,rows,mutate,
   function Fixture(){
    const [target,setTarget]=useState<HTMLDivElement|null>(null);
    return createElement('main',null,createElement('div',{ref:setTarget}),
-    createElement(LibraryDownloadController,{collection:{target,request:{trackIds,title:'Playlist automática'},
+    createElement(LibraryDownloadController,{libraryLoaded:true,collection:{target,request:{trackIds,title:'Playlist automática'},
      label:'Descargar playlist completa',complete:false,disabled:false},accountId:batchAccount,tracks,client,bots:bots as never,connected:true,captureBatch:()=>attempt}));
   }
   const host=document.createElement('div');document.body.append(host);createRoot(host).render(createElement(Fixture));
@@ -220,7 +220,7 @@ const api={id,seed,rows,mutate,
     createElement('button',{onClick:()=>setStorageReady(value=>!value)},'Cambiar disponibilidad local'),
     createElement('h2',null,route==='home'?'Inicio':route==='playlist'?'Playlist de prueba':'Tus descargas'),
     createElement('div',{ref:setTarget,'data-surface':route}),
-    createElement(LibraryDownloadController,{collection:{target:route==='playlist'?target:null,label:'Descargar selección',complete:false,disabled:false,
+    createElement(LibraryDownloadController,{libraryLoaded:true,collection:{target:route==='playlist'?target:null,label:'Descargar selección',complete:false,disabled:false,
      request:{trackIds:rows.map(row=>row.id),title:'Playlist de prueba'}},storageTarget:route==='downloads'?target:null,accountId:id(account),storageReady:()=>storageReady,tracks:rows,client,bots,connected:true,captureBatch:()=>attempt}));
   }
   const host=document.createElement('div');document.body.append(host);createRoot(host).render(createElement(Fixture));

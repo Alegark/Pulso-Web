@@ -14,7 +14,7 @@ export interface AlbumCoordinator {
  running:boolean;uncertainTracks:Set<CatalogId>;remoteClock:{settledAt:number};
  rows:Map<CatalogId,{key:string;rows:AlbumRow[];message?:string}>;listeners:Set<()=>void>;
  active?:AlbumDownloadRun;notice?:{title:string;titles?:string[];progress:AlbumProgress};
- requestAlbum?:(album:SavedAlbum)=>void;
+ requestAlbum?:(album:SavedAlbum,fromLibrary?:boolean)=>void;
  queueAccount?:string;
  albumRowsAccount?:string;
  queued?:readonly CollectionDownloadJob[];
@@ -72,6 +72,9 @@ export async function runAlbumDownload(p:{
    await p.saveAlbum(detail,()=>current()&&!abort.signal.aborted,{savedAt:p.saved.savedAt,failedTracks:[...failures]}).catch(()=>{});
   }
   return cancelled?'cancelled-by-user':abort.signal.aborted||!current()?'interrupted':outcome;
+ }catch(error){
+  if(cancelled)return 'cancelled-by-user';
+  throw error;
  }finally{
   unsubscribe?.();
   if(coordinator.active===run){

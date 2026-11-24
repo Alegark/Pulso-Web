@@ -9,7 +9,7 @@ type DownloadAction=
  | {kind:'library';request:LibraryDownloadRequest;checkpointId?:string;automatic?:boolean}
  | {kind:'repair';trackId:string;title:string;retry:'safe'|'preserve'}
  | {kind:'song';choice:SongChoice}
- | {kind:'album';editionId:CatalogId;title:string;artist:string};
+ | {kind:'album';editionId:CatalogId;title:string;artist:string;fromLibrary?:true};
 
 const key='pulso-shell:download-intent:v1';
 const lifetime=90_000;
@@ -26,7 +26,7 @@ function validAction(action:DownloadAction):boolean{
     (action.checkpointId===undefined||!request.play&&isId(action.checkpointId));
   }
   case 'repair':return isId(action.trackId)&&title(action.title)&&['safe','preserve'].includes(action.retry);
-  case 'album':return (musicBrainzId(action.editionId)||typeof action.editionId==='number'&&Number.isSafeInteger(action.editionId)&&action.editionId>0)&&title(action.title)&&title(action.artist);
+  case 'album':return (musicBrainzId(action.editionId)||typeof action.editionId==='number'&&Number.isSafeInteger(action.editionId)&&action.editionId>0)&&title(action.title)&&title(action.artist)&&(action.fromLibrary===undefined||action.fromLibrary===true);
   case 'song': {
    const choice=action.choice;
    return !!choice&&['local','itunes','musicbrainz','lrclib','spotify'].includes(choice.source)&&title(choice.id)&&title(choice.title)&&
@@ -80,12 +80,19 @@ export function installDownloadUpdates(beforeDownload:BeforeDownload,bundle:stri
   getItem:key=>sessionStorage.getItem(key),setItem:(key,value)=>sessionStorage.setItem(key,value),removeItem:key=>sessionStorage.removeItem(key),
  },bundle)};
 }
+let versionCheckInProgress=false;
+export function downloadVersionCheckInProgress(){return versionCheckInProgress;}
 export async function downloadWithCurrentApp(account:string|undefined,action:DownloadAction,current:()=>boolean){
  if(!current())return false;
  if(!host)return true;
- if(!account)return false;
+ if(!account||versionCheckInProgress)return false;
  const {beforeDownload,store}=host;
- return await beforeDownload(current,target=>store.save(account,action,target),target=>store.discard(account,target))&&current();
+ versionCheckInProgress=true;
+ try{return await beforeDownload(current,target=>store.save(account,action,target),target=>store.discard(account,target))&&current();}
+ finally{
+  versionCheckInProgress=false;
+  for(const notify of handoffListeners)notify();
+ }
 }
 export function pendingDownloadAfterUpdate(account:string|undefined){
  return account?host?.store.read(account):null;
