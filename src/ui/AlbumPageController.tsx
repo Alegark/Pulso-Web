@@ -27,7 +27,7 @@ interface Props {
  savedAlbums?:readonly SavedAlbum[]; fixedDetail?:SavedAlbum; libraryView?:boolean; albumOptions?:React.ReactNode;
  localTracks?:readonly Track[]; songAliases?:SongAliases|null; localAvailability?:ReadonlyMap<string,AvailabilityRecord>; albumSaveBlockedReason?:string;
  saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures)=>Promise<SaveAlbumResult>;
- accountId?:string;resumeDownload?:()=>void;metadataOnly?:boolean;coordinator:AlbumCoordinator;captureInspection?:()=>SongCopyInspection|null;selectedKey:string|null;actionKey?:string|null;libraryTrackIds?:ReadonlySet<string>;playerTrackId?:string|null;title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;searchBatch?:{data:unknown;pending:boolean};backLabel?:string;scope:string;visible:boolean;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;providers:readonly OrderedProvider[];capture:()=>SongPlaybackAttempt|null;management:(id:string)=>SongManagement|null;onBack:()=>void;onChoose:(choice:SongChoice)=>void;songActions:React.ReactNode}
+ songPending?:boolean;accountId?:string;resumeDownload?:()=>void;metadataOnly?:boolean;coordinator:AlbumCoordinator;captureInspection?:()=>SongCopyInspection|null;selectedKey:string|null;actionKey?:string|null;libraryTrackIds?:ReadonlySet<string>;playerTrackId?:string|null;title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;searchBatch?:{data:unknown;pending:boolean};backLabel?:string;scope:string;visible:boolean;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;providers:readonly OrderedProvider[];capture:()=>SongPlaybackAttempt|null;management:(id:string)=>SongManagement|null;onBack:()=>void;onChoose:(choice:SongChoice)=>void;songActions:React.ReactNode}
 const metadataIdentity=(props:Props)=>JSON.stringify([props.title,props.artist,props.editionId??null,props.scope]);
 const catalogError=(reason:AlbumFailure,detail:boolean,stage?:AlbumStage,httpStatus?:number,backup=false)=>{
  const prefix=detail?'No se pudo verificar la lista completa de pistas.':'No se pudo consultar el catálogo de álbumes.';
@@ -122,7 +122,10 @@ export function AlbumPageController(props:Props){
  const inspectionSelection=props.libraryView?null:props.selectedKey;
  React.useEffect(()=>{
   if(props.metadataOnly||!detail||!props.visible){inspectedEdition.current=null;setInspecting(false);return;}
-  if(running){setInspecting(false);return;}
+  if(running||props.songPending){
+   if(finishedInspection.current!==detail)inspectedEdition.current=null;
+   setInspecting(false);return;
+  }
   const abort=new AbortController(),first=inspectedEdition.current!==detail;inspectedEdition.current=detail;
   if(first)setCopies({});
   const targets=first||props.libraryView?detail.tracks:detail.tracks.filter(t=>albumTrackChoice(t,detail.edition.title).id===props.selectedKey);
@@ -131,7 +134,7 @@ export function AlbumPageController(props:Props){
    if(abort.signal.aborted)return;
    const inspector=latest.current.captureInspection?.();if(!inspector)return;
    for(const track of targets){
-    if(abort.signal.aborted||!mounted.current||!latest.current.visible||latest.current.coordinator.running)break;
+    if(abort.signal.aborted||!mounted.current||!latest.current.visible||latest.current.coordinator.running||latest.current.coordinator.songFlight)break;
     const choice=albumTrackChoice(track,detail.edition.title);
     let value:{state:'available'|'missing'|'unknown';trackId:string|null;inLibrary:boolean|null}={state:'unknown',trackId:null,inLibrary:null};
     try{if(inspector.current())value=await inspector.inspect(choice,abort.signal);}catch{/* Unknown is not a verified copy. */}
@@ -142,7 +145,7 @@ export function AlbumPageController(props:Props){
   const task=inspectionTail.current.catch(()=>{}).then(run);inspectionTail.current=task;
   void task.finally(()=>{if(!abort.signal.aborted&&mounted.current){finishedInspection.current=detail;setInspecting(false);}});
   return()=>abort.abort();
- },[detail,props.scope,props.visible,props.metadataOnly,inspectionSelection,inspectionRevision,inspectionSignature,running]);
+ },[detail,props.scope,props.visible,props.metadataOnly,inspectionSelection,inspectionRevision,inspectionSignature,running,props.songPending]);
  const savedAlbum=props.savedAlbums?.find(album=>album.edition.id===detail?.edition.id);
  async function addAlbum(download=true,restoring=false){
   if(!active()||savingRef.current||!detail||download&&inspecting)return;
@@ -168,8 +171,9 @@ export function AlbumPageController(props:Props){
     if(sameEdition())props.coordinator.requestAlbum(saved);
     return;
    }
-   if(!sameEdition()||!await downloadWithCurrentApp(props.accountId,{kind:'album',editionId,title,artist},sameEdition))return;
-   if(!sameEdition()||props.coordinator.running)return;
+   const canStart=()=>sameEdition()&&!props.coordinator.running&&!props.coordinator.dispatching&&!props.coordinator.songFlight;
+   if(!canStart()||!await downloadWithCurrentApp(props.accountId,{kind:'album',editionId,title,artist},canStart))return;
+   if(!canStart())return;
    const p=latest.current,attempt=p.capture();
    if(!attempt?.current()){announceDownloadMessage('La biblioteca está ocupada o requiere revisión en Almacenamiento.');return;}
    void runAlbumDownload({...p,detail,saved,attempt}).catch(()=>announceDownloadMessage('No se pudo completar la descarga del álbum.'));
@@ -178,7 +182,7 @@ export function AlbumPageController(props:Props){
  React.useEffect(()=>{
   if(!props.resumeDownload||resumed.current)return;
   if(!props.visible||retryTarget!==undefined||detail&&detail.edition.id!==props.editionId){cancelResume();return;}
-  if(!detail||finishedInspection.current!==detail||inspecting||!active()||props.coordinator.running)return;
+  if(!detail||finishedInspection.current!==detail||inspecting||!active()||props.coordinator.running||props.coordinator.dispatching||props.coordinator.songFlight)return;
   resumed.current=true;
   void addAlbum(true,true).finally(props.resumeDownload);
  });
@@ -227,7 +231,7 @@ export function AlbumPageController(props:Props){
     const inLibrary=member(choice.id,index);
     const badge=present?(savedAlbum&&!inLibrary?'En caché de escucha':'Descargada'):pending&&failed?'Error':copy?.state==='missing'?(pending?'No descargada':'Sin descarga'):'Copia sin comprobar';
     return <li key={`${track.disc}:${track.position}`} data-album-pending={pending||undefined}>
-     <button type="button" disabled={pending||inspecting||props.coordinator.running} onClick={()=>{if(active()&&!props.coordinator.running&&!inspecting)props.onChoose(choice);}}>
+     <button type="button" disabled={pending||inspecting||props.coordinator.running||props.songPending} onClick={()=>{if(active()&&!props.coordinator.running&&!inspecting)props.onChoose(choice);}}>
       <span className="album-track-number" aria-label={`Disco ${track.disc}, pista ${track.position}`}>{track.position}</span>
       <span className="album-track-copy"><strong><bdi dir="auto">{local?.manualOverrides?.title??track.title}</bdi></strong><span><bdi dir="auto">{local?.manualOverrides?.artist??track.artist}</bdi></span></span>
      </button>

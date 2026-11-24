@@ -297,7 +297,24 @@ export function CollectionDownloadButton({label,disabled,complete,onStart,showLa
   const node=dialog.current;
   if(!confirmation||!node)return;
   node.showModal();keep.current?.focus({preventScroll:true});
-  return()=>{node.close();opener.current?.focus({preventScroll:true});};
+  const button=opener.current;
+  const view=button?.closest('.album-page,.collection-header');
+  const section=view?.closest('.library-view')??button?.closest('main');
+  return()=>{
+   node.close();
+   requestAnimationFrame(()=>{
+    if(document.querySelector('dialog[open],[aria-modal="true"]'))return;
+    if(button?.isConnected&&!button.disabled&&button.getClientRects().length){button.focus({preventScroll:true});return;}
+    const focused=document.activeElement;
+    if(focused&&focused!==document.body&&focused!==button&&focused.isConnected&&focused.getClientRects().length)return;
+    const heading=[view?.querySelector<HTMLElement>('h2,h3'),...section?.querySelectorAll<HTMLElement>('h2[tabindex="-1"]')??[]]
+     .find(element=>element?.getClientRects().length);
+    if(!heading)return;
+    const previous=heading.getAttribute('tabindex');
+    heading.tabIndex=-1;heading.focus({preventScroll:true});
+    if(previous===null)heading.removeAttribute('tabindex');else heading.setAttribute('tabindex',previous);
+   });
+  };
  },[confirmation]);
  useEffect(()=>{
   if(confirmation&&(confirmation.run?ownRun!==confirmation.run:!waiting||!!ownRun))setConfirmation(null);
@@ -313,10 +330,12 @@ export function CollectionDownloadButton({label,disabled,complete,onStart,showLa
    {showProgress?<span aria-hidden="true">{saved}/{total}</span>:showLabel&&<span>{name}</span>}
   </button>
   {confirmation&&createPortal(<dialog ref={dialog} className="download-confirmation" aria-labelledby={headingId}
+   onClose={event=>{if(!event.currentTarget.open)setConfirmation(null);}}
    onCancel={event=>{event.preventDefault();setConfirmation(null);}}
    onKeyDown={event=>{
     if(event.key!=='Tab')return;
-    if(event.shiftKey&&document.activeElement===keep.current){event.preventDefault();cancel.current?.focus();}
+    if(document.activeElement===event.currentTarget){event.preventDefault();(event.shiftKey?cancel:keep).current?.focus();}
+    else if(event.shiftKey&&document.activeElement===keep.current){event.preventDefault();cancel.current?.focus();}
     else if(!event.shiftKey&&document.activeElement===cancel.current){event.preventDefault();keep.current?.focus();}
    }}>
    <h2 id={headingId}><bdi dir="auto">{confirmation.title}</bdi></h2>
@@ -325,7 +344,7 @@ export function CollectionDownloadButton({label,disabled,complete,onStart,showLa
     <button type="button" ref={cancel} onClick={()=>{
      if(confirmation.run&&coordinator.active===confirmation.run){
       const run=confirmation.run;
-      if(run.stop)run.stop();else run.abort.abort();
+      if(run.stop)run.stop(true);else run.abort.abort();
      }else if(!confirmation.run&&collectionKey&&coordinator.active?.collectionKey!==collectionKey)removeQueued?.(collectionKey);
      setConfirmation(null);
     }}>{confirmation.run?'Cancelar descarga':'Quitar de la cola'}</button>

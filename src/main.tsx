@@ -1,3 +1,5 @@
+import {albumCoordinator} from './library/album-download';
+import {albumDownloadKey,libraryDownloadKey} from './library/collection-download-queue';
 import {libraryAlbumCards,readSavedAlbumsFrom,saveAlbumRecord,savedAlbumGroupKey,SavedAlbumLimitError,type SaveAlbumResult,type SavedAlbum,type SavedAlbumFailures} from './library/saved-albums';
 import type {AlbumDetail} from './library/album-catalog';
 import type {LibraryAlbumPage} from './ui/MusicSearchController';
@@ -465,7 +467,7 @@ async function rememberCurrentSongAlias(...args:Parameters<typeof rememberSongAl
 }
 function captureSongDownload():SongPlaybackAttempt|null {return captureSongPlayback('download');}
 // Album acquisition waits for an open storage slot before each lookup or save.
-function captureAlbumDownload():SongPlaybackAttempt|null {return captureSongPlayback('download',true);}
+function captureAlbumDownload():SongPlaybackAttempt|null {return captureSongPlayback('download');}
 function captureBatchDownload(recoverPending=false):SongPlaybackAttempt|null {return captureSongPlayback('batch',recoverPending);}
 function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',recoverPending=false):SongPlaybackAttempt|null {
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();
@@ -474,9 +476,10 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
  const intent=purpose==='playback'?++selectedSongIntent:selectedSongIntent;let queueing=false,playUsed=false,rememberedId:string|null=null,primaryArtist:string|null=null;
  const current=()=>(purpose!=='playback'||intent===selectedSongIntent)&&raw()&&review()&&(purpose==='batch'||queueing||admitted());
  const parked=new Set<string>();
+ const downloadReady=()=>!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked()&&songAdmissionIdle(parked);
  const waitForDownload=(signal:AbortSignal)=>waitForSongAdmission({signal,timeoutMs:15_000,
   current:()=>current()&&!importRecoveryPending(parked),
-  ready:()=>!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked()&&songAdmissionIdle(parked),
+  ready:downloadReady,
   subscribe:changed=>{listeners.add(changed);return()=>{listeners.delete(changed);};},
  });
  const reconcile=async(operationId:string,trackId:string|undefined,signal:AbortSignal,repair:boolean,choice?:SongChoice)=>{
@@ -535,7 +538,9 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
   async lookup(choice:SongChoice,signal:AbortSignal,repair=false){
    const live=()=>current()&&!signal.aborted;
    primaryArtist=((choice.source==='itunes'||choice.source==='musicbrainz')?choice.searchArtist:choice.source==='lrclib'?choice.artist:null)?.trim()||null;
-   if(!live()||!songAdmissionIdle(parked))throw Error('La biblioteca está ocupada.');const token=control.activity.begin();if(!token)throw Error('Sin control.');
+   if(!downloadReady())await waitForDownload(signal);
+   if(!live()||!downloadReady())throw Error('La biblioteca está ocupada.');
+   const token=control.activity.begin();if(!token)throw Error('Sin control.');
    try{
     const id=await readSongAlias(choice,()=>live()&&token.current());if(!live())throw Error('cancelled');rememberedId=id;
     if(!id)return null;const track=await readRecord<Track>('tracks',id);if(!live())throw Error('cancelled');
@@ -557,6 +562,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
    }finally{token.end();}
   },
   async save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(n:number)=>void,operationId?:string){
+   if(!downloadReady())await waitForDownload(signal);
    if(!current()||signal.aborted)return {state:'failed' as const,trackId:null};
    const save=captureBotAudioImport('cache',parked);if(!save)return {state:'failed' as const,trackId:null};
    const result=await save(audio,signal,onProgress,operationId);if(result.state!=='saved'||!result.trackId)return result;
@@ -1158,6 +1164,14 @@ function App(){
   gate:active=>{if(active){if(collectionKey!==removalScopeKey())return;collectionGate=collectionKey;control.activity.block(reason,true);}else{control.activity.block(reason,false);if(collectionGate===collectionKey)collectionGate=null;}emit();},
   reserve:target=>{control.activity.block(reason,false);try{return sourceReview.reserve(target);}finally{control.activity.block(reason,true);}},refresh:()=>refresh(true,false,null),
   adopt:snapshot=>{if(collectionKey!==removalScopeKey())return;copyRemovalStartup={key:collectionKey,snapshot};++removalRecoveryEpoch;setCopyRemovalBlocking(collectionKey,snapshot.unknown||snapshot.pending.length>0,true);},
+  removed:selection=>{
+   if(selection.kind==='playlist')albumCoordinator.removeQueued?.(libraryDownloadKey('playlist:'+selection.id));
+   if(selection.kind==='album'){
+    const album=savedAlbums.find(item=>savedAlbumGroupKey(item.edition.id)===selection.key);
+    if(album)albumCoordinator.removeQueued?.(albumDownloadKey(album.edition.id));
+    else albumCoordinator.removeQueued?.(libraryDownloadKey('group:'+selection.key));
+   }
+  },
   checkpoint:current=>{if(current())void saveLatestQueue(current,true);},changed:()=>emit(),
  });},[collectionKey]);
  const downloadRemovalController=React.useMemo(()=>{const reason=`download-removal:${collectionKey}:${crypto.randomUUID()}`;return createDownloadRemovalController({activity:control.activity,

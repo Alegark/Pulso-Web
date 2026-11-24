@@ -19,7 +19,8 @@ import {compatibleSongMetadata} from '../library/song-copy-status';
 import {searchArtwork,songArtwork} from '../library/catalog-artwork';
 import {samePendingSong,songChoiceKey,readSongAliasKeys,type SongChoice,type SongPlaybackAttempt,type SongManagement,type SongCopyInspection} from '../library/selected-song';
 import {MusicSearchPanel,type MusicSearchResultRow} from './MusicSearchPanel';
-import {albumCoordinator} from '../library/album-download';
+import {albumCoordinator,notifyAlbumDownload} from '../library/album-download';
+import {useAlbumDownloadState} from './DownloadDock';
 import {albumDownloadKey} from '../library/collection-download-queue';
 import type {SavedAlbum} from '../library/saved-albums';
 import {AlbumPageController} from './AlbumPageController';
@@ -120,14 +121,24 @@ export function MusicSearchController(props:Props){
  const [organizing,setOrganizing]=React.useState(false),[songError,setSongError]=React.useState<string|null>(null);
  const actionArea=React.useRef<HTMLDivElement>(null);
  React.useLayoutEffect(()=>{if(chosenId&&props.visible)actionArea.current?.scrollIntoView({block:'nearest'});},[chosenId,props.visible]);
- const saving=download?.phase==='saving',localPending=['lookup','update','saving','play'].includes(flight.current?.phase??'');
+ const downloads=useAlbumDownloadState();
+ const flightPending=()=>!!flight.current&&!['done','error'].includes(flight.current.phase);
+ const saving=download?.phase==='saving',localPending=flightPending();
+ function reserveSong(){
+  const token={};
+  albumCoordinator.songFlight=token;notifyAlbumDownload(albumCoordinator);
+  return ()=>{
+   if(albumCoordinator.songFlight!==token)return;
+   delete albumCoordinator.songFlight;notifyAlbumDownload(albumCoordinator);
+  };
+ }
  const [,pulse]=React.useReducer(n=>n+1,0);
  const latest=React.useRef(props),mounted=React.useRef(false),viewEpoch=React.useRef(0),committed=React.useRef<object|null>(null),metadataAttempt=React.useRef<{abort:AbortController}|null>(null),metadataEpoch=React.useRef(0);
  const chosenDraft=React.useRef<string|null>(null),catalogAbort=React.useRef<AbortController|null>(null);
  const suggestionKey=React.useRef<string|null>(null),catalogKey=React.useRef<string|null>(null);
  const renderToken={};const renderEpoch=viewEpoch.current;
  React.useLayoutEffect(()=>{latest.current=props;mounted.current=true;committed.current=renderToken;return()=>{committed.current=null;};});
- React.useEffect(()=>()=>{singleAttempt.current?.abort();mounted.current=false;metadataAttempt.current?.abort.abort();},[]);
+ React.useEffect(()=>()=>{singleAttempt.current?.abort();flight.current?.abort.abort();mounted.current=false;metadataAttempt.current?.abort.abort();},[]);
  React.useEffect(()=>{if(!props.visible||album||artist)return;let live=true;const trackId=props.playerTrackId??null,scope=props.scopeKey;setPlayingAliases({scope,trackId,keys:new Set()});const track=trackId?props.tracks.find(t=>t.id===trackId):undefined;if(!track)return()=>{live=false;};void readSongAliasKeys(track,()=>live&&props.visible).then(keys=>{if(live)setPlayingAliases({scope,trackId,keys});}).catch(()=>{if(live)setPlayingAliases({scope,trackId,keys:new Set()});});return()=>{live=false;};},[props.playerTrackId,props.scopeKey,props.visible,props.tracks,!!album,!!artist]);
  const current=()=>mounted.current&&committed.current===renderToken&&viewEpoch.current===renderEpoch&&latest.current.visible&&latest.current.scopeKey===props.scopeKey&&latest.current.client===props.client;
  const [artworkBatch,setArtworkBatch]=React.useState<{query:string;scope:string;data:unknown;pending:boolean}|null>(null);
@@ -149,14 +160,14 @@ export function MusicSearchController(props:Props){
  const bump=()=>{++viewEpoch.current;pulse();};
  const edit=(queryChanged=false)=>{
   setBlockedChoice(null);
-  singleAttempt.current?.abort();singleAttempt.current=null;setResolvingSingle(false);
+  if(!queryChanged){singleAttempt.current?.abort();singleAttempt.current=null;setResolvingSingle(false);}
   catalogAbort.current?.abort();catalogAbort.current=null;setCatalogPending(false);
   bump();chosenDraft.current=null;
   if(queryChanged){revokeMetadata();setRemote([]);setRemoteQuery(null);}
   const song=flight.current;
   // Updating the draft revokes its catalogue requests. The song already
   // selected by a gesture keeps its own download and playback authority.
-  if(queryChanged&&song&&!['done','error'].includes(song.phase))return;
+  if(queryChanged&&(singleAttempt.current||flightPending()))return;
   if(song)downloadNotifications.dismiss('song',song);
   song?.abort.abort();flight.current=null;downloadAbort.current?.abort();
   setDownload(null);setSongError(null);setChosenId(null);setDisplayedQuery(null);setSelectedResult(null);setNotice(null);
@@ -263,16 +274,16 @@ export function MusicSearchController(props:Props){
   setBlockedChoice(null);
   if(choice.kind==='artist'){catalogAbort.current?.abort();setCatalogPending(false);revokeMetadata();artistOpener.current=opener;artistScroll.current=[window.scrollX,window.scrollY];setArtist({id:choice.artistId,name:choice.title});return;}
   if(choice.kind==='album'){revokeMetadata();albumOpener.current=opener;albumScroll.current=[window.scrollX,window.scrollY];setAlbum({title:choice.title,artist:choice.artist,editionId:choice.editionId,artworkUrl:choice.artworkUrl});return;}
-  if(resolvingSingle||singleAttempt.current||ownPending||localPending||albumCoordinator.running){
+  if(singleAttempt.current||ownPending||flightPending()||albumCoordinator.running||albumCoordinator.dispatching||albumCoordinator.songFlight){
    setBlockedChoice({id,message:'La canción está seleccionada. Cuando termine la descarga en curso, toca para reproducirla.'});return;
   }
   if(choice.pendingEditionId!==undefined){
    edit();revokeMetadata();
    const playbackAttempt=props.captureSongPlayback?.();
    if(!playbackAttempt?.current()){setNotice('La biblioteca está ocupada o requiere revisión. Comprueba Almacenamiento.');return;}
-   const abort=new AbortController(),scope=props.scopeKey,epoch=viewEpoch.current;
+   const abort=new AbortController(),scope=props.scopeKey,release=reserveSong();
    singleAttempt.current=abort;setResolvingSingle(true);setChosenId(id);setNotice(null);
-   const valid=()=>playbackAttempt.current()&&mounted.current&&!abort.signal.aborted&&singleAttempt.current===abort&&viewEpoch.current===epoch&&latest.current.scopeKey===scope&&latest.current.client===client;
+   const valid=()=>playbackAttempt.current()&&mounted.current&&!abort.signal.aborted&&singleAttempt.current===abort&&latest.current.scopeKey===scope&&latest.current.client===client;
    try{
     const result=await resolveSearchSingle(metadataCatalog,choice.pendingEditionId,{signal:abort.signal,current:valid});
     if(!valid())return;
@@ -282,7 +293,7 @@ export function MusicSearchController(props:Props){
     }
     singleAttempt.current=null;setResolvingSingle(false);
     await resolvedSingleChoice.current?.(result.choice,playbackAttempt);
-   }finally{if(singleAttempt.current===abort){singleAttempt.current=null;if(mounted.current)setResolvingSingle(false);}}
+   }finally{if(singleAttempt.current===abort){singleAttempt.current=null;if(mounted.current)setResolvingSingle(false);}release();}
    return;
   }
   // LRCLIB sometimes puts a video label or a repeated artist in the title.
@@ -299,7 +310,7 @@ export function MusicSearchController(props:Props){
   const old=flight.current;
   const sameRecording=old&&samePendingSong(old.choice,choice);
   if((old?.key===key||sameRecording)&&old?.scope===props.scopeKey&&old.client===client&&!old.abort.signal.aborted&&!['done','error'].includes(old.phase)&&(old.phase!=='choice'||old.client?.searchSnapshot().queryId===old.queryId&&old.client?.searchSnapshot().expiresAt!==null)){setNotice('Esta canción ya está en proceso. Se usará la misma copia.');setChosenId(id);return;}
-  if(ownPending||localPending)return;
+  if(ownPending||flightPending()||albumCoordinator.running||albumCoordinator.dispatching||!capturedAttempt&&albumCoordinator.songFlight)return;
   const chosen=parseBotSearchTarget({title:choice.title.normalize('NFC').trim(),artist:choice.artist?.normalize('NFC').trim()||null,album:choice.album?.normalize('NFC').trim()||null,durationSeconds:choice.duration});
   if(!chosen){setNotice('Los metadatos de esta sugerencia no permiten identificar la canción.');return;}
   const attempt=capturedAttempt??(saveOnly?props.captureSongDownload:props.captureSongPlayback)?.();if(!attempt?.current()){setNotice('La biblioteca está ocupada o requiere revisión. Comprueba Almacenamiento.');return;}
@@ -307,6 +318,7 @@ export function MusicSearchController(props:Props){
   old?.abort.abort();const abort=new AbortController();downloadAbort.current=abort;
   const f:SongFlight={key,choice,target:chosen,attempt,abort,scope:props.scopeKey,client,networkCurrent:null,revision:props.bots?.revision,queryId:null,saveOnly,phase:'lookup'};flight.current=f;
   catalogAbort.current?.abort();setCatalogPending(false);revokeMetadata();bump();chosenDraft.current=query;setChosenId(id);setDownload(null);setSongError(null);setSelectedResult(null);setNotice('Comprobando si ya tienes esta canción…');
+  const release=capturedAttempt?undefined:reserveSong();
   try{
    const local=await attempt.lookup(choice,abort.signal);if(!live(f))return;
    if(local){
@@ -336,9 +348,13 @@ export function MusicSearchController(props:Props){
    if(saved.state==='saved'&&saved.trackId){await finishPlay(f,saved.trackId);return;}
    f.phase='error';setDownload({phase:saved.state==='uncertain'?'uncertain':'failed',bytes:0,total:audio.bytes});setNotice(saved.state==='uncertain'?'La copia requiere revisión. No repitas la descarga hasta comprobar Almacenamiento.':'No se pudo guardar la canción.');pulse();
   }catch(error){if(flightCurrent(f)){f.phase='error';setDownload(null);setNotice(error instanceof Error?error.message:'No se pudo comprobar la copia local.');pulse();}}
+  finally{
+   if(mounted.current&&flight.current===f&&flightPending()){f.phase='error';setDownload(null);pulse();}
+   release?.();
+  }
  }
  React.useEffect(()=>{
-  if(props.libraryAlbum||!props.accountId||!current()||!ready||albumCoordinator.running||ownPending||localPending||flight.current&&!['done','error'].includes(flight.current.phase))return;
+  if(props.libraryAlbum||!props.accountId||!current()||!ready||albumCoordinator.running||albumCoordinator.dispatching||albumCoordinator.songFlight||ownPending||flightPending())return;
   const pending=pendingDownloadAfterUpdate(props.accountId);
   if(pending?.kind==='song'&&!props.captureSongDownload?.()?.current())return;
   const song=takeDownloadAfterUpdate(props.accountId,'song');
@@ -382,7 +398,7 @@ export function MusicSearchController(props:Props){
   onAdd={()=>void manage('add')} onAddToPlaylist={id=>void manage('playlist',id)} onPlay={()=>void manage('play')} onCancel={cancelSong} current={current}/></div>;
  return <><div ref={searchContainer} hidden={!!album||!!artist}><MusicSearchPanel songActions={album?null:songActions} query={query} onQueryChange={value=>{if(!current())return;edit(true);setQuery(value.slice(0,640));}}
   suggestions={choices.map(c=>{const aliasesCurrent=playingAliases.scope===props.scopeKey&&playingAliases.trackId===props.playerTrackId;const exact=c.kind==='track'&&c.pendingEditionId===undefined&&aliasesCurrent&&playingAliases.keys.has(songChoiceKey(c as SongChoice)??'')?props.playerTrackId:undefined;const matches=c.kind==='track'&&c.pendingEditionId===undefined&&!exact?props.tracks.filter(t=>c.source==='local'?t.id===c.id.slice(6):compatibleSongMetadata(t,c)):[];const trackId=exact??(matches.length===1?matches[0].id:undefined);return {id:c.id,kind:c.kind,title:c.displayTitle??c.title,subtitle:(c.kind==='track'?[c.artist,c.album]:[c.artist]).filter(Boolean).join(' · ')||null,source:c.source,trackId,artworkUrl:c.artworkUrl??(c.kind==='track'&&c.artist&&c.duration&&artworkBatch?.scope===props.scopeKey&&artworkBatch.query===normalizeMusicSuggestionsQuery(query)?songArtwork(artworkBatch.data,{title:c.displayTitle??c.title,artist:c.artist,album:c.album,durationSeconds:c.duration}):null)}})} resultsVisible={!!query.trim()} selectedSuggestionId={chosenId} suggestionFeedback={blockedChoice} playingTrackIds={props.playerPlaying&&props.playerTrackId?new Set([props.playerTrackId]):undefined} suggestionsPending={suggesting||catalogPending} suggestionsError={[suggestionError,catalogError].filter(Boolean).join(' ')||null} suggestionsNotice={suggestionNotice}
-  onRetrySuggestions={()=>{if(current()&&!ownPending){edit();setRetry(n=>n+1);}}}
+  onRetrySuggestions={()=>{if(current()&&!ownPending&&!flightPending()&&!singleAttempt.current){edit();setRetry(n=>n+1);}}}
   primaryProvider={selectedProvider}
   hasSupportedProvider={providers.length>0}
   sessionReady={props.phase==='connected'} canSearch={ready} searchPending={ownPending||saving||localPending||resolvingSingle} searchPendingLabel={resolvingSingle?'Comprobando los metadatos de la canción…':undefined}
@@ -394,5 +410,5 @@ export function MusicSearchController(props:Props){
   {artist&&<div hidden={!!album}><ArtistPage key={artist.id} artist={artist} saved={props.savedArtists?.some(row=>row.id===artist.id)} onSave={props.saveArtist} saveDisabled={!props.canSaveArtist} scope={props.scopeKey} visible={props.visible&&!album} onBack={()=>{if(!current())return;navigationReturn.current={scope:props.scopeKey,kind:'search',opener:artistOpener.current,position:artistScroll.current};setArtist(null);}} onAlbum={(row,opener)=>{if(!current())return;albumOpener.current=opener;albumScroll.current=[window.scrollX,window.scrollY];setAlbum({title:row.title,artist:row.artist,editionId:row.id,artworkUrl:row.artworkUrl});}}/></div>}
   {album&&<AlbumPageController accountId={props.accountId} resumeDownload={props.libraryAlbum?undefined:searchAlbum?.resume} savedAlbums={props.savedAlbums}
     fixedDetail={props.libraryAlbum?.fixedDetail} libraryView={!!props.libraryAlbum} albumOptions={props.libraryAlbum?.options}
-    localTracks={props.tracks} songAliases={props.songAliases} localAvailability={props.localAvailability} albumSaveBlockedReason={props.albumSaveBlockedReason} saveAlbum={props.saveAlbum} coordinator={albumCoordinator} title={album.title} artist={album.artist} editionId={album.editionId} artworkUrl={album.artworkUrl} playerTrackId={props.playerPlaying?props.playerTrackId??null:null} searchBatch={artist?undefined:artworkBatch?.scope===props.scopeKey&&artworkBatch.query===normalizeMusicSuggestionsQuery(query)?artworkBatch:normalizeMusicSuggestionsQuery(query)?pendingArtworkBatch:undefined} backLabel={artist?'Volver al artista':undefined} scope={props.scopeKey} visible={props.visible} captureInspection={props.captureSongCopyInspection} actionKey={selected?.choice.id??null} selectedKey={selected?.phase==='done'&&selected.trackId?selected.choice.id:null} libraryTrackIds={props.libraryTrackIds} client={client} revision={props.bots?.revision} provider={selectedProvider?.supported?provider:null} providers={providers} capture={()=>current()?(props.captureSongDownload??props.captureSongPlayback)?.()??null:null} management={id=>props.captureSongManagement?.(id)??null} songActions={songActions} onChoose={choice=>{if(current())void chooseChoice(choice);}} onBack={()=>{if(!current())return;if(props.libraryAlbum){props.libraryAlbum.onBack();return;}navigationReturn.current={scope:props.scopeKey,kind:artist?'artist':'search',opener:albumOpener.current,position:albumScroll.current};setAlbum(null);}}/>}</>;
+    localTracks={props.tracks} songAliases={props.songAliases} localAvailability={props.localAvailability} albumSaveBlockedReason={props.albumSaveBlockedReason} saveAlbum={props.saveAlbum} coordinator={albumCoordinator} title={album.title} artist={album.artist} editionId={album.editionId} artworkUrl={album.artworkUrl} playerTrackId={props.playerPlaying?props.playerTrackId??null:null} searchBatch={artist?undefined:artworkBatch?.scope===props.scopeKey&&artworkBatch.query===normalizeMusicSuggestionsQuery(query)?artworkBatch:normalizeMusicSuggestionsQuery(query)?pendingArtworkBatch:undefined} backLabel={artist?'Volver al artista':undefined} scope={props.scopeKey} visible={props.visible} songPending={!!downloads.songFlight} captureInspection={props.captureSongCopyInspection} actionKey={selected?.choice.id??null} selectedKey={selected?.phase==='done'&&selected.trackId?selected.choice.id:null} libraryTrackIds={props.libraryTrackIds} client={client} revision={props.bots?.revision} provider={selectedProvider?.supported?provider:null} providers={providers} capture={()=>current()?(props.captureSongDownload??props.captureSongPlayback)?.()??null:null} management={id=>props.captureSongManagement?.(id)??null} songActions={songActions} onChoose={choice=>{if(current())void chooseChoice(choice);}} onBack={()=>{if(!current())return;if(props.libraryAlbum){props.libraryAlbum.onBack();return;}navigationReturn.current={scope:props.scopeKey,kind:artist?'artist':'search',opener:albumOpener.current,position:albumScroll.current};setAlbum(null);}}/>}</>;
 }

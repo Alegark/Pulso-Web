@@ -8,8 +8,9 @@ import type {SongManagement,SongPlaybackAttempt} from './selected-song';
 import type {TelegramSessionClient} from '../telegram/session-client';
 import {downloadNotifications} from '../pwa/download-notifications';
 
-export interface AlbumDownloadRun {scope:string;editionId:CatalogId;key:string;title:string;abort:AbortController;stop?:()=>void;accountId?:string;collectionKey?:string}
+export interface AlbumDownloadRun {scope:string;editionId:CatalogId;key:string;title:string;abort:AbortController;stop?:(discardCheckpoint?:boolean)=>void;accountId?:string;collectionKey?:string}
 export interface AlbumCoordinator {
+ dispatching?:boolean;songFlight?:object;
  running:boolean;uncertainTracks:Set<CatalogId>;remoteClock:{settledAt:number};
  rows:Map<CatalogId,{key:string;rows:AlbumRow[];message?:string}>;listeners:Set<()=>void>;
  active?:AlbumDownloadRun;notice?:{title:string;titles?:string[];progress:AlbumProgress};
