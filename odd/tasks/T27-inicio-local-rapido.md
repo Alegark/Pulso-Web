@@ -1,8 +1,8 @@
 # T27 · Inicio rápido del audio ya descargado
 
-- **Estado:** validación en curso.
-- **Código base:** `f803135`. Referencia de rendimiento publicada: v62, código `f97ebb5`.
-- **Método:** ODD, §I.assets, §I.media, §I.player, §I.queue y §V.2 del SPEC. Invariantes V2, V8, V10–V19, V24, V28, V30–V31.
+- **Validación en curso.**
+- Código base `f803135`. Referencia de rendimiento v62 (`f97ebb5`).
+- ODD, §I.assets, §I.media, §I.player, §I.queue y §V.2 del SPEC. Invariantes V2, V8, V10–V19, V24, V28, V30–V31.
 
 ## Objetivo y requisitos
 
@@ -11,7 +11,7 @@ Quitar del camino al primer sonido las lecturas y el SHA-256 de toda la cola. En
 | Requisito | Aceptación |
 | --- | --- |
 | P01 | Desde el toque hasta el evento nativo `playing`, reducir la mediana ≥50 % frente a v62 con el mismo arnés, en Chromium y WebKit, con IDB y OPFS. |
-| P02 | En una playlist de 30 pistas descargadas, reproducir primero la ocurrencia tocada dentro del plazo de 30 s y con una latencia comparable a una pista sola. Verificar las demás antes de su propia reproducción, sin precargar su audio. |
+| P02 | En una playlist de 30 pistas descargadas, reproducir primero la ocurrencia tocada dentro del plazo de 30 s. El arnés concreta «comparable» como una mediana de hasta dos veces la de una pista sola. Verificar las demás antes de su propia reproducción, sin precargar su audio. |
 | P03 | Verificar longitud y SHA-256 antes de entregar bytes de cada pista. Ante corrupción confirmada, saltar automáticamente esa ocurrencia, conservar organización y evitar ciclos infinitos. |
 | P04 | Preservar T24, T25, la reanudación, el audio offline y el avance, MediaSession, los rangos HTTP 206 y el comportamiento de los avisos del reproductor de v61/v62. |
 | P05 | Mantener memoria de audio acotada e independiente de cuántas pistas contiene la playlist. |
@@ -29,10 +29,13 @@ Quitar del camino al primer sonido las lecturas y el SHA-256 de toda la cola. En
 | --- | --- | --- | --- |
 | P01 | B · `check-local-playback.mjs`, serie `cold-start`, escenario de una pista de 8 MiB | Pendiente | Pendiente |
 | P02 | B · `cold-start`, escenario de 30 pistas, clic en la #15, plazo de 30 s y una sola carga inicial | Pendiente | Pendiente |
-| P03 | B · `skip-corrupt`, byte cambiado, truncamiento y hash distinto en la pista 1 y en la pista 2 tras arrancar la 1 | Pendiente | Pendiente |
-| P03 | U · `player.test.ts`, descarta avisos de selección anterior, limita una pasada y conserva pausa al restaurar | Pendiente | Pendiente |
+| P03 | B · `skip-corrupt`, byte cambiado, truncamiento y hash distinto en la pista 1 y en la pista 2 tras arrancar la 1 | Chromium/IDB reproduce que no avanza | Confirmado byte cambiado inicial en los cuatro pares motor/backend. Matriz completa en curso. |
+| P03 | U · `player.test.ts`, descarta avisos de selección anterior, limita una pasada y conserva pausa al restaurar | 0/2 | 2/2 |
+| P03, P04 | B · `check-sw-media-ranges.mjs`, solicitud inicial fuera del bloque alterado con otra selección del mismo manifiesto | 206 indebido en IDB y OPFS. Pasan los controles de rango y alcance. | 409 en IDB y OPFS. Pasan los controles de rango y alcance. |
 | P04 | B · `selected-offline-next`, MediaSession en una cola ya descargada y salto offline desde la pista 2 | Pendiente | Pendiente |
 | P04 | B · matriz funcional, reanudación, avisos, splash y rangos. U · baterías de cola y bots. | Pendiente | Pendiente |
 | P05 | B · `cold-start` y `selected-offline-next`, lecturas de chunks/Blob en página hasta `playing` y número de fuentes cargadas | Pendiente | Pendiente |
 
 El arnés usa perfiles nuevos, cuenta y audio sintéticos, el bundle con su SW local, viewport 390 × 844 y una serie por revisión/motor/backend. Comprueba `uptime` y carga de un minuto < 1,5 antes de cada serie. Cada caso registra muestras, mediana, mínimo, máximo y vencimientos. La aceptación en iPhone físico se mantiene **NO EJECUTADA**.
+
+Pasaron 1.043 pruebas unitarias, ambos typechecks, lint, el build, 73 pruebas de servidor y 10 de Python. Resultados locales en `.local/test-evidence/t27/`. La copia aislada de Engram se contrastó con los 20 documentos de v62. El recibo de T8 corresponde a v62 y difiere por el commit de splash `f803135`. El almacén compartido conserva sus datos y recibos.
