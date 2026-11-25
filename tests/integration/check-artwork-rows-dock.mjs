@@ -11,7 +11,7 @@ import {createTestWorkspace} from './test-workspace.mjs';
 const fixture='tests/integration/artwork-rows-dock-fixture.html';
 const workspace=await createTestWorkspace('artwork-rows-dock');
 const report={cases:[],errors:[],requests:[],geometry:[],engines:{}};
-const colors={remote:[240,30,50,255],catalog:[20,200,70,255],manual:[20,60,230,255]};
+const colors={remote:[240,30,50,255],catalog:[20,200,70,255],manual:[20,60,230,255],secondAccount:[160,50,220,255]};
 function png(rgba){
  function chunk(type,bytes){
   const payload=Buffer.concat([Buffer.from(type),bytes]),size=Buffer.alloc(4),crc=Buffer.alloc(4);
@@ -32,12 +32,16 @@ const titles=['Descarga uno','Descarga dos'];
 const provider='https://is1-ssl.mzstatic.com/image/thumb/Music/remote/100x100bb.png';
 const artist='Intérprete de prueba';
 let server,engine,tempDirectory;
+let remoteCover='remote';
 const previousTemp=process.env.TMPDIR;
 function mockProvider(req,res,next){
  const url=new URL(req.url,'http://127.0.0.1');
  const send=(type,body)=>{res.setHeader('Content-Type',type);res.end(body);};
  const json=value=>send('application/json',JSON.stringify(value));
- if(url.pathname==='/catalog-config.json')return json({version:1,itunes:true,artwork:true});
+ if(url.pathname==='/catalog-config.json'){
+  report.requests.push({engine,kind:'config'});
+  return json({version:1,itunes:true,artwork:true});
+ }
  if(url.pathname==='/__artwork/manual.png')return send('image/png',images.manual);
  if(url.pathname==='/catalog/itunes/search'){
   const term=url.searchParams.get('term'),title=titles.find(title=>term===title+' '+artist);
@@ -49,7 +53,7 @@ function mockProvider(req,res,next){
  if(url.pathname==='/catalog/artwork'){
   const source=url.searchParams.get('u');
   report.requests.push({engine,kind:'image',source});
-  return send('image/png',source?.includes('/catalog/')?images.catalog:images.remote);
+  return send('image/png',source?.includes('/catalog/')?images.catalog:images[remoteCover]);
  }
  next();
 }
@@ -60,9 +64,9 @@ async function check(name,run){
  console.log(engine,report.cases.at(-1).status,name,report.cases.at(-1).error?.split('\n')[0]??'');
 }
 
-async function pixel(page,image,expected){
+async function pixel(page,image,expected,timeout=2500){
  const locator=page.locator(image);
- await locator.waitFor({state:'attached',timeout:2500});
+ await locator.waitFor({state:'attached',timeout});
  const rgba=await locator.evaluate(async img=>{
   await img.decode();
   const canvas=document.createElement('canvas');canvas.width=canvas.height=2;
@@ -93,7 +97,7 @@ async function artworkState(page,ids){
    return entries.sort();
   }
   const opfs=navigator.storage?.getDirectory?await inventory(await navigator.storage.getDirectory()):null;
-  return {idb:rows.map(row=>[row?.revision,row?.state,row?.blob?.size]),opfs};
+  return {idb:rows.map(row=>[row?.revision,row?.state,row?.blob?.size]),opfs,cacheNames:await caches.keys()};
  },ids);
 }
 
@@ -112,7 +116,7 @@ try{
   process.env.TMPDIR=name==='chromium'?`/proc/${process.pid}/fd/${tempDirectory.fd}`:profile;
   const launch={headless:true,proxy:{server:'http://127.0.0.1:9',bypass:'127.0.0.1,localhost'}};
   const browser=name==='chromium'?await launcher.launch({...launch,executablePath:'/usr/bin/chromium',chromiumSandbox:true}):null;
-  const inPage=async run=>{
+  const inPage=async(run,offline=false)=>{
    const options={viewport:{width:390,height:844},serviceWorkers:'block',hasTouch:true,isMobile:true};
    // WebKit ephemeral contexts reject Blob records in IndexedDB on this runner.
    const browserProfile=browser?null:await mkdtemp(resolve(profile,'webkit-'));
@@ -127,14 +131,15 @@ try{
      report.errors.push({engine,external:url.origin});return route.abort();
     });
     await installRequiredAccountFixture(context,origin);
-    await context.addInitScript(()=>{
+    await context.addInitScript(offline=>{
      try{delete Navigator.prototype.serviceWorker;}catch{}
+     window.fixtureOffline=offline;
      Object.defineProperty(navigator,'onLine',{get:()=>!window.fixtureOffline});
      if(!navigator.mediaSession)Object.defineProperty(navigator,'mediaSession',{value:{setActionHandler(){}}});
      if(!window.MediaMetadata)window.MediaMetadata=class{constructor(value){Object.assign(this,value);}};
      const revoke=URL.revokeObjectURL.bind(URL);window.revokedArtworkUrls=new Set();
      URL.revokeObjectURL=url=>{window.revokedArtworkUrls.add(url);revoke(url);};
-    });
+    },offline);
     const page=await context.newPage();
     page.setDefaultTimeout(15000);
     page.setDefaultNavigationTimeout(25000);
@@ -150,9 +155,9 @@ try{
    await page.locator('.library-grid button').filter({hasText:'Favoritos'}).click();
    await page.getByRole('heading',{name:'Favoritos',exact:true}).waitFor();
   };
-  const seed=async page=>{
+  const seed=async(page,secondAccountId)=>{
    await page.goto(origin+'/'+fixture);
-   const ids=await page.evaluate(()=>artworkDockFixture.seed());
+   const ids=await page.evaluate(id=>artworkDockFixture.seed(id),secondAccountId);
    await page.goto(origin);await favorites(page);
    return ids;
   };
@@ -170,6 +175,7 @@ try{
   const open=page=>page.getByRole('button',{name:'Abrir reproductor desde minirreproductor'}).click();
   const close=page=>page.getByRole('button',{name:'Cerrar reproductor',exact:true}).click();
   const requests=()=>report.requests.slice().filter(req=>req.engine===engine);
+  const disconnect=page=>page.evaluate(()=>{window.fixtureOffline=true;window.dispatchEvent(new Event('offline'));});
   try{
    await check('A01 · Favoritos, reproductor, MediaSession, mini y acciones comparten carátula temporal',()=>inPage(async page=>{
     const ids=await seed(page),trackIds=titles.map(title=>ids[title]),before=await artworkState(page,trackIds);
@@ -206,11 +212,87 @@ try{
     await close(page);
     assert.equal(await page.locator(rowArt('Portada oculta')).count(),0);
     assert.equal(await page.locator(miniArt).count(),0);
-    await page.evaluate(()=>{window.fixtureOffline=true;window.dispatchEvent(new Event('offline'));});
+    await disconnect(page);
     await start(page,titles[1]);await open(page);
     await page.waitForTimeout(1200);
     assert.deepEqual(requests().slice(from).filter(req=>req.kind==='search'||req.source?.includes('/remote/')),[]);
     assert.equal(await page.locator(playerArt).count(),0);
+   }));
+   await check('A02a · Una carátula de catálogo fría no abre la red offline',()=>inPage(async page=>{
+    const from=requests().length,title='Portada de catálogo';
+    await seed(page);
+    assert.equal(await page.evaluate(()=>navigator.onLine),false);
+    await start(page,title);await open(page);
+    await page.waitForTimeout(1200);
+    assert.deepEqual(requests().slice(from),[]);
+    assert.equal(await page.locator(playerArt).count(),0);
+    await close(page);
+    assert.equal(await page.locator(rowArt(title)).count(),0);
+    assert.equal(await page.locator(miniArt).count(),0);
+   },true));
+   await check('A02b · Las vistas recuperan la carátula de catálogo en RAM offline',()=>inPage(async page=>{
+    const title='Portada de catálogo';
+    await seed(page);
+    const rowUrl=await pixel(page,rowArt(title),colors.catalog);
+    assert.ok(requests().some(req=>req.kind==='image'&&req.source.includes('/catalog/')));
+    const from=requests().length;
+    await page.locator('.shell-nav').getByRole('button',{name:'Inicio',exact:true}).click();
+    await page.waitForFunction(url=>revokedArtworkUrls.has(url),rowUrl);
+    await disconnect(page);await favorites(page);
+    await start(page,title);await open(page);
+    await pixel(page,playerArt,colors.catalog);await close(page);
+    const views=await Promise.allSettled([pixel(page,rowArt(title),colors.catalog),pixel(page,miniArt,colors.catalog)]);
+    await page.getByRole('button',{name:'Opciones de '+title,exact:true}).click();
+    views.push(...await Promise.allSettled([pixel(page,'dialog[open] .track-actions-art img',colors.catalog)]));
+    assert.deepEqual(views.flatMap((result,i)=>result.status==='rejected'?[['fila','mini','acción'][i]]:[]),[]);
+    assert.deepEqual(requests().slice(from),[]);
+   }));
+   await check('A02c · Un cambio de cuenta en el mismo documento descarta la memoria del proveedor',()=>inPage(async page=>{
+    const users=[
+     {id:'11111111-1111-4111-8111-111111111111',name:'Cuenta A TESTONLY',email:'fixture@example.test',emailVerified:true},
+     {id:'22222222-2222-4222-8222-222222222222',name:'Cuenta B TESTONLY',email:'fixture-b@example.test',emailVerified:true},
+    ];
+    let user=users[0];
+    const context=page.context();
+    await context.route(origin+'/api/account-auth/get-session',route=>{
+     const now=new Date().toISOString();
+     return route.fulfill({json:{user,session:{id:user.id,token:'TESTONLY',
+      userId:user.id,expiresAt:new Date(Date.now()+3600000).toISOString(),createdAt:now,updatedAt:now}}});
+    });
+    await context.route(origin+'/api/account-profile',route=>route.fulfill({json:{accountId:user.id,telegramPhone:null,revision:null}}));
+    let library={accountId:users[1].id,revision:null,document:{version:1,tracks:[],playlists:[]}};
+    await context.route(origin+'/api/account-library',route=>{
+     if(user!==users[1])return route.fallback();
+     if(route.request().method()==='PUT'){
+      const input=route.request().postDataJSON();
+      if(input.accountId!==user.id||input.revision!==library.revision)return route.fulfill({status:409,json:{code:'LIBRARY_CHANGED'}});
+      library={accountId:user.id,revision:(library.revision??0)+1,document:input.document};
+     }
+     return route.fulfill({json:library});
+    });
+    try{
+     const title=titles[0],from=requests().length;
+     await seed(page,users[1].id);
+     const documentId=await page.evaluate(()=>window.fixtureDocumentId=crypto.randomUUID());
+     await start(page,title);await open(page);
+     const oldUrl=await pixel(page,playerArt,colors.remote,8000);await close(page);
+     user=users[1];
+     remoteCover='secondAccount';
+     // Deliver the same session-change notification as another tab.
+     await page.evaluate(()=>window.dispatchEvent(new StorageEvent('storage',{
+      key:'pulso-account:changed:v1',
+      newValue:JSON.stringify({version:1,type:'changed',source:crypto.randomUUID()}),
+     })));
+     await page.waitForFunction(id=>JSON.parse(localStorage.getItem('pulso-account:confirmed-profile:v1'))?.user?.id===id,user.id);
+     await page.waitForFunction(url=>revokedArtworkUrls.has(url),oldUrl);
+     await favorites(page);
+     assert.equal(await page.evaluate(()=>window.fixtureDocumentId),documentId);
+     assert.equal(await page.locator(rowArt(title)).count(),0);
+     await start(page,title);await open(page);
+     await pixel(page,playerArt,colors.secondAccount,8000);
+     assert.deepEqual(requests().slice(from).filter(req=>req.kind==='search').map(req=>req.term),
+      [title+' '+artist,title+' '+artist]);
+    }finally{remoteCover='remote';}
    }));
    await check('A03 · 53/72 en una sola línea y dentro del dock a 100 % y 200 %',()=>inPage(async page=>{
     const failures=[];
@@ -254,7 +336,7 @@ finally{
  report.cleanup=await workspace.cleanup();
  await writeFile(resolve(workspace.evidence,'report.json'),JSON.stringify(report,null,2));
  console.log(workspace.evidence);
- if(report.fatal||report.errors.length||report.cases.length!==6||report.cases.some(row=>row.status==='FAIL')){
+ if(report.fatal||report.errors.length||report.cases.length!==12||report.cases.some(row=>row.status==='FAIL')){
   console.error(report.fatal??JSON.stringify(report.errors));process.exitCode=1;
  }
 }

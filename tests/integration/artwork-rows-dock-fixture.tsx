@@ -28,9 +28,10 @@ function audioFixture(title:string,index:number){
  return new File([bytes],title+'.wav',{type:'audio/wav'});
 }
 
-async function seed(){
+async function seed(secondAccountId?:string){
  registerDatabaseRealmHost({capture:(_kind,current)=>current()?{current,onLifecycle:()=>{},end:()=>{}}:null});
  localStorage.setItem('pulso:setup:v1:'+accountId,'complete');
+ if(secondAccountId)localStorage.setItem('pulso:setup:v1:'+secondAccountId,'complete');
  const db=await new Promise<IDBDatabase>((resolve,reject)=>{
   const req=indexedDB.open('pulso-web-telegram-session-v1',1);
   req.onupgradeneeded=()=>req.result.createObjectStore('authorization');
@@ -58,6 +59,13 @@ async function seed(){
    await setManualArtwork(id,image,(await readArtwork(id)).revision);
   }
   ids[title]=id;
+ }
+ if(secondAccountId){
+  const imported=await importFileDetailed(audioFixture(titles[0],titles.length),new AbortController().signal,()=>{},{backend:'idb'});
+  if(imported.kind!=='confirmed')throw Error('Copia sintética de la segunda cuenta sin confirmar');
+  const {id}=imported.result.track;
+  const track=await readRecord<Track>('tracks',id);
+  await writeRecord('tracks',id,{...track,accountId:secondAccountId,artist,favorite:true});
  }
  await prepareAccountLibrary(accountId,()=>true);
  return ids;

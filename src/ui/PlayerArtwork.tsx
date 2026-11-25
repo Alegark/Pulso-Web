@@ -5,18 +5,18 @@ import {readRecord} from '../storage/database';
 import type {Track} from '../library/library';
 import {readArtwork} from '../library/artwork';
 import {catalogArtwork} from '../library/catalog-artwork';
-import {PlayerArtworkProvider} from '../library/player-artwork-provider';
+import type {PlayerArtworkProvider} from '../library/player-artwork-provider';
 import {PlayerArtworkCacheContext} from './CatalogArtwork';
 import './artwork.css';
 
-const provider=new PlayerArtworkProvider((...args)=>fetch(...args));
 export interface PlayerArtworkProps {
+ provider:PlayerArtworkProvider;
  activity:Activity; trackId:string; title:string; artist:string|null; album:string|null;
  durationSeconds:number|null; scopeKey:string; enabled:boolean; current:()=>boolean;
  catalogCover?:string; sharedArtworkKey?:string; refreshToken:number; onArtwork?:(image:MediaImage|null,previousUrl?:string)=>void; onAlbum?:(album:string|null)=>void;
 }
 type View={key:string;current:()=>boolean;url:string|null};
-export function PlayerArtwork({activity,trackId,title,artist,album,durationSeconds,scopeKey,enabled,current,catalogCover,sharedArtworkKey,refreshToken,onAlbum,onArtwork}:PlayerArtworkProps){
+export function PlayerArtwork({provider,activity,trackId,title,artist,album,durationSeconds,scopeKey,enabled,current,catalogCover,sharedArtworkKey,refreshToken,onAlbum,onArtwork}:PlayerArtworkProps){
  const cache=useContext(PlayerArtworkCacheContext);
  const [view,setView]=useState<View|null>(null);const currentRef=useRef(current);currentRef.current=current;
  const artworkRef=useRef(onArtwork);artworkRef.current=onArtwork;
@@ -64,7 +64,7 @@ export function PlayerArtwork({activity,trackId,title,artist,album,durationSecon
    }catch{/* Optional artwork must never block playback. */}finally{end();}
   })();
   return ()=>{cancelled=true;controller.abort();revoke();};
- },[activity,key,cache]);
+ },[activity,key,cache,provider]);
  const visible=enabled&&view?.key===key&&view.current()?view:null;
  return <div className="artwork-panel">{visible?.url?<img className="artwork-image" src={visible.url} alt={`Portada de ${title}`} onError={()=>setView(null)}/>:<div aria-hidden="true" className="artwork-placeholder">♪</div>}</div>;
 }

@@ -27,11 +27,11 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
     if(!alive||local.state==='unavailable')return;
     if(local.state==='ready'){
      publish(local.blob);
-     if(local.manual||!preferUrl||navigator.onLine===false)return;
+     if(local.manual||!preferUrl)return;
     }else if('manual' in local&&local.manual)return;
    }
    if(shared){publish(shared.blob);return;}
-   if(!imageUrl||navigator.onLine===false)return;
+   if(!imageUrl)return;
    const blob=await catalogArtwork(imageUrl);if(!alive||!blob)return;
    if(trackId){
     const latest=await readArtwork(trackId,!!imageUrl);
