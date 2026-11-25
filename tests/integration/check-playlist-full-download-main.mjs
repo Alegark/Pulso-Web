@@ -100,8 +100,6 @@ const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
   if(id.endsWith('/src/library/saved-albums.ts'))
    return insert('export async function readSavedAlbum(accountId:string,id:CatalogId):Promise<SavedAlbum|null> {',
     "export async function readSavedAlbum(accountId:string,id:CatalogId):Promise<SavedAlbum|null> { if(window.testAlbumReadError)throw new DOMException('Synthetic album read failure','QuotaExceededError'); if(window.testAlbumReadGate)await window.testAlbumReadGate();");
-  if(selectedModes.includes('queue-cancel-save')&&id.endsWith('/src/library/download-song.ts'))
-   return insert('try{local=await attempt.save(', 'try{await window.testBeforeCollectionSave?.();local=await attempt.save(');
   if(id.endsWith('/src/service-worker/download-update.ts')){
    let result=insert(' if(!current())return false;', ' if(!current())return false;\n window.testCheckKinds?.push(action.kind);\n if(window.testDispatchGate)await window.testDispatchGate(current,action);\n if(!current())return false;');
    if(selectedModes.includes('queue-version-busy'))result+=`
@@ -114,6 +112,11 @@ const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
     if(window.testRejectCancelledDispatch&&!allowed)throw Error('Synthetic cancelled dispatch failure');
     return allowed&&current();`);
   }
+ }
+ if(selectedModes?.some(mode=>mode==='queue'||mode==='queue-cancel-save')&&id.endsWith('/src/library/download-song.ts')){
+  const save='try{local=await attempt.save(';
+  assert.ok(code.includes(save));
+  return code.replace(save,'try{await window.testBeforeCollectionSave?.();local=await attempt.save(');
  }
  // Shorten the real callback timer only for the separate recovery regression run.
  if(callbackTimeout&&id.endsWith('/src/telegram/bot-search-protocol.ts')){
@@ -1225,11 +1228,18 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     }
     receipt.status='PASS';receipt.totalMs=elapsed(started);return receipt;
    }
-   gateOn=true;
+   // The card sweep can outlast Telegram's transfer deadline. Hold the first
+   // local save so the collection still owns the dispatcher during the sweep.
+   if(mode==='queue')await page.evaluate(()=>{
+    window.testBeforeCollectionSave=()=>new Promise(resolve=>{
+     delete window.testBeforeCollectionSave;
+     window.testReleaseQueueSave=resolve;
+    });
+   });
+   else gateOn=true;
    await collection.getByRole('button',{name:startLabel,exact:true}).tap();
-   let timer;
-   try{await Promise.race([blocked,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Missing first playlist read')),15000);})]);}
-   finally{clearTimeout(timer);}
+   if(mode==='queue')await page.waitForFunction(()=>!!window.testReleaseQueueSave);
+   else await waitForBlockedRead();
    await search('Pulso Luz');
    if(mode==='queue'){
     // Use the same full card hit test with focus and a live collection.
@@ -1299,6 +1309,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     await page.reload();
    }
    gateOn=false;unblockRead();
+   if(mode==='queue')await page.evaluate(()=>window.testReleaseQueueSave());
    await page.waitForFunction(account=>{
     const queue=localStorage.getItem('pulso:collection-download-queue:v1:'+account);
     const checkpoint=localStorage.getItem('pulso:library-download:v1:'+account);
@@ -1340,7 +1351,8 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     assert.equal(verified,3);
    }
    else{
-    assert.equal(verified,30);
+    const missing=tracks.filter(({track})=>!verifiedIds.has(track.id)).map(({track})=>track.title);
+    assert.equal(verified,30,`Missing verified copies: ${missing.join(', ')}`);
     assert.equal(verifiedIds.size,tracks.length,'Repeated playlist occurrence reuses the verified asset');
    }
    assert.equal(data.copies.at(-1),null);
