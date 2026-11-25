@@ -451,7 +451,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
    if(repair)void reviewRef.current(repair.trackId,repair.title,repair.retry);
    return;
   }
-  if(!telegramReady(props.client)||!autoArmed.current||!pending||!canAutoResumeLibraryDownload(pending)||!owns?.()||admission.current||
+  if(downloadVersionCheckInProgress()||!telegramReady(props.client)||!autoArmed.current||!pending||!canAutoResumeLibraryDownload(pending)||!owns?.()||admission.current||
    flight.current||albumCoordinator.running||checking.current||waiting.current||document.visibilityState==='hidden'||navigator.onLine===false||
    !(props.captureBatch??props.capture)?.(true)?.current())return;
   if(!tracksLoaded(pending,props.tracks))return;

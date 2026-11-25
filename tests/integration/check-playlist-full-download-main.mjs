@@ -20,7 +20,7 @@ const work=await createTestWorkspace('playlist-full-download');
 const checkpointKey='pulso:library-download:v1:'+accountId;
 const botFailureModes=['album','playlist'].flatMap(kind=>
  ['timeout','unsupported','limit'].map(error=>'queue-'+kind+'-bot-'+error));
-const reviewModes=['queue-album-interruption','queue-stop-update','queue-retry-at','queue-disconnected',
+const reviewModes=['queue-album-uncertain-send','queue-album-network','queue-album-interruption','queue-stop-update','queue-retry-at','queue-disconnected',
  'queue-claim-error','queue-album-read-error','queue-cancel-save','queue-paused-removal','queue-missing-track',
  'queue-album-refresh','queue-album-external-removal','queue-single-edition','queue-inspection',
  'queue-review-admission','queue-version-busy','queue-before-library-refresh','queue-album-expired-update','queue-album-clear-retry',
@@ -83,13 +83,13 @@ const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
   if(id.endsWith('/src/telegram/session-client.ts'))
    return insert('private publishSearch(){',`private publishSearch(){window.testQueueTelegram=this;
     if(!this.searchPlan&&window.testBotError&&this.search.expectedTarget?.title===window.testBotError.title&&this.search.rows.length&&!this.search.error){
-     this.search={...this.search,error:window.testBotError.error,delivery:window.testBotError.error==='timeout'?'uncertain':'acknowledged',rows:[]};
+     this.search={...this.search,error:window.testBotError.error,delivery:'acknowledged',rows:[]};
     }`);
   if(id.endsWith('/src/library/album-download.ts'))
    return insert('for(const notify of coordinator.listeners)notify();',`
     if(window.testObserveAlbum&&coordinator.active)window.testObservedAlbum=coordinator.active;
-    if(window.testBotError&&coordinator.notice?.progress.rows.some(row=>row.message==='No existe en tus bots'))
-     window.testSawMissingSong=true;
+    if(coordinator.notice?.progress.rows.some(row=>row.message==='No existe en tus bots'))window.testSawMissingSong=true;
+    if(coordinator.notice?.progress.rows.some(row=>row.message==='Telegram no respondió a tiempo'))window.testSawBotTimeout=true;
     for(const notify of coordinator.listeners)notify();`);
   if(selectedModes.includes('queue-review-admission')&&id.endsWith('/src/ui/LibraryDownloadController.tsx'))
    return insert('reviewRef.current=reviewTrack;', 'reviewRef.current=reviewTrack;window.testReviewTrack=reviewTrack;');
@@ -364,6 +364,9 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     const reply=replies.get(query);
     trace.push({kind,peer,trackId:reply?.trackId,ms:elapsed(started)});
     if(!reply?.plan[peer-101])return route.fulfill({status:400});
+    if(mode==='queue-album-uncertain-send'&&reply.trackId==='album-1'&&!faulted.has(mode)){
+     faulted.add(mode);return route.abort('connectionreset');
+    }
     return route.fulfill({json:reply.plan[peer-101]});
    }
    if(kind==='write-admit'){
@@ -377,6 +380,9 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    const event={kind,peer,trackId,key,offset,option,ms:elapsed(started)};
    trace.push(event);
    if(kind==='callback')return route.fulfill({json:{}});
+   if(mode==='queue-album-network'&&trackId==='album-1'&&!faulted.has(mode)){
+    faulted.add(mode);return route.fulfill({status:503});
+   }
    if(kind!=='read'||!Number.isSafeInteger(offset)||limit!==524288)return route.fulfill({status:400});
    const {payload,fault}=candidate;
    if(queued&&gateOn&&trackId===tracks[cancelMode(mode)?2:0].track.id){
@@ -646,7 +652,8 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await online(true);
      await verifyNext();
      assert.equal(await page.evaluate(()=>window.testQueueTelegram.snapshot().phase),'connected');
-     assert.equal(await page.evaluate(()=>window.testSawMissingSong),true);
+     assert.equal(await page.evaluate(()=>!!window.testSawMissingSong),botError!=='timeout');
+     assert.equal(await page.evaluate(()=>!!window.testSawBotTimeout),botError==='timeout');
      if(albumCase)await verifyAlbum([albumSongs[0],albumSongs[2]]);
      else{
       const {copies}=await inspect(page,entries);
@@ -772,7 +779,15 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      assert.equal(trace.length,0);
     }else if(mode.startsWith('queue-album-')){
      await saveAlbum();await openSavedAlbum();
-     if(mode==='queue-album-interruption'){
+     if(mode==='queue-album-uncertain-send'||mode==='queue-album-network'){
+      await enqueueAlbum();
+      await enqueueNext();
+      await verifyNext();
+      await verifyAlbum();
+      assert.ok(faulted.has(mode));
+      assert.equal(await page.evaluate(()=>!!window.testSawMissingSong),false);
+      assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.trackId),['album-0','album-1','album-1',cTrack.id]);
+     }else if(mode==='queue-album-interruption'){
       await page.evaluate(()=>{
        window.testAlbumTrackConfirmed=index=>{if(index===0){
         delete window.testAlbumTrackConfirmed;window.testQueueTelegram.stop('network');
@@ -780,11 +795,9 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
       });
       await enqueueAlbum();
       await page.waitForFunction(()=>window.testQueueTelegram.snapshot().phase==='error');
-      await dock.locator('progress').waitFor({state:'hidden'});
-      await page.waitForTimeout(100);
+
       assert.deepEqual(await queuedTitles(),[albumTitle],'Interrupted album must keep its persistent entry');
       const before=await verifyAlbum(albumSongs.slice(0,1));
-      await reconnect();
       await page.waitForFunction(key=>!localStorage.getItem(key),queueKey);
       const after=await verifyAlbum();
       assert.equal(after[0],before[0],'Reconnect uses the same first asset');
@@ -1566,7 +1579,7 @@ async function checkTurnaround(browser,engine,origin,scenario){
    assert.ok(!states.includes('Reconectando con Telegram…'));
    assert.deepEqual(songs.map(({timeoutCount,winningBotSlot})=>[timeoutCount,winningBotSlot]),[[0,1],[1,null],[1,null],[0,1]]);
    await handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();});
-   assert.equal(await page.locator('.download-dock__panel li').filter({hasText:'No existe en tus bots'}).count(),2);
+   assert.equal(await page.locator('.download-dock__panel li').filter({hasText:'Telegram no respondió a tiempo'}).count(),2);
   }else if(tagged){
    assert.deepEqual(searches,[baseline?[101,101,101,102]:compound?[101]:[101,102]]);
    assert.deepEqual(callbacks.map(e=>e.option),baseline?[1,2,3]:compound?[1]:[1,2]);

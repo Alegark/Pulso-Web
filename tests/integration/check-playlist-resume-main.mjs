@@ -32,6 +32,15 @@ const fixture=(release='old')=>({name:'playlist-resume-sdk-test',enforce:'pre',r
    'prepare:async manual=>{if (document.documentElement.dataset.testUpdateBlocked === "true") return false;')
    .replace("await refresh(false,false,diagnostic,'refresh',false,true);","await window.testBeforeImportRefresh?.();await refresh(false,false,diagnostic,'refresh',false,true);")+`
 document.documentElement.dataset.testBuild=${JSON.stringify(release)};window.testEmit=emit;window.testCopyState=id=>availability.get(id)?.state;`;
+  if(id.endsWith('/src/service-worker/download-update.ts'))return code.replace(' },bundle)};',` },bundle)};
+   const account=sessionStorage.getItem('testonly-external-version-check');
+   if(account){
+    sessionStorage.removeItem('testonly-external-version-check');
+    window.testExternalVersionGate=new Promise(resolve=>{window.testReleaseExternalVersion=()=>{
+     window.testExternalVersionGate=null;resolve();
+    };});
+    void downloadWithCurrentApp(account,{kind:'repair',trackId:account,title:'Consulta ocupada',retry:'safe'},()=>!!window.testExternalVersionGate);
+   }`).replace('try{return await beforeDownload(', 'try{await window.testExternalVersionGate;if(!current())return false;return await beforeDownload(');
   if(id.endsWith('/src/ui/DownloadDock.tsx'))return code.replace('const displayTime=5000;', 'const displayTime=window.testDockTime??5000;');
   if(id.endsWith('/src/ui/TelegramPanel.tsx'))return code.replace('tracks={localTracks} client={client.current}',
    'tracks={document.documentElement.dataset.testHoldTracks==="true"?[]:localTracks} client={client.current}');
@@ -72,9 +81,9 @@ const testSearchBot=TelegramSessionClient.prototype.searchBot;
    `+code;
  }});
 const backgroundModes=['background-alive','cold-resume','stop-reload','two-tabs','wake-restore','paused-hidden','hidden-rejection','orphan-idle'];
-const channelModes=['long-cooldown','unknown-cooldown','reconnect','suspend','notifications-off','stop',...backgroundModes];
+const channelModes=['long-cooldown','unknown-cooldown','reconnect','uncertain-send','suspend','suspend-short','notifications-off','stop',...backgroundModes];
 const fallbackModes=['bot-timeout','bot-unsupported','manual-lane','manual-lane-settled'];
-const updateModes=['update-resume','update-offline','update-startup','update-single','update-album','update-timeout','update-stopped','update-attempted','update-auto','update-auto-busy','update-priority-album','update-priority-song','update-album-cancelled','update-album-other-edition'];
+const updateModes=['update-resume','update-offline','update-startup','update-single','update-album','update-timeout','update-stopped','update-attempted','update-auto','update-auto-busy','update-auto-external-version','update-priority-album','update-priority-song','update-album-cancelled','update-album-other-edition'];
 const allModes=[...updateModes,...channelModes,...fallbackModes,'autoheal','missing','missing-metadata','invalid','cooldown','staging','parked','ack-lost','connected','single','album'];
 const modes=process.env.PLAYLIST_RESUME_MODE?process.env.PLAYLIST_RESUME_MODE.split(','):allModes;
 assert.ok(modes.every(mode=>allModes.includes(mode)),'Unknown playlist resume test case');
@@ -137,11 +146,13 @@ try{
   const browser=await launcher.launch(engine==='chromium'?{executablePath:'/usr/bin/chromium',headless:true}:{headless:true});
   report[engine]=browser.version();
   try{for(const mode of modes){
+   const suspending=mode==='suspend'||mode==='suspend-short';
    const updating=updateModes.includes(mode),albumMode=mode==='album'||mode==='update-album',singleMode=mode==='single'||mode==='update-single';
    const abandonedAlbum=mode==='update-album-cancelled'||mode==='update-album-other-edition';
    const albumHandoff=mode==='update-priority-album'||abandonedAlbum;
    const priority=albumHandoff||mode==='update-priority-song';
-   const autoUpdate=mode==='update-auto'||mode==='update-auto-busy';
+   const externalVersion=mode==='update-auto-external-version';
+   const autoUpdate=mode==='update-auto'||mode==='update-auto-busy'||externalVersion;
    const updateDownload=['update-resume','update-single','update-album','update-auto'].includes(mode);
    const deferUpdate=mode==='update-timeout'||mode==='update-stopped';
    const updateFallback=mode==='update-timeout'||mode==='update-attempted';
@@ -223,7 +234,10 @@ try{
       const thirdSearches=trace.filter(item=>item.kind==='search'&&item.title==='Pista 3').length;
       if(event.kind==='search'&&event.title==='Pista 3'&&thirdSearches===1)restoresBeforeResume=restores;
       if(['background-alive','cold-resume','stop-reload','two-tabs','wake-restore'].includes(mode)&&event.kind==='read'&&event.title==='Pista 3'&&thirdSearches===1)await searchGate;
-      if(mode==='suspend'&&event.kind==='search'&&event.title==='Pista 3'&&thirdSearches===1)await searchGate;
+      if(event.kind==='search'&&event.title==='Pista 3'&&thirdSearches===1){
+       if(suspending)await searchGate;
+       if(mode==='uncertain-send'||mode==='suspend-short')return route.abort('connectionreset');
+      }
       const limited=['long-cooldown','unknown-cooldown','notifications-off','stop','paused-hidden'].includes(mode);
       const flood=event.kind==='read'&&event.title==='Pista 3'&&limited&&!floodAt
        ?(mode==='unknown-cooldown'?'unknown':mode==='paused-hidden'?1800:300):null;
@@ -238,7 +252,7 @@ try{
       }
       if(mode==='update-priority-song'&&event.kind==='read'){gateProbes++;await searchGate;}
       const network=event.kind==='read'&&event.title==='Pista 3'&&(mode==='reconnect'&&thirdSearches<=2||mode==='wake-restore'&&thirdSearches===1);
-      return route.fulfill({json:{mode:albumMode||mode==='update-priority-album'?'missing':singleMode?'single':updating||mode==='hidden-rejection'?'autoheal':backgroundModes.includes(mode)?'suspend':mode==='manual-lane-settled'?'manual-lane':mode,flood,network}});
+      return route.fulfill({json:{mode:albumMode||mode==='update-priority-album'?'missing':singleMode?'single':updating||mode==='hidden-rejection'?'autoheal':backgroundModes.includes(mode)||suspending||mode==='uncertain-send'?'suspend':mode==='manual-lane-settled'?'manual-lane':mode,flood,network}});
      }
      return route.fallback();
     });
@@ -326,7 +340,7 @@ try{
      window.Worker=class extends NativeWorker{
       operationIdToHide;
       postMessage(message,...args){
-       if(channel&&mode==='suspend'&&message?.type==='import'&&message.file.name==='Pista 4.wav')window.testVisibility(true);
+       if(channel&&mode.startsWith('suspend')&&message?.type==='import'&&message.file.name==='Pista 4.wav')window.testVisibility(true);
        if(loseAck&&message?.type==='import'&&message.file.name==='Pista 3.wav')this.operationIdToHide=message.operationId;
        return super.postMessage(message,...args);
       }
@@ -477,10 +491,11 @@ try{
     }
     let fallbackDelayMs;
     if(autoUpdate||priority){
-     const previousId=await page.evaluate(({user,ids,priority,bundle,albumHandoff})=>{
+     const previousId=await page.evaluate(({user,ids,priority,bundle,albumHandoff,externalVersion})=>{
       const key='pulso:library-download:v1:'+user,checkpoint=JSON.parse(localStorage.getItem(key));
       Object.assign(checkpoint,priority?{trackIds:[ids[2]],cursor:0,saved:0}:{saved:2,autoAttempts:1},{autoResume:true,title:'Playlist pendiente'});
       localStorage.setItem(key,JSON.stringify(checkpoint));
+      if(externalVersion)sessionStorage.setItem('testonly-external-version-check',user);
       if(priority){
        sessionStorage.setItem('testonly-hold-tracks','1');
        const action=albumHandoff?{kind:'album',editionId:201,title:'Álbum de prueba',artist:'Artista prueba'}:
@@ -488,10 +503,16 @@ try{
        sessionStorage.setItem('pulso-shell:download-intent:v1',JSON.stringify({account:user,bundle,expires:Date.now()+90000,action}));
       }
       return checkpoint.id;
-     },{user,ids,priority,albumHandoff,bundle:previous.html.match(/src="(\/assets\/[^"]+\.js)"/)[1]});
+     },{user,ids,priority,albumHandoff,externalVersion,bundle:previous.html.match(/src="(\/assets\/[^"]+\.js)"/)[1]});
      autoPointerAt=pointerChecks+2;
      await page.reload({waitUntil:'commit'});
-     await waitForWorker(()=>gateProbes>0);
+     if(externalVersion){
+      await page.locator('.bot-providers-list li').first().waitFor({state:'attached'});
+      await dock.getByText('Descarga pendiente · 2 de 4 guardadas',{exact:true}).waitFor();
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      assert.equal(trace.length,0);
+      await page.evaluate(()=>window.testReleaseExternalVersion());
+     }else await waitForWorker(()=>gateProbes>0);
      if(priority){
       await page.waitForFunction(()=>sessionStorage.getItem('pulso-shell:download-intent:v1')===null);
       await page.evaluate(()=>{delete document.documentElement.dataset.testHoldTracks;document.dispatchEvent(new Event('visibilitychange'));window.testEmit();});
@@ -527,7 +548,7 @@ try{
       assert.equal(await dock.getByText(/Biblioteca está ocupada/).count(),0);
       assert.equal(trace.length,0);
       await page.evaluate(()=>{delete document.documentElement.dataset.testBusy;window.testEmit();});
-     }else{
+     }else if(!externalVersion){
       await page.waitForURL(origin+next.entry);
       const handoff=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('testonly-handoff')));
       assert.equal(handoff?.action.automatic,true);
@@ -724,15 +745,17 @@ try{
       report.cases.push({engine,mode,status:'PASS'});continue;
      }else if(mode==='hidden-rejection'){
       await waitForWorker(()=>trace.some(e=>e.kind==='read'&&e.title==='Pista 3'));
-     }else if(mode==='suspend'){
+     }else if(suspending){
       await waitForWorker(()=>thirdSearches()===1);
       await page.evaluate(()=>window.testVisibility(true));
-      await advance(240_000);
+      await advance(mode==='suspend-short'?30_000:240_000);
       assert.equal(thirdSearches(),1);
       assert.equal(trace.some(event=>event.title==='Pista 4'),false);
       releaseSearch();
       await page.evaluate(()=>window.testVisibility(false));
       await dock.getByText('Reconectando con Telegram…',{exact:true}).first().waitFor();
+      await waitForWorker(()=>thirdSearches()>=2,12_000);
+     }else if(mode==='uncertain-send'){
       await waitForWorker(()=>thirdSearches()>=2,12_000);
      }else if(mode==='reconnect'){
       await dock.getByText('Reconectando con Telegram…',{exact:true}).first().waitFor();
@@ -800,15 +823,16 @@ try{
       assert.equal(restores,restoresBeforeResume);
       assert.deepEqual(searches.map(event=>event.peer),[101,102,101]);
      }
+     if(suspending||mode==='uncertain-send')assert.equal(searches[0].peer,searches[1].peer,'La pista se reintenta en el mismo bot');
      if(mode==='reconnect')assert.ok(restores>restoresBeforeResume,'expected the worker to restore the saved session');
-     if(mode==='suspend'||mode==='background-alive')assert.equal(await page.evaluate(()=>document.visibilityState),'hidden');
+     if(suspending||mode==='background-alive')assert.equal(await page.evaluate(()=>document.visibilityState),'hidden');
      if(mode!=='notifications-off')await page.waitForFunction(()=>window.testNotifications.some(notice=>!notice.silent));
      const notices=await page.evaluate(()=>window.testNotifications);
      if(mode==='notifications-off')assert.equal(notices.length,0);
      else{
       assert.ok(notices.some(notice=>notice.silent&&notice.body.includes('guardadas')));
       if(!backgroundModes.includes(mode)||mode==='wake-restore')
-       assert.ok(notices.some(notice=>notice.body.includes(['reconnect','suspend','wake-restore'].includes(mode)?'Reconectando':'Telegram pide esperar')));
+       assert.ok(notices.some(notice=>notice.body.includes((['reconnect','uncertain-send','wake-restore'].includes(mode)||suspending)?'Reconectando':'Telegram pide esperar')));
       assert.deepEqual(notices.filter(notice=>!notice.silent).map(notice=>notice.body),['4 de 4 guardadas']);
       assert.ok(notices.every(notice=>notice.tag==='pulso-download-collection'));
      }

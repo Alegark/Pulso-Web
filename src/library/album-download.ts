@@ -47,8 +47,9 @@ export async function runAlbumDownload(p:{
  const titles=detail.tracks.map(track=>track.title);
  coordinator.notice={title,titles,progress:{rows,message:'Comprobando copias…'}};
  coordinator.active=run;coordinator.running=true;notifyAlbumDownload(coordinator);
- const boundSession=client?.snapshot().phase==='connected'?client.captureBotsCurrent():null;
- const current=()=>coordinator.active===run&&attempt.current()&&(!boundSession||boundSession()&&(revision===undefined||client!.botsSnapshot().revision===revision));
+ const accountCurrent=p.queued?client?.captureDownloadAccountCurrent?.():null;
+ const boundSession=!p.queued&&client?.snapshot().phase==='connected'?client.captureBotsCurrent():null;
+ const current=()=>coordinator.active===run&&attempt.current()&&accountCurrent?.()!==false&&(!boundSession||boundSession()&&(revision===undefined||client!.botsSnapshot().revision===revision));
  const unsubscribe=client?.subscribeSearch(()=>{
   let valid=false;try{valid=current();}catch{/* Revoked authority. */}
   if(!valid)abort.abort();
