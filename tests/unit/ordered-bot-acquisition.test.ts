@@ -254,3 +254,26 @@ test('collection remembers an answered provider across a channel pause and prese
  assert.deepEqual(await collect(resumed.client,progress),{state:'timed-out'});
  assert.deepEqual(resumed.searches,['two']);
 });
+
+test('a reused menu that conflicts on wake stays eligible on the same bot',async()=>{
+ const f=fixture(['invalid']);
+ const snapshot=f.client.searchSnapshot.bind(f.client);
+ const first={kind:'option' as const,rowRef:'first',correlation:'reply' as const,label:'Song — Artist'};
+ const second={...first,rowRef:'second'};
+ f.client.searchSnapshot=()=>{
+  const state=snapshot();
+  if(!state.providerRef)return state;
+  const rows=f.downloads.length?[second]:[first,second];
+  return {...state,rows,expiresAt:Date.now()+30_000,
+   ...(f.downloads.length===1?{error:'file-invalid' as const}:f.downloads.length===2?{error:'conflict' as const,delivery:'not-dispatched' as const}:{})};
+ };
+ f.client.downloadBot=async(row,_allowed,started)=>{
+  f.downloads.push(row);started?.({queryId:snapshot().queryId!,cancel:()=>{}});return null;
+ };
+ const progress=collectionProgress();
+ assert.equal((await collect(f.client,progress,()=>f.downloads.length===2)).state,'suspended');
+ assert.deepEqual(f.searches,['one']);
+ assert.deepEqual(f.downloads,['first','second']);
+ assert.equal(progress.resumeBot,0);
+ assert.equal(progress.completed.size,0);
+});
