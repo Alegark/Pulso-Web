@@ -505,3 +505,18 @@ Dos series en el mismo host, en secuencia y sin otra suite de navegador de este 
 El control adicional de audio directo WebKit alternó v62, candidato, candidato y v62. Dio 8.439 [8.342–8.536] → 8.656 [8.061–9.251] ms desde el regreso y 8.092 [7.994–8.190] → 8.311 [7.709–8.913] ms desde el toque. Con las cinco muestras por versión, la mediana desde el regreso fue 8.158 → 8.259 ms. **El criterio estricto de latencia de M1-03 sigue abierto para WebKit directo.** La reapertura terminó antes del toque en todas las muestras del candidato, con 7 RPC en directo y 29 con menú en ambas versiones. También coincidieron las dos relecturas exactas y los recuentos de historial (2 en directo y 8 con menú). El perfil directo WebKit muestra dispersión en el trabajo local de análisis y guardado. Las mediciones acreditan el arnés sintético y quedan pendientes en iPhone.
 
 Pasaron `npm run test:unit` (1.045/1.045), ambos typechecks, lint, build, 73/73 pruebas de servidor y 10/10 de Python. Los recibos compactos de la comparación y el control nativo están en `.local/test-evidence/t25-m1/`.
+
+#### T24, Engram y limpieza
+
+- La matriz funcional completa quedó **incompleta**. Se interrumpió tras 8 PASS y 11 FAIL en el intento de v62, y 14 PASS y 3 FAIL en `c6161bc`, todos en Chromium. El candidato pasó las tres descargas completas de 30 pistas, `resume`, `missing`, `stale-checkpoint` y los seis escenarios de `turnaround`. Hubo esperas agotadas en navegación y localización de elementos durante la carga compartida del host. La reanudación, en un candidato preliminar, llegó a 23 PASS y 10 FAIL de Chromium. No se obtuvo paridad completa de T24 entre motores y versiones.
+- El dock del candidato pasó 10/10 (cinco por motor). En el control focal de reconexión, Chromium agotó las esperas antes de guardar el álbum y antes de abrir la página de preparación. WebKit agotó 180 s al intentar arrancar. El control focal de v62 no produjo un resultado. La matriz de interfaz no llegó a ejecutarse. Estos intentos no cierran Q07–Q09 ni descartan regresiones de T24.
+- La copia de Engram de v62 verificó 20/20 archivos de `Pulso-Web` con `FullContentVerified: true`, bytes y SHA-256. En la lectura posterior sobre la copia, el MCP agotó el plazo de inicialización. Al comparar los recibos de la copia con los archivos, la única divergencia correspondía al T25 editado. La sincronización queda para la integración.
+- Se retiraron la copia de Engram, los bundles, perfiles, archivos de audio de prueba y el checkout temporal. El inventario de artefactos propios retirados sumó 1.077.596.447 bytes. `/data` tenía 5.450.358.784 bytes disponibles al inicio y 2.481.741.824 antes de la limpieza final, que dejó 2.508.902.400 bytes disponibles. Los 344.103 bytes de evidencia local conservan resultados y causas de los intentos incompletos.
+
+Archivos de la rama frente a `f97ebb5`:
+
+- Aplicación y preparación de audio. `src/main.tsx`, `src/playback/local-copy-protection.ts`.
+- Sesión y transporte. `src/telegram/connection-lifecycle.ts`, `session-client.ts`, `session-protocol.ts`, `session.worker.ts` y `temporary-sdk.ts` dentro de `src/telegram/`.
+- Interfaz. `LibraryDownloadController.tsx`, `MusicSearchController.tsx`, `MusicSearchPanel.tsx` y `TelegramPanel.tsx` dentro de `src/ui/`.
+- Pruebas. `tests/unit/telegram-connection-lifecycle.test.ts` y `check-playlist-full-download-main.mjs`, `playlist-connection-m1.mjs`, `playlist-full-download-sdk.ts`, `playlist-speed-csp.mjs` dentro de `tests/integration/`.
+- Documentación. `odd/tasks/T25-velocidad-bots.md` y `docs/IPHONE-ACEPTACION.md`.
