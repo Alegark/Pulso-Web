@@ -27,9 +27,19 @@ USD 0. Trabajar solo en este proyecto; no modificar servicios ajenos. Pruebas lo
 - Indicación expresa del propietario (2026-11-17): publicar en Cloudflare los cambios verificados de Pulso al cerrar la entrega, además de Git/PR; no dejar una entrega autorizada sólo en local o en la PR ni volver a pedir la misma autorización. Conservar USD 0, configuración y datos existentes, verificar la versión pública y registrar el resultado. Esta preferencia no autoriza cambios de infraestructura, servicios ajenos ni publicar trabajo que no haya pasado sus verificaciones.
 
 - Indicación expresa del propietario (2026-11-25): publicar sin volver a preguntar cuando la entrega quede validada. Validada significa que cada parte corregida tiene su prueba en la matriz ODD de su tarea, en el nivel donde vive el fallo; que la batería completa pasa; y que la revisión independiente no deja hallazgos bloqueantes ni altos frente a la versión publicada. Si algo de eso falla, no se publica y se informa.
-- Indicación expresa del propietario (2026-11-25): usar el agente de menor rango capaz para cada tarea. Implementar código: Codex `gpt-6.2-sol` alto. Rondas solo de pruebas: `gpt-6.2-sol` medio. Requisitos y revisión independiente: Antigravity `gemini-4-neon` alto. Publicar en Cloudflare: Codex `gpt-6.1-terra` medio, con `gpt-6.2-sol` medio como respaldo; debe ser Codex porque ahí está el OAuth del MCP de Cloudflare. Commits, push, descripción de PR y notas mecánicas: Codex `gpt-6-luna` bajo. Si un agente falla en su tarea, subir un nivel.
+- Indicación expresa del propietario (2026-11-25): usar el agente de menor rango capaz para cada tarea. Implementar código: Codex `gpt-6.2-sol` medio; alto solo para Telegram, integridad de datos o audio, concurrencia y seguridad. Rondas solo de pruebas: `gpt-6.2-sol` medio. Requisitos y revisión independiente: Antigravity `gemini-4-neon` medio; alto en cambios de riesgo. Publicar en Cloudflare: Codex `gpt-6.1-terra` medio, con `gpt-6.2-sol` medio como respaldo; debe ser Codex porque ahí está el OAuth del MCP de Cloudflare. Commits, push, descripción de PR y notas mecánicas: Codex `gpt-6-luna` bajo. Si un agente falla en su tarea, subir un nivel.
 - Indicación expresa del propietario (2026-11-25): solo el orquestador (Claude) o Gemini pueden orquestar, delegar o iniciar otros agentes. Los agentes Codex (`gpt-6.2-sol`, `gpt-6.1-terra`, `gpt-6-luna`) son ejecutores: no inician workers ni subagentes, no usan `orchestration worker-start` ni la sección SUB-DISPATCH del preámbulo de Orca, y sólo usan la orquestación para informar con `worker_done` o preguntar con `ask`.
 - Entregar los cambios de Git en una rama y una PR con problema, comportamiento resultante, validación y pendientes, para que los colaboradores puedan revisarlos.
+
+## Consumo de cuota de agentes
+
+Indicación expresa del propietario (2026-11-25):
+- Un trabajador nuevo por ronda. No encadenar rondas en el mismo hilo; el encargo nuevo resume lo necesario.
+- Validación proporcional, conforme a doc/SPEC.md §V.2: en cada ronda, solo las pruebas del cambio y de su área. La batería completa (unitarias y matrices de navegador en ambos motores) se ejecuta una sola vez, antes de publicar.
+- Salida mínima: leer solo los totales y los nombres de los casos fallidos. Nunca volcar registros completos al contexto; guardarlos en `.local/tmp/` y citar la ruta.
+- Como máximo dos trabajos pesados (pruebas de navegador) a la vez. Medir tiempos solo con carga de 1 minuto menor de 1,5.
+- Encargos cortos: citar secciones concretas en vez de pedir leer documentos enteros.
+- Agrupar arreglos pequeños en una misma publicación.
 
 ## Espacio de disco y limpieza de pruebas
 
