@@ -1,4 +1,5 @@
 import {LibraryDownloadController,type CollectionDownloadAction} from './LibraryDownloadController';
+import {albumCoordinator} from '../library/album-download';
 import {formatStorageMB} from '../library/storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {registerUpdateBlocker} from '../service-worker/update-blockers';
@@ -28,8 +29,9 @@ export interface TelegramPanelProps {
  savedAlbums?:MusicSearchProps['savedAlbums'];
  saveAlbum?:MusicSearchProps['saveAlbum'];
  albumSaveBlockedReason?:string;
+ connectionWorkPending?:()=>boolean;
  captureDownloadOwner?:()=>()=>boolean;downloadStorageReady?:()=>boolean;downloadUpdateWait?:'checking'|'updating'|null;onStopDownloadUpdate?:()=>void;downloadCollection?:CollectionDownloadAction;downloadStorageTarget?:HTMLElement|null;canSaveArtist?:boolean;savedArtists?:MusicSearchProps['savedArtists'];saveArtist?:MusicSearchProps['saveArtist'];requiredSetup?:boolean;onSetupReady?:(ready:boolean)=>void;accountId?:string;activity:Activity;canConnect:boolean;scopeKey:string;captureCurrent:()=>()=>boolean;captureLifetime?:()=>()=>boolean;captureSongPlayback?:()=>SongPlaybackAttempt|null;captureSongDownload?:()=>SongPlaybackAttempt|null;captureAlbumDownload?:()=>SongPlaybackAttempt|null;captureBatchDownload?:(recoverPending?:boolean)=>SongPlaybackAttempt|null;onReviewDownloadStorage?:()=>void;onReviewedDownload?:(operationId?:string)=>void;captureSongCopyInspection?:()=>SongCopyInspection|null;blockedReason?:TelegramBlockReason;libraryPending?:boolean;libraryLoaded?:boolean;onCheckControl?:()=>void;onRequestControl?:()=>void;searchTarget?:HTMLElement|null;searchVisible?:boolean;localTracks?:readonly Track[];libraryTrackIds?:ReadonlySet<string>;songPlaylists?:readonly Playlist[];playerTrackId?:string|null;playerPlaying?:boolean;captureSongManagement?:(id:string)=>SongManagement|null;captureDownloadSave?:()=>((audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void)=>Promise<'saved'|'failed'|'uncertain'>)|null}
-export function TelegramPanel({songAliases,localAvailability,libraryAlbum,savedAlbums,saveAlbum,albumSaveBlockedReason,requiredSetup=false,captureDownloadOwner,downloadStorageReady,onSetupReady,downloadUpdateWait,onStopDownloadUpdate,downloadCollection,downloadStorageTarget,savedArtists,saveArtist,canSaveArtist,accountId,activity,canConnect,scopeKey,captureCurrent,captureLifetime=captureCurrent,captureSongPlayback,captureSongDownload,captureAlbumDownload,captureBatchDownload,onReviewDownloadStorage,onReviewedDownload,captureSongCopyInspection,blockedReason='busy',libraryPending=false,libraryLoaded=false,onCheckControl,onRequestControl,searchTarget=null,searchVisible=false,localTracks=[],libraryTrackIds,songPlaylists=[],playerTrackId=null,playerPlaying=false,captureSongManagement,captureDownloadSave}:TelegramPanelProps){
+export function TelegramPanel({songAliases,localAvailability,libraryAlbum,savedAlbums,saveAlbum,albumSaveBlockedReason,connectionWorkPending,requiredSetup=false,captureDownloadOwner,downloadStorageReady,onSetupReady,downloadUpdateWait,onStopDownloadUpdate,downloadCollection,downloadStorageTarget,savedArtists,saveArtist,canSaveArtist,accountId,activity,canConnect,scopeKey,captureCurrent,captureLifetime=captureCurrent,captureSongPlayback,captureSongDownload,captureAlbumDownload,captureBatchDownload,onReviewDownloadStorage,onReviewedDownload,captureSongCopyInspection,blockedReason='busy',libraryPending=false,libraryLoaded=false,onCheckControl,onRequestControl,searchTarget=null,searchVisible=false,localTracks=[],libraryTrackIds,songPlaylists=[],playerTrackId=null,playerPlaying=false,captureSongManagement,captureDownloadSave}:TelegramPanelProps){
  const preference=useTelegramPhonePreference(accountId),phoneTouched=React.useRef(false);
  const phoneAttempt=React.useRef<{client:TelegramSessionClient;accountId:string;phone:string;scope:string}|null>(null);
  const [searchState,setSearchState]=React.useState<BotSearchSnapshot|null>(null);
@@ -49,8 +51,17 @@ export function TelegramPanel({songAliases,localAvailability,libraryAlbum,savedA
    !!(search?.pending||search?.cancelling||bots?.pending||bots?.cancelling||sources?.pending||sources?.reading||sources?.cancelling);
  }),[]);
  const lifetime=React.useRef(captureLifetime);lifetime.current=captureLifetime;
+ const pendingConnectionWork=React.useRef(connectionWorkPending);pendingConnectionWork.current=connectionWorkPending;
  const panel=React.useRef<HTMLElement>(null),focusIntent=React.useRef(false);
- React.useEffect(()=>{let live=true;phoneAttempt.current=null;const service=new TelegramSessionClient(activity,()=>lifetime.current(),value=>{if(live)setState(value);},undefined,undefined,value=>{if(live)setSources(value);},undefined,undefined,value=>{if(live)setBots(value);},value=>{if(live)setSearchState(value);},()=>current.current());client.current=service;setState(initialSessionState());setSources(null);setBots(null);setSearchState(null);return()=>{live=false;client.current=null;service.dispose();};},[activity,scopeKey]);
+ React.useEffect(()=>{
+  let live=true;phoneAttempt.current=null;
+  const service=new TelegramSessionClient(activity,()=>lifetime.current(),value=>{if(live)setState(value);},undefined,undefined,value=>{if(live)setSources(value);},undefined,undefined,value=>{if(live)setBots(value);},value=>{if(live)setSearchState(value);},()=>current.current());
+  const revalidate=()=>service.revalidate();
+  service.configureConnectionLifecycle(document.visibilityState==='visible',()=>!!(albumCoordinator.running||albumCoordinator.dispatching||albumCoordinator.songFlight||pendingConnectionWork.current?.()));
+  albumCoordinator.listeners.add(revalidate);
+  client.current=service;setState(initialSessionState());setSources(null);setBots(null);setSearchState(null);
+  return()=>{live=false;albumCoordinator.listeners.delete(revalidate);client.current=null;service.dispose();};
+ },[activity,scopeKey]);
  React.useEffect(()=>{const active=!['disconnected','error'].includes(state.phase);client.current?.revalidate();if(!lifetime.current()()){client.current?.stop(active?'cancelled':null);setCode('');setPassword('');if(active){setCountry('');setPhone('');setConsent(false);}}},[canConnect,scopeKey]);
  React.useEffect(()=>{client.current?.revalidate();});
  React.useEffect(()=>{
@@ -59,7 +70,7 @@ export function TelegramPanel({songAliases,localAvailability,libraryAlbum,savedA
   return()=>{live=false;};
  },[accountId,scopeKey,state.phase]);
  React.useEffect(()=>{
-  const service=client.current;if(pageSuspended.current||!service||resumeTried.current===service||savedSession!=='present'||state.phase!=='disconnected'||!canConnect||navigator.onLine===false||!current.current()())return;
+  const service=client.current;if(pageSuspended.current||document.visibilityState!=='visible'||!service||resumeTried.current===service||savedSession!=='present'||state.phase!=='disconnected'||!canConnect||navigator.onLine===false||!current.current()())return;
   resumeTried.current=service;service.restore();
  },[savedSession,state.phase,canConnect,scopeKey,pageGeneration]);
  React.useEffect(()=>{
@@ -69,10 +80,21 @@ export function TelegramPanel({songAliases,localAvailability,libraryAlbum,savedA
    else client.current?.stop('cancelled');
   };
   const reopen=(event:PageTransitionEvent)=>{
-   if(event.persisted){pageSuspended.current=false;setPageGeneration(value=>value+1);}
+   if(event.persisted){
+    pageSuspended.current=false;
+    client.current?.setConnectionVisibility(document.visibilityState==='visible');
+    setPageGeneration(value=>value+1);
+   }
   };
+  const visibility=()=>{
+   const visible=document.visibilityState==='visible';
+   const service=client.current;
+   service?.setConnectionVisibility(visible);
+   if(visible&&!pageSuspended.current&&service?.snapshot().phase==='disconnected')setPageGeneration(value=>value+1);
+  };
+  document.addEventListener('visibilitychange',visibility);
   addEventListener('pagehide',close);addEventListener('pageshow',reopen);
-  return()=>{removeEventListener('pagehide',close);removeEventListener('pageshow',reopen);};
+  return()=>{document.removeEventListener('visibilitychange',visibility);removeEventListener('pagehide',close);removeEventListener('pageshow',reopen);};
  },[]);
  React.useEffect(()=>{const pointer=()=>{focusIntent.current=false;};const key=(event:KeyboardEvent)=>{if(event.key==='Tab')focusIntent.current=false;};const focus=(event:FocusEvent)=>{if(event.target instanceof Element&&event.target!==document.body&&event.target!==document.documentElement&&!panel.current?.contains(event.target))focusIntent.current=false;};addEventListener('pointerdown',pointer,true);addEventListener('keydown',key,true);addEventListener('focusin',focus,true);return()=>{focusIntent.current=false;removeEventListener('pointerdown',pointer,true);removeEventListener('keydown',key,true);removeEventListener('focusin',focus,true);};},[]);
  React.useEffect(()=>{if(!state.retryAt&&!state.codeResend)return;const until=Math.max(state.retryAt??0,state.codeResend?.availableAt??0);setNow(Date.now());if(Date.now()>=until)return;const timer=setInterval(()=>{const value=Date.now();setNow(value);if(value>=until)clearInterval(timer);},1000);return()=>clearInterval(timer);},[state.retryAt,state.codeResend]);

@@ -457,3 +457,66 @@ La revisión independiente de `aeaf241` frente a v61 dio «APROBADO PARA PUBLICA
 - **Menores.** `updates.getState` al reconectar puede omitir el control de espera aplicado por Pulso. Un `messageEmpty` tras transferir audio directo conserva la clasificación heredada `unsupported`, frente a `conflict` en el flujo con menú. Queda un comentario que describe tres lecturas exactas donde el callback usa dos. Telegram real (T), incluida la comprobación de presencia, y las 16 pruebas de iPhone físico (D) siguen **NO EJECUTADOS**.
 
 Los recibos están en `.local/test-evidence/publish-v62/`. El manifiesto publicado `site-manifest.json` enumera 313 archivos, ocupa 77.183 bytes y tiene SHA-256 `ee2308c4fe40118d53886d2fb48e59425656aacfbca7d5d1f109e6fd3abe6e32`.
+
+## M1 · Conexión bajo demanda
+
+- **Base:** v62, `f97ebb5`. El SDK de v62 mantiene abierto el transporte principal de Telegram mientras el worker está autenticado. Los updates de otras conversaciones llegan a ese transporte aunque Pulso los descarte.
+- **Inactividad elegida:** tres minutos desde que acaba el último trabajo o se usa Buscar. Da margen para editar una consulta, elegir un resultado o preparar la siguiente pista. Al ocultar la app se suspende el transporte en cuanto queda libre, incluso antes de los tres minutos.
+- **Estado conservado:** el worker conserva la autorización lógica, los bots y los resultados vigentes. Destruye los transportes del SDK al suspenderse. Antes de abrir otro SDK valida la misma generación del almacén y llama a `importSession`. Reutiliza el WASM del worker y evita un `getMe` adicional en la ruta de regreso. La revocación explícita sigue el flujo existente.
+- **Recuperación:** un regreso en reposo puede precalentar de inmediato. Las precargas repetidas dentro de un segundo se agrupan y se cancelan si la app vuelve a ocultarse. Se admiten hasta cuatro aperturas M1 por ventana móvil de un minuto y se respeta la espera vigente de cuenta. La espera, la liquidación y los límites de recuperación de lote de T24 conservan sus reglas. Una navegación o suspensión con `pagehide` sigue el protocolo de propiedad de pestaña de T24, incluido el pendiente Q09b.
+
+| ID | Criterio de aceptación | Prueba y nivel |
+| --- | --- | --- |
+| **M1-01** | Cerrar todos los transportes al ocultarse en reposo o tras tres minutos de inactividad. Conservar la autorización guardada y evitar `auth.logOut` en el cierre por reposo. | U · `telegram-connection-lifecycle.test.ts`, reloj a 179.999 y 180.000 ms, ocultación y comandos de autenticación. B · `PLAYLIST_M1=verify`, socket sintético en Chromium y WebKit. |
+| **M1-02** | Mantener la conexión durante búsqueda, transferencia, preparación de canción, despacho de colección y espera de reconexión. Suspender al liquidar el trabajo si sigue en segundo plano. Respetar Q/I de T24. | U · planes de búsqueda y transferencia reales en `TelegramSessionClient`, actividad de preparación y reserva externa entre RPCs. B · `verify` oculta la app con solicitud activa y comprueba cierre después del audio. Regresión completa de T24 frente a v62. |
+| **M1-03** | Calentar al volver al primer plano, enfocar o escribir en Buscar y tocar una canción si sigue suspendida. Mantener el tiempo al primer sonido de v62 en el arnés sintético. | B · `verify` comprueba cada disparador por separado. `measure` usa el arnés de T25 con 200 ms por RPC, una apertura sintética de 150 ms, el mismo intervalo de 300 ms del regreso al toque y la primera muestra del evento `playing` confirmada por avance de audio. Reporta mediana y dispersión por motor. |
+| **M1-04** | Importar la autorización guardada de la misma generación, manteniendo el acceso a los bots y evitando una pantalla de ingreso. | U · restaura una vez, reimporta al abrir y conserva la generación sin logout. B · `verify` exige reimportación, mismo worker, reproducción y ausencia del formulario de acceso. |
+| **M1-05** | El worker recibe y procesa cero updates mientras el transporte está cerrado. | U · inyección sintética antes, durante y después del cierre. B · tres updates ofrecidos en abierto y nueve en segundo plano, contados por el servidor de prueba según el acuse recibido del worker. |
+| **M1-06** | Agrupar cambios rápidos de visibilidad, acotar las aperturas M1 a cuatro por minuto y respetar la espera de cuenta. | U · ráfaga de cambios con reloj controlado, espera de cuenta, reanudación al vencer y cancelación de un calentamiento pendiente al ocultar. B · paridad con la recuperación de lote de T24. |
+| **M1-07** | Mantener el material de Telegram en el worker (J06), con mensajes de ciclo de vida de forma cerrada. Usar solo el ciclo de vida normal del documento (J07). | U · rechaza propiedades adicionales y getters en los mensajes de ciclo de vida, verifica el envelope mínimo. B · trabajador de sesión real con transporte en loopback. R · límites del diff frente a v62. |
+
+**Pendientes T y D.** La presencia «en línea» y «última vez» requiere una comprobación con Telegram real. Las 16 pruebas físicas de iPhone siguen NO EJECUTADAS. [Aceptación física](../../docs/IPHONE-ACEPTACION.md).
+
+### Resultados de M1 en `c6161bc`
+
+Las cuatro pruebas U de ciclo de vida dieron 0/4 en `f97ebb5` y 4/4 en el candidato. La comprobación B con socket sintético dio 0/2 y 2/2 en Chromium 154 y WebKit 27.2.
+
+| ID | v62 | Candidato |
+| --- | --- | --- |
+| M1-01 | Transporte abierto al ocultar y tras la espera del arnés. | Cierra al ocultar y en el umbral de 180.000 ms del reloj U. Conserva el almacén y la generación. |
+| M1-02 | Mantiene el transporte durante el trabajo y también tras liquidarlo. | Mantiene el socket durante búsqueda y transferencia en B. Cierra tras terminar la preparación en segundo plano. U cubre los planes, las reservas de colección y la espera entre RPCs. |
+| M1-03 | Sin precalentamiento observable en el regreso, foco, escritura o toque. | Los cuatro disparadores funcionan en ambos motores. Comparación de latencia abajo. |
+| M1-04 | La primera restauración funciona. Sin ciclo de reimportación tras dormir. | El arnés registra cuatro reimportaciones por caso, conserva las dos restauraciones de inicialización del arnés y nunca muestra el formulario de código. U verifica una generación estable y cero comandos de logout o borrado. |
+| M1-05 | Procesa 3/3 avisos en abierto y 9/9 al ocultar. | Procesa 3/3 en abierto y 0/9 al ocultar, en ambos motores. El control con `BaseTelegramClient` 0.32.7 y flujo sintético observa abrir, cerrar, abrir y cerrar al recrear el SDK. |
+| M1-06 | Sin ciclo de reapertura que observe el antirrebote. | U verifica cuatro aperturas por minuto, espera de cuenta, vencimiento y cancelación al volver a ocultar la app. |
+| M1-07 | Sin mensajes de ciclo de vida M1. | U verifica la forma cerrada y el rechazo de propiedades adicionales o getters. El arnés B usa loopback y la app usa la visibilidad y temporizadores normales. |
+
+#### Primer sonido tras volver
+
+Dos series en el mismo host, en secuencia y sin otra suite de navegador de este encargo, con tres corridas válidas por versión, motor y perfil. Cada corrida usa 300 copias sintéticas previas, 200 ms por RPC y 150 ms de apertura del socket de prueba. El arnés espera 300 ms antes de iniciar el toque. El intervalo observado del regreso al toque incluye la acción de Playwright. Las columnas indican mediana y rango mín–máx en milisegundos.
+
+| Motor y perfil | Desde el regreso v62 | Desde el regreso candidato | Desde el toque v62 | Desde el toque candidato |
+| --- | ---: | ---: | ---: | ---: |
+| Chromium · menú | 13.209 [8.579–13.603] | 8.649 [8.557–9.000] | 12.596 [8.230–12.798] | 8.306 [8.207–8.653] |
+| Chromium · directo | 3.912 [3.634–4.599] | 2.852 [2.787–2.942] | 3.500 [3.229–4.196] | 2.506 [2.438–2.592] |
+| WebKit · menú | 13.713 [13.439–15.709] | 12.585 [12.464–12.753] | 13.377 [13.101–15.300] | 12.234 [12.116–12.398] |
+| WebKit · directo | 8.007 [7.830–8.158] | 8.259 [8.171–8.355] | 7.658 [7.486–7.814] | 7.914 [7.823–8.003] |
+
+El control adicional de audio directo WebKit alternó v62, candidato, candidato y v62. Dio 8.439 [8.342–8.536] → 8.656 [8.061–9.251] ms desde el regreso y 8.092 [7.994–8.190] → 8.311 [7.709–8.913] ms desde el toque. Con las cinco muestras por versión, la mediana desde el regreso fue 8.158 → 8.259 ms. **El criterio estricto de latencia de M1-03 sigue abierto para WebKit directo.** La reapertura terminó antes del toque en todas las muestras del candidato, con 7 RPC en directo y 29 con menú en ambas versiones. También coincidieron las dos relecturas exactas y los recuentos de historial (2 en directo y 8 con menú). El perfil directo WebKit muestra dispersión en el trabajo local de análisis y guardado. Las mediciones acreditan el arnés sintético y quedan pendientes en iPhone.
+
+Pasaron `npm run test:unit` (1.045/1.045), ambos typechecks, lint, build, 73/73 pruebas de servidor y 10/10 de Python. Los recibos compactos de la comparación y el control nativo están en `.local/test-evidence/t25-m1/`.
+
+#### T24, Engram y limpieza
+
+- La matriz funcional completa quedó **incompleta**. Se interrumpió tras 8 PASS y 11 FAIL en el intento de v62, y 14 PASS y 3 FAIL en `c6161bc`, todos en Chromium. El candidato pasó las tres descargas completas de 30 pistas, `resume`, `missing`, `stale-checkpoint` y los seis escenarios de `turnaround`. Hubo esperas agotadas en navegación y localización de elementos durante la carga compartida del host. La reanudación, en un candidato preliminar, llegó a 23 PASS y 10 FAIL de Chromium. No se obtuvo paridad completa de T24 entre motores y versiones.
+- El dock del candidato pasó 10/10 (cinco por motor). En el control focal de reconexión, Chromium agotó las esperas antes de guardar el álbum y antes de abrir la página de preparación. WebKit agotó 180 s al intentar arrancar. El control focal de v62 no produjo un resultado. La matriz de interfaz no llegó a ejecutarse. Estos intentos no cierran Q07–Q09 ni descartan regresiones de T24.
+- La copia de Engram de v62 verificó 20/20 archivos de `Pulso-Web` con `FullContentVerified: true`, bytes y SHA-256. En la lectura posterior sobre la copia, el MCP agotó el plazo de inicialización. Al comparar los recibos de la copia con los archivos, la única divergencia correspondía al T25 editado. La sincronización queda para la integración.
+- Se retiraron la copia de Engram, los bundles, perfiles, archivos de audio de prueba y el checkout temporal. El inventario de artefactos propios retirados sumó 1.077.596.447 bytes. `/data` tenía 5.450.358.784 bytes disponibles al inicio y 2.481.741.824 antes de la limpieza final, que dejó 2.508.902.400 bytes disponibles. Los 344.103 bytes de evidencia local conservan resultados y causas de los intentos incompletos.
+
+Archivos de la rama frente a `f97ebb5`:
+
+- Aplicación y preparación de audio. `src/main.tsx`, `src/playback/local-copy-protection.ts`.
+- Sesión y transporte. `src/telegram/connection-lifecycle.ts`, `session-client.ts`, `session-protocol.ts`, `session.worker.ts` y `temporary-sdk.ts` dentro de `src/telegram/`.
+- Interfaz. `LibraryDownloadController.tsx`, `MusicSearchController.tsx`, `MusicSearchPanel.tsx` y `TelegramPanel.tsx` dentro de `src/ui/`.
+- Pruebas. `tests/unit/telegram-connection-lifecycle.test.ts` y `check-playlist-full-download-main.mjs`, `playlist-connection-m1.mjs`, `playlist-full-download-sdk.ts`, `playlist-speed-csp.mjs` dentro de `tests/integration/`.
+- Documentación. `odd/tasks/T25-velocidad-bots.md` y `docs/IPHONE-ACEPTACION.md`.

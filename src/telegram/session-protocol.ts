@@ -13,6 +13,13 @@ export type Delivery='app'|'sms'|'call'|'email';
 export interface CodeResend {readonly delivery:'sms'|'call';readonly availableAt:number}
 export interface SessionState {phase:SessionPhase;error:SessionError|null;retryAt:number|null;delivery:Delivery|null;codeResend?:CodeResend|null}
 export interface SessionCommand {version:2;session:string;request:string;type:'begin'|'qr-begin'|'qr-check'|'restore'|'forget'|'code'|'resend'|'password'|'logout';value:string}
+export interface ConnectionCommand {protocol:'pulso-telegram-connection';version:1;session:string;type:'suspend'|'warm'}
+export function parseConnectionCommand(value:unknown):ConnectionCommand|null {
+ try{
+  if(!record(value,['protocol','version','session','type'])||value.protocol!=='pulso-telegram-connection'||value.version!==1||!uuid(value.session)||value.type!=='suspend'&&value.type!=='warm')return null;
+  return {protocol:value.protocol,version:value.version,session:value.session,type:value.type};
+ }catch{return null;}
+}
 export interface SessionReply {version:2;session:string;request:string;phase:SessionPhase;error:SessionError|null;retryAt:number|null;delivery:Delivery|null;binding:AccountBinding|null;saved:SourceRow|null;vaultGeneration?:string;bots?:readonly BotProviderRow[];codeResend?:CodeResend|null;qr?:QrLoginChallenge}
 export const initialSessionState=():SessionState=>({phase:'disconnected',error:null,retryAt:null,delivery:null});
 export function parseSessionCommand(value:unknown):SessionCommand|null {

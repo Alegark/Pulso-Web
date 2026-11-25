@@ -15,6 +15,7 @@ export interface MusicSearchResultRow {
 }
 export interface MusicSearchPanelProps {
  query:string;onQueryChange:(query:string)=>void;
+ onQueryFocus?:()=>void;
  suggestions:readonly MusicSearchSuggestionRow[];suggestionsPending:boolean;
  suggestionsError?:string|null;suggestionsNotice?:string|null;onRetrySuggestions?:()=>void;
  resultsVisible:boolean;selectedSuggestionId:string|null;playingTrackIds?:ReadonlySet<string>;
@@ -78,7 +79,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
      <div className="catalog-search-field"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
      <input ref={input} id={`${id}-query`} type="search" placeholder="¿Qué quieres escuchar?" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={640} enterKeyHint="search"
       value={props.query} aria-describedby={`${id}-query-help`}
-      onFocus={()=>setEditing(true)}
+      onFocus={()=>{setEditing(true);if(active())props.onQueryFocus?.();}}
       onChange={event=>{if(active())props.onQueryChange(event.currentTarget.value);}}
       onKeyDown={event=>{if(event.key==='Enter'&&event.nativeEvent.isComposing)event.preventDefault();}}/>
      {props.query.length>0&&<button className="catalog-clear" type="button" aria-label="Borrar búsqueda" onClick={()=>resetQuery(true)}><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><path d="m7 7 10 10M17 7 7 17"/></svg></button>}</div>

@@ -13,6 +13,7 @@ import {benchmarkPart,benchmarkBytes} from './playlist-benchmark-audio.mjs';
 import {captureSpeedCsp,isSpeedCspBaseRevision,speedCspDiagnostics,speedCspPrefix} from './playlist-speed-csp.mjs';
 import {taggedM4a} from './tagged-audio-fixture.mjs';
 import {accountId,bots,playlistFixture,uuid} from './playlist-full-download-fixture.mjs';
+import {connectionPath,exerciseConnection,installConnectionFixture,installVisibilityFixture,verificationIdleMs} from './playlist-connection-m1.mjs';
 
 const evidence=resolve(process.env.PULSO_TEST_EVIDENCE_DIR??'.local/test-evidence/playlist-full-download');
 await mkdir(evidence,{recursive:true});
@@ -34,6 +35,8 @@ const selectedMode=process.env.PLAYLIST_FULL_MODE;
 const speedModes=['benchmark','first-sound','first-sound-direct'];
 const selectedModes=selectedMode==='regression'?modes.filter(mode=>mode!=='tap-baseline'&&!speedModes.includes(mode)):selectedMode?.split(',');
 const measuring=selectedModes?.some(mode=>speedModes.includes(mode));
+const connectionMode=process.env.PLAYLIST_M1;
+assert.ok(!connectionMode||measuring&&['verify','measure'].includes(connectionMode));
 const speedRepetitions=Number(process.env.PLAYLIST_SPEED_REPEATS??'3');
 const speedFilter=process.env.PLAYLIST_SPEED_FILTER;
 assert.ok(Number.isSafeInteger(speedRepetitions)&&speedRepetitions>=1);
@@ -64,6 +67,11 @@ const reviewBuild=selectedModes?.some(mode=>reviewModes.includes(mode));
 const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
  if(id==='./temporary-sdk')return resolve('tests/integration/playlist-full-download-sdk.ts');
 },transform(code,id){
+ if(connectionMode==='verify'&&id.endsWith('/src/telegram/connection-lifecycle.ts')){
+  const idle='TELEGRAM_CONNECTION_IDLE_MS=3*60_000';
+  assert.ok(code.includes(idle),'Connection fixture idle boundary');
+  return code.replace(idle,'TELEGRAM_CONNECTION_IDLE_MS='+verificationIdleMs);
+ }
  if(reviewBuild){
   const insert=(source,replacement)=>{
    assert.ok(code.includes(source),id+' fixture boundary');
@@ -1606,9 +1614,16 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
  let cloud={accountId,revision:1,document:{version:1,tracks:trackMode?[]:tracks,
   playlists:[{id:uuid(99),name:playlistName,entries:trackMode?[]:tracks.map((track,i)=>({trackId:track.id,id:uuid(100+i)}))}]}};
  const result={mode,engine,delayMs,rpcMs:200,requestedBackend:backend,count,existingCount,repetition,bytes,serviceWorker};
+ if(connectionMode)assert.ok(trackMode,'M1 measures a first song');
+ const feed=connectionFixture?.start();
+ const heldWhileHidden={};
  let page,awaitingPlayback=false;
  try{
-  await ctx.routeWebSocket('**/*',socket=>{external.add(new URL(socket.url()).origin);void socket.close();});
+  await ctx.routeWebSocket('**/*',socket=>{
+   const url=new URL(socket.url());
+   if(feed&&url.host===new URL(origin).host&&url.pathname===connectionPath){socket.connectToServer();return;}
+   external.add(url.origin);void socket.close();
+  });
   await ctx.route('**/*',async route=>{
    const url=new URL(route.request().url());
    if(url.hostname.endsWith('lrclib.net'))return route.fulfill({headers:{'access-control-allow-origin':origin},json:[]});
@@ -1623,12 +1638,23 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
    if(url.pathname==='/__playlist-full-rpc'){
     const {kind,query,key,offset,limit}=route.request().postDataJSON();
     if(kind==='search'){
+     if(connectionMode==='verify'&&!Object.hasOwn(heldWhileHidden,'search')){
+      await page.evaluate(()=>window.testM1Visibility(false));
+      await new Promise(resolve=>setTimeout(resolve,200));
+      heldWhileHidden.search=feed.connected===1;
+     }
      const descriptor=audio.find(item=>query===item.title+' '+item.artist);
      if(!descriptor)return route.fulfill({status:400});
      return route.fulfill({json:direct?{delayMs,audio:[descriptor]}:{delayMs,audio:[],menu:[{label:`1. ${descriptor.artist} - ${descriptor.title}`,audio:descriptor}]}});
     }
     if(kind==='callback')return route.fulfill({json:{}});
-    if(kind==='read'&&direct&&key===401)return route.fulfill({body:shortAudio.subarray(offset,offset+limit),contentType:'application/octet-stream'});
+    if(kind==='read'&&direct&&key===401){
+     if(connectionMode==='verify'&&!Object.hasOwn(heldWhileHidden,'read')){
+      await new Promise(resolve=>setTimeout(resolve,200));
+      heldWhileHidden.read=feed.connected===1;
+     }
+     return route.fulfill({body:shortAudio.subarray(offset,offset+limit),contentType:'application/octet-stream'});
+    }
     return route.abort();
    }
    if(backend==='idb'&&/\/assets\/import\.worker-[^/]+\.js$/.test(url.pathname)){
@@ -1644,6 +1670,7 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
    return route.fulfill({json:cloud});
   });
   await ctx.addInitScript(captureSpeedCsp,speedCspPrefix);
+  if(feed)await ctx.addInitScript(installVisibilityFixture);
   await ctx.addInitScript(({count,trackMode})=>{
    const state=window.benchmark={start:null,marks:[],failed:false,playing:null,advanced:false,audioEvents:[]};
    const OriginalAudio=window.Audio;
@@ -1693,8 +1720,14 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
   await page.locator('.bot-providers-list li').nth(2).waitFor({state:'attached'});
   if(trackMode){
    await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).tap();
-   await page.locator('.music-search input[type=search]').fill(song.trackName);
-   await page.locator('[data-catalog-kind=track]').filter({hasText:song.trackName}).tap();
+   const input=page.locator('.music-search input[type=search]');
+   const track=page.locator('[data-catalog-kind=track]').filter({hasText:song.trackName});
+   await input.fill(song.trackName);
+   if(feed){
+    await track.waitFor();
+    result.m1=await exerciseConnection(page,input,feed,connectionMode==='verify');
+   }
+   await track.tap();
    awaitingPlayback=true;
    await page.waitForFunction(()=>window.benchmark.advanced,null,{timeout:60000});
    awaitingPlayback=false;
@@ -1703,6 +1736,18 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
    await page.waitForFunction(count=>window.benchmark.marks.length===count||window.benchmark.failed,count,{timeout:Math.max(180000,count*30000)});
   }
   const {start,marks,playing,failed}=await page.evaluate(()=>window.benchmark);
+  if(feed){
+   result.m1.foregroundToTapMs=Math.round(start-await page.evaluate(()=>window.testM1ReturnAt));
+   result.m1.foregroundToPlayingMs=Math.round(playing-await page.evaluate(()=>window.testM1ReturnAt));
+   result.m1.imports=feed.count('import');
+   result.m1.restores=feed.count('restore');
+   const loginVisible=await page.getByRole('button',{name:'Enviar código de acceso',exact:true}).isVisible();
+   result.m1.loginVisible=loginVisible;
+   if(connectionMode==='verify'){
+    result.m1.heldWhileHidden=heldWhileHidden;
+    result.m1.closedAfterSound=await feed.waitClosed();
+   }
+  }
   assert.notEqual(start,null);assert.equal(failed,false);
   const ids=trackMode?await page.evaluate(async title=>{
    const db=await new Promise((resolve,reject)=>{
@@ -1738,6 +1783,16 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
   const totalRpcPerTrack=Object.values(rpcPerTrack).reduce((sum,value)=>sum+value,0);
   const {errors,csp}=await cspDiagnostics({...result,backend:actualBackend},cspEvents,consoleErrors);
   errors.push(...pageErrors);
+  if(feed){
+   const m1=result.m1;
+   if((connectionMode==='verify'||report.speedCspReference)&&(!m1.hiddenClosed||!m1.foregroundWarm||m1.loginVisible))errors.push('M1 foreground or hidden connection');
+   if(connectionMode==='verify'){
+    if(m1.awake!==3||m1.hiddenProcessed!==0)errors.push('M1 update traffic');
+    if(!m1.idleClosed||!m1.focusWarm||!m1.typingWarm||!m1.coldAtTap||m1.imports!==m1.importsBeforeTap+1)errors.push('M1 idle, focus, typing or tap');
+    if(m1.restores!==m1.restoresBeforeTap)errors.push('M1 in-place saved authorization');
+    if(!m1.heldWhileHidden.search||direct&&!m1.heldWhileHidden.read||!m1.closedAfterSound)errors.push('M1 active search, transfer or preparation');
+   }
+  }
   const invalid=errors.length||external.size||csp.novel.length;
   return {...result,status:invalid?'FAIL':'PASS',...(invalid?{error:'Browser diagnostics',errors,external:[...external]}:{}),csp,
    advisories,backend:actualBackend,verified:count,samplesMs,totalMs:Math.round((trackMode?playing:marks.at(-1))-start),
@@ -1749,11 +1804,12 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
    return {benchmark:window.benchmark,timing:window.testDownloadTiming?.(),
     audio:audio&&{paused:audio.paused,ended:audio.ended,readyState:audio.readyState,networkState:audio.networkState,
      currentTime:audio.currentTime,error:audio.error?.code??null,source:audio.currentSrc.split(':')[0]},
-    screen:document.querySelector('main')?.innerText.slice(0,350)};
+    screen:document.body.innerText.slice(0,700)};
   }).catch(()=>null);
   return {...result,status:'FAIL',error:String(error.stack??error),countRpc,errors:[...pageErrors,...consoleErrors],cspEvents,advisories,external:[...external],
+   ...(feed?{connection:{open:feed.connected,restores:feed.count('restore'),imports:feed.count('import'),ready:feed.count('ready')}}:{}),
    playbackTimeout:awaitingPlayback&&error.name==='TimeoutError',state};
- }finally{await ctx.close();}
+ }finally{await ctx.close();feed?.stop();}
 }
 
 async function checkTurnaround(browser,engine,origin,scenario){
@@ -1936,7 +1992,7 @@ async function checkTurnaround(browser,engine,origin,scenario){
  return report;
 }
 
-let server,browser,tempDirectory;
+let server,browser,tempDirectory,connectionFixture;
 const oldTemp=process.env.TMPDIR;
 const stop=()=>{report.errors.push('Interrupted');void browser?.close();};
 process.on('SIGTERM',stop);
@@ -1958,7 +2014,7 @@ try{
    execFileSync('git',['diff','--quiet','HEAD','--','src','public','index.html','package.json','package-lock.json']);
   }
  }
- await build({configFile:false,define:{__PLAYLIST_RPC_MS__:measuring?'200':'0'},plugins:[tailwindcss(),sdk()],worker:{plugins:()=>[sdk()]},
+ await build({configFile:false,define:{__PLAYLIST_RPC_MS__:measuring?'200':'0',__PLAYLIST_M1__:Boolean(connectionMode)},plugins:[tailwindcss(),sdk()],worker:{plugins:()=>[sdk()]},
   logLevel:'error',build:{outDir:bundle,sourcemap:measuring?'hidden':false}});
  if(measuring){
   await build({configFile:false,define:{SHELL_FILES:'[]'},logLevel:'error',
@@ -1966,6 +2022,7 @@ try{
  }
  await writeFile(bundle+'/telegram-config.json',JSON.stringify({api_id:12345,api_hash:'0'.repeat(32)}));
  server=await preview({configFile:false,build:{outDir:bundle},preview:{host:'127.0.0.1',port:0}});
+ if(connectionMode)connectionFixture=installConnectionFixture(server.httpServer);
  const origin='http://127.0.0.1:'+server.httpServer.address().port;
  const cspDiagnostics=speedCspDiagnostics(bundle,origin,report.speedRevision,speedReference);
  for(const [engine,launcher] of [['chromium',chromium],['webkit',webkit]]){
@@ -2012,6 +2069,7 @@ try{
  }
 }catch(error){report.errors.push(String(error.stack??error));}
 finally{
+ connectionFixture?.close();
  if(server)await new Promise(ok=>server.httpServer.close(ok));
  if(oldTemp===undefined)delete process.env.TMPDIR;else process.env.TMPDIR=oldTemp;
  await tempDirectory?.close();

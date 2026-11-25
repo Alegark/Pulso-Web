@@ -162,6 +162,8 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   const blocked=accessMessage();
   if(blocked){if(!automatic)setNotice(blocked);return;}
   const p=latest.current,guard=p.captureLifetime?.(),account=p.accountId;
+  if(request.play)p.client?.connectionActivity();
+  const releaseConnection=p.client?.holdConnection();
   const check={account,id:restore?.id};
   const current=()=>admission.current===check&&pageLive.current&&latest.current.accountId===account&&!albumCoordinator.songFlight&&
    (p.connectionPhase==='initializing'||(guard?.()??true));
@@ -173,6 +175,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
    else if(!automatic&&admission.current===check&&latest.current.accountId===account)
     setNotice(accessMessage()??`No se pudo iniciar «${request.title}».`);
   }finally{
+   releaseConnection?.();
    if(admission.current===check){admission.current=null;setRetaking(false);wake(value=>value+1);}
   }
  }
