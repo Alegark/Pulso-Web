@@ -969,3 +969,38 @@ Se eliminaron compilaciones, snapshots de referencia, perfiles de navegador, dat
 ### iPhone físico
 
 Las 16 pruebas permanecen NO EJECUTADAS. La aceptación con Telegram real y un iPhone físico queda pendiente, igual que la siguiente revisión independiente, la decisión de publicar y la fusión de la PR.
+
+## 2026-11-25 · Sexta revisión de la PR 20
+
+La revisión independiente de `e21639c` detectó regresiones en menús de bots y en recuperación de álbumes en cola. Se verificó el candidato `885f00f` contra `e21639c` para las regresiones y contra `7d41d25` (v59) para los toques y la interfaz. Las pruebas de navegador usaron loopback, Telegram sintético y los drivers del producto.
+
+| Hallazgo | Causa y corrección | Prueba de regresión |
+| --- | --- | --- |
+| R1 | El MIME incompatible se clasificaba como rechazo del protocolo y descartaba el menú. `file-unsupported` pertenece a la fila 7 de la clasificación, conserva las opciones, cede a los demás bots si se agotan y no penaliza al proveedor. El aviso de compatibilidad se descarta si llegó un audio compatible que falló por otro motivo. La búsqueda individual conserva el menú cuando hay alternativas con el mismo presupuesto de callbacks que los lotes para ese menú. | `ordered-bot-driver.test.ts` comprueba Ogg y FLAC seguidos de WAV, un menú agotado, un audio válido rechazado durante el guardado, la salud tras tres consultas y la búsqueda individual. `turnaround/unsupported-format` comprueba el menú por el driver, el worker y la sesión reales. |
+| R2 | La pausa de la cabeza dependía de haber observado `offline`. La transición a primer plano, la restauración de página o un evento `online` permiten retomar por cuenta e ID. El evento se registra desde el comienzo de la adquisición para cubrir la llegada anterior al asentamiento. Las notificaciones internas de Telegram no rearman la pausa. | Los casos `queue-album-reconnect-foreground`, `queue-album-reconnect-online` y `queue-album-reconnect-online-before-settle` comprueban la recuperación y el avance de la siguiente colección. `queue-album-reconnect-exhausted` comprueba que el álbum queda pausado mientras sigue en primer plano sin un evento de recuperación. `queue-album-clear-retry` comprueba la recuperación de red y el almacenamiento. |
+| #3 | El contador cobraba cualquier pérdida de disponibilidad. Sólo cuenta relanzamientos consecutivos cuando el trabajo ya está listo para otro intento. Se rearma al arrancar la descarga, al observar un bloqueo externo, al volver al primer plano, al recuperar red o al reintentar. Si se agota, el dock muestra que el trabajo sigue en cola y conserva el motivo hasta que se retoma. | `queue-dispatch-normal-deferrals` fuerza dos diferimientos en la versión y uno al leer el álbum. Los tres se recuperan solos. `queue-dispatch-relaunch-cap` fuerza dos intentos inmediatos sin avance, comprueba que el aviso sigue visible después de cinco segundos y verifica que el primer plano rearma la admisión. |
+| #4 | `USER_IS_BLOCKED` parecía una entrega de resultado incierto y el texto sólo reconocía dos respuestas literales con `replyTo`. La negativa explícita de RPC y las peticiones cerradas de `/start` en mensajes correlacionados se clasifican como `needs-start`. Se intenta el siguiente proveedor y se conserva el aviso de M9 si se agotan. | `ordered-bot-driver.test.ts` recorre la negativa RPC, mensajes recientes, bienvenida multilínea, variante española con emoji y un control con `/start` dentro del título de una canción. La búsqueda individual también cede al siguiente bot tras la negativa RPC. |
+| Observaciones menores | Un resultado mixto en búsqueda individual omite la afirmación de ausencia global. La pausa de álbum conserva el motivo concreto en el dock e identifica «Reintentar descarga en cola». Si el navegador está offline, el motivo sigue visible y el botón vuelve cuando hay red para admitirlo. El conflicto posterior a una transferencia interactiva conserva el tratamiento de entrega incierta, igual que un conflicto de callback después del acuse. | La búsqueda individual mezcla una ausencia explícita con un inicio pendiente mediante el driver real. Las pruebas de cola comprueban el aviso persistente, el reintento y las copias ya guardadas. |
+
+### Regresiones sobre la base de revisión
+
+En `e21639c` fallan 12 de los 24 casos del driver. En el candidato pasan los 24. El control que menciona `/start` en un título y las pruebas anteriores pasan en las dos revisiones. En Chromium, las cinco pruebas nuevas de cola fallan en `e21639c` porque la cabeza sigue pausada después del evento o porque el aviso de relanzamientos caduca. Esas cinco pasan en Chromium y WebKit sobre el candidato. En la prueba de formato con el cliente de sesión real, la base ejecuta sólo la opción 1 y consulta a otro bot. El candidato ejecuta las opciones 1 y 2 en el mismo bot y guarda la copia en ambos motores.
+
+### Local
+
+`npm run test:unit` pasó 1.013/1.013. El conjunto focalizado del driver y la adquisición pasó 118/118. Pasaron `npm run typecheck`, `npm run typecheck:tests`, `npm run lint` y `npm run build`. Pasaron además 73/73 pruebas de servidor y 10/10 de Python. El build se ejecutó con el árbol exacto del candidato y produjo el manifiesto y el service worker.
+
+### Navegador
+
+- Matriz funcional de playlist, cola y toques, 54/54 en Chromium 154.0.8037.57 y 54/54 en WebKit 27.2. Por motor, seis variantes principales y 48 de cola y toques. Las copias verificadas fueron 30/30 en cada una de las tres descargas de un toque, 30/30 tras recarga y 9/10 en cada caso de pista ausente y de checkpoint antiguo.
+- Matriz de reanudación, 46/46 por motor. En la primera corrida Chromium obtuvo 45/46 por un agotamiento del tiempo de espera en `notifications-off`. La repetición focalizada pasó. WebKit pasó 46/46 en la primera corrida.
+- `turnaround/unsupported-format`, 2/2 en el candidato. `tap-baseline`, 2/2 sólo sobre `7d41d25`, reproduciendo el bloqueo de toque histórico.
+- Interfaz, 11/12 por motor en `7d41d25` y el candidato. Ambas corridas del arnés salieron con código 1 por el mismo botón del minirreproductor fuera del viewport al 200 % con movimiento reducido. Ambas conservan los dos avisos de `ResizeObserver` y los 24 de CSP en WebKit. Los inventarios SHA-256 verificaron 311 archivos en v59 y 312 en el candidato antes y después de las pruebas.
+
+Las primeras corridas concurrentes tuvieron tiempos de espera en la reproducción de `full`, en la espera de reconexión de WebKit y en la interfaz de la base. Se amplió el plazo para que el arnés observe la pausa de álbum y se repitieron las matrices. Una corrida focalizada de WebKit pasó sus siete casos de cola pero salió con código 1 al combinar `turnaround` con los otros modos, porque el arnés activa su instrumentación mediante un selector exclusivo. Ejecutado por separado, el caso de formato pasó en ambos motores. Las causas y los resultados originales se conservan en `.local/test-evidence/pr20-r6/`, junto al resumen y sus huellas.
+
+Se retiraron snapshots, builds, perfiles, datos sintéticos, cachés y capturas auxiliares. Se recuperaron al menos 121.085.952 bytes medidos y `.local/tmp/` quedó vacío. El espacio disponible en `/data` fue 7.595.147.264 bytes antes de las pruebas y 7.588.220.928 después de limpiar. Se conservaron cerca de 1 MiB de informes y logs para reproducir las comprobaciones.
+
+### iPhone físico
+
+Las 16 pruebas de aceptación permanecen NO EJECUTADAS. Quedan pendientes la verificación en iPhone con Telegram real, la revisión independiente siguiente y la decisión del propietario sobre publicación y fusión.
