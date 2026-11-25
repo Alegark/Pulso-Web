@@ -1,6 +1,7 @@
 import {MB_UUID,musicBrainzArtwork} from './catalog-id';
 import {catalogFetch} from './catalog-fetch';
 import {MAX_ARTWORK_BYTES, validateArtwork} from '../imports/artwork';
+import type {ValidatedArtwork} from '../cache/thumbnail';
 
 export interface PlayerArtworkQuery { title:string; artist:string; album:string|null; durationSeconds:number; editionId?:number; trackId?:number; musicbrainzReleaseId?:string }
 export interface PlayerArtworkMatch { album:string; url:string }
@@ -12,11 +13,19 @@ export function artworkUrl(value:unknown):string|null {
  try { const u=new URL(value); if(u.protocol!=='https:'||!hosts.has(u.hostname)||u.port||u.username||u.password||u.hash)return null; return u.href; } catch{return null;}
 }
 /** Apple CDN size variants; never enlarge an arbitrary URL or change its host/path identity. */
-export function artworkImageUrl(value:unknown):string|null {
+export function artworkImageUrl(value:unknown,size:300|600=600):string|null {
  const safe=artworkUrl(value);if(!safe)return null;
  const url=new URL(safe);
- url.pathname=url.pathname.replace(/\/[1-9][0-9]{0,3}x[1-9][0-9]{0,3}(?:bb|cc)?\.(jpg|jpeg|png|webp)$/i,'/600x600bb.$1');
+ url.pathname=url.pathname.replace(/\/[1-9][0-9]{0,3}x[1-9][0-9]{0,3}(?:bb|cc)?\.(jpg|jpeg|png|webp)$/i,`/${size}x${size}bb.$1`);
  return url.href;
+}
+export async function fetchArtworkVariant(url:string,fetcher:(url:string)=>Promise<Response>):Promise<Response>{
+ const thumbnail=artworkImageUrl(url,300)??url;
+ const response=await fetcher(thumbnail);
+ const fallback=artworkImageUrl(url);
+ if(response.status!==404||!fallback||fallback===thumbnail)return response;
+ await response.body?.cancel().catch(()=>{});
+ return fetcher(fallback);
 }
 function validIdentity(q:PlayerArtworkQuery):boolean {
  if(q.musicbrainzReleaseId!==undefined)return MB_UUID.test(q.musicbrainzReleaseId)&&q.editionId===undefined&&q.trackId===undefined&&q.album!==null;
@@ -58,15 +67,11 @@ async function bytes(response:Response,limit:number,signal:AbortSignal):Promise<
  } finally {signal.removeEventListener('abort',cancel);if(!done)cancel();reader.releaseLock();}
 }
 export class PlayerArtworkProvider {
- private cache=new Map<string,{expires:number; value:{album:string;blob:Blob}}>();
  constructor(private fetcher:typeof fetch=fetch){}
- async load(q:PlayerArtworkQuery,request:{signal:AbortSignal;current:()=>boolean}):Promise<{album:string;blob:Blob}|null>{
+ async load(q:PlayerArtworkQuery,request:{signal:AbortSignal;current:()=>boolean}):Promise<{album:string;image:ValidatedArtwork}|null>{
   if(!validIdentity(q)||!validText(q.title)||!validText(q.artist)||!Number.isFinite(q.durationSeconds)||q.durationSeconds<=0||q.durationSeconds>86400||q.album!==null&&!validText(q.album))return null;
-  const key=JSON.stringify([q.title,q.artist,q.album,q.durationSeconds,q.editionId,q.trackId,q.musicbrainzReleaseId]);
   const active=()=>{try{return !request.signal.aborted&&request.current();}catch{return false;}};
   if(!active())return null;
-  const cached=this.cache.get(key);if(cached&&cached.expires>Date.now())return active()?cached.value:null;
-  this.cache.delete(key);
   const online=()=>globalThis.navigator?.onLine!==false;
   if(!online())return null;
   const fetchOnline:typeof fetch=(...args)=>online()?this.fetcher(...args):Promise.reject(new Error('offline'));
@@ -92,11 +97,11 @@ export class PlayerArtworkProvider {
 
    }
    if(!match||!online())return null;
-   const image=await catalogFetch(match.url,options,fetchOnline);const mime=image.headers.get('content-type')?.split(';')[0].trim().toLowerCase()??'';
+   const image=await fetchArtworkVariant(match.url,url=>catalogFetch(url,options,fetchOnline));const mime=image.headers.get('content-type')?.split(';')[0].trim().toLowerCase()??'';
    if(!['image/png','image/jpeg','image/webp'].includes(mime)){await image.body?.cancel();return null;}
    const raw=await bytes(image,MAX_ARTWORK_BYTES,controller.signal);if(!live())return null;
    const validated=await validateArtwork(new Blob([new Uint8Array(raw)],{type:mime}));if(!live())return null;
-   const value={album:match.album,blob:validated.blob};this.cache.set(key,{expires:Date.now()+300000,value});if(this.cache.size>8)this.cache.delete(this.cache.keys().next().value!);return value;
+   return {album:match.album,image:validated};
   })().catch(()=>null);
   const outcome=Promise.race([task,new Promise<null>(resolve=>{if(controller.signal.aborted)resolve(null);else controller.signal.addEventListener('abort',()=>resolve(null),{once:true});})]);
   tail=outcome.then(()=>{},()=>{});

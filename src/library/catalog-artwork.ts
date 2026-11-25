@@ -1,7 +1,9 @@
 import {musicBrainzArtworkUrl,spotifyArtworkUrl} from './catalog-id';
 import {catalogFetch} from './catalog-fetch';
 import {MAX_ARTWORK_BYTES,validateArtwork} from '../imports/artwork';
-import {artworkImageUrl,selectPlayerArtwork,type PlayerArtworkQuery} from './player-artwork-provider';
+import {artworkImageUrl,fetchArtworkVariant,selectPlayerArtwork,type PlayerArtworkQuery} from './player-artwork-provider';
+import {PlayerArtworkCache} from './player-artwork-cache';
+import type {ValidatedArtwork} from '../cache/thumbnail';
 
 // The catalog returns all candidate tracks in one request for a search, not one
 // search per row. Ambiguous editions are intentionally left without artwork.
@@ -47,24 +49,26 @@ async function limited(r:Response,max:number,signal:AbortSignal):Promise<Uint8Ar
  try{while(true){if(signal.aborted)throw Error('aborted');const part=await abortable(reader.read(),signal);if(signal.aborted)throw Error('aborted');if(part.done){done=true;break;}size+=part.value.length;if(size>max||chunks.length>=8192)throw Error('size');chunks.push(part.value);}const out=new Uint8Array(size);let offset=0;for(const chunk of chunks){out.set(chunk,offset);offset+=chunk.length;}return out;}
  finally{signal.removeEventListener('abort',cancel);if(!done)cancel();try{reader.releaseLock();}catch{/* An outstanding read can settle later. */}}
 }
-const cache=new Map<string,{blob:Blob;expires:number}>();
-const pending=new Map<string,Promise<Blob|null>>();
+const transientArtwork=new PlayerArtworkCache();
 let running=0;const queue:(()=>void)[]=[];
 async function acquire(){if(running>=4){await new Promise<void>(resolve=>queue.push(resolve));return;}running++;}
 function release(){const next=queue.shift();if(next)next();else running--;}
 /** Shared, bounded, anonymous image transport. Only decoded validated blobs leave it. */
-export async function catalogArtwork(url:string):Promise<Blob|null>{
+export async function catalogArtwork(url:string,cache=transientArtwork,onRefresh?:(blob:Blob)=>void):Promise<Blob|null>{
  const spotify=spotifyArtworkUrl(url);
- const safe=spotify?new URL('/catalog/artwork?'+new URLSearchParams({u:spotify}),location.origin).href:musicBrainzArtworkUrl(url)??artworkImageUrl(url);if(!safe)return null;
- const hit=cache.get(safe);if(hit&&hit.expires>Date.now())return hit.blob;if(hit)cache.delete(safe);
- if(!online())return null;
- const existing=pending.get(safe);if(existing)return existing;if(pending.size>=80)return null;
- const task=(async()=>{await acquire();const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);try{
-  const response=await fetchResponse(safe,controller.signal);
+ const safe=spotify?new URL('/catalog/artwork?'+new URLSearchParams({u:spotify}),location.origin).href:musicBrainzArtworkUrl(url)??artworkImageUrl(url,300);if(!safe)return null;
+ return cache.loadCatalog(safe,async():Promise<ValidatedArtwork|null>=>{
+  await acquire();
+  const controller=new AbortController(),abort=()=>controller.abort();
+  cache.signal.addEventListener('abort',abort,{once:true});
+  const timer=setTimeout(abort,15000);
+  try{
+  if(cache.signal.aborted||!online())return null;
+  const response=await fetchArtworkVariant(safe,source=>fetchResponse(source,controller.signal));
   const mime=response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()??'';
   if(!['image/png','image/jpeg','image/webp'].includes(mime)){await response.body?.cancel();return null;}
-  const raw=await limited(response,MAX_ARTWORK_BYTES,controller.signal);const result=await validateArtwork(new Blob([new Uint8Array(raw)],{type:mime}));
-  cache.set(safe,{blob:result.blob,expires:Date.now()+300000});while(cache.size>16)cache.delete(cache.keys().next().value!);return result.blob;
- }catch{return null;}finally{clearTimeout(timer);release();}})();
- pending.set(safe,task);try{return await task;}finally{pending.delete(safe);}
+  const raw=await limited(response,MAX_ARTWORK_BYTES,controller.signal);
+  return await validateArtwork(new Blob([new Uint8Array(raw)],{type:mime}));
+  }catch{return null;}finally{clearTimeout(timer);cache.signal.removeEventListener('abort',abort);release();}
+ },onRefresh);
 }

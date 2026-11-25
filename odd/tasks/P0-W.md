@@ -2479,3 +2479,7 @@ Pasaron el build, las 73 pruebas de Cloudflare, la preparación y la simulación
 La revisión independiente aprobó v62 con cero bloqueantes y cero altos. En el control sintético la ganancia determinista es de unos 200 ms menos por pista con menú (S02, un `getMessages` menos) y 200 ms menos de sondeo con bots lentos (S01). La serie concurrente de WebKit carece de comparabilidad por contención de CPU.
 
 Quedan M1 (conexión de Telegram durante toda la sesión), M2 (límites de la medición), M3 (cableado del SDK sin prueba unitaria directa) y los menores sobre `getState` al reconectar, la clasificación de `messageEmpty` en audio directo, el comentario sobre lecturas del callback y la verificación real. Telegram real y las 16 pruebas físicas de iPhone siguen **NO EJECUTADOS**. P0-W sigue abierto. [Matriz y recibos de T25](T25-velocidad-bots.md#2026-11-25--publicación-de-v62).
+
+## 2026-11-25 · Caché de portadas e información
+
+La decisión del propietario del 2026-11-25 autoriza la caché persistente y acotada en el teléfono. [T26](T26-cache-portadas-info.md) define los incrementos. El primero parte de `f803135` y cubre el almacén dedicado, portadas de catálogo y proveedor, reapertura offline y purga de cuenta.

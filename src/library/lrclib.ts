@@ -117,6 +117,7 @@ export async function readLrclib(input:LrclibInput,options:LrclibOptions):Promis
  }
  try {
   guard();const q=query(input);if(!q)return {state:'missing-input'};
+  if(globalThis.navigator?.onLine===false)return {state:'unavailable',reason:'network'};
   const timeout=options.timeoutMs??LRCLIB_LIMITS.timeoutMs;
   if(!Number.isFinite(timeout)||timeout<1||timeout>LRCLIB_LIMITS.maxTimeoutMs)return {state:'unavailable',reason:'protocol-invalid'};
   options.signal?.addEventListener('abort',abort,{once:true});guard();
