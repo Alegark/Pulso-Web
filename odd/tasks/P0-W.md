@@ -2433,3 +2433,7 @@ T11-T12 registra las cuatro regresiones de admisión, reserva de canción, guard
 ### 2026-11-24 · Segunda revisión de la cola de colecciones
 
 T11-T12 registra la conservación de álbumes interrumpidos, la cancelación antes del inicio, los despertares de Telegram, el límite de reintento por fallo persistente y la retirada de checkpoints pausados. Pasaron 13 casos nuevos por motor y se verificó con Telegram sintético que el álbum retomó tras reconectar sin duplicar su primera copia. Pasaron los 13 escenarios de playlist por motor y los 43 de reanudación por motor. Se mantuvo el mismo fallo de interfaz al 200 % de `7d41d25`. P0-W continúa abierto y queda pendiente la aceptación física con Telegram real.
+
+### 2026-11-25 · Tercera revisión de la cola de colecciones
+
+T11-T12 registra los fallos de bot que se resuelven por pista, la recuperación al perder Telegram o al caducar una consulta durante la suspensión y la protección del turno durante la revisión y el primer refresco por cuenta. Se verificaron 17 casos de la revisión, 27 de playlist y 43 de reanudación por motor con Telegram sintético. La interfaz reprodujo el fallo conocido del minirreproductor al 200 % de `7d41d25`. Cloudflare quedó sin despliegue. P0-W y la aceptación física siguen abiertos.
