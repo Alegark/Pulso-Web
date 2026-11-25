@@ -52,7 +52,8 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  const module=await WebAssembly.compile(await wasm.arrayBuffer());if(signal.aborted)throw Error('cancelled');
  const crypto=await openCrypto(module);if(signal.aborted)throw Error('cancelled');
  const platform=new WebPlatform();platform.log=()=>{};platform.getDefaultLogLevel=()=>LogManager.OFF;platform.getDeviceModel=()=> 'Pulso Web';
- const createClient=()=>new BaseTelegramClient({apiId:identity.apiId,apiHash:identity.apiHash,storage:new MemoryStorage(),platform,crypto,transport:new WebSocketTransport(),updates:false,disableUpdates:false,storageOptions:{peers:{updatesWriteInterval:0}},logLevel:LogManager.OFF,initConnectionOptions:{appVersion:'Pulso Web 0.1',deviceModel:'Pulso Web',systemVersion:'Web',langCode:'es',systemLangCode:'es'}});
+ const storage=new MemoryStorage();
+ const createClient=()=>new BaseTelegramClient({apiId:identity.apiId,apiHash:identity.apiHash,storage,platform,crypto,transport:new WebSocketTransport(),updates:false,disableUpdates:false,storageOptions:{peers:{updatesWriteInterval:0}},logLevel:LogManager.OFF,initConnectionOptions:{appVersion:'Pulso Web 0.1',deviceModel:'Pulso Web',systemVersion:'Web',langCode:'es',systemLangCode:'es'}});
  let client=createClient(),call=client.call.bind(client);
  // Disable automatic RPC retries/flood sleeps. DC migration remains SDK-managed.
  const accountRead:typeof client.call=async(message,params)=>{
@@ -107,12 +108,11 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
   current(connectionAbort.signal);
   const expired=():never=>{
    persisted=false;
-   binding=null;
    throw Error('session-expired');
   };
   if(!saved||saved.lease!==lease)return expired();
-  // Disconnect tears down the SDK's DC-config subscriptions. Keep the worker,
-  // providers and WASM warm, and import into a fresh SDK with its own transport.
+  // Disconnect tears down the SDK's DC-config subscriptions. Use a fresh
+  // transport and keep the worker's WASM, drivers and auxiliary DC keys.
   const next=createClient();
   try{
    await next.importSession(saved.value);

@@ -4,7 +4,7 @@ import {WebSocketServer} from 'ws';
 export const connectionPath='/__playlist-m1-updates';
 export const verificationIdleMs=3_000;
 const syntheticHandshakeMs=150;
-async function observe(condition,timeout=1_500){
+async function observe(condition,timeout=5_000){
  const deadline=Date.now()+timeout;
  while(!condition()&&Date.now()<deadline)await pause(25);
  return condition();
@@ -42,6 +42,7 @@ export function installConnectionFixture(server){
      await pause(100);
     },
     count,
+    waitClosed:()=>observe(()=>peers.size===0),
     get connected(){return peers.size;},
     stop(){for(const peer of peers)peer.terminate();current=undefined;},
    };
@@ -65,7 +66,10 @@ export async function exerciseConnection(page,input,feed,verify){
  const settled=()=>page.waitForFunction(()=>document.querySelector('.music-search-catalog')?.getAttribute('aria-busy')==='false');
  await settled();
  const beforeHide=feed.count('processed');
- if(verify)await feed.offerUpdates(3);
+ if(verify){
+  await feed.offerUpdates(3);
+  await observe(()=>feed.count('processed')===beforeHide+3);
+ }
  const awake=feed.count('processed')-beforeHide;
  await apply(false);
  if(!verify)await pause(250);

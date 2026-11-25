@@ -1744,9 +1744,8 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
    const loginVisible=await page.getByRole('button',{name:'Enviar código de acceso',exact:true}).isVisible();
    result.m1.loginVisible=loginVisible;
    if(connectionMode==='verify'){
-    await new Promise(resolve=>setTimeout(resolve,250));
     result.m1.heldWhileHidden=heldWhileHidden;
-    result.m1.closedAfterSound=feed.connected===0;
+    result.m1.closedAfterSound=await feed.waitClosed();
    }
   }
   assert.notEqual(start,null);assert.equal(failed,false);
