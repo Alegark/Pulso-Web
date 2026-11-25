@@ -81,7 +81,8 @@ const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
     "const testAppRoot=createRoot(document.getElementById('root')!);testAppRoot.render(<App/>);")+
     '\nwindow.testUnmountPulso=()=>testAppRoot.unmount();window.testUpdateWait=()=>downloadUpdateWait;';
   if(selectedModes.includes('queue-album-reconnect-exhausted')&&id.endsWith('/src/library/collection-telegram-wait.ts'))
-   return insert('[5_000,10_000,20_000,40_000]','[10,20,40,80]');
+   return insert('[5_000,10_000,20_000,40_000]',
+    'globalThis.testFastQueueReconnect?[10,20,40,80]:[5_000,10_000,20_000,40_000]');
   if(id.endsWith('/src/telegram/session-client.ts'))
    return insert('private publishSearch(){','private publishSearch(){window.testQueueTelegram=this;');
   if(id.endsWith('/src/library/album-download.ts'))
@@ -468,7 +469,8 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     return route.fulfill({contentType:'text/javascript',body:prefix+worker});
    });
   }
-  await context.addInitScript(({startLabel,resumeLabel,reviewButtons})=>{
+  await context.addInitScript(({startLabel,resumeLabel,reviewButtons,fastQueueReconnect})=>{
+   window.testFastQueueReconnect=fastQueueReconnect;
    const data=window.__playlistFull={activations:[],review:[],dialogs:[],imports:[],finishedAt:null,closedAt:null,audio:null};
    addEventListener('click',event=>{
     const button=event.target.closest?.('button'),label=button?.getAttribute('aria-label')??button?.textContent;
@@ -501,7 +503,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     if(dock&&Array.from(document.querySelectorAll('[role="status"]')).some(status=>status.textContent.startsWith('Descarga finalizada ·')))data.finishedAt??=performance.now();
     if(data.finishedAt!==null&&!dock)data.closedAt??=performance.now();
    }).observe(document,{childList:true,subtree:true,characterData:true,attributes:true});
-  },{startLabel,resumeLabel,reviewButtons});
+  },{startLabel,resumeLabel,reviewButtons,fastQueueReconnect:mode==='queue-album-reconnect-exhausted'});
   page=await context.newPage();
   page.setDefaultTimeout(15000);
   page.on('pageerror',error=>errors.push(String(error)));
