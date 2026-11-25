@@ -18,13 +18,9 @@ USD 0. Trabajar solo en este proyecto; no modificar servicios ajenos. Pruebas lo
 
 **Pendiente abierto del propietario (2026-11-25): aceptación física en iPhone.** Leer `docs/IPHONE-ACEPTACION.md` antes de cerrar cualquier entrega que toque descargas, reproducción, sesión de Telegram u offline. Tiene 16 pruebas que solo hace el propietario. Él las marca en la página privada que enlaza ese archivo. Sin su resultado, cada prueba sigue NO EJECUTADA. Transcribir lo que reporte a `odd/tasks/T3-gate-fisico.md`.
 
-**Trabajo pausado por el propietario (2026-11-25): leer `docs/PENDIENTES.md` al retomar.** Incluye:
-- la PR 20, que NO es publicable y tiene hallazgos abiertos;
-- las mejoras de velocidad, sin revisar;
-- Engram, desincronizado entre ramas;
-- decisiones del propietario sin responder.
+**Publicación vigente (2026-11-25):** v60, rama `fix/album-tap-save-queue`. La PR 20 sigue abierta.
 
-No publicar ni fusionar nada de eso hasta que el propietario lo retome.
+**Trabajo pausado por el propietario (2026-11-25):** las mejoras de velocidad de la rama local `perf/faster-bot-pipeline` siguen pausadas y sin revisar. Leer `docs/PENDIENTES.md` al retomar. La publicación o fusión de esa rama requiere que el propietario retome el trabajo.
 
 ## Entregas y colaboración
 

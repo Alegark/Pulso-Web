@@ -122,4 +122,16 @@ La limpieza retiró los perfiles, builds, datos sintéticos, cachés y snapshots
 - **Menor 1 de la revisión 8.** Una recuperación registrada en una pista anterior puede dar un ciclo adicional de reconexión al fallar una pista posterior. Queda acotado a una ronda adicional.
 - **Menor 2 de la revisión 8.** Si la canción individual termina en `file-invalid` o `file-too-large`, el temporizador del menú retenido puede sustituir el motivo por `expired` a los 120 s.
 - **Telegram real (T) e iPhone físico (D).** Cuenta, RPC y audio de prueba son sintéticos. Las 16 pruebas de `docs/IPHONE-ACEPTACION.md` permanecen NO EJECUTADAS. La prueba Q09a verifica los manejadores del shell con eventos inyectados en escritorio.
-- **Publicación y fusión.** Quedan pendientes de la autorización y decisión del propietario.
+- **Fusión.** La PR 20 sigue abierta para revisión.
+
+## 2026-11-25 · Publicación de v60
+
+Cloudflare Workers Free (USD 0) sirve [v60](https://pulso-web.pruebassoftware.workers.dev/releases/b5f7b46a815f9364.html) desde el commit `933af5b843a6563cc4c3a706ab393acc727eb649` de la [PR 20](https://github.com/Alegark/Pulso-Web/pull/20). El MCP oficial confirmó la versión `7de9496b-b4f2-4ea0-ba66-1a52cd7c5f4d` al 100 % en el despliegue `bad72e9b-3421-4b29-b301-53e15f66079c`, creado a las `08:14:16.189414Z`. El Worker coincide por bytes (330.978) y SHA-256 (`b9fe9983c4d9e2a293f9e10d7de2b671d8c92b4bf72fc92cc2fd91d6bd23c03f`). Se conservaron los 13 bindings, Turnstile, los secretos, los límites, la configuración de ejecución y las 14 reglas de `run_worker_first` de v59.
+
+Pasaron el build, 73/73 pruebas de servidor, la preparación de Cloudflare y la simulación de Wrangler 4.161.0. El freeze conservó 13 publicaciones anteriores y el inventario heredado, con cero rutas retiradas. El primer PUT recibió HTTP 400, error 10021, porque incluyó `serve_directly` junto con `run_worker_first`. El reintento conservó las reglas de `wrangler.jsonc`, cotejadas con la versión activa v59, y omitió `serve_directly`. Cloudflare ya tenía los 12 assets que solicitó en el primer intento y la sesión nueva pidió cero.
+
+HTTPS confirmó `latest.json`, el 307 hacia la ruta sin `.html`, el 200 de esa ruta y el meta `pulso-release` con valor `b5f7b46a815f9364`. Coincidieron bytes y SHA-256 de 299/299 rutas estáticas públicas, incluido `sw.js`. Las 54 entradas históricas y la actual sirvieron el bundle vigente tanto con Fetch Metadata y Accept como con Accept solo. Se verificaron el mismo `turnstileSiteKey`, `challenges.cloudflare.com` en las directivas CSP de script y marco, y HTTP 401 para perfil y biblioteca anónimos.
+
+El manifiesto publicado y los recibos compactos están en `.local/test-evidence/pr20-release-v60/`. `site-manifest.json` enumera 302 archivos, ocupa 73.111 bytes y tiene SHA-256 `ca63e8431eb54e87ccf2ef87afc659dad6b2b083320e701248bb5080d112174b`.
+
+P0-W sigue abierto. Q09b sigue como fallo heredado de v59. Quedan los dos menores de la revisión 8: una ronda adicional acotada de reconexión y la posible sustitución tardía del motivo de archivo por `expired`. Las 16 pruebas físicas en iPhone siguen **NO EJECUTADAS**.

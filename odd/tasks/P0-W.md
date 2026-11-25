@@ -2442,3 +2442,11 @@ T11-T12 registra los fallos de bot que se resuelven por pista, la recuperación 
 ### 2026-11-25 · Cuarta revisión de la cola de colecciones
 
 T11-T12 registra la clasificación compartida de fallos de bot, cortes de Telegram y suspensiones. Un resultado inconcluso queda disponible para reintentar la misma pista. Los álbumes en cola recuperan Telegram con la espera acotada de la playlist. Un checkpoint automático espera a que se libere la comprobación de versión. Los recorridos focales con Telegram sintético pasaron en Chromium y WebKit, incluida la suspensión simulada de 30 s. P0-W permanece abierto y sigue pendiente la aceptación con un iPhone físico y Telegram real.
+
+## 2026-11-25 · Cola de colecciones publicada en v60
+
+Cloudflare Workers Free (USD 0) sirve [v60](https://pulso-web.pruebassoftware.workers.dev/releases/b5f7b46a815f9364.html) desde `933af5b` de la [PR 20](https://github.com/Alegark/Pulso-Web/pull/20). El MCP oficial verificó la versión `7de9496b-b4f2-4ea0-ba66-1a52cd7c5f4d` activa al 100 % en el despliegue `bad72e9b-3421-4b29-b301-53e15f66079c`, el Worker por bytes y SHA-256, los 13 bindings, los secretos, los límites, la configuración de ejecución y las 14 reglas de `run_worker_first` de v59. El primer PUT recibió HTTP 400, error 10021, al enviar `serve_directly` junto con `run_worker_first`. El PUT autorizado posterior omitió `serve_directly` y conservó las reglas verificadas.
+
+Pasaron el build, 73 pruebas de servidor, la preparación y la simulación de Wrangler. El freeze conservó 13 publicaciones previas y el inventario heredado, con cero rutas retiradas. HTTPS verificó el puntero `latest.json`, el 307, el 200 y el meta `pulso-release`; 299/299 recursos por bytes y SHA-256, incluido `sw.js`; las 54 entradas históricas y la actual con cabeceras de navegación; la CSP de Turnstile y la igualdad de su clave pública; y HTTP 401 para el perfil y la biblioteca anónimos. T24 registra el manifiesto y los recibos.
+
+P0-W sigue abierto. Q09b continúa como fallo heredado de v59. Quedan los dos menores de la revisión 8 sobre una reconexión adicional acotada y un motivo de archivo que puede pasar a `expired` a los 120 s. Las 16 pruebas de iPhone siguen **NO EJECUTADAS**.
