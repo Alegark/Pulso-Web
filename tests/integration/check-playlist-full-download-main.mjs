@@ -20,7 +20,7 @@ const work=await createTestWorkspace('playlist-full-download');
 const checkpointKey='pulso:library-download:v1:'+accountId;
 const botFailureModes=['album','playlist'].flatMap(kind=>
  ['timeout','unsupported','limit','needs-start'].map(error=>'queue-'+kind+'-bot-'+error));
-const reconnectModes=['queue-album-reconnect-exhausted','queue-album-reconnect-foreground','queue-album-reconnect-online','queue-album-reconnect-online-before-settle'];
+const reconnectModes=['queue-album-reconnect-exhausted','queue-album-reconnect-foreground','queue-album-reconnect-online','queue-album-reconnect-online-before-settle','queue-album-reconnect-persisted-pageshow'];
 const reviewModes=[...reconnectModes,'queue-dispatch-relaunch-cap','queue-dispatch-normal-deferrals','queue-album-uncertain-send','queue-album-network','queue-album-interruption','queue-stop-update','queue-retry-at','queue-disconnected',
  'queue-claim-error','queue-album-read-error','queue-cancel-save','queue-paused-removal','queue-missing-track',
  'queue-album-refresh','queue-album-external-removal','queue-single-edition','queue-inspection',
@@ -932,7 +932,27 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
       faulted.add('allow-album-retry');
       if(mode==='queue-album-reconnect-foreground')await foreground(true);
       else if(mode==='queue-album-reconnect-online')await online(true);
-      else await retry.tap();
+      else if(mode==='queue-album-reconnect-persisted-pageshow'){
+       await page.evaluate(()=>{
+        dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}));
+        dispatchEvent(new PageTransitionEvent('pageshow',{persisted:false}));
+       });
+       await page.waitForTimeout(650);
+       assert.deepEqual(await page.evaluate(()=>window.testCheckKinds),['album'],'A non-persisted pageshow must leave the head paused');
+       assert.deepEqual(await queuedTitles(),[albumTitle,playlistC]);
+       await page.evaluate(()=>dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));
+       const ownershipPrompt=page.getByRole('region',{name:'Control de esta pestaña disponible',exact:true});
+       // Q09b is the inherited v59 shell failure. A persisted pageshow leaves the tab without control.
+       await ownershipPrompt.waitFor();
+       await page.waitForTimeout(650);
+       assert.equal(await ownershipPrompt.isVisible(),true,'Known v59 behavior: persisted pageshow does not restore tab control');
+       assert.deepEqual(await page.evaluate(()=>window.testCheckKinds),['album'],'The queue must remain paused without tab control');
+       assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.trackId),['album-0',...Array(5).fill('album-1')]);
+       assert.deepEqual(await queuedTitles(),[albumTitle,playlistC]);
+       receipt.bfcache={automaticTabControl:'FAIL (Q09b, inherited from v59)',relaunchesWithoutControl:0};
+       await ownershipPrompt.getByRole('button',{name:'Usar en esta pestaña',exact:true}).tap();
+       await ownershipPrompt.waitFor({state:'hidden'});
+      }else await retry.tap();
       await verifyNext();
       assert.equal((await verifyAlbum())[0],before[0]);
       assert.deepEqual(await page.evaluate(()=>window.testCheckKinds),['album','album','library']);

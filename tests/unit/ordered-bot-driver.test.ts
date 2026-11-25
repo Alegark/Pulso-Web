@@ -167,12 +167,12 @@ function setup(t:TestContext,replies:readonly Reply[]){
   assert.ok(settled,'Operation did not settle on the mock clock');
   return result;
  }
- return {params,searches,callbacks,errors,allowed,drive,binding,dependency,get transferStarted(){return transferStarted;},
+ const rotateProviders=()=>{activeProviders=activeProviders.map(provider=>({...provider,providerRef:crypto.randomUUID()}));return activeProviders;};
+ return {params,searches,callbacks,errors,allowed,drive,binding,dependency,rotateProviders,get transferStarted(){return transferStarted;},
   reconnect(){
    driver.close();
    sessionId=crypto.randomUUID();
-   activeProviders=activeProviders.map(provider=>({...provider,providerRef:crypto.randomUUID()}));
-   params.providers=activeProviders;
+   params.providers=rotateProviders();
    driver=createBotSearchDriver(binding,sessionId,dependency);
    publish({queryId:null,providerRef:null,rows:[],expiresAt:null,error:null});
   },
@@ -196,51 +196,74 @@ function setupRealClient(t:TestContext,replies:readonly Reply[]){
  const fixture=setup(t,replies);
  const activity=new Activity();
  activity.open();
- const abort=new AbortController();
  const transcript:BotSearchReply[]=[];
  const snapshots:BotSearchSnapshot[]=[];
- let driver:ReturnType<typeof createBotSearchDriver>;
+ const commands:BotSearchCommand[]=[];
+ const admission={allowed:true};
+ let activeProviders=providers;
  let terminations=0;
  let bridgeError:unknown;
- const emit=(data:unknown)=>worker.onmessage?.({data} as MessageEvent);
- const worker:SessionWorker={
-  onmessage:null,onerror:null,onmessageerror:null,
-  postMessage(command){
-   if(command.type==='restore'){
-    driver=createBotSearchDriver(fixture.binding,command.session,fixture.dependency);
-    queueMicrotask(()=>emit({version:2,session:command.session,request:command.request,phase:'connected',error:null,
-     retryAt:null,delivery:null,binding:fixture.binding,saved:{peerRef:crypto.randomUUID(),kind:'saved',name:'Mensajes guardados'},
-     bots:providers.map((provider,index)=>({...provider,username:index===0?'ivkmbot':'lydbot',
-      status:'verified-profile',compatibility:'unverified'}))}));
-    return;
-   }
-   assert.ok(command.type==='bot-search.search'||command.type==='bot-search.download');
-   const post=(reply:BotSearchReply,sessionClosed=false)=>{
-    assert.ok(parseBotSearchReply(reply,command));
-    transcript.push(reply);
-    emit({protocol:'pulso-bot-search',version:1,reply,sessionClosed,retryAt:null,retryBlocked:false});
-   };
-   void driver.handle(command,{signal:abort.signal,current:()=>!abort.signal.aborted,publish:post}).then(async reply=>{
-    assert.ok(reply);
-    post(reply,!await driver.whenSettled());
-   }).catch(error=>{bridgeError=error;worker.onerror?.({} as ErrorEvent);});
-  },
-  terminate(){terminations++;abort.abort();driver.close();},
+ const createWorker=():SessionWorker=>{
+  const abort=new AbortController();
+  let driver:ReturnType<typeof createBotSearchDriver>;
+  const emit=(data:unknown)=>worker.onmessage?.({data} as MessageEvent);
+  const worker:SessionWorker={
+   onmessage:null,onerror:null,onmessageerror:null,
+   postMessage(command){
+    if(command.type==='restore'){
+     driver=createBotSearchDriver(fixture.binding,command.session,fixture.dependency);
+     queueMicrotask(()=>emit({version:2,session:command.session,request:command.request,phase:'connected',error:null,
+      retryAt:null,delivery:null,binding:fixture.binding,saved:{peerRef:crypto.randomUUID(),kind:'saved',name:'Mensajes guardados'},
+      bots:activeProviders.map((provider,index)=>({...provider,username:index===0?'ivkmbot':'lydbot',
+       status:'verified-profile',compatibility:'unverified'}))}));
+     return;
+    }
+    assert.ok(command.type==='bot-search.search'||command.type==='bot-search.download');
+    commands.push(command);
+    const post=(reply:BotSearchReply,sessionClosed=false)=>{
+     assert.ok(parseBotSearchReply(reply,command));
+     transcript.push(reply);
+     emit({protocol:'pulso-bot-search',version:1,reply,sessionClosed,retryAt:null,retryBlocked:false});
+    };
+    void driver.handle(command,{signal:abort.signal,current:()=>!abort.signal.aborted,publish:post}).then(async reply=>{
+     assert.ok(reply);
+     post(reply,!await driver.whenSettled());
+    }).catch(error=>{bridgeError=error;worker.onerror?.({} as ErrorEvent);});
+   },
+   terminate(){terminations++;abort.abort();driver.close();},
+  };
+  return worker;
  };
- const client=new TelegramSessionClient(activity,()=>activity.scope(),()=>{},()=>worker);
+ // Closing admission applies to the next command and preserves the admitted plan.
+ const captureAdmission=()=>{
+  const current=activity.scope(),allowed=admission.allowed;
+  return ()=>allowed&&current();
+ };
+ const client=new TelegramSessionClient(activity,()=>activity.scope(),()=>{},createWorker,
+  undefined,undefined,undefined,undefined,undefined,undefined,captureAdmission);
  t.after(()=>client.dispose());
  client.subscribeSearch(state=>snapshots.push(state));
  client.restore();
  const params={...fixture.params,client,revision:client.botsSnapshot().revision,progress:()=>{}};
- return {...fixture,params,client,transcript,snapshots,async connected(){
+ return {...fixture,params,client,transcript,snapshots,commands,admission,
+  get transferStarted(){return fixture.transferStarted;},
+  searchProviders:()=>commands.filter(command=>command.type==='bot-search.search').map(command=>command.providerRef),
+  async renew(){
+   activeProviders=fixture.rotateProviders();
+   assert.equal(client.reconnectForDownload(),true);
+   await Promise.resolve();
+   assert.equal(client.snapshot().phase,'connected');
+   params.providers=activeProviders;
+   params.revision=client.botsSnapshot().revision;
+  },async connected(){
   await Promise.resolve();
   assert.equal(client.snapshot().phase,'connected');
   assert.equal(client.botsSnapshot().providers.length,2);
- },assertConnected(){
+ },assertConnected(expectedTerminations=0){
   assert.equal(bridgeError,undefined);
   assert.equal(client.snapshot().error,null);
   assert.equal(client.snapshot().phase,'connected');
-  assert.equal(terminations,0);
+  assert.equal(terminations,expectedTerminations);
  }};
 }
 
@@ -275,6 +298,119 @@ for(const scenario of ['menu-valid','menu-ogg-three'] as const)test(`R4 · real 
  assert.equal(f.client.searchSnapshot().error,null);
  assert.equal(f.snapshots.some(state=>state.error==='expired'),false);
  assert.equal(f.client.searchSnapshot().rows.length,0);
+ assert.equal(f.client.searchSnapshot().expiresAt,null);
+});
+
+test('Q13 · H2 real client advances after a direct audio transfer timeout',async t=>{
+ const f=setupRealClient(t,['direct-timeout','direct']);
+ await f.connected();
+ const song=await downloadFixtureSong(f,'next-bot-copy');
+ f.assertConnected();
+ const terminal=f.transcript.filter(reply=>reply.type==='bot-search.error').map(reply=>[reply.error,reply.delivery]);
+ assert.equal(f.transferStarted,1);
+ assert.deepEqual({terminal,searches:f.searchProviders(),state:song.state},
+  {terminal:[['timeout','acknowledged']],searches:providers.map(provider=>provider.providerRef),state:'downloaded'});
+});
+
+test('Q17 · H3 real client denies selection after a result without closing the bot',async t=>{
+ const f=setupRealClient(t,['direct']);
+ await f.connected();
+ const unsubscribe=f.client.subscribeSearch(state=>{
+  if(!state.pending&&state.rows.some(row=>row.kind==='audio'))f.admission.allowed=false;
+ });
+ t.after(unsubscribe);
+ const collection=progress();
+ const result=await f.drive(acquireFromOrderedBots({...f.params,collection,accept}));
+ f.assertConnected();
+ assert.equal(f.admission.allowed,false);
+ assert.deepEqual(f.commands.map(command=>command.type),['bot-search.search']);
+ assert.deepEqual({result,resumeBot:collection.resumeBot,completed:[...collection.completed]},
+  {result:{state:'telegram'},resumeBot:0,completed:[]});
+});
+
+test('Q17 · H3 real client exposes an expired foreign search without closing either bot',async t=>{
+ const f=setupRealClient(t,['direct']);
+ await f.connected();
+ const settled=new Promise<void>(resolve=>{
+  const unsubscribe=f.client.subscribeSearch(state=>{
+   if(!state.pending&&state.rows.some(row=>row.kind==='audio')){unsubscribe();resolve();}
+  });
+ });
+ f.client.searchBot({providerRef:providers[1].providerRef,query:target.title,target,consent:true});
+ await f.drive(settled);
+ const original=f.client.searchSnapshot();
+ assert.equal(original.providerRef,providers[1].providerRef);
+ assert.ok(original.expiresAt);
+ t.mock.timers.tick(original.expiresAt-Date.now()+1);
+ assert.equal(f.client.searchSnapshot().error,'expired');
+ f.admission.allowed=false;
+ const collection=progress();
+ const result=await f.drive(acquireFromOrderedBots({...f.params,collection,accept}));
+ f.assertConnected();
+ assert.deepEqual(f.searchProviders(),[providers[1].providerRef]);
+ assert.deepEqual(result,{state:'telegram'});
+ assert.equal(collection.resumeBot,0);
+ assert.deepEqual([...collection.completed],[]);
+});
+
+for(const [scenario,error] of [['menu-invalid','file-invalid'],['menu-large','file-too-large']] as const)
+ test(`Q11 · H4 real client resumes a suspended menu after ${error} and rotates references`,async t=>{
+  const f=setupRealClient(t,[scenario,'direct']);
+  await f.connected();
+  let suspended=false;
+  const unsubscribe=f.client.subscribeSearch(state=>{
+   if(!state.pending&&state.error===error){suspended=true;f.admission.allowed=false;}
+  });
+  t.after(unsubscribe);
+  const collection=progress();
+  const result=await f.drive(acquireFromOrderedBots({...f.params,collection,accept,suspended:()=>suspended}));
+  f.assertConnected();
+  assert.equal(f.client.searchSnapshot().error,error);
+  assert.equal(f.client.searchSnapshot().rows.filter(row=>row.kind==='option').length,1);
+  assert.deepEqual(f.callbacks,[1]);
+  assert.deepEqual({result,resumeBot:collection.resumeBot,completed:[...collection.completed]},
+   {result:{state:'suspended'},resumeBot:0,completed:[]});
+  assert.equal(collection.rejectedOptions?.size,1);
+  const original=f.client.captureBotsCurrent();
+  f.admission.allowed=true;suspended=false;
+  await f.renew();
+  assert.equal(original(),false);
+  assert.notEqual(f.params.providers[0].providerRef,providers[0].providerRef);
+  assert.equal((await f.drive(acquireFromOrderedBots({...f.params,collection,accept}))).state,'audio');
+  f.assertConnected(1);
+  assert.deepEqual(f.searchProviders(),[providers[0].providerRef,f.params.providers[0].providerRef]);
+  assert.deepEqual(f.callbacks,[1,2]);
+ });
+
+test('Q17 · M8 real client advances after an acknowledged callback conflict',async t=>{
+ const f=setupRealClient(t,['callback-conflict','direct']);
+ await f.connected();
+ const result=await f.drive(acquireFromOrderedBots({...f.params,collection:progress(),accept}));
+ f.assertConnected();
+ const terminal=f.transcript.filter(reply=>reply.type==='bot-search.error').map(reply=>[reply.error,reply.delivery]);
+ assert.deepEqual(terminal,[['conflict','acknowledged']]);
+ assert.deepEqual(f.callbacks,[1]);
+ assert.deepEqual(f.searchProviders(),providers.map(provider=>provider.providerRef));
+ assert.equal(result.state,'audio');
+});
+
+test('Q19 · real individual search keeps the session and advances after a blocked bot',async t=>{
+ const f=setupRealClient(t,['blocked','direct']);
+ await f.connected();
+ const result=await f.drive(acquireFromOrderedBots(f.params));
+ f.assertConnected();
+ assert.deepEqual(f.searchProviders(),providers.map(provider=>provider.providerRef));
+ assert.equal(result.state,'audio');
+});
+
+test('Q19 · real individual search uses the next option of the same Ogg menu',async t=>{
+ const f=setupRealClient(t,['menu-ogg','empty']);
+ await f.connected();
+ const result=await f.drive(acquireFromOrderedBots(f.params));
+ f.assertConnected();
+ assert.deepEqual(f.searchProviders(),[providers[0].providerRef]);
+ assert.deepEqual(f.callbacks,[1,2]);
+ assert.equal(result.state,'audio');
  assert.equal(f.client.searchSnapshot().expiresAt,null);
 });
 
