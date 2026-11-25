@@ -17,6 +17,7 @@ Autorización adicional: levantar/cerrar servidores temporales SOLO loopback par
 - T6–T18 PENDIENTE según dependencias del SPEC; no expandir UI para posponer un gate.
 - T19 PENDIENTE: AC01–AC24, 10 pistas/30 min y evidencia por entorno.
 - T20: fuera de implementación actual; revisión posterior con propietario.
+- [T24 · Cola de colecciones y descargas de la PR 20](T24-cola-colecciones.md). Trazabilidad local y de navegador. La aceptación física y el fallo heredado de control de pestaña tras BFCache quedan pendientes.
 
 Todas W01–W18 y AC01–AC24 permanecen sin aceptación completa. Local no implica navegador ni iPhone. D01 resuelta; D02–D10 conservan sus permisos/evidencia pendientes según SPEC.
 
@@ -2421,3 +2422,31 @@ La segunda revisión de la PR 19 preserva pertenencia y audio compartidos al ret
 ## 2026-11-23 · Coherencia de los álbumes sueltos y cota de alias
 
 La tercera revisión de la PR 19 usa el mismo grupo de Biblioteca para la tarjeta, el detalle y la retirada de los álbumes sueltos. T10 registra la lectura conjunta de organización en IndexedDB, la protección frente a un listado de alias incompleto y la retirada física que preserva la copia compartida de otra edición. Pasaron tipos, lint, 924 unitarias, 73 de servidor, 10 Python, Chromium 8/8, WebKit 7/7, descarga completa de playlist 3/3, reanudación 2/2, build y simulación Wrangler. T10 conserva los tiempos, los avisos CSP ya presentes y los bytes retirados. P0-W y la validación física siguen abiertos.
+
+## 2026-11-24 · Toques y cola de descargas de colección
+
+T8, T10 y T11-T12 registran la reproducción táctil, el guardado de una edición durante una descarga y la cola persistente por cuenta. Chromium y WebKit locales verificaron el guardado sin audio, la playlist de 30 entradas y el álbum en cola mediante transportes de prueba. P0-W continúa abierto. Sigue pendiente la aceptación en iPhone físico con Telegram real.
+
+### 2026-11-24 · Revisión independiente de la cola
+
+T11-T12 registra las cuatro regresiones de admisión, reserva de canción, guardado y cancelación, reproducidas en `af313ac` y verificadas con transportes de prueba en Chromium y WebKit. T8 y T10 registran la continuidad al navegar, la retirada de colecciones y la inspección pasiva. P0-W sigue abierto y la aceptación física con Telegram real queda pendiente.
+
+### 2026-11-24 · Segunda revisión de la cola de colecciones
+
+T11-T12 registra la conservación de álbumes interrumpidos, la cancelación antes del inicio, los despertares de Telegram, el límite de reintento por fallo persistente y la retirada de checkpoints pausados. Pasaron 13 casos nuevos por motor y se verificó con Telegram sintético que el álbum retomó tras reconectar sin duplicar su primera copia. Pasaron los 13 escenarios de playlist por motor y los 43 de reanudación por motor. Se mantuvo el mismo fallo de interfaz al 200 % de `7d41d25`. P0-W continúa abierto y queda pendiente la aceptación física con Telegram real.
+
+### 2026-11-25 · Tercera revisión de la cola de colecciones
+
+T11-T12 registra los fallos de bot que se resuelven por pista, la recuperación al perder Telegram o al caducar una consulta durante la suspensión y la protección del turno durante la revisión y el primer refresco por cuenta. Se verificaron 17 casos de la revisión, 27 de playlist y 43 de reanudación por motor con Telegram sintético. La interfaz reprodujo el fallo conocido del minirreproductor al 200 % de `7d41d25`. Cloudflare quedó sin despliegue. P0-W y la aceptación física siguen abiertos.
+
+### 2026-11-25 · Cuarta revisión de la cola de colecciones
+
+T11-T12 registra la clasificación compartida de fallos de bot, cortes de Telegram y suspensiones. Un resultado inconcluso queda disponible para reintentar la misma pista. Los álbumes en cola recuperan Telegram con la espera acotada de la playlist. Un checkpoint automático espera a que se libere la comprobación de versión. Los recorridos focales con Telegram sintético pasaron en Chromium y WebKit, incluida la suspensión simulada de 30 s. P0-W permanece abierto y sigue pendiente la aceptación con un iPhone físico y Telegram real.
+
+## 2026-11-25 · Cola de colecciones publicada en v60
+
+Cloudflare Workers Free (USD 0) sirve [v60](https://pulso-web.pruebassoftware.workers.dev/releases/b5f7b46a815f9364.html) desde `933af5b` de la [PR 20](https://github.com/Alegark/Pulso-Web/pull/20). El MCP oficial verificó la versión `7de9496b-b4f2-4ea0-ba66-1a52cd7c5f4d` activa al 100 % en el despliegue `bad72e9b-3421-4b29-b301-53e15f66079c`, el Worker por bytes y SHA-256, los 13 bindings, los secretos, los límites, la configuración de ejecución y las 14 reglas de `run_worker_first` de v59. El primer PUT recibió HTTP 400, error 10021, al enviar `serve_directly` junto con `run_worker_first`. El PUT autorizado posterior omitió `serve_directly` y conservó las reglas verificadas.
+
+Pasaron el build, 73 pruebas de servidor, la preparación y la simulación de Wrangler. El freeze conservó 13 publicaciones previas y el inventario heredado, con cero rutas retiradas. HTTPS verificó el puntero `latest.json`, el 307, el 200 y el meta `pulso-release`; 299/299 recursos por bytes y SHA-256, incluido `sw.js`; las 54 entradas históricas y la actual con cabeceras de navegación; la CSP de Turnstile y la igualdad de su clave pública; y HTTP 401 para el perfil y la biblioteca anónimos. T24 registra el manifiesto y los recibos.
+
+P0-W sigue abierto. Q09b continúa como fallo heredado de v59. Quedan los dos menores de la revisión 8 sobre una reconexión adicional acotada y un motivo de archivo que puede pasar a `expired` a los 120 s. Las 16 pruebas de iPhone siguen **NO EJECUTADAS**.

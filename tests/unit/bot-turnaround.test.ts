@@ -85,7 +85,7 @@ test('one closed song record adds every bot, option and transfer while the dock 
   },
  } as unknown as TelegramSessionClient;
  const result=await acquireFromOrderedBots({client,providers,revision:1,target,signal:new AbortController().signal,current:()=>true,
-  networkCurrent:()=>true,collection:{completed:new Set(),ambiguous:new Set(),responded:false,reasons:[]},
+  networkCurrent:()=>true,collection:{completed:new Set(),reasons:[]},
   measurement,progress:()=>{},status:message=>statuses.push(message),accept:async()=>{await new Promise(ok=>setTimeout(ok,5));return 'saved';}});
  measurement.finish();measurement.finish();
  assert.equal(result.state,'audio');
@@ -138,7 +138,7 @@ test('a stalled transfer cannot spend the backup bot’s reserved time',async t=
   },
  } as unknown as TelegramSessionClient;
  const result=acquireFromOrderedBots({client,providers,revision:1,target,signal:new AbortController().signal,current:()=>true,
-  networkCurrent:()=>true,collection:{completed:new Set(),ambiguous:new Set(),responded:false,reasons:[]},
+  networkCurrent:()=>true,collection:{completed:new Set(),reasons:[]},
   progress:()=>{},accept:async()=> 'saved'});
  await inFlight;
  t.mock.timers.tick(149999);
@@ -226,7 +226,7 @@ for(const collection of [false,true])test(`timer expiry survives a wall-clock ro
  const initial=f.hooks.onSearch;
  f.hooks.onSearch=(first,cancel)=>{initial(first,cancel);if(first)offset=1;};
  const result=acquireFromOrderedBots({...f.params,...(collection?{accept:async()=> 'saved' as const,
-  collection:{completed:new Set<number>(),ambiguous:new Set<number>(),responded:false,reasons:[]}}:{})});
+  collection:{completed:new Set<number>(),reasons:[]}}:{})});
  await new Promise(resolve=>setImmediate(resolve));
  monotonic+=149999;t.mock.timers.tick(150000);
  await result;
@@ -316,9 +316,8 @@ test('an answered collection with an exhausted callback fails only the song',asy
   admit();assert.equal(budget,65000);now+=budget!;
   f.update({error:'timeout',rows:[]});return null;
  };
- const collection={completed:new Set<number>(),ambiguous:new Set<number>(),responded:false,reasons:[]};
+ const collection={completed:new Set<number>(),reasons:[]};
  const result=await acquireFromOrderedBots({...f.params,collection,accept:async()=> 'saved'});
  assert.deepEqual(result,{state:'timed-out'});
- assert.equal(collection.responded,true);
  assert.deepEqual(f.searches,providers.map(p=>p.providerRef));
 });

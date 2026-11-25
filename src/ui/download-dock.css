@@ -92,3 +92,29 @@
 @media (prefers-reduced-motion: reduce) {
  .download-dock,.download-dock * { animation: none; transition: none; scroll-behavior: auto; }
 }
+
+.download-dock__queue h3 { margin: .5rem 0 0; font-size: .9rem; }
+.download-dock__queue li { align-items: center; justify-content: space-between; }
+.download-confirmation {
+ position: fixed;
+ inset: 0;
+ margin: auto;
+ inline-size: min(22rem, calc(100% - 2rem));
+ padding: 1rem;
+ border: 1px solid var(--pulso-border);
+ border-radius: var(--pulso-radius);
+ background: var(--pulso-surface);
+ color: var(--pulso-foreground);
+ overflow-wrap: anywhere;
+}
+.download-confirmation::backdrop { background: #0007; }
+.download-confirmation h2 { margin: 0 0 .75rem; font-size: 1.1rem; }
+.download-confirmation div { display: flex; flex-wrap: wrap; gap: .5rem; }
+.download-confirmation button {
+ min-block-size: 44px;
+ padding-inline: .65rem;
+ border: 1px solid var(--pulso-border);
+ border-radius: .6rem;
+ background: var(--pulso-soft);
+ color: inherit;
+}

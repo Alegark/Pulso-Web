@@ -1,7 +1,7 @@
 import {BOT_DOWNLOAD_MAX_BYTES,isBotDownloadMime} from './bot-download-bytes';
 import Long from 'long';
 import {dataArray,positive} from './sources-protocol';
-import {BOT_SEARCH_BOUNDS as B,botSearchText,matchingSongRows,type BotSearchLimitError,type BotSearchTarget,type BotSearchRow} from './bot-search-protocol';
+import {BOT_SEARCH_BOUNDS as B,botSearchText,matchingSongRows,type BotSearchFileError,type BotSearchLimitError,type BotSearchTarget,type BotSearchRow} from './bot-search-protocol';
 /** Raw SDK values are worker-private. No getters, JSON hooks, bigint coercion or raw logging. */
 export const searchOwn=(v:unknown,k:string):unknown=>v&&typeof v==='object'?Object.getOwnPropertyDescriptor(v,k)?.value:undefined;
 export class BotSearchProjectionError extends Error {constructor(readonly code:'limit'|'unsupported',readonly limit:BotSearchLimitError|undefined=undefined){super(code);}}
@@ -63,7 +63,7 @@ export function botSearchAck(raw:unknown,botId:number,randomId:Long):number|null
  return ids[0];
 }
 export interface BotSearchPrivateRef {readonly messageId:number;readonly callbackData?:Uint8Array;readonly fingerprint?:string;readonly audioFingerprint?:string;readonly documentId?:string;readonly row?:BotSearchRow}
-export interface BotSearchPage {readonly rows:readonly BotSearchRow[];readonly refs:ReadonlyMap<string,BotSearchPrivateRef>;readonly concurrent:boolean;readonly unrecognized:boolean;readonly rejectedFile?:'file-too-large'|'file-invalid'}
+export interface BotSearchPage {readonly rows:readonly BotSearchRow[];readonly refs:ReadonlyMap<string,BotSearchPrivateRef>;readonly concurrent:boolean;readonly unrecognized:boolean;readonly rejectedFile?:BotSearchFileError}
 /** A callback can edit its original menu into audio. Include only that exact
  * message with a different document and messages newer than the pre-callback baseline; older neighbouring
  * recordings do not belong to this attempt. The raw window still has the same
@@ -106,8 +106,11 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
      const candidate={kind:'audio' as const,correlation,title:botSearchText(searchOwn(audio[0],'title')),performer:botSearchText(searchOwn(audio[0],'performer')),durationSeconds:duration};
      if(isBotDownloadMime(mime)&&typeof size==='number'&&Number.isSafeInteger(size)&&size>0&&size<=BOT_DOWNLOAD_MAX_BYTES)
       add(id,{...candidate,mimeType:mime,bytes:size});
-     else if(target&&matchingSongRows([{...candidate,rowRef:'',mimeType:'audio/wav',bytes:1}],target).length)
-      rejectedFile=typeof size==='number'&&size>BOT_DOWNLOAD_MAX_BYTES?'file-too-large':'file-invalid';
+    else if(target&&matchingSongRows([{...candidate,rowRef:'',mimeType:'audio/wav',bytes:1}],target).length){
+      if(typeof size==='number'&&size>BOT_DOWNLOAD_MAX_BYTES)rejectedFile='file-too-large';
+      else if(typeof mime==='string'&&/^audio\//i.test(mime)&&!isBotDownloadMime(mime))rejectedFile='file-unsupported';
+      else rejectedFile='file-invalid';
+    }
     }
    }
   }

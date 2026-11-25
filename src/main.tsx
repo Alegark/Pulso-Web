@@ -1,3 +1,5 @@
+import {albumCoordinator} from './library/album-download';
+import {albumDownloadKey,libraryDownloadKey} from './library/collection-download-queue';
 import {libraryAlbumCards,readSavedAlbumsFrom,saveAlbumRecord,savedAlbumGroupKey,SavedAlbumLimitError,type SaveAlbumResult,type SavedAlbum,type SavedAlbumFailures} from './library/saved-albums';
 import type {AlbumDetail} from './library/album-catalog';
 import type {LibraryAlbumPage} from './ui/MusicSearchController';
@@ -193,6 +195,7 @@ const databaseRetries=new Set<()=>boolean>();
 const databaseReloadRequired=()=>databaseState==='versionchange'||databaseState==='version-incompatible';
 const databaseRecoverable=()=>databaseState==='blocked'||databaseState==='connection-closed';
 let metadataRescanBlocked=true;
+let libraryLoadedFor:string|null=null;
 let owner=false;let busy=false,busyOwner:symbol|null=null;let status='Abriendo biblioteca…';let tracks:Track[]=[];let playlists:Playlist[]=[];let addedTrackIds:ReadonlySet<string>=new Set();
 const listeners=new Set<()=>void>();const emit=()=>{observeQueueAdmission();finishTransferPlay();listeners.forEach(fn=>fn());};
 let writes=Promise.resolve();let configuring=false;
@@ -464,6 +467,8 @@ async function rememberCurrentSongAlias(...args:Parameters<typeof rememberSongAl
  if(await rememberSongAlias(...args))await refresh(false,false,null);
 }
 function captureSongDownload():SongPlaybackAttempt|null {return captureSongPlayback('download');}
+// Album acquisition waits for an open storage slot before each lookup or save.
+function captureAlbumDownload():SongPlaybackAttempt|null {return captureSongPlayback('download');}
 function captureBatchDownload(recoverPending=false):SongPlaybackAttempt|null {return captureSongPlayback('batch',recoverPending);}
 function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',recoverPending=false):SongPlaybackAttempt|null {
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();
@@ -472,9 +477,10 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
  const intent=purpose==='playback'?++selectedSongIntent:selectedSongIntent;let queueing=false,playUsed=false,rememberedId:string|null=null,primaryArtist:string|null=null;
  const current=()=>(purpose!=='playback'||intent===selectedSongIntent)&&raw()&&review()&&(purpose==='batch'||queueing||admitted());
  const parked=new Set<string>();
+ const downloadReady=()=>!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked()&&songAdmissionIdle(parked);
  const waitForDownload=(signal:AbortSignal)=>waitForSongAdmission({signal,timeoutMs:15_000,
   current:()=>current()&&!importRecoveryPending(parked),
-  ready:()=>!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked()&&songAdmissionIdle(parked),
+  ready:downloadReady,
   subscribe:changed=>{listeners.add(changed);return()=>{listeners.delete(changed);};},
  });
  const reconcile=async(operationId:string,trackId:string|undefined,signal:AbortSignal,repair:boolean,choice?:SongChoice)=>{
@@ -533,7 +539,9 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
   async lookup(choice:SongChoice,signal:AbortSignal,repair=false){
    const live=()=>current()&&!signal.aborted;
    primaryArtist=((choice.source==='itunes'||choice.source==='musicbrainz')?choice.searchArtist:choice.source==='lrclib'?choice.artist:null)?.trim()||null;
-   if(!live()||!songAdmissionIdle(parked))throw Error('La biblioteca está ocupada.');const token=control.activity.begin();if(!token)throw Error('Sin control.');
+   if(!downloadReady())await waitForDownload(signal);
+   if(!live()||!downloadReady())throw Error('La biblioteca está ocupada.');
+   const token=control.activity.begin();if(!token)throw Error('Sin control.');
    try{
     const id=await readSongAlias(choice,()=>live()&&token.current());if(!live())throw Error('cancelled');rememberedId=id;
     if(!id)return null;const track=await readRecord<Track>('tracks',id);if(!live())throw Error('cancelled');
@@ -555,6 +563,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
    }finally{token.end();}
   },
   async save(audio:BotDownloadedAudio,choice:SongChoice,signal:AbortSignal,onProgress:(n:number)=>void,operationId?:string){
+   if(!downloadReady())await waitForDownload(signal);
    if(!current()||signal.aborted)return {state:'failed' as const,trackId:null};
    const save=captureBotAudioImport('cache',parked);if(!save)return {state:'failed' as const,trackId:null};
    const result=await save(audio,signal,onProgress,operationId);if(result.state!=='saved'||!result.trackId)return result;
@@ -714,7 +723,7 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
  songAliases=organization?.aliases??null;
  diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'succeeded'});
  storedAssets=[...assets.values()].filter(validAsset);tracks=nextTracks;addedTrackIds=nextAddedTrackIds;playlists=nextPlaylists;operations=nextOperations;importProblems=nextProblems;storageEstimate=estimate;
- availability=nextAvailability;
+ availability=nextAvailability;libraryLoadedFor=accountId;
  if(firstFailure){
   diagnostics.complete(diagnostic,failurePhase?{...firstFailure,phase:failurePhase}:firstFailure,parent===undefined?'primary':'refresh');
   availabilityNotice=`No se pudo comprobar la copia local de ${unknown===1?'una canción':unknown+' canciones'}. Vuelve a comprobar el almacenamiento.`;status=availabilityNotice;
@@ -1017,7 +1026,7 @@ attachDatabaseTransportLifecycle(applyDatabaseLifecycle);
 let activeAccount:string|null=null,accountQueue:Snapshot|undefined,accountQueueOwner:string|null=null;
 function accountBoundary(){
  const next=accountController.getSnapshot().user?.id??null;if(next===activeAccount)return;
- const previous=activeAccount;activeAccount=next;if(previous)status='';librarySync.account(next);preparedLibraryAccount=null;lastLibrarySyncSignature='';savedArtists=[];savedArtistRevision++;savedAlbums=[];savedAlbumRevision++;songAliases=new Map();tracks=[];playlists=[];addedTrackIds=new Set();availability=new Map();
+ const previous=activeAccount;activeAccount=next;libraryLoadedFor=null;if(previous)status='';librarySync.account(next);preparedLibraryAccount=null;lastLibrarySyncSignature='';savedArtists=[];savedArtistRevision++;savedAlbums=[];savedAlbumRevision++;songAliases=new Map();tracks=[];playlists=[];addedTrackIds=new Set();availability=new Map();
  if(previous){
   const key=playbackCheckpointKey();accountEpoch++;accountQueue=snapshot();accountQueueOwner=previous;transferPlayIntent=null;cancelSelectedSongIntent();queueInsertions.cancelAll('user');control.cancelTransfer();audio.pause();player.suspend();player.setQueue([]);clearMediaSession();
   if(control.owner&&control.activity.idle&&!releaseBlocked()){
@@ -1088,7 +1097,7 @@ function App(){
  const [page,setPage]=React.useState<'inicio'|'buscar'|'biblioteca'>('inicio');
  React.useEffect(()=>{
   const pending=pendingDownloadAfterUpdate(account.user?.id);
-  if(pending?.kind==='song'||pending?.kind==='album')setPage('buscar');
+  if(pending?.kind==='song'||pending?.kind==='album')setPage(pending.kind==='album'&&pending.fromLibrary?'biblioteca':'buscar');
  },[account.user?.id]);
 
  const [settingsOpen,setSettingsOpen]=React.useState(false);
@@ -1156,6 +1165,14 @@ function App(){
   gate:active=>{if(active){if(collectionKey!==removalScopeKey())return;collectionGate=collectionKey;control.activity.block(reason,true);}else{control.activity.block(reason,false);if(collectionGate===collectionKey)collectionGate=null;}emit();},
   reserve:target=>{control.activity.block(reason,false);try{return sourceReview.reserve(target);}finally{control.activity.block(reason,true);}},refresh:()=>refresh(true,false,null),
   adopt:snapshot=>{if(collectionKey!==removalScopeKey())return;copyRemovalStartup={key:collectionKey,snapshot};++removalRecoveryEpoch;setCopyRemovalBlocking(collectionKey,snapshot.unknown||snapshot.pending.length>0,true);},
+  removed:selection=>{
+   if(selection.kind==='playlist')albumCoordinator.removeQueued?.(libraryDownloadKey('playlist:'+selection.id));
+   if(selection.kind==='album'){
+    const album=savedAlbums.find(item=>savedAlbumGroupKey(item.edition.id)===selection.key);
+    if(album)albumCoordinator.removeQueued?.(albumDownloadKey(album.edition.id));
+    else albumCoordinator.removeQueued?.(libraryDownloadKey('group:'+selection.key));
+   }
+  },
   checkpoint:current=>{if(current())void saveLatestQueue(current,true);},changed:()=>emit(),
  });},[collectionKey]);
  const downloadRemovalController=React.useMemo(()=>{const reason=`download-removal:${collectionKey}:${crypto.randomUUID()}`;return createDownloadRemovalController({activity:control.activity,
@@ -1460,11 +1477,14 @@ function App(){
  const canOrganize=owner&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked();
  const collectionTitle=selected?.name??(favorites?'Favoritos':activeGroup?.label??'Colección');
  const collectionDownloadIds=React.useMemo(()=>selected?selected.entries.map(entry=>entry.trackId).filter(id=>trackIndex.has(id)):visible.map(({track})=>track.id),[selected,trackIndex,visible]);
- const downloadCollection={target:collectionDownloadVisible?collectionDownloadTarget:null,
+ const downloadCollection={id:selected?'playlist:'+selected.id:favorites?'favorites':activeGroup?'group:'+activeGroup.key:'library',target:collectionDownloadVisible?collectionDownloadTarget:null,
   request:{trackIds:collectionDownloadIds,title:collectionTitle},
   label:selected?'Descargar playlist completa':'Descargar esta selección en este dispositivo',
-  disabled:!canOrganize,complete:!!collectionDownloadIds.length&&collectionDownloadIds.every(id=>trackAvailability(trackIndex.get(id)!,availability)==='available')};
+  disabled:!owner||busy||databaseState!=='ready'||collectionBlocked(),complete:!!collectionDownloadIds.length&&collectionDownloadIds.every(id=>trackAvailability(trackIndex.get(id)!,availability)==='available')};
  const canSaveArtist=canOrganize&&databaseState==='ready'&&!collectionBlocked();
+ const albumSaveBlockedReason=!owner?'Usa Pulso en esta pestaña para guardar el álbum.':
+  databaseState!=='ready'?'Abre Almacenamiento para recuperar el acceso a Biblioteca.':
+  busy||collectionBlocked()||queueForeignBlocked()||sourceReview.hasReservation()?'Espera a que termine la operación en Biblioteca para guardar el álbum.':undefined;
  const telegramLibraryPending=importRecoveryPending()||metadataRescanBlocked||copyRemovalPending;
  const telegramBlocked=telegramBlockReason({supported:control.supported,owner,acquiring:control.state==='adquiriendo',storageReady:databaseState==='ready',busy,reserved:sourceReview.hasReservation(),queuePending:queueForeignBlocked()});
  const canAppend=insertionBaseReady()&&deferredQueueRestore===null&&sourceReview.canPrepare()&&control.activity.count===queueInsertions.pendingCount+queueSaveTokens&&(queueInsertions.pendingCount>0||!sourceProtection.getReadonlySnapshot().unknown);
@@ -1517,8 +1537,8 @@ function App(){
  }} onOpen={openSpotifyPlaylist}/>}
 <section className="settings-group settings-appearance"><h3>Apariencia</h3><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label></section><DownloadNotificationSettings/><section className="settings-group settings-app-update" aria-labelledby="app-update-heading"><h3 id="app-update-heading">Actualización de la app</h3><div className="settings-group__body"><p>Versión en ejecución: {runningVersion}</p><p role="status">{manualReloadPending?'Esperando a que terminen las operaciones para recargar…':updateState==='checking'?'Comprobando versión…':updateState==='current'?'Actualizada':updateState==='available'?'Nueva versión disponible':'No se pudo comprobar si hay actualizaciones.'}</p><button type="button" disabled={manualReloadPending||updateNavigationLocked} onClick={()=>{player.pause();automaticUpdates?.reload();}}>Recargar app</button><p>Recarga Pulso y conserva tus datos. Si hay música sonando, se pausará.</p></div></section><section className="settings-group" aria-label="Sincronización de biblioteca"><h3>Biblioteca de tu cuenta</h3><div className="settings-group__body"><p role="status">{librarySyncMessage[librarySyncState]}</p><p>Las playlists, los favoritos y los datos de las canciones se conservan con tu cuenta. Los álbumes y artistas guardados, y las descargas, se conservan en este dispositivo.</p><button type="button" disabled={!owner||busy||librarySyncState==='syncing'} onClick={()=>void librarySync.sync()}>Sincronizar biblioteca</button></div></section></div><div className="settings-groups">
 <section hidden={settingsSection!=='connections'} className="settings-group"><h3>Cuenta y fuentes</h3><div className="settings-group__body"><section aria-label="Música de Telegram"><details className="settings-help"><summary>Cómo buscar y escuchar</summary><p>En Buscar puedes consultar sugerencias musicales y las opciones del bot que elijas. Conecta tu cuenta de Telegram y configura tus bots para consultarlos. Al elegir una canción se comprueba tu copia local; si falta, se obtiene del bot para descargarla y escucharla. Límite por canción: {formatStorageMB(AUDIO_FILE_MAX_BYTES)}.</p></details></section>
- <TelegramPanel requiredSetup songAliases={songAliases} localAvailability={availability} savedAlbums={savedAlbums} saveAlbum={saveCatalogAlbum} canSaveAlbum={canSaveArtist}
-  libraryAlbum={albumPage&&libraryAlbumTarget?{page:albumPage,target:libraryAlbumTarget,visible:page==='biblioteca'&&!settingsOpen&&!playerOpen}:undefined} captureDownloadOwner={captureDownloadOwner} downloadStorageReady={downloadStorageReady} downloadUpdateWait={downloadUpdateWait} onStopDownloadUpdate={stopDownloadUpdate} downloadCollection={downloadCollection} downloadStorageTarget={storageOpen&&!playerOpen?storageDownloadTarget:null} onSetupReady={onSetupReady} accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureBatchDownload={captureBatchDownload} onReviewedDownload={operationId=>{if(operationId)verifiedResponse(operationId);void refresh(false,false,null).catch(()=>{});}} onReviewDownloadStorage={()=>{
+ <TelegramPanel requiredSetup songAliases={songAliases} localAvailability={availability} savedAlbums={savedAlbums} saveAlbum={saveCatalogAlbum} albumSaveBlockedReason={albumSaveBlockedReason}
+  libraryAlbum={albumPage&&libraryAlbumTarget?{page:albumPage,target:libraryAlbumTarget,visible:page==='biblioteca'&&!settingsOpen&&!playerOpen}:undefined} captureDownloadOwner={captureDownloadOwner} downloadStorageReady={downloadStorageReady} downloadUpdateWait={downloadUpdateWait} onStopDownloadUpdate={stopDownloadUpdate} downloadCollection={downloadCollection} downloadStorageTarget={storageOpen&&!playerOpen?storageDownloadTarget:null} onSetupReady={onSetupReady} accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} libraryLoaded={libraryLoadedFor!==null&&libraryLoadedFor===account.user?.id} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureAlbumDownload={captureAlbumDownload} captureBatchDownload={captureBatchDownload} onReviewedDownload={operationId=>{if(operationId)verifiedResponse(operationId);void refresh(false,false,null).catch(()=>{});}} onReviewDownloadStorage={()=>{
   const target=document.getElementById('download-copy-recovery')??document.getElementById('download-response-recovery');
   if(target){setSettingsOpen(false);requestAnimationFrame(()=>{target.focus({preventScroll:true});target.scrollIntoView({block:'start'});});}
   else{setSettingsSection('general');setSettingsOpen(true);requestAnimationFrame(()=>settingsHeading.current?.focus());}

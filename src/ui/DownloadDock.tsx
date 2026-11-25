@@ -57,8 +57,11 @@ function readPosition():Point|null{
  return null;
 }
 
-export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUpdate,pendingDownload}:{updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;pendingDownload?:{saved:number;total:number;title?:string;reason?:string;retaking:boolean;onContinue:()=>void};message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
- const {running,active,notice}=useAlbumDownloadState();
+export function DownloadDock({accountId,message,review,onReviewStorage,updateWait,onStopUpdate,pendingDownload,queuedPauseReason,onRetryQueued}:{accountId?:string;updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;queuedPauseReason?:string;onRetryQueued?:()=>void;pendingDownload?:{saved:number;total:number;title?:string;reason?:string;retaking:boolean;onContinue:()=>void};message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
+ const {active:activeRun,notice,queued,queueAccount,removeQueued}=useAlbumDownloadState();
+ const scoped=(run:AlbumCoordinator['active'])=>run?.accountId===undefined||run.accountId===accountId?run:undefined;
+ const active=scoped(activeRun),running=!!active;
+ const waiting=(queueAccount===accountId?queued?.filter(item=>item.key!==active?.collectionKey):[])??[];
  const diagnostics=useSyncExternalStore(appDiagnosticSession.subscribe,appDiagnosticSession.getSnapshot);
  const song=diagnostics.enabled?diagnostics.songs.at(-1):undefined;
  const seconds=(ms:number)=>(ms/1000).toLocaleString('es',{maximumFractionDigits:1});
@@ -83,10 +86,10 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
  const showingDetails=reviewing||expanded;
 
  useLayoutEffect(()=>{
-  let run=albumCoordinator.active;
+  let run=scoped(albumCoordinator.active);
   let timer:ReturnType<typeof setTimeout>|undefined;
   const listener=()=>{
-   const next=albumCoordinator.active;
+   const next=scoped(albumCoordinator.active);
    if(next===run)return;
    clearTimeout(timer);
    if(next){setFinished(null);setExpanded(false);}
@@ -132,8 +135,8 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
  const pendingBatch=!running?pendingDownload:undefined;
  useLayoutEffect(()=>{if(pendingBatch)setFinished(null);},[!!pendingBatch]);
  const pendingMessage=pendingBatch&&(pendingBatch.retaking?'Retomando…':`Descarga pendiente · ${pendingBatch.saved} de ${pendingBatch.total} guardadas`);
- const pauseReason=displayMessage(pendingBatch?.reason);
- const visible=!!updateMessage||running||!!finished||!!transient||reviewing||!!pendingBatch;
+ const pauseReason=displayMessage(pendingBatch?.reason??(!running?queuedPauseReason:undefined));
+ const visible=!!updateMessage||running||!!finished||!!transient||reviewing||!!pendingBatch||waiting.length>0;
  const currentNotice=running?notice:pendingBatch?undefined:finished?.notice;
  const rows=currentNotice?.progress.rows??[];
  const {saved,total}=downloadCounts(currentNotice);
@@ -220,23 +223,23 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
  },[visible]);
 
  return createPortal(<>
-  <div className="pulso-visually-hidden" role="status">{updateMessage||(pendingMessage?[pendingMessage,transient,pauseReason].filter(Boolean).join(' · '):null)||transient||(running?`Descargando · ${summary}`:finished?`${finished.stopped?'Descarga detenida':'Descarga finalizada'} · ${summary}`:'')}</div>
+  <div className="pulso-visually-hidden" role="status">{updateMessage||(pendingMessage?[pendingMessage,transient,pauseReason].filter(Boolean).join(' · '):null)||transient||pauseReason||(running?`Descargando · ${summary}`:finished?`${finished.stopped?'Descarga detenida':'Descarga finalizada'} · ${summary}`:'')}</div>
   {visible&&<div ref={bounds} className="download-dock-area">
    <section ref={card} className="download-dock" aria-label={reviewing?'Revisión de descarga':'Descargas'} tabIndex={-1}
     data-positioned={!!position} data-expanded={showingDetails} data-pending={!!pendingBatch&&!updateMessage&&!reviewing&&!showingDetails&&!transient&&!pauseReason}>
-    {updateMessage?<p className="download-dock__message">{updateMessage}</p>:reviewing?review:pendingBatch||currentNotice||running?<><button ref={handle} type="button" className="download-dock__handle"
+    {updateMessage?<p className="download-dock__message">{updateMessage}</p>:reviewing?review:pendingBatch||currentNotice||running||waiting.length?<><button ref={handle} type="button" className="download-dock__handle"
      aria-expanded={expanded} aria-controls={expanded?panelId:undefined} aria-describedby={hintId}
      aria-label={running?`${expanded?'Plegar':'Ver'} descargas · ${saved} de ${total} guardadas`:undefined}
      onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={endPointer} onPointerCancel={endPointer} onLostPointerCapture={endPointer}
      onKeyDown={moveWithKey} onClick={event=>{if(event.detail&&ignoreClick.current){ignoreClick.current=false;return;}setExpanded(value=>!value);}}>
-      <DownloadIcon done={!pendingBatch&&!running&&saved===total}/>
-      {running?<><span>{saved}/{total}</span><progress aria-hidden="true" value={saved} max={Math.max(1,total)}/></>:<span>{pendingMessage??summary}</span>}
+      <DownloadIcon done={!pendingBatch&&!running&&total>0&&saved===total}/>
+      {running?<><span>{saved}/{total}</span><progress aria-hidden="true" value={saved} max={Math.max(1,total)}/></>:<span>{pendingMessage??(currentNotice?summary:`En cola (${waiting.length})`)}</span>}
       <span className="download-dock__chevron" aria-hidden="true">{expanded?'⌃':'⌄'}</span>
      </button>
      <span id={hintId} className="pulso-visually-hidden">Usa las flechas para mover la ventana.</span>
      {expanded&&<div id={panelId} className="download-dock__panel">
-      <strong><bdi dir="auto">{pendingBatch?.title??currentNotice?.title??active?.title??'Selección de Biblioteca'}</bdi></strong>
-      {!pendingBatch&&<p>{running?summary:finished?.stopped?'Descarga detenida':'Descarga finalizada'}</p>}
+      <strong><bdi dir="auto">{pendingBatch?.title??currentNotice?.title??active?.title??waiting[0]?.title??'Cola de descargas'}</bdi></strong>
+      {!pendingBatch&&currentNotice&&<p>{running?summary:finished?.stopped?'Descarga detenida':'Descarga finalizada'}</p>}
       {running&&currentIndex>=0&&<p><bdi dir="auto">{currentNotice?.titles?.[currentIndex]??`Canción ${currentIndex+1}`}</bdi></p>}
       {detailMessage&&<p>{detailMessage}</p>}
       {song&&<p>Última: {seconds(song.totalMs)} s · {song.botsTried} {song.botsTried===1?'bot':'bots'} · {song.candidatesTried} {song.candidatesTried===1?'opción':'opciones'}
@@ -245,6 +248,13 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
        {song.transferMs>0&&` · red ${seconds(song.transferMs)} s`}{song.importMs>0&&` · guardado ${seconds(song.importMs)} s`}
        {song.timeoutMs>0&&` · espera agotada ${seconds(song.timeoutMs)} s`}{song.reconnectMs>0&&` · reconexión ${seconds(song.reconnectMs)} s`}
        {song.floodWaitMs>0&&` · pausa de Telegram ${seconds(song.floodWaitMs)} s`}</p>}
+      {waiting.length>0&&<section className="download-dock__queue" aria-label="Cola de descargas">
+       <h3>En cola ({waiting.length})</h3>
+       <ol>{waiting.map(item=><li key={item.key}>
+        <bdi dir="auto">{item.title}</bdi>
+        <button type="button" aria-label={`Quitar de la cola: ${item.title}`} onClick={()=>removeQueued?.(item.key)}>Quitar</button>
+       </li>)}</ol>
+      </section>}
       {rows.length>0&&<ol>{rows.map((row,index)=>{
        const failed=!row.confirmed&&(row.state==='failed'||row.state==='uncertain');
        const reason=!row.confirmed&&row.reason?reasonLabels[row.reason].row:null;
@@ -259,6 +269,7 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
      {!expanded&&(transient||pauseReason||currentNotice?.progress.waiting&&progressMessage)&&<p className="download-dock__message" role={pauseReason?undefined:'status'}>{detailMessage}</p>}
     </>:<p className="download-dock__message">{transient}</p>}
     {!updateMessage&&!reviewing&&pendingBatch&&!pendingBatch.retaking&&<div className="download-dock__footer"><button type="button" onClick={pendingBatch.onContinue}>Continuar</button></div>}
+    {!updateMessage&&!reviewing&&!running&&!pendingBatch&&onRetryQueued&&<div className="download-dock__footer"><button type="button" onClick={onRetryQueued}>Reintentar descarga en cola</button></div>}
     {(updateMessage||!reviewing&&expanded&&running&&active)&&<div className="download-dock__footer"><button type="button" onClick={()=>{
      if(updateMessage)onStopUpdate?.();
      else if(active&&albumCoordinator.active===active){if(active.stop)active.stop();else active.abort.abort();}
@@ -268,15 +279,98 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
  </>,document.body);
 }
 
-export function CollectionDownloadButton({label,disabled,complete,onStart,showLabel=false,coordinator=albumCoordinator}:{
- label:string;disabled?:boolean;complete?:boolean;onStart:()=>void;showLabel?:boolean;coordinator?:AlbumCoordinator;
+export function CollectionDownloadButton({label,disabled,complete,onStart,paused=false,showLabel=false,coordinator=albumCoordinator,collectionKey,accountId}:{
+ label:string;paused?:boolean;disabled?:boolean;complete?:boolean;onStart:()=>void;showLabel?:boolean;coordinator?:AlbumCoordinator;collectionKey?:string;accountId?:string;
 }){
- const {running,notice}=useAlbumDownloadState(coordinator);
+ const {running,notice,active,queued,queueAccount,removeQueued}=useAlbumDownloadState(coordinator);
+ const dialog=useRef<HTMLDialogElement>(null),keep=useRef<HTMLButtonElement>(null),cancel=useRef<HTMLButtonElement>(null);
+ const opener=useRef<HTMLButtonElement>(null);
+ const focusAfterDisable=useRef<(()=>void)|null>(null);
+ const [confirmation,setConfirmation]=useState<{title:string;run?:NonNullable<AlbumCoordinator['active']>}|null>(null);
+ const headingId=useId();
+ const ownRun=collectionKey&&active?.collectionKey===collectionKey&&active.accountId===accountId?active:undefined;
+ const waiting=!paused&&collectionKey&&queueAccount===accountId?queued?.find(item=>item.key===collectionKey):undefined;
+ const managed=!!(ownRun||waiting);
+ const showProgress=!!ownRun||paused||running&&!collectionKey;
+ const buttonDisabled=!showProgress&&!managed&&!!(disabled||complete);
  const {saved,total}=downloadCounts(notice);
- const name=running?`Ver descargas · ${saved} de ${total} guardadas`:complete?'Todas las canciones descargadas':label;
- return <button type="button" className="collection-download" aria-label={name} title={name}
-  disabled={!running&&(disabled||complete)} onClick={running?openDownloadDock:onStart}>
-  <DownloadIcon done={!running&&complete}/>
-  {running?<span aria-hidden="true">{saved}/{total}</span>:showLabel&&<span>{name}</span>}
- </button>;
+ const name=showProgress?ownRun?`Gestionar descarga de ${ownRun.title}`:paused?label:`Ver descargas · ${saved} de ${total} guardadas`:
+  waiting?`Gestionar descarga en cola de ${waiting.title}`:complete?'Todas las canciones descargadas':label;
+ useLayoutEffect(()=>{
+  const node=dialog.current;
+  if(!confirmation||!node)return;
+  node.showModal();keep.current?.focus({preventScroll:true});
+  const button=opener.current;
+  const view=button?.closest('.album-page,.collection-header');
+  const section=view?.closest('.library-view')??button?.closest('main');
+  return()=>{
+   node.close();
+   const canReturn=()=>{
+    const focused=document.activeElement;
+    return !document.querySelector('dialog[open],[aria-modal="true"]')&&
+     (!focused||focused===document.documentElement||focused===document.body||focused===button||node.contains(focused));
+   };
+   const focusHeading=()=>{
+    focusAfterDisable.current=null;
+    if(!canReturn())return;
+    const heading=[view?.querySelector<HTMLElement>('h2,h3'),...section?.querySelectorAll<HTMLElement>('h2[tabindex="-1"]')??[]]
+     .find(element=>element?.getClientRects().length);
+    heading?.focus({preventScroll:true});
+   };
+   requestAnimationFrame(()=>{
+    if(!canReturn())return;
+    if(button?.isConnected&&!button.disabled&&button.getClientRects().length){
+     // Availability can finish refreshing after the download has settled.
+     // Move off the opener if that later render disables or removes it.
+     focusAfterDisable.current=focusHeading;
+     button.focus({preventScroll:true});
+    }else focusHeading();
+   });
+  };
+ },[confirmation]);
+ useLayoutEffect(()=>{
+  if(buttonDisabled)focusAfterDisable.current?.();
+ },[buttonDisabled]);
+ useLayoutEffect(()=>()=>{
+  const fallback=focusAfterDisable.current;
+  if(fallback)requestAnimationFrame(fallback);
+ },[]);
+ useEffect(()=>{
+  if(confirmation&&(confirmation.run?ownRun!==confirmation.run:!waiting||!!ownRun))setConfirmation(null);
+ },[confirmation,ownRun,waiting]);
+ return <>
+  <button ref={opener} type="button" className="collection-download" aria-label={name} title={name}
+   aria-haspopup={managed?'dialog':undefined} disabled={buttonDisabled} onBlur={event=>{
+    if(event.relatedTarget&&event.relatedTarget!==document.body)focusAfterDisable.current=null;
+   }} onClick={()=>{
+    focusAfterDisable.current=null;
+    if(ownRun||waiting)setConfirmation({title:ownRun?.title??waiting!.title,run:ownRun});
+    else if(showProgress)openDownloadDock();
+    else onStart();
+   }}>
+   <DownloadIcon done={!showProgress&&!managed&&!!complete}/>
+   {showProgress&&!paused?<span aria-hidden="true">{saved}/{total}</span>:showLabel&&<span>{name}</span>}
+  </button>
+  {confirmation&&createPortal(<dialog ref={dialog} className="download-confirmation" aria-labelledby={headingId}
+   onClose={event=>{if(!event.currentTarget.open)setConfirmation(null);}}
+   onCancel={event=>{event.preventDefault();setConfirmation(null);}}
+   onKeyDown={event=>{
+    if(event.key!=='Tab')return;
+    if(document.activeElement===event.currentTarget){event.preventDefault();(event.shiftKey?cancel:keep).current?.focus();}
+    else if(event.shiftKey&&document.activeElement===keep.current){event.preventDefault();cancel.current?.focus();}
+    else if(!event.shiftKey&&document.activeElement===cancel.current){event.preventDefault();keep.current?.focus();}
+   }}>
+   <h2 id={headingId}><bdi dir="auto">{confirmation.title}</bdi></h2>
+   <div>
+    <button type="button" ref={keep} onClick={()=>setConfirmation(null)}>{confirmation.run?'Seguir descargando':'Mantener en cola'}</button>
+    <button type="button" ref={cancel} onClick={()=>{
+     if(confirmation.run&&coordinator.active===confirmation.run){
+      const run=confirmation.run;
+      if(run.stop)run.stop(true);else run.abort.abort();
+     }else if(!confirmation.run&&collectionKey&&coordinator.active?.collectionKey!==collectionKey)removeQueued?.(collectionKey);
+     setConfirmation(null);
+    }}>{confirmation.run?'Cancelar descarga':'Quitar de la cola'}</button>
+   </div>
+  </dialog>,document.body)}
+ </>;
 }

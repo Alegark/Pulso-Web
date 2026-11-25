@@ -8,13 +8,14 @@ function copyCandidates(value:unknown):SavedCandidate[]|null{
 export type PendingDownload={kind:'network';index:number}|{kind:'save';index:number;operationId:string;attempts?:SavedCandidate[]};
 export interface LibraryDownloadCheckpoint {
  id:string;trackIds:string[];cursor:number;pending:PendingDownload|null;telegramRetryAt?:number;
- title?:string;autoResume?:boolean;autoAttempts?:number;saved?:number;pauseMessage?:string;
+ collectionKey?:string;queueId?:string;title?:string;autoResume?:boolean;autoAttempts?:number;saved?:number;pauseMessage?:string;
 }
 export function copyLibraryDownloadCheckpoint(value:unknown):LibraryDownloadCheckpoint|null{
  const row=value as LibraryDownloadCheckpoint|null;
  if(!row||!uuid(row.id)||!Array.isArray(row.trackIds)||!row.trackIds.length||row.trackIds.length>5000||
   !row.trackIds.every(uuid)||!Number.isInteger(row.cursor)||row.cursor<0||row.cursor>row.trackIds.length)return null;
- const {telegramRetryAt,title,autoResume,autoAttempts,saved,pauseMessage}=row;
+ const {telegramRetryAt,title,autoResume,autoAttempts,saved,pauseMessage,collectionKey,queueId}=row;
+ if(collectionKey!==undefined&&(typeof collectionKey!=='string'||!collectionKey.startsWith('library:')||collectionKey.length>1000)||queueId!==undefined&&!uuid(queueId))return null;
  if(title!==undefined&&(typeof title!=='string'||!title.length||title.length>640)||
   pauseMessage!==undefined&&(typeof pauseMessage!=='string'||!pauseMessage.length||pauseMessage.length>300)||
   autoResume!==undefined&&typeof autoResume!=='boolean'||
@@ -27,7 +28,7 @@ export function copyLibraryDownloadCheckpoint(value:unknown):LibraryDownloadChec
  const attempts=pending?.kind==='save'&&pending.attempts!==undefined?copyCandidates(pending.attempts):undefined;
  if(attempts===null)return null;
  return {id:row.id,trackIds:[...row.trackIds],cursor:row.cursor,
-  ...(pauseMessage?{pauseMessage}:{}),...(title!==undefined?{title}:{}),...(autoResume!==undefined?{autoResume}:{}),
+  ...(collectionKey?{collectionKey}:{}),...(queueId?{queueId}:{}),...(pauseMessage?{pauseMessage}:{}),...(title!==undefined?{title}:{}),...(autoResume!==undefined?{autoResume}:{}),
   ...(autoAttempts!==undefined?{autoAttempts}:{}),...(saved!==undefined?{saved}:{}),...(telegramRetryAt?{telegramRetryAt}:{}),pending:pending===null?null:pending.kind==='network'?
   {kind:'network',index:pending.index}:{kind:'save',index:pending.index,operationId:pending.operationId,...(attempts?{attempts}:{})}};
 }
@@ -53,11 +54,12 @@ export function canAutoResumeLibraryDownload(checkpoint:LibraryDownloadCheckpoin
 
 // The playback owner serializes writes across tabs. Rotate the pointer to
 // reject stale handoffs and starts that passed the same asynchronous gate.
-export function claimLibraryDownload(accountId:string,title:string,trackIds:readonly string[],expectedId?:string,automatic=false){
+export function claimLibraryDownload(accountId:string,title:string,trackIds:readonly string[],expectedId?:string,automatic=false,queued?:{key:string;id:string}){
  const previous=readLibraryDownloadCheckpoint(accountId);
  if(previous?.id!==expectedId||automatic&&(!previous||!canAutoResumeLibraryDownload(previous)))return null;
  const checkpoint:LibraryDownloadCheckpoint={
   ...(previous??{trackIds:[...trackIds],cursor:0,pending:null}),
+  ...(queued?{collectionKey:queued.key,queueId:queued.id}:{}),
   title:title.slice(0,640)||'Selección de Biblioteca',id:crypto.randomUUID(),autoResume:true,
   autoAttempts:automatic?(previous?.autoAttempts??0)+1:0,
  };

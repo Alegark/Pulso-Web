@@ -7,7 +7,7 @@ import type {tl} from '@mtcute/core';
 import type {BaseTelegramClient} from '@mtcute/core/client.js';
 import {botProvidersFailure,type BotProvidersClock,type BotSearchProviderCapture,type BotProvidersDriver} from './bot-providers-driver';
 import {isUuid,parseAccountBinding,type AccountBinding} from './sources-protocol';
-import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,botPollDelay,botSearchText,formatBotSearchQuery,parseBotSearchCommand,matchingSongRows,botOptionDurationMismatch,type BotSearchEnvelope,type BotSearchReply,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
+import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,botPollDelay,botSearchText,botSearchReportsNeedsStart,botSearchReportsNoResults,formatBotSearchQuery,parseBotSearchCommand,matchingSongRows,botOptionDurationMismatch,type BotSearchEnvelope,type BotSearchReply,type BotSearchError,type BotSearchDelivery} from './bot-search-protocol';
 import {assertBotSearchRawBudget,botSearchAck,botSearchBaseline,BotSearchProjectionError,projectBotSearchPage,projectBotCallbackPage,botSearchDocumentIdentity,botSearchKnownMessage,botSearchMessageFingerprint,botSearchAudioFingerprint,botSearchDocument,type BotSearchPrivateRef} from './bot-search-page';
 /** Inject only inside the worker. No generic RPC, root peers or arbitrary message identifiers. */
 export interface BotSearchDependency {
@@ -114,6 +114,9 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
     // SDK late failures are observed independently of a winning cancel/deadline cause.
     const kind=classifyTelegramFailure(error).error;
     if(kind==='invalid-peer'||kind==='access'||invalidatesBotIdentity(error))identities.delete(c.providerRef);
+    // Keep the published sending state. Telegram's rejection is conclusive
+    // even though the bot did not acknowledge the request.
+    if(kind==='blocked-user'&&!f.cause&&f.delivery==='uncertain')return fail('needs-start');
     const cause=botProvidersFailure(error,time.now());
     if(cause.error==='session-expired'){if(!f.cause)f.cause=cause;invalidate();}
     if(cause.error==='rate-limit'){
@@ -213,6 +216,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       const documentId=botSearchDocumentIdentity(message)!;
       if(reuseMenu&&downloadedDocuments.has(documentId))throw fail('file-invalid');
       check();
+      // A verified direct audio reply has already been delivered by the bot.
+      f.delivery='acknowledged';
       const transferMs=botDownloadTransferMs(row.bytes);
       deadline=time.now()+transferMs;
       if(timer!==undefined)time.clearTimeout(timer);
@@ -265,8 +270,10 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       // Only a closed, explicit reply can establish an empty result; generic
       // text, history silence and unsupported menus remain inconclusive.
       rejectedFile??=page.rejectedFile;
-      if(!lastCandidates&&!rejectedFile&&page.rows.some(row=>row.kind==='message'&&row.correlation==='reply'&&
-       /^(?:no (?:se )?encontraron resultados|no results found)[.!]?$/iu.test(row.text)))return searchResult(page);
+      if(!lastCandidates&&!rejectedFile){
+       if(page.rows.some(botSearchReportsNoResults))return searchResult(page);
+       if(page.rows.some(botSearchReportsNeedsStart))throw fail('needs-start');
+      }
       sawBotReply ||= page.unrecognized||page.rows.length>0;
      }
      if(rejectedFile)throw fail(rejectedFile);

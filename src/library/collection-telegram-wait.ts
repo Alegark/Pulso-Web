@@ -5,7 +5,7 @@ import type {TelegramSessionClient} from '../telegram/session-client';
 const MAX_AUTO_WAIT_MS=15*60_000;
 const RECONNECT_DELAYS=[5_000,10_000,20_000,40_000];
 
-export function collectionTelegramWait(client:TelegramSessionClient,signal:AbortSignal,live:()=>boolean,initialWait:number,onWait:(until:number)=>void){
+export function collectionTelegramWait(client:TelegramSessionClient,signal:AbortSignal,live:()=>boolean,initialWait:number,onWait:(until:number)=>void,resumeLabel='Continuar'){
  const page=typeof document==='undefined'?null:document;
  const windowHost=typeof window==='undefined'?null:window;
  const online=()=>globalThis.navigator?.onLine!==false;
@@ -51,7 +51,7 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
     if(generation!==observed||Date.now()-before>ms+1000)reset();
    };
    const pause=(message:string,automatic=false)=>({message,automatic});
-   const networkPause=()=>pause('No se pudo reconectar con Telegram. Pulsa Continuar cuando vuelva la conexión.',true);
+   const networkPause=()=>pause(`No se pudo reconectar con Telegram. Pulsa ${resumeLabel} cuando vuelva la conexión.`,true);
    while(live()){
     const remote=client.searchSnapshot(),session=client.snapshot?.();
     if(session?.phase==='restoring'){
@@ -65,7 +65,7 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
      if(until>observedWait){observedWait=until;onWait(until);}
      const remaining=until-Date.now();
      if(remaining>MAX_AUTO_WAIT_MS||lastWait!==until&&disruptions>RECONNECT_DELAYS.length)
-      return pause(`Telegram pide esperar ${duration(remaining)}. Pulsa Continuar cuando termine la espera.`);
+      return pause(`Telegram pide esperar ${duration(remaining)}. Pulsa ${resumeLabel} cuando termine la espera.`);
      lastWait=until;waitingForFlood=true;renew=false;
      report(`Telegram pide esperar ${duration(remaining)} · continúo sola`);
      await sleepUntilWake(delayFor(until),'floodWaitMs');
@@ -73,11 +73,11 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
     }
     if((session?.phase==='error'&&!['network','timeout','cancelled','rate-limit'].includes(session.error??''))||
        session&&['password','code','qr','disconnecting','disconnected'].includes(session.phase)||remote.error==='session-expired'){
-     return pause('Vuelve a conectar Telegram y pulsa Continuar. El progreso se conserva.');
+     return pause(`Vuelve a conectar Telegram y pulsa ${resumeLabel}. El progreso se conserva.`);
     }
     if(!online()){
      if(!wasOffline){wasOffline=true;reset();}
-     if(Date.now()-idleSince>=60_000)return pause('Pulso sigue sin conexión. Pulsa Continuar cuando vuelva la red.',true);
+     if(Date.now()-idleSince>=60_000)return pause(`Pulso sigue sin conexión. Pulsa ${resumeLabel} cuando vuelva la red.`,true);
      report('Pulso sigue sin conexión.');
      await sleepUntilWake(1000,'reconnectMs');continue;
     }
@@ -85,7 +85,7 @@ export function collectionTelegramWait(client:TelegramSessionClient,signal:Abort
      reset();if(waitingForFlood)retryAt=Date.now();
      wasOffline=false;waitingForFlood=false;
     }
-    if(disruptions>RECONNECT_DELAYS.length)return pause('Telegram sigue sin responder. Pulsa Continuar para volver a intentarlo.',true);
+    if(disruptions>RECONNECT_DELAYS.length)return pause(`Telegram sigue sin responder. Pulsa ${resumeLabel} para volver a intentarlo.`,true);
     const ready=remote.available&&(!session||session.phase==='connected');
     const inUse=remote.pending||remote.cancelling;
     if(!inUse&&ready&&!renew&&Date.now()>=retryAt)return null;

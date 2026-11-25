@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {acquireFromOrderedBots,orderedProviders,type CollectionBotProgress} from '../../src/library/ordered-bot-acquisition';
 import {acquireAlbum,type AlbumProgress} from '../../src/library/album-acquisition';
-import type {TelegramSessionClient} from '../../src/telegram/session-client';
+import {downloadSong} from '../../src/library/download-song';
+import type {BotSearchSnapshot,TelegramSessionClient} from '../../src/telegram/session-client';
 import {matchingSongRows,type SongPlaybackAttempt} from '../../src/library/selected-song';
 
 const target={title:'Song',artist:'Artist',album:'Album',durationSeconds:60};
@@ -65,12 +66,12 @@ test('unsupported first provider is skipped while preserving configured order an
  const bots={providers:[{providerRef:'unsupported',username:'unknown',label:'Unknown'},{providerRef:'kd',username:'KDMUSIC_BOT',label:'KD'},{providerRef:'iv',username:'ivkmbot',label:'IV'},{providerRef:'kd',username:'kdmusic_bot',label:'KD'}]};
  assert.deepEqual(orderedProviders(bots as never),[{providerRef:'kd',label:'KD'},{providerRef:'iv',label:'IV'}]);
 });
-test('album cancellation after dispatch quarantines the row before any retry',async()=>{
+test('album cancellation before storage leaves an unconfirmed row eligible for retry',async()=>{
  const f=fixture(['success']),abort=new AbortController(),prior=f.client.downloadBot.bind(f.client),uncertain=new Set<number>();
  f.client.downloadBot=async(ref,allowed,started)=>{const value=await prior(ref,allowed,started);abort.abort();return value;};
  let result:AlbumProgress|undefined;const attempt:SongPlaybackAttempt={current:()=>true,lookup:async()=>null,save:async()=>{throw Error('must not save');},addToLibrary:async()=>{throw Error('must not add');},play:async()=>{throw Error('must not play');}};
  await acquireAlbum({detail:{edition:{id:1,title:'Album',artist:'Artist',trackCount:1,releaseDate:null},tracks:[{releaseId:1,trackId:1,disc:1,position:1,title:'Song',artist:'Artist',durationMs:60000}]},attempt,client:f.client,provider:'one',providers,revision:4,management:()=>null,signal:abort.signal,current:()=>true,rows:[{state:'unattempted',trackId:null,confirmed:false,message:''}],uncertainTracks:uncertain,update:v=>{result=v;}});
- assert.equal(result?.rows[0].state,'uncertain');assert.equal(uncertain.has(1),true);assert.deepEqual(f.searches,['one']);
+ assert.equal(result?.rows[0].state,'unattempted');assert.equal(uncertain.size,0);assert.deepEqual(f.searches,['one']);
 });
 
 test('album retries a network-only interruption once the delivery has settled',async()=>{
@@ -135,38 +136,146 @@ test('acknowledged incompatible full credit reports artist only and never return
 
 
 function collectionProgress():CollectionBotProgress{
- return {completed:new Set(),ambiguous:new Set(),responded:false,reasons:[]};
+ return {completed:new Set(),reasons:[]};
 }
-function collect(client:TelegramSessionClient,collection=collectionProgress()){
- return acquireFromOrderedBots({client,collection,providers,revision:4,target,signal:new AbortController().signal,
+function collect(client:TelegramSessionClient,collection=collectionProgress(),suspended?:()=>boolean){
+ return acquireFromOrderedBots({client,collection,providers,revision:4,target,signal:new AbortController().signal,suspended,
   current:()=>true,networkCurrent:client.captureBotsCurrent(),progress:()=>{},accept:async()=>'saved'});
 }
 
-test('collection tries the next provider after an isolated timeout or unsupported response',async()=>{
- for(const error of ['timeout','unsupported','uncertain','identity-changed','conflict-uncertain'] as const){
-  const f=fixture([error,'success']);
-  assert.equal((await collect(f.client)).state,'audio');
-  assert.deepEqual(f.searches,['one','two']);
- }
-});
+type FailureCase={
+ name:string;row:number;phase?:'search'|'callback'|'download'|'selection';
+ error?:BotSearchSnapshot['error'];delivery?:BotSearchSnapshot['delivery'];
+ suspended?:boolean;down?:boolean;cooldown?:boolean;mismatch?:boolean;expected:'telegram'|'suspended'|'timed-out'|'not-found'|'no-valid-file'|'unsupported'|'needs-start'|'bot-limit';
+};
+const failureCases:FailureCase[]=[
+ {row:1,name:'envío sin resultado tras suspensión breve',phase:'search',error:'timeout',delivery:'acknowledged',suspended:true,expected:'suspended'},
+ {row:1,name:'selección caducada tras suspensión breve',phase:'selection',error:'expired',delivery:'not-dispatched',suspended:true,expected:'suspended'},
+ {row:1,name:'callback sin resultado tras suspensión breve',phase:'callback',error:'uncertain',delivery:'uncertain',suspended:true,expected:'suspended'},
+ {row:1,name:'descarga inconclusa tras suspensión breve',phase:'download',error:'cancelled',suspended:true,expected:'suspended'},
+ {row:2,name:'WebSocket caído pese a rechazo explícito',error:'unsupported',down:true,expected:'telegram'},
+ {row:2,name:'flood vigente tras el acuse del callback',phase:'callback',error:'rate-limit',cooldown:true,expected:'telegram'},
+ {row:3,name:'envío incierto con sesión viva',error:'uncertain',delivery:'uncertain',expected:'telegram'},
+ {row:3,name:'callback incierto con sesión viva',phase:'callback',error:'uncertain',delivery:'uncertain',expected:'telegram'},
+ {row:3,name:'error incierto incluso con acuse',error:'uncertain',delivery:'acknowledged',expected:'telegram'},
+ {row:3,name:'red durante descarga con sesión viva',phase:'download',error:'network',expected:'telegram'},
+ {row:3,name:'sesión vencida incluso antes del envío',error:'session-expired',delivery:'not-dispatched',expected:'telegram'},
+ {row:3,name:'flood sin fecha proyectada',error:'rate-limit',delivery:'not-dispatched',expected:'telegram'},
+ {row:4,name:'timeout antes del envío',error:'timeout',delivery:'not-dispatched',expected:'telegram'},
+ {row:4,name:'timeout antes del callback',phase:'callback',error:'timeout',delivery:'not-dispatched',expected:'telegram'},
+ {row:5,name:'bot mudo tras el envío',error:'timeout',expected:'timed-out'},
+ {row:5,name:'bot mudo tras el callback',phase:'callback',error:'timeout',expected:'timed-out'},
+ {row:5,name:'timeout de transferencia tras el acuse del callback',phase:'download',error:'timeout',expected:'timed-out'},
+ {row:6,name:'búsqueda rechazada por el bot',error:'unsupported',expected:'unsupported'},
+ {row:6,name:'callback incompatible antes del envío',phase:'callback',error:'unsupported',delivery:'not-dispatched',expected:'unsupported'},
+ {row:6,name:'bot requiere inicio incluso tras suspensión',error:'needs-start',suspended:true,expected:'needs-start'},
+ {row:6,name:'límite específico del bot',error:'limit-history',expected:'bot-limit'},
+ {row:6,name:'límite específico al descargar',phase:'download',error:'limit-attempt',delivery:'not-dispatched',expected:'bot-limit'},
+ {row:7,name:'archivo inválido confirmado en búsqueda',error:'file-invalid',expected:'no-valid-file'},
+ {row:7,name:'archivo demasiado grande tras callback',phase:'callback',error:'file-too-large',expected:'no-valid-file'},
+ {row:7,name:'archivo inválido tras suspensión',phase:'callback',error:'file-invalid',suspended:true,expected:'no-valid-file'},
+ {row:7,name:'audio devuelto incompatible',phase:'callback',mismatch:true,expected:'no-valid-file'},
+ {row:8,name:'respuesta vacía confirmada',expected:'not-found'},
+ {row:9,name:'conflicto antes de enviar callback',phase:'callback',error:'conflict',delivery:'not-dispatched',expected:'no-valid-file'},
+ {row:10,name:'búsqueda cancelada sin rechazo verificable',error:'cancelled',expected:'telegram'},
+];
+function failureFixture(row:FailureCase){
+ const phase=row.phase??'search';
+ const option={kind:'option' as const,rowRef:'option',correlation:'reply' as const,label:'Song — Artist'};
+ const direct={kind:'audio' as const,rowRef:'audio',correlation:'reply' as const,title:'Song',performer:'Artist',durationSeconds:60,mimeType:'audio/wav',bytes:1};
+ const f=fixture(Array<Scenario>(5).fill('empty'));
+ let completed=false,observations=0;
+ const search=f.client.searchBot.bind(f.client),snapshot=f.client.searchSnapshot.bind(f.client);
+ f.client.searchBot=(...args)=>{search(...args);completed=phase==='search';observations=0;};
+ f.client.searchSnapshot=()=>{
+  const state=snapshot();
+  if(!state.providerRef)return state;
+  const expired=phase==='selection'&&++observations>=3;
+  if(expired)completed=true;
+  if(!completed)return {...state,rows:[phase==='download'&&row.delivery==='not-dispatched'?direct:option],expiresAt:Date.now()+120_000};
+  const rows=row.mismatch?[{...direct,title:'Otro título'}]:
+   phase==='search'&&!row.error?[{kind:'message' as const,rowRef:'absent',correlation:'reply' as const,text:'No se encontraron resultados'}]:[];
+  return {...state,...(expired?{queryId:null,providerRef:null}:{}),error:row.error??null,delivery:row.delivery??'acknowledged',rows,available:!row.down,
+   retryAt:row.cooldown?Date.now()+30_000:null,expiresAt:rows.length?Date.now()+120_000:null};
+ };
+ f.client.downloadBot=async(ref,_allowed,started)=>{
+  const state=snapshot();
+  f.downloads.push(ref);started?.({queryId:state.queryId!,cancel:()=>{}});
+  completed=true;return null;
+ };
+ return {...f,suspended:()=>completed&&!!row.suspended};
+}
 
-test('collection treats a timeout as a channel interruption only after all bots are inconclusive',async()=>{
- const silent=fixture(['timeout','uncertain']);
- assert.equal((await collect(silent.client)).state,'unavailable');
- assert.deepEqual(silent.searches,['one','two']);
- const answered=fixture(['empty','timeout']);
- assert.deepEqual(await collect(answered.client),{state:'known-failure',reasons:['no-compatible-row']});
- assert.deepEqual(answered.searches,['one','two']);
- const rejected=fixture(['unsupported','timeout']);
- assert.equal((await collect(rejected.client)).state,'known-failure');
- assert.deepEqual(rejected.searches,['one','two']);
+const messages={
+ 'timed-out':'Telegram no respondió a tiempo',
+ 'not-found':'No existe en tus bots',
+ 'no-valid-file':'Ningún bot entregó un archivo válido',
+ 'unsupported':'Ningún bot entregó un archivo compatible',
+ 'needs-start':'Un bot necesita que envíes /start en Telegram',
+ 'bot-limit':'Un bot alcanzó un límite de búsqueda o descarga',
+} as const;
+const compareBase=process.env.PULSO_COMPARE_CLASSIFICATION==='base';
+for(const row of failureCases)for(const mode of ['collection','interruptOnTelegram'] as const){
+ if(compareBase&&mode!=='collection')continue;
+ test(`clasificación ${row.row} · ${mode} · ${row.name}`,async()=>{
+  const f=failureFixture(row),translated=failureFixture(row);
+  const params=(fixture:ReturnType<typeof failureFixture>):Omit<Parameters<typeof acquireFromOrderedBots>[0],'target'>=>({
+   client:fixture.client,providers,revision:4,signal:new AbortController().signal,suspended:fixture.suspended,
+   current:()=>true,networkCurrent:()=>true,progress:()=>{},
+   ...(mode==='collection'?{collection:compareBase
+    ?Object.assign(collectionProgress(),{ambiguous:new Set<number>(),responded:false}):collectionProgress()}:{interruptOnTelegram:true}),
+  });
+  const result=await acquireFromOrderedBots({...params(f),target,accept:async()=>'saved'});
+  const attempt:SongPlaybackAttempt={current:()=>true,lookup:async()=>null,save:async()=>{throw Error('must not save');},
+   addToLibrary:async()=>true,play:async()=>'failed'};
+  const song=await downloadSong({...params(translated),choice:{id:'song',source:'itunes',title:'Song',artist:'Artist',album:'Album',duration:60},
+   attempt,index:0,mark:()=>{},message:()=>{}});
+  const songResult=song.state==='failed'&&'message' in song?song.message:song.state;
+  if(process.env.PULSO_COMPARE_CLASSIFICATION&&mode==='collection')
+   console.log('CLASIFICACION '+JSON.stringify({name:row.name,row:row.row,acquisition:result.state,song:songResult,searches:f.searches,downloads:f.downloads}));
+  if(compareBase)return;
+  assert.equal(result.state,row.expected in messages&&row.expected!=='timed-out'?'known-failure':row.expected);
+  assert.equal(songResult,row.expected in messages?messages[row.expected as keyof typeof messages]:row.expected);
+  const advances=row.expected in messages;
+  assert.deepEqual(f.searches,advances?['one','two']:['one']);
+  assert.deepEqual(translated.searches,f.searches);
+  assert.deepEqual(translated.downloads,f.downloads);
+ });
+}
+test('an isolated acknowledged timeout still allows the next provider to save',async()=>{
+ const f=fixture(['timeout','success']);
+ assert.equal((await collect(f.client)).state,'audio');
+ assert.deepEqual(f.searches,['one','two']);
 });
 
 test('collection remembers an answered provider across a channel pause and preserves its reason',async()=>{
  const progress=collectionProgress(),f=fixture(['empty','rate-limit']);
- assert.equal((await collect(f.client,progress)).state,'unavailable');
+ assert.equal((await collect(f.client,progress)).state,'telegram');
  assert.deepEqual(f.searches,['one','two']);
  const resumed=fixture(['timeout']);
- assert.deepEqual(await collect(resumed.client,progress),{state:'known-failure',reasons:['no-compatible-row']});
+ assert.deepEqual(await collect(resumed.client,progress),{state:'timed-out'});
  assert.deepEqual(resumed.searches,['two']);
+});
+
+test('a reused menu that conflicts on wake stays eligible on the same bot',async()=>{
+ const f=fixture(['invalid']);
+ const snapshot=f.client.searchSnapshot.bind(f.client);
+ const first={kind:'option' as const,rowRef:'first',correlation:'reply' as const,label:'Song — Artist'};
+ const second={...first,rowRef:'second'};
+ f.client.searchSnapshot=()=>{
+  const state=snapshot();
+  if(!state.providerRef)return state;
+  const rows=f.downloads.length?[second]:[first,second];
+  return {...state,rows,expiresAt:Date.now()+30_000,
+   ...(f.downloads.length===1?{error:'file-invalid' as const}:f.downloads.length===2?{error:'conflict' as const,delivery:'not-dispatched' as const}:{})};
+ };
+ f.client.downloadBot=async(row,_allowed,started)=>{
+  f.downloads.push(row);started?.({queryId:snapshot().queryId!,cancel:()=>{}});return null;
+ };
+ const progress=collectionProgress();
+ assert.equal((await collect(f.client,progress,()=>f.downloads.length===2)).state,'suspended');
+ assert.deepEqual(f.searches,['one']);
+ assert.deepEqual(f.downloads,['first','second']);
+ assert.equal(progress.resumeBot,0);
+ assert.equal(progress.completed.size,0);
 });

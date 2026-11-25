@@ -333,3 +333,15 @@ El manifiesto publicado, de 295 archivos y 70827 bytes, quedó en `.local/test-e
 - Sincronizar los álbumes guardados entre dispositivos en T22.
 - Con más de 2000 alias se desactiva la resolución de copias. Las tarjetas de álbum guardado muestran 0 copias y se bloquean las retiradas que dependen de alias.
 - Verificar la aceptación en iPhone físico con la entrada del propietario. La aceptación con Telegram y cuenta reales sigue pendiente.
+
+## 2026-11-24 · Guardar álbum mientras se descarga una playlist
+
+«Guardar álbum» usa el guardado transaccional de la edición bajo la cuenta activa, con un permiso independiente del estado de importación de audio. El detalle confirma «En Biblioteca» y explica los bloqueos de pestaña, Almacenamiento u organización. El guardado verificado sigue limitado a los metadatos de la edición.
+
+En Chromium y WebKit locales, con una lectura de la playlist de 30 entradas retenida, el guardado mostró el álbum en Biblioteca → Álbumes con su botón actualizado y cero consultas de sus pistas. La playlist mantuvo su checkpoint y terminó con las 30 entradas verificadas. La suite focal `check-album-library-main` pasó los grupos 59–66 en Chromium y 60–66 en WebKit. El recorrido con Telegram real y el iPhone físico sigue pendiente.
+
+## 2026-11-24 · Guardado y retirada durante la cola de descargas
+
+El guardado de álbum o artista puede coincidir con la llegada del audio de una canción. La canción espera la actividad de Almacenamiento antes de consultar o importar su copia. El detalle suspende la inspección pasiva durante esa canción y reutiliza los resultados vigentes si sus entradas siguen iguales. En WebKit, el grupo 62 volvió a poder retirar la edición tras reproducir la pista compartida. Pasó en el candidato corregido y en `7d41d25`. Chromium pasó los grupos 59–66 y WebKit los grupos 60–66.
+
+Al confirmar la retirada de un álbum o la eliminación de una playlist, se retira su trabajo de la cola de la cuenta. El despachador consulta IndexedDB al iniciar el álbum y usa la ficha vigente para conciliar `failedTracks`. El escenario `queue-removal-storage` verificó en ambos motores la retirada de las dos colecciones pendientes con cero consultas de Telegram y el aviso de Almacenamiento para una edición guardada.

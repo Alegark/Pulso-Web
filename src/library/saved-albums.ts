@@ -94,6 +94,16 @@ export async function readSavedAlbums(accountId:string):Promise<SavedAlbum[]> {
  }finally{closeDatabase(db);}
 }
 
+export async function readSavedAlbum(accountId:string,id:CatalogId):Promise<SavedAlbum|null> {
+ const db=await openExistingDatabase();
+ try{
+  const tx=admittedTransaction(db,['settings']),done=transactionDone(tx),store=tx.objectStore('settings');
+  const [active,raw]=await Promise.all([request(store.get(ACTIVE_LIBRARY_ACCOUNT)),request(store.get(savedAlbumKey(accountId,id))),done]);
+  if(active!==accountId)throw Error('account-changed');
+  return copySavedAlbum(raw,id);
+ }finally{closeDatabase(db);}
+}
+
 export async function saveAlbumRecord(accountId:string,detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures):Promise<SavedAlbum|null> {
  const record=copySavedAlbum({version:1,savedAt:new Date().toISOString(),edition:detail.edition,tracks:detail.tracks,failedTracks:failure?.failedTracks??[]});
  if(!record||!current())throw Error('saved-album');

@@ -8,14 +8,14 @@ import type {LocalAsset} from '../library/library';
 export interface CollectionHost {
  activity:Activity; canStart():boolean; captureRaw():()=>boolean;
  gate(active:boolean):void; reserve(target:Readonly<LocalAsset>):SourceReviewResult;
- refresh():Promise<void>; adopt(snapshot:CopyRemovalStartup):void; checkpoint(current:()=>boolean):void; changed():void;
+ removed?(selection:core.CollectionSelection):void; refresh():Promise<void>; adopt(snapshot:CopyRemovalStartup):void; checkpoint(current:()=>boolean):void; changed():void;
 }
 type State='preparing'|'ready'|'working'|'done'|'uncertain'|'blocked';
 export interface CollectionView {
  readonly visible:boolean; readonly state:State; readonly title:string; readonly kind:'playlist'|'album'|'cache';
  readonly summary:core.CollectionPreview|null; readonly accepted:boolean; readonly result:(Omit<core.CollectionOutcome,'freedBytes'> & {freedBytes:number|null})|null; readonly message:string|null;
 }
-type Run={abort:AbortController;raw:()=>boolean;context:core.CollectionContext;token:ActivityToken|null;preview:core.CollectionPreviewToken|null;settlement:Promise<void>|null;settling:boolean;released:boolean};
+type Run={selection:core.CollectionSelection;abort:AbortController;raw:()=>boolean;context:core.CollectionContext;token:ActivityToken|null;preview:core.CollectionPreviewToken|null;settlement:Promise<void>|null;settling:boolean;released:boolean};
 const safe=(fn:()=>boolean)=>{try{return fn()===true;}catch{return false;}};
 const initial:CollectionView=Object.freeze({visible:false,state:'blocked',title:'',kind:'playlist',summary:null,accepted:false,result:null,message:null});
 export function createCollectionRemovalController(host:CollectionHost){
@@ -30,7 +30,7 @@ export function createCollectionRemovalController(host:CollectionHost){
    return true;
   }
   const raw=host.captureRaw(),abort=new AbortController();
-  const r:Run={abort,raw,context:{signal:abort.signal,current:()=>live(r)},token:null,preview:null,settlement:null,settling:true,released:false};
+  const r:Run={selection,abort,raw,context:{signal:abort.signal,current:()=>live(r)},token:null,preview:null,settlement:null,settling:true,released:false};
   run=r;host.gate(true);publish({...initial,visible:true,state:'preparing',title,kind:selection.kind});
   r.token=host.activity.begin();
   const work=(async()=>{try{
@@ -68,6 +68,7 @@ export function createCollectionRemovalController(host:CollectionHost){
    finally{
     r.token?.end();r.token=null;
     if(safe(r.raw)){
+     if(outcome?.metadata==='committed')host.removed?.(r.selection);
      let refreshFailed=false;try{await host.refresh();}catch{outcome=null;refreshFailed=true;}
      if(!outcome||outcome.metadata==='unknown'||outcome.cleanup==='stopped'){
       const scanAbort=new AbortController();const snapshot=await scanCopyRemovalStartup({signal:scanAbort.signal,current:r.raw});if(safe(r.raw))host.adopt(refreshFailed?{...snapshot,unknown:true}:snapshot);

@@ -25,6 +25,7 @@ export interface MusicSearchPanelProps {
  onSearch:()=>void;
  onChooseSuggestion:(id:string,opener:HTMLButtonElement)=>void;onCancel:()=>void;
  songActions?:React.ReactNode;
+ suggestionFeedback?:{id:string;message:string}|null;
  automaticSelection?:boolean;
  results:readonly MusicSearchResultRow[];status?:string|null;error?:string|null;uncertain:boolean;
  downloadStatus?:string|null;downloadProgress?:{bytes:number;total:number}|null;onCancelDownload?:()=>void;
@@ -48,7 +49,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
  const active=()=>committed.current===props&&props.current();
  const provider=props.primaryProvider;
  const ready=props.canSearch&&props.sessionReady&&(props.hasSupportedProvider??!!provider?.supported)&&!props.searchPending;
- const choose=(row:MusicSearchSuggestionRow,opener:HTMLButtonElement)=>{if(active()&&!props.searchPending)props.onChooseSuggestion(row.id,opener);};
+ const choose=(row:MusicSearchSuggestionRow,opener:HTMLButtonElement)=>{if(active())props.onChooseSuggestion(row.id,opener);};
  const showAll=()=>{if(active()&&props.query.trim()){props.onSearch();setFilter('all');}};
  const resetQuery=(keepEditing:boolean)=>{
   if(!active())return;
@@ -61,8 +62,8 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
  const rank=(row:MusicSearchSuggestionRow)=>row.title.trim().localeCompare(props.query.trim(),'es',{sensitivity:'base'})===0?-1:({artist:0,album:1,track:2} as const)[row.kind];
  const rows=props.suggestions.filter(row=>filter==='all'||row.kind===filter).map((row,index)=>({row,index})).sort((a,b)=>rank(a.row)-rank(b.row)||a.index-b.index).map(item=>item.row);
  const card=(row:MusicSearchSuggestionRow)=><button type="button"
-  data-suggestion-id={row.id} data-catalog-kind={row.kind} disabled={props.searchPending}
-  aria-pressed={props.selectedSuggestionId===row.id} onClick={event=>choose(row,event.currentTarget)}>
+  data-suggestion-id={row.id} data-catalog-kind={row.kind}
+  aria-pressed={(props.suggestionFeedback?.id??props.selectedSuggestionId)===row.id} onClick={event=>choose(row,event.currentTarget)}>
   <CatalogArtwork className={`catalog-art catalog-art--${row.kind}`} url={row.artworkUrl} trackId={row.trackId} fallback={row.kind==='artist'?Array.from(row.title.trim())[0]?.toLocaleUpperCase('es')??'♪':row.kind==='album'?'◉':'♪'}/>
   <span className="catalog-row-copy"><strong title={row.title}><bdi dir="auto">{row.title}</bdi></strong>
   <span className="catalog-row-meta">{kindLabels[row.kind]}{row.subtitle&&<> · <bdi dir="auto">{row.subtitle}</bdi></>}</span></span><span className="catalog-chevron" aria-hidden="true">›</span>
@@ -96,7 +97,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    <div className="music-search-actions" role="group" aria-label="Tipo de resultado">
     {([['all','Todo'],['track','Canciones'],['album','Álbumes'],['artist','Artistas']] as const).map(([kind,label])=><button type="button" key={kind} aria-pressed={filter===kind} onClick={()=>setFilter(kind)}>{label}</button>)}
    </div>
-   {rows.length?<ul className="catalog-mixed-list">{rows.map(row=><li key={row.id}>{card(row)}{row.id===props.selectedSuggestionId&&props.songActions}</li>)}</ul>:!props.suggestionsPending&&!props.suggestionsError&&(props.suggestions.length>0||!props.suggestionsNotice)&&<div className="catalog-empty">
+   {rows.length?<ul className="catalog-mixed-list">{rows.map(row=><li key={row.id}>{card(row)}{row.id===props.suggestionFeedback?.id&&<p role="status">{props.suggestionFeedback.message}</p>}{row.id===props.selectedSuggestionId&&props.songActions}</li>)}</ul>:!props.suggestionsPending&&!props.suggestionsError&&(props.suggestions.length>0||!props.suggestionsNotice)&&<div className="catalog-empty">
     <p>{props.suggestions.length?'No hay resultados con este filtro.':'No encontramos coincidencias. Prueba con otro título o artista.'}</p>
     {props.suggestions.length>0&&filter!=='all'&&<button type="button" onClick={()=>setFilter('all')}>Ver todos los resultados</button>}
    </div>}

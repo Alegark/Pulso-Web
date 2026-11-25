@@ -40,7 +40,7 @@ function fixture(checkpoint=batch(),options:{onAudio?:()=>void;twoBots?:boolean;
   searchBot(input:{providerRef:string;target:BotSearchTarget},_allowed:unknown,started:Parameters<typeof start>[0]){
    assert.ok(!state.retryAt||Date.now()>=state.retryAt,'cannot query before retryAt');
    requests.push(input.target.title);queries.push(input.providerRef);
-   const rows:BotSearchRow[]=options.absent&&input.target.title==='Pista 3'?[]:[{
+   const rows:BotSearchRow[]=options.absent&&input.target.title==='Pista 3'?[{kind:'message',rowRef:'absent',correlation:'reply',text:'No se encontraron resultados'}]:[{
     kind:'option',rowRef:'row',correlation:'reply',label:input.target.title+' — '+input.target.artist,
    }];
    if(rows.length&&options.alternates)rows.push({...rows[0],rowRef:'alternate'} as BotSearchRow);
@@ -515,23 +515,22 @@ const acquireFixture=()=>{
  const run=(overrides:Partial<Parameters<typeof acquireFromOrderedBots>[0]>={})=>acquireFromOrderedBots({
   client:client as unknown as TelegramSessionClient,target,providers:[{providerRef:'bot',label:'Bot'}],revision:1,
   signal:abort.signal,current:()=>true,networkCurrent:()=>true,audioCurrent:()=>true,progress:()=>{},
-  collection:{completed:new Set(),ambiguous:new Set(),responded:false,reasons:[]},accept:async()=>{accepts++;return 'saved';},
+  collection:{completed:new Set(),reasons:[]},accept:async()=>{accepts++;return 'saved';},
   ...overrides,
  });
  return {client,state,run,abort,audio,get accepts(){return accepts;}};
 };
 
-for(const stage of ['search','download'] as const)test(`an acknowledged ${stage} refusal across hiding remains a bot failure`,async()=>{
+for(const stage of ['search','download'] as const)test(`an acknowledged ${stage} file refusal remains specific to the song`,async()=>{
  const f=acquireFixture();
- let hidden=false;
  const error=stage==='search'?'file-too-large':'file-invalid';
- const reject=()=>{hidden=true;f.state.error=error;};
+ const reject=()=>{f.state.error=error;};
  if(stage==='search'){
   const search=f.client.searchBot;f.client.searchBot=(...args)=>{search(...args);reject();};
  }else{
   const download=f.client.downloadBot;f.client.downloadBot=async(...args)=>{await download(...args);reject();return null as never;};
  }
- assert.deepEqual(await f.run({suspended:()=>hidden}),{state:'known-failure',reasons:[error]});
+ assert.deepEqual(await f.run(),{state:'known-failure',reasons:[error]});
  assert.equal(f.accepts,0);
 });
 
@@ -547,6 +546,6 @@ for(const revoked of ['session','account','bots','abort'] as const)test(`receive
   return audio;
  };
  const result=await f.run({current:()=>current,audioCurrent:()=>audioCurrent&&f.client.botsSnapshot().revision===1});
- assert.ok(['stopped','unavailable'].includes(result.state));
+ assert.equal(result.state,revoked==='abort'||revoked==='account'?'stopped':'telegram');
  assert.equal(f.accepts,0);
 });

@@ -35,8 +35,8 @@ Página privada «Pruebas iPhone de Pulso»: https://claude.ai/artifact/73vnYbLn
 | B1 | Tocar la tarjeta de un álbum buscado en carátula, título y esquina vacía, también durante una descarga | Abre el álbum al primer toque desde cualquier punto | v60 |
 | B2 | «Guardar álbum» | Cambia a «En Biblioteca» y aparece en Biblioteca sin descargar canciones | v60 |
 | C1 | Descargar y reproducir una canción suelta | Se descarga y suena | v59 |
-| C2 | Descargar una playlist de 15 a 30 canciones de una vez | El recuadro flotante muestra el avance; cada canción queda descargada o «No existe en tus bots»; el lote no se para | v59 |
-| C3 | Pedir otra descarga mientras baja un álbum; tocar de nuevo la activa y la que está en cola | La segunda queda «En cola» y arranca sola. La activa ofrece «Seguir descargando» o «Cancelar descarga». La de la cola, «Mantener en cola» o «Quitar de la cola» | v60 |
+| C2 | Descargar una playlist de 15 a 30 canciones de una vez | El recuadro flotante muestra el avance y el lote continúa tras un fallo de pista. En v60, «No existe en tus bots» requiere ausencia confirmada y los rechazos informan su causa | v59 (mensajes corregidos en v60) |
+| C3 | Pedir otra descarga mientras baja un álbum; tocar de nuevo la activa y la que está en cola | La segunda queda «En cola» y arranca sola. La activa ofrece «Seguir descargando» o «Cancelar descarga». La de la cola ofrece «Mantener en cola» o «Quitar de la cola». Si el álbum agota la recuperación, queda en cola con «Reintentar descarga en cola» | v60 |
 | C4 | Bloquear la pantalla unos 30 s durante una playlist | Sigue; ninguna canción queda «No existe en tus bots» por el bloqueo | v59 (la v60 corrige su clasificación) |
 | C5 | Bloquear unos 5 min durante una playlist | Retoma sola; ninguna canción queda inexistente por el bloqueo | v59 |
 | C6 | Pasar de wifi a datos durante una playlist | Espera y continúa; ninguna canción queda «No existe en tus bots» por el corte | v59 (la v60 corrige su clasificación) |

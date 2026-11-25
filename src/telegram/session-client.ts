@@ -2,7 +2,7 @@ import type {NetworkTiming} from '../diagnostics/download-timing';
 import {cooldownDeadline} from './rpc-failure';
 import {botDownloadTransferMs,BOT_DOWNLOAD_MAX_BYTES} from './bot-download-bytes';
 import {clearTelegramSessionLease} from './saved-session';
-import {BOT_SEARCH_BOUNDS,parseBotSearchCommand,type BotSearchCommand,type BotSearchRow,type BotSearchTarget,type BotSearchError,type BotSearchDelivery,type BotDownloadedAudio} from './bot-search-protocol';
+import {BOT_SEARCH_BOUNDS,isBotSearchFileError,parseBotSearchCommand,type BotSearchCommand,type BotSearchRow,type BotSearchTarget,type BotSearchError,type BotSearchDelivery,type BotDownloadedAudio} from './bot-search-protocol';
 import type {QrLoginChallenge} from './qr-login-protocol';
 import {parseBotSearchBridgeReply} from './bot-search-bridge-protocol';
 import {parseBotProvidersCommand,parseBotUsername,type BotProvidersCommand,type BotProviderRow,type BotProvidersReply} from './bot-providers-protocol';
@@ -21,7 +21,7 @@ export interface BotSearchSnapshot {binding:AccountBinding|null;scopeKey:string;
 /** Cancellation receipt for this admitted plan only; never looks up a newer plan. */
 export interface BotSearchAdmission {readonly queryId:string;readonly cancel:()=>void}
 const emptySearch=():BotSearchSnapshot=>({binding:null,scopeKey:'',pending:false,cancelling:false,rows:[],queryId:null,providerRef:null,providerRevision:0,expectedTarget:null,delivery:'not-dispatched',expiresAt:null,error:null,retryAt:null,retryBlocked:false,available:false,providerNotice:null});
-interface SearchPlan {worker:SessionWorker;command:Exclude<BotSearchCommand,{type:'bot-search.cancel'}>;token:ActivityToken;current:()=>boolean;timer:ReturnType<typeof setTimeout>;until:number;cancelCommand:BotSearchCommand|null;cancelAck:boolean;done:boolean;cancelled:boolean;timing?:(value:Readonly<NetworkTiming>)=>void;resolveDownload?:(audio:BotDownloadedAudio|null)=>void;audio?:BotDownloadedAudio|null;menu?:{rows:readonly BotSearchRow[];expiresAt:number}}
+interface SearchPlan {worker:SessionWorker;command:Exclude<BotSearchCommand,{type:'bot-search.cancel'}>;token:ActivityToken;current:()=>boolean;timer:ReturnType<typeof setTimeout>;until:number;cancelCommand:BotSearchCommand|null;cancelAck:boolean;done:boolean;cancelled:boolean;timing?:(value:Readonly<NetworkTiming>)=>void;resolveDownload?:(audio:BotDownloadedAudio|null)=>void;audio?:BotDownloadedAudio|null;menu?:{rows:readonly BotSearchRow[];expiresAt:number};menuAfterSuccess?:'retain'|'consume'}
 export interface SessionWorker {onmessage:((event:MessageEvent)=>void)|null;onerror:((event:ErrorEvent)=>void)|null;onmessageerror:((event:MessageEvent)=>void)|null;postMessage(message:SessionCommand|SourcesCommand|BotProvidersCommand|BotSearchCommand):void;terminate():void}
 interface Pending {request:string;type:SessionCommand['type'];token:ActivityToken;timer:ReturnType<typeof setTimeout>}
 /** One worker under owner authority. Credentials remain worker-private. */
@@ -60,7 +60,7 @@ export class TelegramSessionClient {
   if(!p.current()||this.searchEpoch!==epoch){this.stop('cancelled');return;}try{worker.postMessage(command);}catch{this.stop('protocol');return;}
   try{started?.(Object.freeze({queryId:command.queryId,cancel:()=>{if(this.searchPlan===p&&this.state.phase==='connected')this.cancelSearch(p);}}));}catch{/* Observing admission cannot change transport authority. */}
  }
- downloadBot(rowRef:string,allowed:()=>boolean,started?:(admission:BotSearchAdmission)=>void,timing?:SearchPlan['timing'],callbackBudgetMs?:number):Promise<BotDownloadedAudio|null> {
+ downloadBot(rowRef:string,allowed:()=>boolean,started?:(admission:BotSearchAdmission)=>void,timing?:SearchPlan['timing'],callbackBudgetMs?:number,menuAfterSuccess:SearchPlan['menuAfterSuccess']='retain'):Promise<BotDownloadedAudio|null> {
   const root=this.searchGuards.get(allowed);this.expireSearch();
   if(!root||!allowed()||!this.botReady()||!this.remoteAllowed()||!this.search.queryId||!this.search.providerRef||!this.search.expectedTarget||!this.search.rows.some(r=>r.rowRef===rowRef&&r.kind!=='message'))return Promise.resolve(null);
   const worker=this.worker!,binding=this.botBinding!,session=this.session,revision=this.bots.revision;
@@ -71,7 +71,10 @@ export class TelegramSessionClient {
   let resolveDownload!:(audio:BotDownloadedAudio|null)=>void;const done=new Promise<BotDownloadedAudio|null>(r=>resolveDownload=r);
   const timeout=BOT_SEARCH_BOUNDS.downloadResolveMs+botDownloadTransferMs(BOT_DOWNLOAD_MAX_BYTES)+BOT_SEARCH_BOUNDS.settlementMs;
   const p:SearchPlan={worker,command,token,current:()=>root()&&token.current()&&this.worker===worker&&this.session===session&&this.botBinding?.accountRef===binding.accountRef&&this.botBinding?.accountEpoch===binding.accountEpoch&&(this.state.phase==='disconnecting'||this.bots.revision===revision),timer:setTimeout(()=>{if(this.searchPlan===p)this.cancelSearch(p,true);},timeout),until:Date.now()+timeout,cancelCommand:null,cancelAck:false,done:false,cancelled:false,resolveDownload,timing};
-  if(callbackBudgetMs!==undefined&&this.search.expiresAt!==null)p.menu={expiresAt:this.search.expiresAt,rows:this.search.rows.filter(row=>row.kind==='option'&&row.rowRef!==rowRef)};
+  if(callbackBudgetMs!==undefined&&this.search.expiresAt!==null){
+   p.menu={expiresAt:this.search.expiresAt,rows:this.search.rows.filter(row=>row.kind==='option'&&row.rowRef!==rowRef)};
+   p.menuAfterSuccess=menuAfterSuccess;
+  }
   this.searchPlan=p;this.search={...this.search,error:null,delivery:'not-dispatched',expiresAt:null,providerNotice:null,downloadProgress:{bytes:0,total:0}};if(this.searchExpiry!==null)clearTimeout(this.searchExpiry);this.searchExpiry=null;
   this.publishSearch();this.publishBots();this.publishSources();
   if(!p.current()){this.stop('cancelled');return done;}try{worker.postMessage(command);}catch{this.stop('protocol');return done;}
@@ -107,11 +110,11 @@ export class TelegramSessionClient {
    if(reply.type==='bot-search.downloaded'){if(p.command.type!=='bot-search.download'){this.quarantineSearch('protocol');return true;}if(!p.cancelled&&Date.now()<p.until){p.audio=reply.audio;this.search={...this.search,error:null,rows:[],downloadProgress:null};}}
    if(this.state.phase==='connected'){
     if(reply.type==='bot-search.error')this.search={...this.search,delivery:reply.delivery,error:p.cancelled?this.search.error:reply.error,
-     ...(menu&&['file-invalid','file-too-large'].includes(reply.error)?menu:p.menu?{rows:[]}:{})};
+     ...(menu&&isBotSearchFileError(reply.error)?menu:p.menu?{rows:[]}:{})};
     else if(reply.type==='bot-search.result'){
      const valid=!p.cancelled&&Date.now()<p.until&&Date.now()<reply.expiresAt&&reply.expiresAt<=Date.now()+BOT_SEARCH_BOUNDS.resultTtlMs;
      this.search={...this.search,delivery:reply.delivery,rows:valid?[...(menu?.rows??[]),...reply.rows].slice(0,BOT_SEARCH_BOUNDS.rows):[],expiresAt:valid?(menu?Math.min(menu.expiresAt,reply.expiresAt):reply.expiresAt):null,error:valid?null:p.cancelled?this.search.error:'expired'};
-    }else if(reply.type==='bot-search.downloaded'&&p.audio&&menu)this.search={...this.search,...menu,delivery:'acknowledged'};
+    }else if(reply.type==='bot-search.downloaded'&&p.audio&&menu&&p.menuAfterSuccess==='retain')this.search={...this.search,...menu,delivery:'acknowledged'};
     if(this.search.expiresAt!==null){
      const epoch=this.searchEpoch;
      this.searchExpiry=setTimeout(()=>{if(this.searchEpoch===epoch)this.expireSearch();},Math.max(0,this.search.expiresAt-Date.now()));

@@ -1,6 +1,6 @@
 import type {SessionError} from './session-protocol';
 
-type ErrorKind=SessionError|'password-needed'|'invalid-peer'|'access';
+type ErrorKind=SessionError|'password-needed'|'invalid-peer'|'access'|'blocked-user';
 interface RpcFailure {error:ErrorKind;retryAt:number|null;retryBlocked:boolean}
 const failure=(error:ErrorKind):RpcFailure=>({error,retryAt:null,retryBlocked:false});
 const kinds:readonly [RegExp,ErrorKind][]=[
@@ -8,6 +8,7 @@ const kinds:readonly [RegExp,ErrorKind][]=[
  [/session-expired|\b(?:AUTH_KEY_UNREGISTERED|SESSION_REVOKED|SESSION_EXPIRED|USER_DEACTIVATED(?:_BAN)?)\b/,'session-expired'],
  [/^(CHANNEL_PRIVATE|CHAT_FORBIDDEN|USER_BANNED_IN_CHANNEL|CHAT_ADMIN_REQUIRED)$/,'access'],
  [/^(USERNAME_INVALID|USERNAME_NOT_OCCUPIED|PEER_ID_INVALID)$/,'invalid-peer'],
+ [/^USER_IS_BLOCKED$/,'blocked-user'],
  [/qr-expired/,'qr-expired'],[/session-storage/,'session-storage'],[/PHONE_NUMBER_INVALID/,'phone-invalid'],
  [/PHONE_CODE_INVALID|PHONE_CODE_EMPTY/,'code-invalid'],[/PHONE_CODE_EXPIRED|PHONE_CODE_HASH/,'code-expired'],
  [/PASSWORD_HASH_INVALID/,'password-invalid'],[/API_ID_INVALID/,'api-invalid'],[/API_ID_PUBLISHED_FLOOD/,'api-restricted'],

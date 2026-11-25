@@ -1,5 +1,5 @@
 import {beginSongAggregate} from '../diagnostics/song-aggregate';
-import {acquireFromOrderedBots,type CandidateDisposition} from './ordered-bot-acquisition';
+import {acquireFromOrderedBots,acquisitionFailureText,type AcquisitionFailureReason,type CandidateDisposition} from './ordered-bot-acquisition';
 import type {AlbumRow} from './album-acquisition';
 import type {PendingDownload,SavedCandidate} from './library-download-checkpoint';
 import type {SongChoice,SongPlaybackAttempt} from './selected-song';
@@ -11,7 +11,7 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
  choice:SongChoice;attempt:SongPlaybackAttempt;waitForDownload?:SongPlaybackAttempt['waitForDownload'];trackId?:string;index:number;
  previousAttempts?:readonly SavedCandidate[];onFailedCandidates?:(candidates:SavedCandidate[])=>void;
  mark:(pending:PendingDownload)=>void;message:(message:string)=>void;
-}):Promise<(Partial<AlbumRow>&{state:AlbumRow['state']}) | {state:'stopped'} | {state:'telegram'}>{
+}):Promise<(Partial<AlbumRow>&{state:AlbumRow['state']}) | {state:'stopped'} | {state:'telegram'} | {state:'suspended'}>{
  const {choice,attempt,signal,current,trackId}=p;
  const waitForDownload=p.waitForDownload??attempt.waitForDownload;
  const target=parseBotSearchTarget({title:choice.title,artist:choice.artist,album:choice.album,durationSeconds:choice.duration||null});
@@ -67,10 +67,18 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
  if(result.state==='stopped'||!current())return {state:'stopped'};
  if(savedId)return {state:'downloaded',trackId:savedId,confirmed:true,message:'Descargada'};
  if(result.state==='parked')return parkedSong;
+ if(result.state==='telegram'||result.state==='suspended')return {state:result.state};
  if(result.state==='unavailable'||result.state==='uncertain'||result.state==='timed-out')
-  return p.collection&&result.state!=='timed-out'?{state:'telegram'}:{state:'failed',message:'Telegram no respondió a tiempo'};
- if(result.state==='known-failure'&&(failedDigests.size||result.reasons.some(reason=>reason!=='no-compatible-row')))return {state:'failed',reason:'no-valid-file',message:'Ningún bot entregó un archivo válido'};
- if(result.state==='known-failure'&&result.reasons.length)return {state:'failed',reason:'not-found',message:'No existe en tus bots'};
+  return (p.collection||p.interruptOnTelegram)&&result.state!=='timed-out'?{state:'telegram'}:{state:'failed',message:'Telegram no respondió a tiempo'};
+ if(result.state==='known-failure'){
+  const reasons=new Set(result.reasons);
+  const providerRejections:AcquisitionFailureReason[]=['needs-start','bot-limit','unsupported','file-unsupported'];
+  const rejection=providerRejections.find(reason=>reasons.has(reason));
+  if(rejection)return {state:'failed',message:acquisitionFailureText([rejection])};
+  if(!failedDigests.size&&reasons.size===1&&reasons.has('no-results'))
+   return {state:'failed',reason:'not-found',message:acquisitionFailureText(['no-results'])};
+  if(failedDigests.size||reasons.size)return {state:'failed',reason:'no-valid-file',message:'Ningún bot entregó un archivo válido'};
+ }
  return {state:'failed',message:'No hay bots disponibles'};
  }finally{if(!p.measurement)measurement?.finish();}
 }

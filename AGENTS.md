@@ -18,19 +18,17 @@ USD 0. Trabajar solo en este proyecto; no modificar servicios ajenos. Pruebas lo
 
 **Pendiente abierto del propietario (2026-11-25): aceptación física en iPhone.** Leer `docs/IPHONE-ACEPTACION.md` antes de cerrar cualquier entrega que toque descargas, reproducción, sesión de Telegram u offline. Tiene 16 pruebas que solo hace el propietario. Él las marca en la página privada que enlaza ese archivo. Sin su resultado, cada prueba sigue NO EJECUTADA. Transcribir lo que reporte a `odd/tasks/T3-gate-fisico.md`.
 
-**Trabajo pausado por el propietario (2026-11-25): leer `docs/PENDIENTES.md` al retomar.** Incluye:
-- la PR 20, que NO es publicable y tiene hallazgos abiertos;
-- las mejoras de velocidad, sin revisar;
-- Engram, desincronizado entre ramas;
-- decisiones del propietario sin responder.
+**Publicación vigente (2026-11-25):** v60, rama `fix/album-tap-save-queue`. La PR 20 sigue abierta.
 
-No publicar ni fusionar nada de eso hasta que el propietario lo retome.
+**Trabajo pausado por el propietario (2026-11-25):** las mejoras de velocidad de la rama local `perf/faster-bot-pipeline` siguen pausadas y sin revisar. Leer `docs/PENDIENTES.md` al retomar. La publicación o fusión de esa rama requiere que el propietario retome el trabajo.
 
 ## Entregas y colaboración
 
 - Indicación expresa del propietario (2026-11-17): publicar en Cloudflare los cambios verificados de Pulso al cerrar la entrega, además de Git/PR; no dejar una entrega autorizada sólo en local o en la PR ni volver a pedir la misma autorización. Conservar USD 0, configuración y datos existentes, verificar la versión pública y registrar el resultado. Esta preferencia no autoriza cambios de infraestructura, servicios ajenos ni publicar trabajo que no haya pasado sus verificaciones.
 
-- Preferencia del propietario: usar un agente económico para las publicaciones en Cloudflare y las actualizaciones de Git al cerrar cambios verificados.
+- Indicación expresa del propietario (2026-11-25): publicar sin volver a preguntar cuando la entrega quede validada. Validada significa que cada parte corregida tiene su prueba en la matriz ODD de su tarea, en el nivel donde vive el fallo; que la batería completa pasa; y que la revisión independiente no deja hallazgos bloqueantes ni altos frente a la versión publicada. Si algo de eso falla, no se publica y se informa.
+- Indicación expresa del propietario (2026-11-25): usar el agente de menor rango capaz para cada tarea. Implementar código: Codex `gpt-6.2-sol` alto. Rondas solo de pruebas: `gpt-6.2-sol` medio. Requisitos y revisión independiente: Antigravity `gemini-4-neon` alto. Publicar en Cloudflare: Codex `gpt-6.1-terra` medio, con `gpt-6.2-sol` medio como respaldo; debe ser Codex porque ahí está el OAuth del MCP de Cloudflare. Commits, push, descripción de PR y notas mecánicas: Codex `gpt-6-luna` bajo. Si un agente falla en su tarea, subir un nivel.
+- Indicación expresa del propietario (2026-11-25): solo el orquestador (Claude) o Gemini pueden orquestar, delegar o iniciar otros agentes. Los agentes Codex (`gpt-6.2-sol`, `gpt-6.1-terra`, `gpt-6-luna`) son ejecutores: no inician workers ni subagentes, no usan `orchestration worker-start` ni la sección SUB-DISPATCH del preámbulo de Orca, y sólo usan la orquestación para informar con `worker_done` o preguntar con `ask`.
 - Entregar los cambios de Git en una rama y una PR con problema, comportamiento resultante, validación y pendientes, para que los colaboradores puedan revisarlos.
 
 ## Espacio de disco y limpieza de pruebas

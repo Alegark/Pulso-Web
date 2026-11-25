@@ -48,7 +48,7 @@ export function parseSessionReply(value:unknown,session:string,request:string):S
 /** SDK error names are examined defensively and never emitted verbatim. */
 export function sessionFailure(error:unknown):{error:SessionError;retryAt:number|null;passwordNeeded:boolean} {
  const {error:kind,retryAt}=classifyTelegramFailure(error);
- const errorCode=kind==='password-needed'?'internal':kind==='access'||kind==='invalid-peer'?'network':kind;
+ const errorCode=kind==='password-needed'?'internal':kind==='access'||kind==='invalid-peer'||kind==='blocked-user'?'network':kind;
  return {error:errorCode,retryAt,passwordNeeded:kind==='password-needed'};
 }
 export const sessionErrorText:Record<SessionError,string>={

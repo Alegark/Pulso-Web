@@ -2,7 +2,8 @@ import {musicBrainzId} from './catalog-id';
 import type {CatalogId} from './catalog-id';
 import type {AlbumDetail,AlbumTrack} from './album-catalog';
 import type {SongChoice,SongPlaybackAttempt,SongManagement} from './selected-song';
-import type {OrderedProvider} from './ordered-bot-acquisition';
+import {orderedProviders,type CollectionBotProgress,type OrderedProvider} from './ordered-bot-acquisition';
+import {collectionTelegramWait} from './collection-telegram-wait';
 import {downloadSong,parkedSong} from './download-song';
 import type {PendingDownload} from './library-download-checkpoint';
 import type {TelegramSessionClient} from '../telegram/session-client';
@@ -16,15 +17,19 @@ export interface AlbumRow {state:AlbumRowState;trackId:string|null;confirmed:boo
 export interface AlbumProgress {rows:AlbumRow[];message:string;waiting?:boolean}
 export interface AlbumAcquisition {
  detail:AlbumDetail;attempt:SongPlaybackAttempt;client:TelegramSessionClient|null;provider:string|null;providers?:readonly OrderedProvider[];revision:number|undefined;
- management:(id:string)=>SongManagement|null;signal:AbortSignal;current:()=>boolean;update:(value:AlbumProgress)=>void;rows:AlbumRow[];remoteClock?:{settledAt:number};uncertainTracks?:Set<CatalogId>;
+ management:(id:string)=>SongManagement|null;signal:AbortSignal;current:()=>boolean;update:(value:AlbumProgress)=>void;rows:AlbumRow[];remoteClock?:{settledAt:number};uncertainTracks?:Set<CatalogId>;interruptOnTelegram?:boolean;
 }
-export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
+export async function acquireAlbum(p:AlbumAcquisition):Promise<'completed'|'interrupted'> {
  const rows=p.rows.map(row=>row.confirmed?{...row,state:'ready' as const,confirmed:false,message:'Pendiente de verificar de nuevo.'}:{...row});
  const live=()=>{try{return !p.signal.aborted&&p.current()&&p.attempt.current();}catch{return false;}};
- const update=(message:string)=>p.update({rows:rows.map(row=>({...row})),message});
+ const update=(message:string,waiting=false)=>p.update({rows:rows.map(row=>({...row})),message,waiting});
  const remoteClock=p.remoteClock??{settledAt:0},networkCurrent=p.client?.captureBotsCurrent();
  const providers=p.providers??(p.provider?[{providerRef:p.provider,label:'Bot'}]:[]);
- let storageStopped=false;
+ const initialBots=p.interruptOnTelegram?p.client?.botsSnapshot():undefined;
+ const providerNames=providers.map(provider=>initialBots?.providers?.find(row=>row.providerRef===provider.providerRef)?.username);
+ const telegramWait=p.interruptOnTelegram&&p.client?collectionTelegramWait(p.client,p.signal,live,0,()=>{},'Reintentar descarga en cola'):null;
+ let interruption:string|undefined;
+ const storageStopped='No se pudo continuar con el almacenamiento actual.';
  update('Comprobando copias…');
  try {
   for(let i=0;i<p.detail.tracks.length;i++){
@@ -36,8 +41,8 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
     p.uncertainTracks?.add(track.trackId);
    };
    let id:string|null=null,downloaded=false;
-   if(p.attempt.waitForDownload&&!await p.attempt.waitForDownload(p.signal)){storageStopped=true;break;}
-   try{id=await p.attempt.lookup(choice,p.signal,true);}catch{park();update(row.message);continue;}
+   if(p.attempt.waitForDownload&&!await p.attempt.waitForDownload(p.signal)){interruption=storageStopped;break;}
+   try{id=await p.attempt.lookup(choice,p.signal,true);}catch{if(!live())break;park();update(row.message);continue;}
    if(!live())break;
    if(!id&&previouslyParked){park();update(row.message);continue;}
    row.confirmed=false;
@@ -47,21 +52,46 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
      row.state='failed';row.message='No hay bots disponibles';update(row.message);continue;
     }
     let pending:PendingDownload|undefined;
-    const result=await downloadSong({client:p.client,providers,revision:p.revision,signal:p.signal,current:live,networkCurrent,remoteClock,
-     attempt:p.attempt,choice,index:i,mark:value=>{pending=value;},message:message=>{row.message=message;update(message);},progress:()=>{}});
-    if(result.state==='stopped'||result.state==='telegram'||!live()){
-     if(pending?.kind==='save')park();
-     else if(pending?.kind==='network'){
-      const remote=p.client.searchSnapshot();
-      if(remote.pending||remote.cancelling||remote.retryBlocked||remote.delivery==='uncertain')park();
+    const collection:CollectionBotProgress|undefined=telegramWait?{completed:new Set(),reasons:[]}:undefined;
+    const pause=telegramWait?.pauseForTrack();
+    let interrupted=false,suspended=false,lastSuspension=-1;
+    const status=(message:string,waiting=false)=>{row.message=message;update(message,waiting);};
+    while(live()){
+     const paused=await pause?.(message=>status(message,true),interrupted,suspended);
+     if(!live())break;
+     if(paused){interruption=paused.message;break;}
+     const bots=telegramWait?p.client.botsSnapshot():undefined;
+     const sameSession=bots?.scopeKey===initialBots?.scopeKey;
+     const activeProviders=bots&&!sameSession?orderedProviders(bots):providers;
+     if(bots&&(sameSession?bots.revision!==p.revision:activeProviders.length!==providers.length||
+      activeProviders.some((provider,index)=>bots.providers.find(row=>row.providerRef===provider.providerRef)?.username!==providerNames[index]))){
+      interruption='La selección de bots cambió. Revisa Telegram y pulsa Reintentar descarga en cola.';break;
      }
-     storageStopped=live();
+     const captured=bots?p.client.captureBotsCurrent():networkCurrent;
+     const audioCurrent=()=>captured()&&(!bots||p.client?.botsSnapshot().revision===bots.revision);
+     const generation=telegramWait?.generation()??0;
+     const crossedSuspension=()=>!!telegramWait&&telegramWait.generation()!==generation&&telegramWait.generation()!==lastSuspension;
+     const result=await downloadSong({client:p.client,providers:activeProviders,revision:bots?.revision??p.revision,signal:p.signal,current:live,
+      networkCurrent:()=>audioCurrent()&&globalThis.navigator?.onLine!==false,audioCurrent:telegramWait?audioCurrent:undefined,
+      suspended:crossedSuspension,collection,remoteClock,interruptOnTelegram:p.interruptOnTelegram,
+      attempt:p.attempt,choice,index:i,mark:value=>{pending=value;},message:status,progress:()=>{}});
+     if(result.state==='stopped'||!live()){
+      if(pending?.kind==='save')park();
+      interruption=storageStopped;break;
+     }
+     if(result.state==='telegram'||result.state==='suspended'){
+      interrupted=true;suspended=crossedSuspension();
+      if(suspended)lastSuspension=telegramWait?.generation()??-1;
+      continue;
+     }
+     Object.assign(row,result);
+     if(result.state==='uncertain')park();
+     if(result.state==='downloaded'&&result.trackId){downloaded=true;id=result.trackId;}
+     else update(row.message);
      break;
     }
-    Object.assign(row,result);
-    if(result.state==='uncertain')park();
-    if(result.state!=='downloaded'||!result.trackId){update(row.message);continue;}
-    downloaded=true;id=result.trackId;
+    if(interruption||!live())break;
+    if(!id)continue;
    }
    p.uncertainTracks?.delete(track.trackId);
    row.trackId=id;row.confirmed=false;row.state='ready';row.message='Copia verificada';
@@ -73,7 +103,9 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<void> {
    update(row.message);
   }
   if(!live())update('Operación detenida. Las copias ya confirmadas se conservan.');
-  else if(storageStopped)update('No se pudo continuar con el almacenamiento actual.');
+  else if(interruption)update(interruption,true);
   else update(rows.every(row=>row.confirmed)?'Álbum listo en Biblioteca.':'Álbum incompleto: revisa las pistas pendientes o fallidas.');
- }catch{update('No se pudo continuar con el almacenamiento actual.');}
+  return live()&&!interruption?'completed':'interrupted';
+ }catch{update(storageStopped,true);return 'interrupted';}
+ finally{telegramWait?.dispose();}
 }
