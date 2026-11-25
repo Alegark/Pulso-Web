@@ -20,7 +20,8 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
   const hint=wakeups.get(peer);
   if(hint)setTimeout(()=>{if(wakeups.get(peer)===hint&&chats.get(peer)===chat)hint();},chat.delayMs);
  };
- const countRpc=(kind:string)=>{if(benchmark)console.debug('TESTONLY playlist RPC '+kind);};
+ let rpcSequence=0;
+ const countRpc=(kind:string)=>{if(benchmark)console.debug(`TESTONLY playlist RPC ${++rpcSequence} ${kind}`);};
  const history=(messages:unknown[]=[])=>({_:'messages.messages',messages,users:[],chats:[]});
  const rpc=(kind:string,details:object,signal:AbortSignal)=>fetch('/__playlist-full-rpc',{
   method:'POST',body:JSON.stringify({kind,...details}),signal,

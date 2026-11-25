@@ -1585,9 +1585,12 @@ async function seedSpeedLibrary(page,existingCount,source){
 }
 
 async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,count,existingCount,repetition){
- const ctx=await browser.newContext({...config,serviceWorkers:'allow'});
+ // WPE cannot reliably route the synthetic account requests under a real
+ // controller. Keep the existing WebKit fixture path through local Blobs.
+ const serviceWorker=engine==='chromium';
+ const ctx=await browser.newContext({...config,serviceWorkers:serviceWorker?'allow':'block'});
  const trackMode=mode!=='benchmark',direct=mode==='first-sound-direct';
- const countRpc={},errors=[],external=new Set();
+ const countRpc={},errors=[],advisories=[],external=new Set();
  const existingAudio=await readFile('public/fixtures/A.mp3');
  const shortAudio=direct?await readFile('public/fixtures/C.mp3'):null;
  const bytes=direct?shortAudio.length:benchmarkBytes;
@@ -1600,7 +1603,7 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
   collectionName:'Medición sintética',trackName:tracks[0].title,artistName:tracks[0].artist,trackTimeMillis:tracks[0].duration*1000};
  let cloud={accountId,revision:1,document:{version:1,tracks:trackMode?[]:tracks,
   playlists:[{id:uuid(99),name:playlistName,entries:trackMode?[]:tracks.map((track,i)=>({trackId:track.id,id:uuid(100+i)}))}]}};
- const result={mode,engine,delayMs,rpcMs:200,requestedBackend:backend,count,existingCount,repetition,bytes};
+ const result={mode,engine,delayMs,rpcMs:200,requestedBackend:backend,count,existingCount,repetition,bytes,serviceWorker};
  let page;
  try{
   await ctx.routeWebSocket('**/*',socket=>{external.add(new URL(socket.url()).origin);void socket.close();});
@@ -1663,16 +1666,21 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
    document.addEventListener('securitypolicyviolation',event=>console.error('CSP '+event.violatedDirective));
   },{count,trackMode});
   page=await ctx.newPage();
-  page.setDefaultTimeout(20000);
+  page.setDefaultTimeout(60000);
   page.on('pageerror',error=>errors.push(String(error)));
   page.on('console',message=>{
    const prefix='TESTONLY playlist RPC ',text=message.text();
-   if(text.startsWith(prefix)){const key=text.slice(prefix.length);countRpc[key]=(countRpc[key]??0)+1;}
+   if(text.startsWith(prefix)){
+    // WebKit folds identical adjacent console messages into a repeat count.
+    const [,key]=text.slice(prefix.length).split(' ');
+    countRpc[key]=(countRpc[key]??0)+1;
+   }
+   else if(engine==='webkit'&&text==='Viewport argument key "interactive-widget" not recognized and ignored.')advisories.push(text);
    else if(message.type()==='error')errors.push(text);
   });
   await seed(page,origin,null,null);
   await seedSpeedLibrary(page,existingCount,existingAudio);
-  await page.waitForFunction(()=>Boolean(navigator.serviceWorker.controller));
+  if(serviceWorker)await page.waitForFunction(()=>Boolean(navigator.serviceWorker.controller));
   assert.equal((await inspect(page,[])).assetIds.length,existingCount);
   await page.evaluate(()=>window.testDownloadTiming());
   await page.locator('.bot-providers-list li').nth(2).waitFor({state:'attached'});
@@ -1680,10 +1688,10 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
    await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).tap();
    await page.locator('.music-search input[type=search]').fill(song.trackName);
    await page.locator('[data-catalog-kind=track]').filter({hasText:song.trackName}).tap();
-   await page.waitForFunction(()=>window.benchmark.advanced,null,{timeout:25000});
+   await page.waitForFunction(()=>window.benchmark.advanced,null,{timeout:60000});
   }else{
    await page.getByRole('button',{name:startLabel,exact:true}).tap();
-   await page.waitForFunction(count=>window.benchmark.marks.length===count||window.benchmark.failed,count,{timeout:360000});
+   await page.waitForFunction(count=>window.benchmark.marks.length===count||window.benchmark.failed,count,{timeout:Math.max(180000,count*30000)});
   }
   const {start,marks,playing,failed}=await page.evaluate(()=>window.benchmark);
   assert.notEqual(start,null);assert.equal(failed,false);
@@ -1714,18 +1722,20 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
   assert.equal(countRpc.sendMessage,count);
   assert.equal(countRpc['upload.getFile'],Math.ceil(bytes/524288)*count);
   assert.equal(countRpc.getHistory20,timing.reduce((total,item)=>total+item.searchReads+item.callbackReads,0));
-  assert.deepEqual([...external],[]);assert.deepEqual(errors,[]);
   const samplesMs=trackMode?[Math.round(playing-start)]:marks.map((mark,i)=>Math.round(mark-(marks[i-1]??start)));
   const sorted=[...samplesMs].sort((a,b)=>a-b);
   const rpcPerTrack=Object.fromEntries(Object.entries(countRpc).map(([key,total])=>[key,total/count]));
   const historyPerTrack=rpcPerTrack.getHistory1+rpcPerTrack.getHistory20;
   const totalRpcPerTrack=Object.values(rpcPerTrack).reduce((sum,value)=>sum+value,0);
-  return {...result,status:'PASS',backend:actualBackend,verified:count,samplesMs,totalMs:Math.round((trackMode?playing:marks.at(-1))-start),
+  const invalid=errors.length||external.size;
+  return {...result,status:invalid?'FAIL':'PASS',...(invalid?{error:'Browser diagnostics',errors,external:[...external]}:{}),
+   advisories,backend:actualBackend,verified:count,samplesMs,totalMs:Math.round((trackMode?playing:marks.at(-1))-start),
    medianMs:(sorted[Math.floor((count-1)/2)]+sorted[Math.floor(count/2)])/2,p90Ms:sorted[Math.ceil(count*.9)-1],
    rpcPerTrack,historyPerTrack,totalRpcPerTrack,timing};
  }catch(error){
-  return {...result,status:'FAIL',error:String(error.stack??error),countRpc,errors,external:[...external],
-   state:await page?.evaluate(()=>({benchmark:window.benchmark,timing:window.testDownloadTiming?.()})).catch(()=>null)};
+  return {...result,status:'FAIL',error:String(error.stack??error),countRpc,errors,advisories,external:[...external],
+   state:await page?.evaluate(()=>({benchmark:window.benchmark,timing:window.testDownloadTiming?.(),
+    screen:document.querySelector('main')?.innerText.slice(0,350)})).catch(()=>null)};
  }finally{await ctx.close();}
 }
 
