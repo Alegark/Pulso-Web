@@ -337,23 +337,27 @@ try{
     }finally{await cover.close();}
    });
    await check('C06 · cambio de cuenta y cierre de sesión purgan persistencia',async()=>{
+    const localBefore=await inspect(page,{opfs:true});
     assert.ok((await inspect(page))?.artwork.some(x=>x.accountId===accountA));
     const previous=await page.locator(rowFor(providerTitle)).getAttribute('src');
     const from=requests.length;
     user=accountB;await accountChange(page);
     await page.waitForFunction(id=>JSON.parse(localStorage.getItem('pulso-account:confirmed-profile:v1'))?.user?.id===id,accountB);
     await page.waitForFunction(url=>window.revoked.includes(url),previous??oldUrl);
-    assert.ok(!(await inspect(page)).artwork.some(x=>x.accountId===accountA));
+    assert.ok(Object.values(await inspect(page)).every(rows=>rows.every(x=>x.accountId!==accountA)));
     await library(page,'Favoritos');
     await page.locator(rowFor('Portada de la otra cuenta')).waitFor();
     assert.ok(requests.slice(from).some(x=>x.path==='/catalog/artwork'),'B obtiene su propia copia de la misma URL');
+    assert.notEqual(await page.locator(rowFor('Portada de la otra cuenta')).getAttribute('src'),previous);
     await start();await page.locator(playerImg).waitFor();
     assert.ok((await inspect(page)).artwork.some(x=>x.accountId===accountB));
     if(await closePlayer.isVisible())await closePlayer.click();
+    await page.locator('.shell-nav').getByRole('button',{name:'Inicio',exact:true}).click();
     await page.getByRole('button',{name:'Mi cuenta',exact:true}).click();
     await page.getByRole('button',{name:'Cerrar sesión de Pulso'}).click();
     await page.waitForFunction(()=>!JSON.parse(localStorage.getItem('pulso-account:confirmed-profile:v1')));
-    assert.ok(!(await inspect(page)).artwork.some(x=>x.accountId===accountB));
+    assert.ok(Object.values(await inspect(page)).every(rows=>rows.every(x=>x.accountId!==accountB)));
+    assert.deepEqual(await inspect(page,{opfs:true}),localBefore);
    });
    await check('C02 · desalojo real por cantidad y degradación ante cuota',async()=>{
     user=accountA;await accountChange(page);

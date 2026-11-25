@@ -2491,4 +2491,6 @@ Se integraron sobre v62 `perf/t25-m1`, `fix/startup-splash-notice`, `perf/t26-in
 
 Caché: 17/22 inicialmente; C03 WebKit (dos casos) pasó al repetir. C04 portada incrustada WebKit se repitió y falló igual en v62. C06 cierre de sesión falló dos veces en ambos motores al buscar «Mi cuenta»; en v62 el mismo caso falla antes por no existir la caché, por lo que su causa y clasificación siguen pendientes, sin afirmar regresión ni aceptación.
 
+Corrección C06: la prueba móvil estaba en detalle de biblioteca, que oculta la cabecera; volver a Inicio permite cerrar sesión. C06 pasa en ambos motores con purga por cuenta y comparación de biblioteca/OPFS/Cache API; la comparación de IndexedDB local no cubre todos sus almacenes. En la batería de caché, C02 WebKit falló en el recuento de desalojo (21/22).
+
 Mediciones sintéticas Chromium, cinco corridas por versión: primer sonido de una pista v62→v63, IDB 550→495 ms y OPFS 1114→574 ms; playlist de 30 pistas IDB 6467→718 ms y OPFS 13796→627 ms. T27 P01 no alcanzó la reducción exigida del 50 % para una pista (10,0 % IDB y 48,5 % OPFS); P02 y P05 pasaron en estas mediciones. Tras volver de segundo plano M1: 2633→2642 ms. Revisión independiente y aceptación física en iPhone pendientes; esta integración no constituye publicación.
