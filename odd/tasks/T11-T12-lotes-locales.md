@@ -1004,3 +1004,27 @@ Se retiraron snapshots, builds, perfiles, datos sintéticos, cachés y capturas 
 ### iPhone físico
 
 Las 16 pruebas de aceptación permanecen NO EJECUTADAS. Quedan pendientes la verificación en iPhone con Telegram real, la revisión independiente siguiente y la decisión del propietario sobre publicación y fusión.
+
+## 2026-11-25 · Séptima revisión de la PR 20
+
+La revisión partió de `9b03e62`. El candidato `0a235b0` limita el cambio de producto a `src/telegram/bot-search-driver.ts`, `src/telegram/session-client.ts` y `src/library/ordered-bot-acquisition.ts`. Las pruebas nuevas de `tests/unit/ordered-bot-driver.test.ts` conectan el `TelegramSessionClient` y el driver reales por un puente de prueba que publica el progreso y espera la señal de asentamiento. El transporte de prueba y las RPC son sintéticos.
+
+| Hallazgo | Causa, cambio y razón | Prueba sobre la base y el candidato |
+| --- | --- | --- |
+| R3 | Después de publicar `bot-search.sending`, el driver retrocedía de `uncertain` a `not-dispatched` al recibir `USER_IS_BLOCKED`. El driver conserva el estado de entrega publicado y devuelve `needs-start`. La adquisición considera concluyente ese rechazo explícito cuando pertenece a la operación vigente. Así distingue la certeza del rechazo RPC del acuse del bot y mantiene la comprobación de cuarentena del cliente. Un canal caído, una operación ajena y los demás resultados de entrega incierta conservan sus guardas. | Cuatro casos fallan en `9b03e62` con `error: 'protocol'`. En el candidato, se prueba el bot 2 tanto si el rechazo ocurre en la búsqueda como si ocurre en el callback. La sesión sigue conectada y se guarda la copia si el siguiente bot tiene la canción. Si ese bot tampoco la tiene, se muestra el aviso de M9. La prueba de regresión de entrega para otros errores sigue comprobando la cuarentena. |
+| R4 | El presupuesto de callback necesario para reutilizar opciones de R1 volvía a publicar el menú también después de descargar correctamente una canción individual. El cliente conserva la capacidad de reutilizar el menú tras un rechazo de archivo y sólo repone el menú después de una descarga correcta cuando la adquisición necesita validar o guardar la copia mediante `accept`. Así vuelve a quedar sin opciones ni temporizador visible tras el éxito individual, como en v59. El protocolo entre cliente y worker conserva el mismo formato. | Dos pruebas con el cliente y driver reales fallan en `9b03e62` con `expired` al avanzar 120.001 ms. Una descarga tiene éxito al primer callback. La otra recibe Ogg y usa la segunda opción del mismo menú, con una tercera todavía disponible. Ambas completan la descarga y conservan `error: null` y `expiresAt: null` en el candidato. |
+| #3 menor | Sigue abierto. Una transición a primer plano durante una pista anterior puede permitir una ronda adicional de recuperación cuando una pista posterior falla. Distinguirlas con fiabilidad requiere que la adquisición del álbum comunique el comienzo de la interrupción al controlador de cola a través de `album-acquisition.ts` y `album-download.ts`. Usar el mensaje del dock como señal mezclaría esperas y fallos distintos. Se conserva el límite actual de una sola ronda adicional. | La observación de la revisión se verificó por lectura. Se ejecutaron los casos de la ronda anterior para asegurar la pausa sin bucle, la recuperación por eventos y la transición `online` justo antes del asentamiento. |
+
+### Verificación local
+
+Las seis pruebas nuevas fallaron sobre un snapshot de `9b03e62` y pasaron en `0a235b0`. Obtuvieron 219/219 las pruebas focalizadas, 1.019/1.019 `npm run test:unit`, 73/73 las pruebas de servidor y 10/10 las de Python. Pasaron `npm run typecheck`, `npm run typecheck:tests`, `npm run lint` y `npm run build`. La compilación utilizó el árbol exacto del candidato y se verificaron el manifiesto de versión y el service worker.
+
+### Navegador
+
+- Chromium 154.0.8037.57 y WebKit 27.2 obtuvieron 54/54 en la matriz funcional. Cada motor pasó seis variantes principales de playlist y 48 variantes de cola y toques. La primera corrida de cola en WebKit salió con código 1 y 47/48 por un error de control de acceso en la API de Biblioteca simulada durante `queue-resumed-album-pagehide`. En esa prueba no hubo RPC de Telegram. Pasaron la repetición focalizada y la repetición completa de la cola con 48/48 y código cero, sin cambiar producto ni arnés.
+- La matriz de reanudación pasó 46/46 por motor en la primera ejecución. `turnaround/unsupported-format` conservó los callbacks 1 y 2 del mismo menú en ambos motores, con 2/2. `tap-baseline` reprodujo el defecto histórico con 2/2 sólo sobre `7d41d25`.
+- Interfaz dio 11/12 por motor tanto en `7d41d25` como en `0a235b0`. El botón del minirreproductor al 200 % con movimiento reducido quedó fuera del viewport y el arnés salió con código 1 en ambos árboles. Se repitieron los dos avisos de `ResizeObserver` y los 24 de CSP de WebKit. Los inventarios SHA-256 verificaron 311 archivos de v59 y 312 del candidato antes y después de las pruebas.
+
+### Limpieza e iPhone
+
+Se retiraron snapshots, builds, cachés, perfiles de navegador, datos sintéticos y 67 capturas auxiliares. Las rutas medidas recuperaron al menos 60.039.168 bytes. `/data` tenía 7.309.606.912 bytes libres al inicio y 7.303.114.752 tras la limpieza. `.local/tmp/` quedó vacío. `.local/test-evidence/pr20-r7/` conserva resúmenes, causas y huellas. Las 16 pruebas físicas en iPhone siguen NO EJECUTADAS. La PR queda pendiente de revisión independiente y de las decisiones de publicación y fusión.
