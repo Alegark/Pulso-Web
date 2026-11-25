@@ -214,3 +214,5 @@ La comparación de interfaz en Chromium mantuvo los tres destinos de la navegaci
 La lectura inicial de la copia Engram detectó una divergencia de T8. El SHA-256 del recibo coincide con T8 en el padre de `f803135` y el archivo canónico incorpora la modificación de `f803135`. Ante el timeout y la salida del MCP durante `initialize` en el clon SQLite, se prepara un almacén temporal aislado con otra copia de los archivos ODD para verificar sus bytes y SHA-256. La base compartida queda fuera de ambas operaciones.
 
 Validaciones locales completas: `npm run test:unit` 1047/1047, `npm run typecheck`, `npm run typecheck:tests`, `npm run lint`, `npm run build`, `npm run test:cloudflare` 73/73 y `npm run test:py` 10/10. El diagnóstico de IndexedDB real usó datos sintéticos y comprobó los stores separados, el enlace del proveedor, la cuenta con la misma clave, el desalojo exacto, una cuota inyectada seguida de reintento y la purga selectiva.
+
+Publicación y verificaciones de v63 en [P0-W](P0-W.md#2026-11-25--publicación-de-v63).

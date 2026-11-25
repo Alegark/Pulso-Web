@@ -606,3 +606,5 @@ La apertura de la biblioteca y la restauración de la cola anuncian su estado en
 | E05 | Inyecta un fallo al leer `library-playback` y reproduce desde Favoritos tras comprobar el anuncio. | B | FAIL en ambos motores. El error se trata como fallo de apertura y la selección nueva no empieza a reproducirse. | PASS en ambos motores. Se puede reproducir una selección nueva. |
 
 Pruebas locales con audio WAV, cuentas y biblioteca sintéticos. Pasaron `test:unit` (1.041 casos), `typecheck`, `typecheck:tests`, `lint` y `build`. `check-player-notice.mjs` pasó 10/10 en `f97ebb5` y 10/10 en la rama. Los navegadores fueron Chromium 154.0.8037.57 y WebKit 27.2. La aceptación en iPhone físico sigue pendiente.
+
+Publicación y verificaciones de v63 en [P0-W](P0-W.md#2026-11-25--publicación-de-v63).

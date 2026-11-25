@@ -63,3 +63,5 @@ Pasaron 1.043 pruebas unitarias, ambos typechecks, lint, el build, 73 pruebas de
 | WebKit, OPFS | Sin muestra histórica | Sin muestra histórica |
 
 La investigación de v62 registra además 2.700 ms para una sugerencia local de Buscar en Chromium/OPFS. Son observaciones históricas del documento `diseno-inventario-y-medicion.md`. La carga de un minuto impidió iniciar las series comparables. Quedan PENDIENTE DE VENTANA en la máquina reservada, con cinco corridas por versión.
+
+Publicación y verificaciones de v63 en [P0-W](P0-W.md#2026-11-25--publicación-de-v63).

@@ -1,10 +1,13 @@
 # Pendientes abiertos · 2026-11-25
 
-Pulso sirve [v62](https://pulso-web.pruebassoftware.workers.dev/releases/50ddc18edba3d338.html) desde `perf/t25-inc1`. El registro de publicación está en [T25](../odd/tasks/T25-velocidad-bots.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
+Pulso sirve [v63](https://pulso-web.pruebassoftware.workers.dev/releases/87a4e7d0841ad483.html) desde `release/v63`. El registro de publicación está en [P0-W](../odd/tasks/P0-W.md#2026-11-25--publicación-de-v63). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
 
-## Prioridad · M1 de T25
+## Pendientes de v63
 
-La conexión de Telegram permanece abierta durante toda la sesión con `disableUpdates: false` y recibe los updates de todas las conversaciones. En cuentas con grupos activos, procesarlos aumenta el consumo de datos móviles y batería. La mitigación propuesta es cerrar la conexión por inactividad o abrirla bajo demanda. Queda por comprobar con Telegram real si la restauración o reconexión refresca la presencia «en línea».
+- **T26 C03 en WebKit.** Estabilizar el arnés de reapertura de playlist sin tráfico y corregir el caso de portada de proveedor que encontró una carrera entre `img.decode()` y la revocación de su URL de objeto en `CatalogArtwork.tsx`.
+- **T26 C04 en WebKit.** Reparar el fixture de portada incrustada, que reescribe en IndexedDB un Blob leído del mismo registro y falla también en v62.
+- **T27 P01.** La pista suelta tardó 550 → 495 ms en IDB (−10,0 %) y 1.114 → 574 ms en OPFS (−48,5 %) en Chromium sintético. La meta era −50 %. Queda completar la medición comparable en WebKit.
+- **M1 con Telegram real.** Comprobar suspensión y reconexión bajo demanda, conservación de la sesión y presencia «en línea» tras restaurar la conexión. La prueba con Telegram real sigue **NO EJECUTADA**.
 
 ## 1. Hallazgos abiertos de v60
 
