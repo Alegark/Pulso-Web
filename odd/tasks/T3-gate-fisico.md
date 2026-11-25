@@ -31,3 +31,19 @@ El propietario respondió «Funciona bien» tras recibir el enlace directo a /sa
 ## Instrucciones físicas solicitadas por el propietario
 
 Tras entregar recuperación web, el propietario preguntó qué probar en iPhone. Se dio protocolo corto para candidato privado416c4e0dbc97cfca: Safari, Cargar música de prueba (Aurora/Brisa/Camino), repetición desactivada/aleatorio apagado, reproducir Aurora y bloquear un minuto, informar si avanzó sola a Brisa y Camino. No se pidió nuevamente modelo/iOS ni acceso, no se alteró almacenamiento. Esta interacción prepara observación física, no la sustituye: resultado todavía PENDIENTE; las aceptaciones restantes siguen APLAZADAS/PENDIENTES. docs/IPHONE-GATE-T3.md añade protocolo vigente conservando el diagnóstico histórico.
+
+## Aceptación física vigente · 2026-11-25 · PENDIENTE
+
+El propietario pidió dejar preparada y anotada la prueba en su iPhone real, con Telegram, para cuando la pueda hacer. El protocolo vigente es `docs/IPHONE-ACEPTACION.md`. Tiene 16 pruebas en cinco bloques:
+
+- instalación;
+- búsqueda y guardado de álbumes;
+- descargas, incluida la cola, bloqueo de 30 s y 5 min, cambio de wifi a datos y cierre a mitad;
+- reproducción bloqueada, offline y escucha larga;
+- persistencia al día siguiente.
+
+Sustituye al protocolo corto de tonos como guía actual y conserva este historial. B1, B2 y C3 esperan a la v60.
+
+El propietario marca los resultados en la página privada https://claude.ai/artifact/73vnYbLnwJ2NesjKX3euBp. Al publicarla, su colección `pruebas` estaba vacía. Resultado de las 16 pruebas: NO EJECUTADO.
+
+Cada resultado que reporte se añade debajo como observación física, con versión, fecha, prueba, resultado y nota, sin datos privados. No se deduce PASS de pruebas de navegador ni de una prueba sin marcar.
