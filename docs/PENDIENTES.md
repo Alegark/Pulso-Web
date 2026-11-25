@@ -29,9 +29,13 @@ El trabajo sigue pausado por el propietario.
 
 ## 4. Engram de Pulso Web
 
-La base local compartida `.local/engram` está sincronizada con los ODD de `fix/album-tap-save-queue` tras registrar v60. Una invocación posterior en modo lectura verificó el proyecto `Pulso-Web`, contenido íntegro, bytes y SHA-256 de los 19 archivos. Un checkout con ODD de otra rama puede mostrar divergencias respecto a ese recibo.
+La base local compartida `.local/engram` corresponde a v61 (`d718b9d`, `fix/artwork-rows-dock`). T25 usa la copia de proyecto en su propio worktree. La sincronización de T25 con la base compartida queda pendiente de la integración con v61.
 
 ## 5. Decisiones del propietario sin responder
 
 - Despliegue automático en Cloudflare al hacer push: sin decidir. No configurar nada.
 - Bot privado de YouTube Music en un equipo de su casa: idea opcional, sin respuesta. El acceso directo desde la app web a YouTube no es viable; ver `.local/research/ytmusic-direct-neon-2026-11-24/report.md` y `.local/research/youtube-viability-2026-11-24/report.md`.
+
+## 6. Infracción CSP heredada en WebKit
+
+WebKit WPE emite `style-src-attr` con `blockedURI: inline` para el selector de Apariencia de [src/main.tsx:1538](../src/main.tsx#L1538). El mapa de fuentes sitúa el evento en `node_modules/react-dom/cjs/react-dom-client.production.js:8514`, en la llamada que crea el elemento `select`. La política aplicada procede de [index.html:1](../index.html#L1). La reproducción se confirmó en v60 (`086aaac`). El arnés de velocidad registra esa infracción y decide frente a una ejecución de v60 del mismo perfil.

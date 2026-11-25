@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
 import {mkdir,open,readFile,realpath,statfs,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {performance} from 'node:perf_hooks';
@@ -9,6 +10,7 @@ import {chromium,webkit} from 'playwright-core';
 import {createTestWorkspace} from './test-workspace.mjs';
 import {installRequiredAccountFixture} from './required-account-fixture.mjs';
 import {benchmarkPart,benchmarkBytes} from './playlist-benchmark-audio.mjs';
+import {captureSpeedCsp,speedCspBaseRevision,speedCspDiagnostics,speedCspPrefix} from './playlist-speed-csp.mjs';
 import {taggedM4a} from './tagged-audio-fixture.mjs';
 import {accountId,bots,playlistFixture,uuid} from './playlist-full-download-fixture.mjs';
 
@@ -1584,13 +1586,13 @@ async function seedSpeedLibrary(page,existingCount,source){
  await openPlaylist(page);
 }
 
-async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,count,existingCount,repetition){
+async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,count,existingCount,repetition,cspDiagnostics){
  // WPE cannot reliably route the synthetic account requests under a real
  // controller. Keep the existing WebKit fixture path through local Blobs.
  const serviceWorker=engine==='chromium';
  const ctx=await browser.newContext({...config,serviceWorkers:serviceWorker?'allow':'block'});
  const trackMode=mode!=='benchmark',direct=mode==='first-sound-direct';
- const countRpc={},errors=[],advisories=[],external=new Set();
+ const countRpc={},consoleErrors=[],pageErrors=[],cspEvents=[],advisories=[],external=new Set();
  const existingAudio=await readFile('public/fixtures/A.mp3');
  const shortAudio=direct?await readFile('public/fixtures/C.mp3'):null;
  const bytes=direct?shortAudio.length:benchmarkBytes;
@@ -1604,7 +1606,7 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
  let cloud={accountId,revision:1,document:{version:1,tracks:trackMode?[]:tracks,
   playlists:[{id:uuid(99),name:playlistName,entries:trackMode?[]:tracks.map((track,i)=>({trackId:track.id,id:uuid(100+i)}))}]}};
  const result={mode,engine,delayMs,rpcMs:200,requestedBackend:backend,count,existingCount,repetition,bytes,serviceWorker};
- let page;
+ let page,awaitingPlayback=false;
  try{
   await ctx.routeWebSocket('**/*',socket=>{external.add(new URL(socket.url()).origin);void socket.close();});
   await ctx.route('**/*',async route=>{
@@ -1641,13 +1643,18 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
    if(route.request().method()==='PUT')cloud={...cloud,revision:cloud.revision+1,document:route.request().postDataJSON().document};
    return route.fulfill({json:cloud});
   });
+  await ctx.addInitScript(captureSpeedCsp,speedCspPrefix);
   await ctx.addInitScript(({count,trackMode})=>{
-   const state=window.benchmark={start:null,marks:[],failed:false,playing:null,advanced:false};
+   const state=window.benchmark={start:null,marks:[],failed:false,playing:null,advanced:false,audioEvents:[]};
    const OriginalAudio=window.Audio;
    window.Audio=function(...args){
-    const audio=new OriginalAudio(...args);
+    const audio=window.benchmarkAudio=new OriginalAudio(...args);
     audio.addEventListener('playing',()=>{if(state.start!==null)state.playing??=performance.now();});
     audio.addEventListener('timeupdate',()=>{if(state.playing!==null&&audio.currentTime>0)state.advanced=true;});
+    if(trackMode)for(const type of ['loadstart','canplay','play','playing','pause','waiting','stalled','error','ended'])audio.addEventListener(type,()=>{
+     if(state.start!==null&&state.audioEvents.length<24)
+      state.audioEvents.push({type,ms:Math.round(performance.now()-state.start),readyState:audio.readyState,time:audio.currentTime});
+    });
     return audio;
    };
    window.Audio.prototype=OriginalAudio.prototype;
@@ -1663,11 +1670,10 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
     if(event.target.closest(trackMode?'[data-catalog-kind="track"]':'button[aria-label="Descargar playlist completa"]'))
      state.start??=performance.now();
    },true);
-   document.addEventListener('securitypolicyviolation',event=>console.error('CSP '+event.violatedDirective));
   },{count,trackMode});
   page=await ctx.newPage();
   page.setDefaultTimeout(60000);
-  page.on('pageerror',error=>errors.push(String(error)));
+  page.on('pageerror',error=>pageErrors.push(String(error)));
   page.on('console',message=>{
    const prefix='TESTONLY playlist RPC ',text=message.text();
    if(text.startsWith(prefix)){
@@ -1675,8 +1681,9 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
     const [,key]=text.slice(prefix.length).split(' ');
     countRpc[key]=(countRpc[key]??0)+1;
    }
+   else if(text.startsWith(speedCspPrefix))cspEvents.push(JSON.parse(text.slice(speedCspPrefix.length)));
    else if(engine==='webkit'&&text==='Viewport argument key "interactive-widget" not recognized and ignored.')advisories.push(text);
-   else if(message.type()==='error')errors.push(text);
+   else if(message.type()==='error')consoleErrors.push(text);
   });
   await seed(page,origin,null,null);
   await seedSpeedLibrary(page,existingCount,existingAudio);
@@ -1688,7 +1695,9 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
    await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).tap();
    await page.locator('.music-search input[type=search]').fill(song.trackName);
    await page.locator('[data-catalog-kind=track]').filter({hasText:song.trackName}).tap();
+   awaitingPlayback=true;
    await page.waitForFunction(()=>window.benchmark.advanced,null,{timeout:60000});
+   awaitingPlayback=false;
   }else{
    await page.getByRole('button',{name:startLabel,exact:true}).tap();
    await page.waitForFunction(count=>window.benchmark.marks.length===count||window.benchmark.failed,count,{timeout:Math.max(180000,count*30000)});
@@ -1727,15 +1736,23 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
   const rpcPerTrack=Object.fromEntries(Object.entries(countRpc).map(([key,total])=>[key,total/count]));
   const historyPerTrack=rpcPerTrack.getHistory1+rpcPerTrack.getHistory20;
   const totalRpcPerTrack=Object.values(rpcPerTrack).reduce((sum,value)=>sum+value,0);
-  const invalid=errors.length||external.size;
-  return {...result,status:invalid?'FAIL':'PASS',...(invalid?{error:'Browser diagnostics',errors,external:[...external]}:{}),
+  const {errors,csp}=await cspDiagnostics({...result,backend:actualBackend},cspEvents,consoleErrors);
+  errors.push(...pageErrors);
+  const invalid=errors.length||external.size||csp.novel.length;
+  return {...result,status:invalid?'FAIL':'PASS',...(invalid?{error:'Browser diagnostics',errors,external:[...external]}:{}),csp,
    advisories,backend:actualBackend,verified:count,samplesMs,totalMs:Math.round((trackMode?playing:marks.at(-1))-start),
    medianMs:(sorted[Math.floor((count-1)/2)]+sorted[Math.floor(count/2)])/2,p90Ms:sorted[Math.ceil(count*.9)-1],
    rpcPerTrack,historyPerTrack,totalRpcPerTrack,timing};
  }catch(error){
-  return {...result,status:'FAIL',error:String(error.stack??error),countRpc,errors,advisories,external:[...external],
-   state:await page?.evaluate(()=>({benchmark:window.benchmark,timing:window.testDownloadTiming?.(),
-    screen:document.querySelector('main')?.innerText.slice(0,350)})).catch(()=>null)};
+  const state=await page?.evaluate(()=>{
+   const audio=window.benchmarkAudio;
+   return {benchmark:window.benchmark,timing:window.testDownloadTiming?.(),
+    audio:audio&&{paused:audio.paused,ended:audio.ended,readyState:audio.readyState,networkState:audio.networkState,
+     currentTime:audio.currentTime,error:audio.error?.code??null,source:audio.currentSrc.split(':')[0]},
+    screen:document.querySelector('main')?.innerText.slice(0,350)};
+  }).catch(()=>null);
+  return {...result,status:'FAIL',error:String(error.stack??error),countRpc,errors:[...pageErrors,...consoleErrors],cspEvents,advisories,external:[...external],
+   playbackTimeout:awaitingPlayback&&error.name==='TimeoutError',state};
  }finally{await ctx.close();}
 }
 
@@ -1928,7 +1945,21 @@ try{
  tempDirectory=await open(work.dir,'r');
  process.env.TMPDIR=`/proc/${process.pid}/fd/${tempDirectory.fd}`;
  const bundle=resolve(work.dir,'bundle');
- await build({configFile:false,define:{__PLAYLIST_RPC_MS__:measuring?'200':'0'},plugins:[tailwindcss(),sdk()],worker:{plugins:()=>[sdk()]},logLevel:'error',build:{outDir:bundle}});
+ let speedReference;
+ if(measuring){
+  report.speedRevision=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+  const referencePath=process.env.PLAYLIST_SPEED_CSP_REFERENCE;
+  if(referencePath){
+   speedReference=JSON.parse(await readFile(referencePath,'utf8'));
+   assert.equal(speedReference.speedRevision,speedCspBaseRevision,'CSP reference revision');
+   assert.ok(!speedReference.speedCspReference&&Array.isArray(speedReference.cases)&&!speedReference.errors.length,'CSP reference run');
+   report.speedCspReference=speedReference.speedRevision;
+  }else if(report.speedRevision===speedCspBaseRevision){
+   execFileSync('git',['diff','--quiet','HEAD','--','src','public','index.html','package.json','package-lock.json']);
+  }
+ }
+ await build({configFile:false,define:{__PLAYLIST_RPC_MS__:measuring?'200':'0'},plugins:[tailwindcss(),sdk()],worker:{plugins:()=>[sdk()]},
+  logLevel:'error',build:{outDir:bundle,sourcemap:measuring?'hidden':false}});
  if(measuring){
   await build({configFile:false,define:{SHELL_FILES:'[]'},logLevel:'error',
    build:{outDir:bundle,emptyOutDir:false,lib:{entry:'src/service-worker/sw.ts',formats:['es'],fileName:()=> 'sw.js'}}});
@@ -1936,11 +1967,13 @@ try{
  await writeFile(bundle+'/telegram-config.json',JSON.stringify({api_id:12345,api_hash:'0'.repeat(32)}));
  server=await preview({configFile:false,build:{outDir:bundle},preview:{host:'127.0.0.1',port:0}});
  const origin='http://127.0.0.1:'+server.httpServer.address().port;
+ const cspDiagnostics=speedCspDiagnostics(bundle,origin,report.speedRevision,speedReference);
  for(const [engine,launcher] of [['chromium',chromium],['webkit',webkit]]){
   if(selectedEngine&&selectedEngine!==engine)continue;
   browser=await launcher.launch({headless:true,handleSIGINT:false,handleSIGTERM:false,handleSIGHUP:false,...(engine==='chromium'?{executablePath:'/usr/bin/chromium'}:{})});
   report.engines[engine]=browser.version();
   try{
+   if(speedReference)assert.equal(report.engines[engine],speedReference.engines[engine],'CSP reference browser version');
    for(const mode of modes){
     if(selectedModes&&!selectedModes.includes(mode)||!selectedModes&&(['benchmark','first-sound','first-sound-direct','turnaround'].includes(mode)||isQueueMode(mode)))continue;
     if(mode==='turnaround'){
@@ -1956,7 +1989,7 @@ try{
      for(const [backend,delayMs,count,existing] of variants){
       if(speedFilter&&!speedFilter.split(',').includes([mode,backend,delayMs,count].join(':')))continue;
       for(let repetition=1;repetition<=speedRepetitions;repetition++){
-       const result=await checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,count,existing,repetition);
+       const result=await checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,count,existing,repetition,cspDiagnostics);
        report.cases.push(result);console.log(JSON.stringify(result));
        if(process.env.PLAYLIST_FULL_FAIL_FAST==='1'&&result.status!=='PASS')throw Error('Stopped after failed speed case');
       }
