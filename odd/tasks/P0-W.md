@@ -2437,3 +2437,7 @@ T11-T12 registra la conservación de álbumes interrumpidos, la cancelación ant
 ### 2026-11-25 · Tercera revisión de la cola de colecciones
 
 T11-T12 registra los fallos de bot que se resuelven por pista, la recuperación al perder Telegram o al caducar una consulta durante la suspensión y la protección del turno durante la revisión y el primer refresco por cuenta. Se verificaron 17 casos de la revisión, 27 de playlist y 43 de reanudación por motor con Telegram sintético. La interfaz reprodujo el fallo conocido del minirreproductor al 200 % de `7d41d25`. Cloudflare quedó sin despliegue. P0-W y la aceptación física siguen abiertos.
+
+### 2026-11-25 · Cuarta revisión de la cola de colecciones
+
+T11-T12 registra la clasificación compartida de fallos de bot, cortes de Telegram y suspensiones. Un resultado inconcluso queda disponible para reintentar la misma pista. Los álbumes en cola recuperan Telegram con la espera acotada de la playlist. Un checkpoint automático espera a que se libere la comprobación de versión. Los recorridos focales con Telegram sintético pasaron en Chromium y WebKit, incluida la suspensión simulada de 30 s. P0-W permanece abierto y sigue pendiente la aceptación con un iPhone físico y Telegram real.
