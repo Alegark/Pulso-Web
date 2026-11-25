@@ -1,7 +1,7 @@
 # T25 · Velocidad de adquisición y primer sonido de bots
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** S01 y S02 implementados. Segunda ronda del arnés de velocidad completada. Revisión independiente pendiente.
+- **Estado:** S01 y S02 implementados. Incremento 1 integrado con v61. Revisión independiente pendiente.
 - **Fecha:** 2026-11-25
 - **Línea base:** v60 publicada (`086aaac`, rama `fix/album-tap-save-queue`, PR 20). Rama paralela `fix/artwork-rows-dock` (v61) fuera del pipeline de bots.
 - **Requisitos SPEC vinculados:** W08, W10, W11, W13, W17, W18 · Invariantes SPEC: V2, V3, V5, V6, V8, V9, V10, V11, V13, V16, V17, V21, V22, V23, V24, V27, V28, V29, V30, V31
@@ -343,7 +343,7 @@ Las 40 corridas verificaron el audio por longitud y SHA-256. Ambos árboles usar
 
 El arnés registra eventos estructurados de CSP y resuelve su posición original con mapas de fuentes del bundle de prueba. La firma incluye directiva, origen y posición, elemento, recurso bloqueado y política. El perfil de v60 debe coincidir en motor y versión, escenario, backend y parámetros. Las ocurrencias heredadas se enumeran con repeticiones. Una firma nueva, un error de página o un mensaje de consola sin un evento CSP correspondiente mantienen el fallo. Tres pruebas unitarias cubren coincidencias heredadas, origen o elemento nuevos y referencia ausente o incompatible.
 
-El evento heredado corresponde al selector de Apariencia de `src/main.tsx:1538`. El mapa de fuentes ubica su origen en `node_modules/react-dom/cjs/react-dom-client.production.js:8514:39`, al crear el `select`. La política de `index.html:1` produjo `style-src-attr` con `blockedURI: inline`. En audio directo se observaron 20 ocurrencias en WebKit por árbol y cero en Chromium. Las 20 del candidato coincidieron con la referencia. El pendiente separado está en [docs/PENDIENTES.md](../../docs/PENDIENTES.md#6-infracción-csp-heredada-en-webkit).
+El evento heredado corresponde al selector de Apariencia de `src/main.tsx:1538`. El mapa de fuentes ubica su origen en `node_modules/react-dom/cjs/react-dom-client.production.js:8514:39`, al crear el `select`. La política de `index.html:1` produjo `style-src-attr` con `blockedURI: inline`. En audio directo se observaron 20 ocurrencias en WebKit por árbol y cero en Chromium. Las 20 del candidato coincidieron con la referencia. El pendiente separado está en [docs/PENDIENTES.md](../../docs/PENDIENTES.md#7-infracción-csp-heredada-en-webkit).
 
 Para generar la referencia, se usa un worktree separado en `086aaac` y se copian sólo `tests/integration/check-playlist-full-download-main.mjs`, `playlist-full-download-sdk.ts` y `playlist-speed-csp.mjs`. En el candidato, `PLAYLIST_SPEED_CSP_REFERENCE` apunta al `report.json` de esa corrida base del mismo perfil. Las corridas de audio directo usaron `PLAYLIST_FULL_MODE=first-sound-direct` y `PLAYLIST_SPEED_REPEATS=10`, con `PLAYLIST_FULL_ENGINE` en el motor de cada par.
 
@@ -374,3 +374,69 @@ Pasaron `npm run test:unit` (1.038/1.038), `npm run typecheck`, `npm run typeche
 #### Limpieza de la segunda ronda
 
 Se retiraron el worktree temporal de v60, los perfiles y bundles de prueba y la compilación de verificación. Los artefactos retirados ocupaban 48.877.568 bytes. `/data` tenía 6.155.542.528 bytes libres al inicio, 6.133.116.928 antes de la limpieza final y 6.153.555.968 después. Se conservaron los recibos y la copia de Engram del worktree. El SHA-256 del recibo de Engram compartido coincidió antes y después de la comparación.
+
+### Integración del incremento 1 con v61
+
+El merge `b852a07` incorporó `origin/fix/artwork-rows-dock` en `d718b9d`. Se conservaron las entradas de publicación, hallazgos y decisiones de v61, la referencia de T25 en P0-W y el pendiente de CSP. Se probó el árbol `deefd44`. El diff de producto frente a v61 se limita a los cuatro archivos de Telegram de S01 y S02. Los dos árboles usaron las mismas dependencias. En el worktree temporal de v61 se superpusieron los tres archivos del arnés de playlist y velocidad, con hashes iguales en los dos árboles. Los arneses de reanudación, carátulas y avisos de v61 fueron idénticos.
+
+#### Validación de la integración
+
+Pasaron `npm run test:unit` (1.041/1.041), `npm run typecheck`, `npm run typecheck:tests`, `npm run lint`, `npm run build`, `npm run test:cloudflare` (73/73) y `npm run test:py` (10/10).
+
+| Matriz | Motor | v61 en la primera pasada | Integración en la primera pasada | Cobertura con reintentos |
+| --- | --- | ---: | ---: | --- |
+| Playlist, cola y toques, modo `regression` | Chromium | 59/61 | 60/61 | 61/61 en cada árbol |
+| Playlist, cola y toques, modo `regression` | WebKit | 60/61 | 59/61 | 61/61 en cada árbol |
+| Reanudación de playlist | Chromium | 46/46 | 45/46 | 46/46 en cada árbol |
+| Reanudación de playlist | WebKit | 46/46 | 46/46 | 46/46 en cada árbol |
+| Carátulas compartidas y contador | Chromium | 5/6 | 6/6 | 6/6 en cada árbol |
+| Carátulas compartidas y contador | WebKit | 5/6 | 5/6 | 6/6 en cada árbol |
+| Avisos del reproductor | Chromium | 5/5 | 5/5 | 5/5 en cada árbol |
+| Avisos del reproductor | WebKit | 5/5 | 5/5 | 5/5 en cada árbol |
+| Interfaz general al 200 % | Chromium | 11/12 | 11/12 | Excepción conocida del minirreproductor en ambos |
+| Interfaz general al 200 % | WebKit | 11/12 | 11/12 | Excepción conocida del minirreproductor en ambos |
+
+- En Chromium, `queue-song-order` expiró en v61 y pasó el reintento. `tap-active` falló primero al abrir un álbum en v61 y por dos tarjetas del mismo título en el candidato. Bajo carga, el reintento de ambos reprodujo las dos tarjetas en el mismo selector. El arnés retenía la transferencia de la primera canción mientras barría las tarjetas. La canción siguiente llegó a iniciar su descarga después del plazo de 18 s de aquella transferencia. Las corridas aisladas con el arnés original pasaron en ambos árboles.
+- En WebKit, `full #1` agotó los 135 s de espera en ambos y las siguientes dos corridas pasaron en cada árbol. El candidato recibió un error de `fetch` de `/api/account-library` al ejecutar `queue-resumed-album-pagehide`. El reintento de `full #1` pasó en cada árbol. También pasó el reintento de `queue-resumed-album-pagehide`.
+- En Chromium, `update-startup` falló en el candidato durante la matriz y en el primer reintento concurrente. Ambos árboles pasaron 3/3 corridas aisladas. En WebKit pasó en ambas matrices.
+- La primera pasada de carátulas registró timeouts en `A02c` en v61 y en `A02` en WebKit del candidato. Los reintentos completos de v61 y el control aislado del candidato pasaron 12/12 en cada árbol. Un reintento concurrente del candidato pasó 11/12, con timeout de `A01` en Chromium. Los avisos del reproductor pasaron 10/10 en cada árbol.
+- `tap-baseline` pasó 2/2 en `7d41d25`. `check-interface-main` reprodujo el mismo fallo de geometría al abrir el minirreproductor a 200 % con movimiento reducido. WebKit registró además `ResizeObserver loop completed with undelivered notifications` en ambos árboles durante esa suite.
+
+#### Velocidad frente a v61
+
+Se usaron Chromium 154.0.8037.57 con SW y OPFS, y WebKit WPE 27.2 con Blob e IDB, con 200 ms por RPC. Cada celda de tiempo muestra mediana, p90 y rango en ms. Para `benchmark` se agruparon las muestras por pista. Las tres primeras repeticiones por perfil se hicieron mientras corrían otras pruebas de navegador. Cada serie del candidato usó el recibo CSP de v61 del mismo motor, versión y perfil.
+
+| Motor y backend | Perfil (modo, demora del bot, pistas) | Corridas válidas v61 → candidato | v61, mediana / p90 [mín–máx] | Candidato, mediana / p90 [mín–máx] | Cambio de mediana | RPC/pista, mensajes / historial / total |
+| --- | --- | --- | --- | --- | ---: | --- |
+| chromium opfs | first-sound · 400 ms · 1 | 3/3 → 3/3 | 12106 / 14294 [11608–14294] | 15009 / 21195 [13295–21195] | +24,0 % | 3 / 4 / 26 → 2 / 4 / 25 |
+| chromium opfs | first-sound · 1200 ms · 1 | 3/3 → 3/3 | 15693 / 16704 [15093–16704] | 16107 / 21725 [15490–21725] | +2,6 % | 3 / 8 / 30 → 2 / 8 / 29 |
+| chromium opfs | first-sound-direct · 400 ms · 1 | 3/3 → 3/3 | 4606 / 6107 [4390–6107] | 4275 / 8377 [3598–8377] | -7,2 % | 2 / 2 / 7 → 2 / 2 / 7 |
+| chromium opfs | benchmark · 400 ms · 2 | 3/3 → 3/3 | 7064 / 8418 [5780–8418] | 6560,5 / 7308 [5214–7308] | -7,1 % | 3 / 4 / 25,5 → 2 / 4 / 24,5 |
+| chromium opfs | benchmark · 400 ms · 30 | 3/3 → 3/3 | 8622 / 10414 [5587–11599] | 9403 / 12607 [5299–15673] | +9,1 % | 3 / 4 / 25,0333 → 2 / 4 / 24,0333 |
+| webkit idb | first-sound · 400 ms · 1 | 3/3 → 3/3 | 13403 / 14203 [12400–14203] | 10588 / 12310 [10395–12310] | -21,0 % | 3 / 4 / 26 → 2 / 4 / 25 |
+| webkit idb | first-sound · 1200 ms · 1 | 2/3 → 3/3 | 16789 / 18616 [14962–18616] | 15696 / 15720 [13902–15720] | -6,5 % | 3 / 8 / 30 → 2 / 8 / 29 |
+| webkit idb | first-sound-direct · 400 ms · 1 | 3/3 → 3/3 | 10294 / 12110 [9016–12110] | 7978 / 8276 [7669–8276] | -22,5 % | 2 / 2 / 7 → 2 / 2 / 7 |
+| webkit idb | benchmark · 400 ms · 2 | 3/3 → 3/3 | 6793 / 9185 [5117–9185] | 6034 / 6701 [4114–6701] | -11,2 % | 3 / 4 / 25,5 → 2 / 4 / 24,5 |
+| webkit idb | benchmark · 400 ms · 30 | 2/3 → 3/3 | 7049,5 / 9290 [4509–11790] | 5894,5 / 6621 [3998–8282] | -16,4 % | 3 / 4 / 25,0333 → 2 / 4 / 24,0333 |
+
+Chromium pasó 15/15 corridas por árbol. WebKit pasó 13/15 en v61 y 15/15 en el candidato. Se excluyeron del cálculo dos corridas de la base WebKit. El lote de 30 produjo 31 registros de tiempos para 30 pistas, y un primer sonido de menú a 1.200 ms registró `Failed to load resource` tras reproducir y verificar la pista. Las seis corridas de audio directo de cada motor confirmaron `playing` y avance, con cero timeouts. En la serie del candidato, WebKit registró 27 ocurrencias heredadas de `style-src-attr` y cero nuevas. Chromium registró cero ocurrencias.
+
+Se repitió la comparación en serie, sin otras pruebas de navegador de esta tarea. Chromium pasó 10/10 corridas por árbol. WebKit repitió los dos perfiles con muestras inválidas en v61 y pasó 2/2 por árbol. Las cuatro ocurrencias de CSP de ese control WebKit coincidieron con v61.
+
+| Motor y backend | Perfil (modo, demora del bot, pistas) | Corridas válidas v61 → candidato | v61, mediana / p90 [mín–máx] | Candidato, mediana / p90 [mín–máx] | Cambio de mediana | RPC/pista, mensajes / historial / total |
+| --- | --- | --- | --- | --- | ---: | --- |
+| chromium opfs | first-sound · 400 ms · 1 | 2/2 → 2/2 | 6290,5 / 6399 [6182–6399] | 6089 / 6108 [6070–6108] | -3,2 % | 3 / 4 / 26 → 2 / 4 / 25 |
+| chromium opfs | first-sound · 1200 ms · 1 | 2/2 → 2/2 | 7906,5 / 8012 [7801–8012] | 7878 / 7920 [7836–7920] | -0,4 % | 3 / 8 / 30 → 2 / 8 / 29 |
+| chromium opfs | first-sound-direct · 400 ms · 1 | 2/2 → 2/2 | 2335 / 2417 [2253–2417] | 2397 / 2420 [2374–2420] | +2,7 % | 2 / 2 / 7 → 2 / 2 / 7 |
+| chromium opfs | benchmark · 400 ms · 2 | 2/2 → 2/2 | 4446 / 4715 [4201–4715] | 4198,5 / 4301 [4097–4301] | -5,6 % | 3 / 4 / 25,5 → 2 / 4 / 24,5 |
+| chromium opfs | benchmark · 400 ms · 30 | 2/2 → 2/2 | 4772,5 / 5195 [4315–5719] | 4491 / 4891 [4012–5542] | -5,9 % | 3 / 4 / 25,0333 → 2 / 4 / 24,0333 |
+| webkit idb | first-sound · 1200 ms · 1 | 1/1 → 1/1 | 11772 / 11772 [11772–11772] | 11768 / 11768 [11768–11768] | ≈0 % | 3 / 8 / 30 → 2 / 8 / 29 |
+| webkit idb | benchmark · 400 ms · 30 | 1/1 → 1/1 | 4398,5 / 4820 [3914–5170] | 4101 / 4290 [3801–4493] | -6,8 % | 3 / 4 / 25,0333 → 2 / 4 / 24,0333 |
+
+En los controles de lote de 30 se verificó por longitud y SHA-256 cada copia. Chromium verificó 60/60 por árbol, con una mediana del lote completo de 144.581,5 → 135.301,5 ms. WebKit verificó 30/30 por árbol, con 132.961 → 123.168 ms en su único lote de control. El ahorro de un `getMessages` por pista con menú se reprodujo en los dos motores y el número de lecturas de historial coincidió. Chromium reprodujo una mejora de 3,2 % en el primer sonido con menú a 400 ms y de 5,9 % en el lote por pista bajo control. Su primer sonido directo aumentó 62 ms en la mediana del control. El primer sonido WebKit a 1.200 ms varió 4 ms en la única repetición aislada. La diferencia de latencia del primer sonido depende del perfil y de la carga.
+
+#### Engram compartido y limpieza
+
+La lectura inicial de v61 en la base real verificó 19/19 archivos tras reintentar el inicio del MCP. Se conservó la copia de proyecto previa en `.local/engram-pre-v61-t25-inc1`. El enlace `.local/engram` de este worktree resuelve a `/data/home/Proyectos/Pulso-Web/.local/engram` y se comprobó la identidad del archivo de base de datos. En esa base se ejecutó `python3 scripts/sync_odd_memory.py` con el resultado de esta integración. Una segunda invocación con `--read-only` verificó 20/20 archivos del proyecto `Pulso-Web` con `FullContentVerified: true`, bytes y SHA-256. T7 conserva el SHA-256 de v61 `c870c06dfccccd2e5e4813cae28e2ddd296a269536dcfe832f1a6c8af6c494a3`.
+
+Se retiraron las copias temporales, los perfiles, los bundles y el build de verificación. Las copias y el build retirados sumaron 59.416.576 bytes. `/data` tenía 6.146.691.072 bytes disponibles al inicio, 6.119.755.776 antes de la limpieza final y 6.140.977.152 después. Los recibos detallados se conservan en `.local/test-evidence/t25-inc1-v61/`. Telegram real (T) y iPhone físico (D) siguen **NO EJECUTADOS**.
