@@ -2450,3 +2450,7 @@ Cloudflare Workers Free (USD 0) sirve [v60](https://pulso-web.pruebassoftware.wo
 Pasaron el build, 73 pruebas de servidor, la preparación y la simulación de Wrangler. El freeze conservó 13 publicaciones previas y el inventario heredado, con cero rutas retiradas. HTTPS verificó el puntero `latest.json`, el 307, el 200 y el meta `pulso-release`; 299/299 recursos por bytes y SHA-256, incluido `sw.js`; las 54 entradas históricas y la actual con cabeceras de navegación; la CSP de Turnstile y la igualdad de su clave pública; y HTTP 401 para el perfil y la biblioteca anónimos. T24 registra el manifiesto y los recibos.
 
 P0-W sigue abierto. Q09b continúa como fallo heredado de v59. Quedan los dos menores de la revisión 8 sobre una reconexión adicional acotada y un motivo de archivo que puede pasar a `expired` a los 120 s. Las 16 pruebas de iPhone siguen **NO EJECUTADAS**.
+
+## 2026-11-25 · Velocidad de adquisición y primer sonido
+
+- [T25](T25-velocidad-bots.md) fija las métricas y pruebas de los incrementos de velocidad de bots.
