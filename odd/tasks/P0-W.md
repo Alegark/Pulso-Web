@@ -17,6 +17,7 @@ Autorización adicional: levantar/cerrar servidores temporales SOLO loopback par
 - T6–T18 PENDIENTE según dependencias del SPEC; no expandir UI para posponer un gate.
 - T19 PENDIENTE: AC01–AC24, 10 pistas/30 min y evidencia por entorno.
 - T20: fuera de implementación actual; revisión posterior con propietario.
+- [T24 · Cola de colecciones y descargas de la PR 20](T24-cola-colecciones.md). Trazabilidad local y de navegador. La aceptación física y el fallo heredado de control de pestaña tras BFCache quedan pendientes.
 
 Todas W01–W18 y AC01–AC24 permanecen sin aceptación completa. Local no implica navegador ni iPhone. D01 resuelta; D02–D10 conservan sus permisos/evidencia pendientes según SPEC.
 

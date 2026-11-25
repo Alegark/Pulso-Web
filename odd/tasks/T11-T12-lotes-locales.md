@@ -1028,3 +1028,5 @@ Las seis pruebas nuevas fallaron sobre un snapshot de `9b03e62` y pasaron en `0a
 ### Limpieza e iPhone
 
 Se retiraron snapshots, builds, cachés, perfiles de navegador, datos sintéticos y 67 capturas auxiliares. Las rutas medidas recuperaron al menos 60.039.168 bytes. `/data` tenía 7.309.606.912 bytes libres al inicio y 7.303.114.752 tras la limpieza. `.local/tmp/` quedó vacío. `.local/test-evidence/pr20-r7/` conserva resúmenes, causas y huellas. Las 16 pruebas físicas en iPhone siguen NO EJECUTADAS. La PR queda pendiente de revisión independiente y de las decisiones de publicación y fusión.
+
+La octava ronda y la matriz de requisitos de la PR 20 se registran en [T24 · Cola de colecciones y descargas de la PR 20](T24-cola-colecciones.md).
