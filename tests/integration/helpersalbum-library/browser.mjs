@@ -14,7 +14,11 @@ function observeNative(){
  const nativeOpen=indexedDB.open.bind(indexedDB);indexedDB.open=(...a)=>{if(a[0]==='pulso-web-telegram-session-v1')MUSIC_FLOW.vaultProbeCount++;const q=nativeOpen(...a);q.addEventListener('success',()=>MUSIC_FLOW.dbs.push(q.result));return q;};
  const nativeGet=IDBObjectStore.prototype.get;IDBObjectStore.prototype.get=function(key){if(this.name==='authorization'&&key==='session')MUSIC_FLOW.vaultSecretReads++;return nativeGet.call(this,key);};
  const nativeGetAllKeys=IDBObjectStore.prototype.getAllKeys;IDBObjectStore.prototype.getAllKeys=function(query,...rest){if(MUSIC_FLOW.failAliasRead&&this.name==='settings'&&query instanceof IDBKeyRange&&Array.isArray(query.lower)&&query.lower[0]==='music-catalog-alias'){MUSIC_FLOW.failAliasRead=false;throw new DOMException('TESTONLY alias read failure','UnknownError');}return nativeGetAllKeys.call(this,query,...rest);};
- addEventListener('securitypolicyviolation',e=>globalThis.__MUSIC_FLOWcsp?.({directive:e.violatedDirective,blocked:e.blockedURI,source:e.sourceFile,line:e.lineNumber,sample:e.sample,styles:[...document.querySelectorAll('[style],style')].map(x=>x.outerHTML.slice(0,300))}));
+ addEventListener('securitypolicyviolation',e=>{
+  const collectionModal=document.querySelector('.collection-header dialog.track-actions-menu[open]')?'options':
+   document.querySelector('dialog.collection-removal-dialog[open][aria-label="Eliminar álbum"]')?'removal':null;
+  globalThis.__MUSIC_FLOWcsp?.({directive:e.violatedDirective,blocked:e.blockedURI,source:e.sourceFile,line:e.lineNumber,sample:e.sample,styles:[...document.querySelectorAll('[style],style')].map(x=>x.outerHTML.slice(0,300)),collectionModal});
+ });
  MUSIC_FLOW.find=(key,predicate=()=>true)=>{const el=document.getElementById('root'),k=el&&Object.keys(el).find(k=>k.startsWith('__reactContainer$'));if(!k)throw Error('Root absent');const stack=[el[k].stateNode.current];while(stack.length){const n=stack.pop();if(n.memoizedProps&&Object.hasOwn(n.memoizedProps,key)&&predicate(n.memoizedProps))return n.memoizedProps;if(n.sibling)stack.push(n.sibling);if(n.child)stack.push(n.child);}throw Error('Missing committed props '+key);};
  MUSIC_FLOW.root=()=>MUSIC_FLOW.find('captureCurrent');MUSIC_FLOW.panel=()=>MUSIC_FLOW.find('onQueryChange');MUSIC_FLOW.bot=()=>MUSIC_FLOW.find('onAdd');
  MUSIC_FLOW.observe=()=>{const r=MUSIC_FLOW.root();let p=null;try{const v=MUSIC_FLOW.panel();p={query:v.query,primary:v.primaryProvider,pending:v.searchPending,canSearch:v.canSearch,results:v.results,selected:v.selectedResultId,error:v.error,status:v.status,suggestions:v.suggestions,suggestionsPending:v.suggestionsPending,catalog:v.resultsVisible,chosen:v.selectedSuggestionId,current:v.current()};}catch{}return {scope:r.scopeKey,canConnect:r.canConnect,current:r.captureCurrent()(),activity:r.activity.count,idle:r.activity.idle,resolved:r.activity.resolved,panel:p,workers:MUSIC_FLOW.workers,audio:MUSIC_FLOW.audio.map(a=>({src:a.src,time:a.currentTime,paused:a.paused,duration:Number.isFinite(a.duration)?a.duration:null}))};};
@@ -30,11 +34,11 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
  const callbacks=()=>report.rpc.filter(r=>r.method==='messages.getBotCallbackAnswer').length;
  const observe=()=>page.evaluate(()=>MUSIC_FLOW.observe());
  const wait=async(fn,label)=>{const end=Date.now()+20000;while(!fn()){if(Date.now()>end)throw Error('Barrier '+label);await new Promise(r=>setTimeout(r,25));}};
- const idle=()=>page.waitForFunction(()=>{const r=MUSIC_FLOW.root();return r.canConnect&&r.captureCurrent()()&&r.activity.idle&&r.activity.count===0;});
+ const idle=()=>page.waitForFunction(()=>{try{const r=MUSIC_FLOW.root();return r.canConnect&&r.captureCurrent()()&&r.activity.idle&&r.activity.count===0;}catch{return false;}});
  const state=()=>page.evaluate(async()=>{const db=await new Promise((r,j)=>{const q=indexedDB.open('pulso-web-local-v1');q.onsuccess=()=>r(q.result);q.onerror=()=>j(q.error);});try{const tx=db.transaction(['tracks','assets','jobs','settings','playlists','tickets']),done=new Promise((r,j)=>{tx.oncomplete=r;tx.onabort=j;});const read=s=>new Promise((r,j)=>{const q=tx.objectStore(s).getAll();q.onsuccess=()=>r(q.result);q.onerror=()=>j(q.error);});const ticketKeys=new Promise((r,j)=>{const q=tx.objectStore('tickets').getAllKeys();q.onsuccess=()=>r(q.result);q.onerror=()=>j(q.error);});const [tracks,assets,jobs,settings,playlists,tickets,tKeys]=await Promise.all(['tracks','assets','jobs','settings','playlists','tickets'].map(read).concat(ticketKeys));await done;return{tracks,assets,jobs,settings,playlists,tickets:tKeys.map((key,i)=>({key,value:tickets[i]}))};}finally{db.close();}});
  const vaultPresent=()=>page.evaluate(async()=>{const db=await new Promise((r,j)=>{const q=indexedDB.open('pulso-web-telegram-session-v1',1);q.onsuccess=()=>r(q.result);q.onerror=()=>j(q.error);});try{return await new Promise((r,j)=>{const tx=db.transaction('authorization'),q=tx.objectStore('authorization').getKey('session');let present=false;q.onsuccess=()=>{present=q.result!==undefined;};tx.oncomplete=()=>r(present);tx.onabort=()=>j(tx.error);});}finally{db.close();}});
  async function close(){if(context){report.traces??=[];report.traces.push({group:groupName,observation:await observe().catch(e=>({error:e.message}))});await context.close();context=null;}fixture.dispose();}
- async function fresh({control=false,seed=false,ambiguous=false,exactAlias=false,singleAlias=false,twoTrackAliasPlaylist=false,aliasOtherAsset=false,corrupt=false,purge=false,idb=false,sw=false,artistCatalogueSetup=false}={}){
+ async function fresh({control=false,seed=false,ambiguous=false,exactAlias=false,singleAlias=false,twoTrackAliasPlaylist=false,spotifyAlbum=false,aliasOtherAsset=false,corrupt=false,purge=false,idb=false,sw=false,artistCatalogueSetup=false}={}){
   // Navigation fixtures remain albums under single classification: two
   // occurrences of one recording, still exactly one producer and asset.
   await close();fixture.reset();albumMode=/^(44|48|49) /.test(groupName)?'identity':/^(18|38|39|40) /.test(groupName)?'repeat':'single';metaRows=[meta()];forceIdb=idb;setBuildControl(control);context=await newContext();
@@ -43,20 +47,48 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   await context.route('**/*',async route=>{try{const req=route.request(),url=new URL(req.url());if(url.origin===origin)return route.continue();if(url.origin==='https://itunes.apple.com'){const album={wrapperType:'collection',collectionType:'Album',collectionId:42,collectionName:'MUSIC_FLOW Album',artistName:'MUSIC_FLOW Artist',trackCount:albumMode==='mixed'?4:['repeat','identity'].includes(albumMode)?2:1};const track={wrapperType:'track',kind:'song',collectionId:42,trackId:81,discNumber:1,discCount:1,trackNumber:1,trackCount:1,trackName:title,artistName:'MUSIC_FLOW Artist',trackTimeMillis:45000};const results=url.pathname==='/lookup'&&url.searchParams.get('entity')==='album'?[{wrapperType:'artist',artistId:2,artistName:'MUSIC_FLOW Artist'},{...album,artistId:2}]:url.pathname==='/search'&&url.searchParams.get('entity')==='musicArtist'?[{wrapperType:'artist',artistId:2,artistName:'MUSIC_FLOW Artist'}]:url.pathname==='/search'?(albumMode==='multiple'?[album,{...album,collectionId:43,releaseDate:'2020-01-01T00:00:00Z'}]:[album]):albumMode==='identity'?[album,{...track,trackCount:2},{...track,trackId:82,trackName:'MUSIC_FLOW Second',trackNumber:2,trackCount:2}]:albumMode==='incomplete'?[album]:albumMode==='mixed'?[album,{...track,trackCount:2,discCount:2},{...track,trackId:82,trackName:'MUSIC_FLOW Second',trackNumber:2,trackCount:2,discCount:2},{...track,trackId:83,trackName:'MUSIC_FLOW Third',discNumber:2,trackCount:2,discCount:2},{...track,discNumber:2,trackNumber:2,trackCount:2,discCount:2}]:albumMode==='repeat'?[album,{...track,discCount:2},{...track,discCount:2,discNumber:2}]:[album,track];report.itunes??=[];report.itunes.push({group:groupName,url:req.url(),results:results.map(x=>({wrapperType:x.wrapperType,id:x.trackId??x.collectionId,title:x.trackName??x.collectionName}))});return route.fulfill({status:200,headers:{'access-control-allow-origin':origin,'content-type':'application/json'},body:JSON.stringify({resultCount:results.length,results})});}if(url.origin==='https://lrclib.net'&&url.pathname==='/api/v2/search'){
    report.lrclib.push({group:groupName,method:req.method(),url:req.url()});const headers={'access-control-allow-origin':origin,'access-control-allow-methods':'GET, OPTIONS','access-control-allow-headers':'Lrclib-Client','content-type':'application/json'};
    return route.fulfill({status:req.method()==='OPTIONS'?204:200,headers,body:req.method()==='OPTIONS'?'':JSON.stringify(metaRows)});
-  }report.network.push({type:'unexpected-http',url:req.url()});return route.abort();}catch(e){report.network.push({type:'route-error',message:e.message});return route.abort();}});
+  }
+  if(groupName.startsWith('65 ')&&url.origin==='https://lrclib.net'&&url.pathname==='/api/get'){
+   return route.fulfill({status:req.method()==='OPTIONS'?204:404,headers:{'access-control-allow-origin':origin,'access-control-allow-methods':'GET, OPTIONS',
+    'access-control-allow-headers':'Lrclib-Client','content-type':'application/json'},body:req.method()==='OPTIONS'?'':'{}'});
+  }
+  report.network.push({type:'unexpected-http',url:req.url()});return route.abort();}catch(e){report.network.push({type:'route-error',message:e.message});return route.abort();}});
   context.on('page',p=>p.on('pageerror',e=>report.pageErrors.push({group:groupName,message:e.message})));
   if(artistCatalogueSetup)await context.addInitScript(()=>Object.defineProperty(navigator,'onLine',{get:()=>false}));
   page=await context.newPage();page.setDefaultTimeout(18000);
-  if(seed||ambiguous||exactAlias||singleAlias||twoTrackAliasPlaylist||aliasOtherAsset||corrupt||purge){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async ({ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,aliasOtherAsset,corrupt,purge})=>{const module=await import('/__musicflow/importer/seed.js');return purge?module.seedPhysicalPurge():corrupt?module.seedCorruptManifest():aliasOtherAsset?module.seedAliasWithOtherValidAsset():twoTrackAliasPlaylist?module.seedTwoTrackAliasPlaylist():singleAlias?module.seedSingleExactAlias():exactAlias?module.seedExactAlias():ambiguous?module.seedAmbiguous():module.seed();},{ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,aliasOtherAsset,corrupt,purge});}
+  if(seed||ambiguous||exactAlias||singleAlias||twoTrackAliasPlaylist||spotifyAlbum||aliasOtherAsset||corrupt||purge){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async ({ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,spotifyAlbum,aliasOtherAsset,corrupt,purge,idb})=>{const module=await import('/__musicflow/importer/seed.js');return purge?module.seedPhysicalPurge():corrupt?module.seedCorruptManifest():aliasOtherAsset?module.seedAliasWithOtherValidAsset():spotifyAlbum?module.seedSpotifyAlbum(idb):twoTrackAliasPlaylist?module.seedTwoTrackAliasPlaylist(idb):singleAlias?module.seedSingleExactAlias():exactAlias?module.seedExactAlias():ambiguous?module.seedAmbiguous():module.seed(idb);},{ambiguous,exactAlias,singleAlias,twoTrackAliasPlaylist,spotifyAlbum,aliasOtherAsset,corrupt,purge,idb});}
   if(artistCatalogueSetup){await page.goto(origin+'/__musicflow/seed.html');await page.evaluate(async()=>{const module=await import('/__musicflow/importer/seed.js');await module.seedArtistCatalogueSetup();});}
-  await page.goto(origin+'/');await nav('Buscar').click();await idle();
+  await page.goto(origin+'/');
+  if(!/^6[0-6] /.test(groupName))await nav('Buscar').click();
+  await idle();
   if(sw){await page.evaluate(async()=>{await navigator.serviceWorker.register('/sw.js',{type:'module'});await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(r=>navigator.serviceWorker.addEventListener('controllerchange',r,{once:true}));});await idle();}
  }
  async function ready(){await idle();await button('Configuración').click();await page.locator('.settings-group>summary').filter({hasText:'Cuenta y fuentes'}).click();await page.getByLabel('Número de teléfono',{exact:true}).fill('+15550000146');await page.locator('.telegram-consent input').check();await button('Enviar código de acceso').click();await page.getByLabel('Código de Telegram',{exact:true}).fill('00000');await button('Confirmar código').click();await page.getByLabel('Contraseña de verificación en dos pasos',{exact:true}).fill('TESTONLY');await button('Verificar contraseña').click();await page.locator('.bot-providers').waitFor();await idle();await page.getByLabel('@usuario o enlace público de Telegram',{exact:true}).fill('@ivkmbot');await button('Comprobar y añadir').click();await button('Quitar @ivkmbot').waitFor();await button('Cerrar configuración').click();await page.waitForFunction(()=>MUSIC_FLOW.panel().canSearch);await idle();}
+ async function completeRequiredSetup(){
+  fixture.set({persistSession:true});
+  await page.getByLabel('Número de teléfono',{exact:true}).fill('+15550000146');
+  await page.locator('.telegram-consent input').check();
+  await button('Enviar código de acceso').click();
+  await page.getByLabel('Código de Telegram',{exact:true}).fill('00000');
+  await button('Confirmar código').click();
+  await page.getByLabel('Contraseña de verificación en dos pasos',{exact:true}).fill('TESTONLY');
+  await button('Verificar contraseña').click();
+  await button('Elegir otros bots').click();
+  await page.getByLabel('Usuario del bot',{exact:true}).fill('@ivkmbot');
+  await button('Comprobar y añadir').click();
+  await button('Empezar a escuchar').click();
+  await nav('Buscar').click();
+  await idle();
+ }
  async function openAlbum(){await input().press('Enter');if(groupName.startsWith('50 ')){await input().fill('MUSIC_FLOW Artist');
    // Search keeps singles in Songs; an artist's catalogue still lists releases.
    await panel().locator('[data-catalog-kind="artist"]').first().click();await page.locator('.artist-album-grid').getByRole('button').filter({hasText:'MUSIC_FLOW Album'}).first().click();return;
-  }await panel().locator('[data-catalog-kind="album"]').first().click();}
+  }
+  if(/^6[0-6] /.test(groupName)){
+   await page.waitForFunction(()=>{const panel=MUSIC_FLOW.panel();return !panel.suggestionsPending&&panel.suggestions.some(row=>row.kind==='album');});
+  }
+  await panel().locator('[data-catalog-kind="album"]').first().click();
+ }
  async function catalogue(query='MUSIC_FLOW Song'){const n=report.lrclib.filter(r=>r.method==='GET').length;await input().fill(query);await wait(()=>report.lrclib.filter(r=>r.method==='GET').length>n,'metadata response');await page.waitForFunction(()=>MUSIC_FLOW.panel().suggestions.length>0&&!MUSIC_FLOW.panel().suggestionsPending);await input().press('Enter');await panel().locator('.music-search-catalog').waitFor();}
   const select=()=>panel().locator('.music-search-catalog [data-catalog-kind="track"]').first().click();
  const playing=()=>page.waitForFunction(()=>MUSIC_FLOW.audio.length===1&&!MUSIC_FLOW.audio[0].paused&&MUSIC_FLOW.audio[0].currentTime>0.03&&/Reproduciendo/.test(MUSIC_FLOW.panel().status??''));
@@ -260,6 +292,204 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   const detail={sameContext:await first.context()===await second.context(),heldCounters,completedCounters,finalCounters,trackId:after.tracks[0].id,sha256:after.assets[0].sha256,bytes:after.assets[0].bytes,firstTabCommands:await counters(first),secondTabCommands:await counters(second),networkSavings:'second selection sends/callbacks/files=0 before importer; separate from final binary dedup'};assert(detail.sameContext);
   const tabCounters=async p=>p.evaluate(()=>{const sent=MUSIC_FLOW.workers.flatMap(w=>w.sent);return {search:sent.filter(m=>m.type==='bot-search.search').length,download:sent.filter(m=>m.type==='bot-search.download').length};});detail.firstTab=await tabCounters(first);detail.secondTab=await tabCounters(second);assert.deepEqual(detail.firstTab,{search:1,download:1});assert.deepEqual(detail.secondTab,{search:0,download:0});
   detail.physical=await second.evaluate(async()=>{const {musicalSnapshot}=await import('/__musicflow/snapshot.mjs');return musicalSnapshot();});const asset=after.assets[0];if(asset.backend==='opfs'){const physical=detail.physical.opfs.find(f=>f[0]==='pulso-assets-v1/'+asset.storageKey);assert(physical);assert.equal(physical[1],asset.bytes);assert.equal(physical[2],asset.sha256);}else assert.equal(detail.physical.stores.chunks.reduce((n,row)=>n+row[1].MUSIC_FLOWnativeBytes,0),asset.bytes);return detail;
+ });
+ await group('60 saved album reopens offline and resumes missing downloads from Library',async()=>{
+  await fresh({twoTrackAliasPlaylist:true,idb:process.env.MUSIC_FLOW_ENGINE==='webkit'});await completeRequiredSetup();albumMode='mixed';
+  fixture.set({mode:'download-partial'});
+  await input().fill('MUSIC_FLOW Album');await openAlbum();await button('Añadir álbum').click();
+  await page.waitForFunction(()=>{
+   try{return MUSIC_FLOW.root().savedAlbums?.find(album=>album.edition.id===42)?.failedTracks.length===1;}
+   catch{return false;}
+  },null,{timeout:60000});
+  await idle();
+  const saved=()=>page.locator('.library-grid .collection-card').filter({hasText:'MUSIC_FLOW Album'});
+  const detail=()=>page.locator('.library-detail .album-page');
+  const result=await state();
+  assert.equal(result.settings.filter(row=>row?.version===1&&row?.edition?.id===42).length,1);
+  assert.equal(result.assets.length,3);
+  // Reload while online to rehydrate IndexedDB, then open with every request offline.
+  await page.reload();
+  await page.waitForFunction(()=>{try{return MUSIC_FLOW.panel().canSearch;}catch{return false;}});
+  await nav('Biblioteca').click();await idle();
+  const lookups=report.itunes.length,requests=report.rpc.length;
+  await context.setOffline(true);
+  await saved().click();
+  await detail().getByText('3 de 4 descargadas',{exact:true}).waitFor();
+  assert.equal(await detail().locator('.album-tracks > li').count(),4);
+  const missing=detail().locator('[data-album-pending]');
+  assert.equal(await missing.count(),1);
+  await missing.getByText('Error',{exact:true}).waitFor();
+  assert.equal(await missing.locator('button').isDisabled(),true);
+  assert.equal(await saved().locator('.collection-cover__tile').count(),1);
+  assert.equal(await saved().locator('[data-mosaic]').count(),0);
+  assert.equal(report.itunes.length,lookups);
+  assert.equal(report.rpc.length,requests);
+  await context.setOffline(false);
+  // Restore the synthetic connection in the same context if the driver suspended it.
+  fixture.set({mode:'download-multi',hold:'file'});
+  const before=sends();
+  await button('Descargar faltantes').click();
+  await wait(()=>fixture.pendingCount===1,'held album continuation');
+  await button('Volver a Biblioteca').click();
+  await saved().click();
+  await detail().getByText('1 de 4 descargadas',{exact:true}).waitFor();
+  fixture.resume();
+  await detail().getByText('4 de 4 descargadas',{exact:true}).waitFor({timeout:60000});
+  await idle();
+  assert.equal(sends()-before,1);
+  const final=await state();assert.equal(final.assets.length,4);
+  await page.evaluate(async ids=>{
+   const module=await import('/__musicflow/importer/seed.js');
+   await module.playlistWithLocalCopies(ids);
+  },final.tracks.map(track=>track.id));
+  await page.reload();await idle();await nav('Biblioteca').click();
+  const playlist=page.locator('.library-grid .collection-card').filter({hasText:'MUSIC_FLOW Portadas'});
+  await playlist.waitFor();
+  assert.equal(await playlist.locator('[data-mosaic="true"] .collection-cover__tile').count(),4);
+  await saved().click();
+  await detail().getByText('4 de 4 descargadas',{exact:true}).waitFor();
+  const home=page.locator('.home-view');
+  await nav('Inicio').click();
+  await home.getByRole('button',{name:'Favoritos',exact:true}).click();
+  await page.locator('.library-detail:visible').getByRole('heading',{name:'Favoritos'}).waitFor();
+  await button('Volver a Biblioteca').click();await saved().click();
+  await nav('Inicio').click();
+  await home.getByRole('button',{name:/MUSIC_FLOW Portadas/}).first().click();
+  await page.locator('.library-detail:visible').getByRole('heading',{name:'MUSIC_FLOW Portadas'}).waitFor();
+  await button('Volver a Biblioteca').click();await saved().click();
+  await detail().getByText('4 de 4 descargadas',{exact:true}).waitFor();
+  const row=detail().locator('.album-tracks > li').filter({hasText:'MUSIC_FLOW Second'});
+  await row.getByRole('button').click();
+  await page.waitForFunction(()=>MUSIC_FLOW.audio[0]&&!MUSIC_FLOW.audio[0].paused);
+  return {roster:4,offlineDownloaded:3,additionalTelegramSearches:1,finalAssets:4,coverTiles:1,playlistTiles:4,homeNavigation:true,reopenedWhileDownloading:true};
+ });
+ await group('61 removing an explicitly saved album with zero copies removes only its record',async()=>{
+  await fresh();await completeRequiredSetup();albumMode='mixed';
+  await input().fill('MUSIC_FLOW Album');await openAlbum();
+  const before=report.rpc.length;
+  await button('Guardar álbum').click();
+  await page.getByText('0 de 4 descargadas',{exact:true}).waitFor();
+  await nav('Biblioteca').click();
+  const card=page.locator('.library-grid .collection-card').filter({hasText:'MUSIC_FLOW Album'});
+  await card.click();
+  const detail=page.locator('.library-detail .album-page');
+  await detail.getByText('No descargada',{exact:true}).nth(3).waitFor();
+  await button('Retirar álbum').click();
+  const dialog=page.getByRole('dialog',{name:'Eliminar álbum'});
+  await dialog.getByRole('checkbox').check();
+  await dialog.getByRole('button',{name:'Eliminar álbum',exact:true}).click();
+  await dialog.getByText('La colección se eliminó.',{exact:true}).waitFor();
+  await dialog.getByRole('button',{name:'Cerrar',exact:true}).click();
+  await card.waitFor({state:'detached'});
+  const remaining=await state();
+  assert.equal(remaining.settings.some(row=>row?.version===1&&row?.edition?.id===42),false);
+  assert.equal(remaining.assets.length,0);assert.equal(report.rpc.length,before);
+  const contracts=await page.evaluate(async()=> (await import('/__musicflow/importer/seed.js')).savedAlbumContracts());
+  return {savedTracks:4,downloaded:0,recordDeleted:true,telegram:0,contracts};
+ });
+ await group('62 Spotify group joins the saved edition and removal protects shared copies',async()=>{
+  await fresh({spotifyAlbum:true,idb:process.env.MUSIC_FLOW_ENGINE==='webkit'});await completeRequiredSetup();albumMode='mixed';
+  await nav('Biblioteca').click();
+  const card=page.locator('.library-grid .collection-card').filter({hasText:'MUSIC_FLOW Album'});
+  await card.click();await button('Ver álbum completo').click();await button('Guardar álbum').click();
+  const detail=page.locator('.library-detail .album-page');
+  await detail.getByText('2 de 4 descargadas',{exact:true}).waitFor();
+  await button('Volver a Biblioteca').click();await card.waitFor();
+  assert.equal(await card.count(),1);
+  await card.click();await detail.getByText('2 de 4 descargadas',{exact:true}).waitFor();
+  await detail.locator('.album-tracks > li').first().getByRole('button').click();
+  await page.waitForFunction(()=>MUSIC_FLOW.audio[0]&&!MUSIC_FLOW.audio[0].paused);
+  await idle();
+  await button('Retirar álbum').click();
+  const dialog=page.getByRole('dialog',{name:'Eliminar álbum'});
+  await dialog.getByRole('checkbox').check();
+  await dialog.getByRole('button',{name:'Eliminar álbum',exact:true}).click();
+  await dialog.getByText('La colección se eliminó.',{exact:true}).waitFor();
+  await dialog.getByRole('button',{name:'Cerrar',exact:true}).click();
+  const result=await state();
+  assert.equal(result.assets.length,2);
+  assert(result.tracks.some(track=>track.catalogChoice?.source==='spotify'));
+  assert(!result.settings.some(row=>row?.edition?.id===42));
+  assert(result.settings.some(row=>row?.key?.startsWith('["itunes:42:1:1:81"')&&row.trackId===result.tracks.find(track=>track.catalogChoice?.source==='spotify')?.id));
+  assert(result.settings.some(row=>row?.trackId===result.tracks.find(track=>track.catalogChoice?.source==='spotify')?.id&&row?.added===false));
+  return {spotify:true,partial:2,protectedCopies:2,returnedToLibrary:true};
+ });
+ await group('63 listening cache is playable and the saved album still offers to retain it',async()=>{
+  await fresh({singleAlias:true});await completeRequiredSetup();albumMode='repeat';
+  await input().fill('MUSIC_FLOW Album');await openAlbum();await button('Guardar álbum').click();
+  await nav('Biblioteca').click();
+  await page.locator('.library-grid .collection-card').filter({hasText:'MUSIC_FLOW Album'}).click();
+  const detail=page.locator('.library-detail .album-page');
+  await detail.getByText('En caché de escucha',{exact:true}).nth(1).waitFor();
+  await detail.getByText('0 de 2 descargadas',{exact:true}).waitFor();
+  const before=sends();
+  await button('Descargar faltantes').click();
+  await detail.getByText('2 de 2 descargadas',{exact:true}).waitFor();
+  assert.equal(sends(),before);
+  const retained=await state();
+  assert.equal(retained.assets.length,1);
+  await idle();
+  await page.evaluate(async id=>(await import('/__musicflow/importer/seed.js')).correctAlbumTrack(id),retained.tracks[0].id);
+  await page.reload();
+  await page.waitForFunction(()=>{try{return MUSIC_FLOW.panel().canSearch;}catch{return false;}});
+  await nav('Biblioteca').click();
+  await page.locator('.library-grid .collection-card').filter({hasText:'Álbum · 2 canciones'}).click();
+  await detail.getByText('No descargada',{exact:true}).nth(1).waitFor();
+  await detail.getByText('0 de 2 descargadas',{exact:true}).waitFor();
+  return {cached:2,retained:2,manualCorrectionRejected:true,telegramSearches:0};
+ });
+ await group('64 removing one saved edition retains shared audio and rejects a stale preview',async()=>{
+  await fresh();await completeRequiredSetup();
+  return page.evaluate(async()=>(await import('/__musicflow/importer/seed.js')).sharedSavedAlbumRemoval());
+ });
+ await group('65 favorite immediately after binding an alias and actionable album limit',async()=>{
+  await fresh({seed:true,idb:process.env.MUSIC_FLOW_ENGINE==='webkit'});await completeRequiredSetup();albumMode='mixed';
+  await input().fill('MUSIC_FLOW Album');await openAlbum();
+  const details=page.locator('.album-page');
+  const row=details.locator('.album-tracks > li').first();
+  await row.getByText('Descargada',{exact:false}).waitFor();
+  const before=(await state()).tracks.find(track=>track.title===title);
+  assert(before&&!before.catalogChoice&&!before.favorite);
+  await row.getByRole('button').click();await playing();
+  await button('Abrir reproductor desde título').click();
+  await page.locator('.np-favorite').click();
+  await page.locator('.np-favorite[aria-pressed="true"]').waitFor();
+  const after=(await state()).tracks.find(track=>track.id===before.id);
+  assert(after.favorite&&after.catalogChoice?.source==='itunes'&&after.revision===before.revision+2);
+  await page.locator('.player-surface').getByRole('button',{name:'Cerrar reproductor',exact:true}).click();
+  await page.evaluate(async()=>(await import('/__musicflow/importer/seed.js')).seedSavedAlbumLimit());
+  const remote=sends();
+  await button('Añadir álbum').click();
+  await details.getByText('Llegaste al máximo de 500 álbumes guardados. Quita alguno de Biblioteca para guardar este.',{exact:true}).waitFor();
+  assert.equal(sends(),remote);
+  return {favorite:true,aliasRefreshed:true,limit:500,telegramSearches:0};
+ });
+ await group('66 loose album card, detail and removal agree after a saved album absorbs part of a tag group',async()=>{
+  await fresh();await completeRequiredSetup();
+  const ids=await page.evaluate(async forceIdb=>(await import('/__musicflow/importer/seed.js')).seedPartiallyCoveredTagAlbum(forceIdb),process.env.MUSIC_FLOW_ENGINE==='webkit');
+  await page.reload();
+  await page.waitForFunction(()=>{try{return MUSIC_FLOW.panel().canSearch;}catch{return false;}});
+  await nav('Biblioteca').click();
+  const cards=page.locator('.library-grid .collection-card').filter({hasText:'MUSIC_FLOW Album'});
+  await cards.nth(1).waitFor();
+  assert.equal(await cards.count(),2);
+  await cards.nth(1).click();
+  const detail=page.locator('.library-detail:visible');
+  await detail.getByRole('heading',{name:'MUSIC_FLOW Album',exact:true}).waitFor();
+  const titles=await detail.locator('.collection-track-main strong').allTextContents();
+  assert.deepEqual(titles,['MUSIC_FLOW Alternate']);
+  await detail.getByRole('button',{name:'Opciones de colección'}).click();
+  await button('Retirar álbum').click();
+  const dialog=page.getByRole('dialog',{name:'Eliminar álbum'});
+  assert.equal(await dialog.locator('dd').first().textContent(),'1');
+  await dialog.getByRole('checkbox').check();
+  await dialog.getByRole('button',{name:'Eliminar álbum',exact:true}).click();
+  await dialog.getByText('La colección se eliminó.',{exact:true}).waitFor();
+  const records=await state();
+  assert(records.settings.some(row=>row?.trackId===ids.loose&&row.added===false));
+  assert(!records.settings.some(row=>row?.trackId===ids.covered&&row.added===false));
+  await dialog.getByRole('button',{name:'Cerrar',exact:true}).click();
+  return {looseTracks:1,coveredTrackRetained:true,compilationPartition:true};
  });
  await runArtistGroups({group,fresh,pipeline,idle,input,panel,button,nav,report,origin,ready,fixture,playing,state,page:()=>page,context:()=>context});
  await close();

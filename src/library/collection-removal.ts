@@ -5,7 +5,8 @@ import {ACTIVE_LIBRARY_ACCOUNT} from '../accounts/library-local';
 import {admittedTransaction, closeDatabase, openExistingDatabase, request} from '../storage/database';
 import {transactionDone} from '../storage/transaction-done';
 import {WRITER_LOCK} from '../storage/asset-reader';
-import {groupAlbums} from './groups';
+import {readSongAliasesFrom} from './selected-song';
+import {albumRemovalMembership,libraryAlbumCards,readSavedAlbumsFrom,savedAlbumKey,savedAlbumGroupKey} from './saved-albums';
 import {indexCopyProtection,listeningCacheAssets} from './listening-cache';
 import {copyLibraryMembership, libraryMembershipKey, makeLibraryMembership} from './library-membership';
 import {describeRemovalData, validateTrack} from './local-copy-removal-snapshot';
@@ -24,8 +25,8 @@ export interface CollectionOutcome {readonly metadata:'committed'|'not-committed
 /** Host must create a fresh context AFTER reservation; release settles its resources. */
 export interface CollectionCleanupHost {readContext():RemovalReadContext;settlementReadContext?():RemovalReadContext;reserve(target:Readonly<LocalAsset>):Promise<{kind:'reserved';context:RemovalContext;release():Promise<void>}|{kind:'blocked';reason:string}>;record(tracking:RemovalTracking):Promise<boolean>;forget(tracking:RemovalTracking):Promise<boolean>}
 type Row={key:IDBValidKey; value:unknown};
-type Snapshot={accountId?:string;tracks:Track[]; playlists:Playlist[]; assets:LocalAsset[]; membership:Map<string,boolean>; queued:Set<string>; canonical:string};
-type Data={selection:CollectionSelection; snapshot:Snapshot; affected:string[]; targets:{asset:LocalAsset;track:Track}[]; context:CollectionContext};
+type Snapshot={accountId?:string;tracks:Track[]; playlists:Playlist[]; assets:LocalAsset[]; membership:Map<string,boolean>; queued:Set<string>; album?:ReturnType<typeof albumRemovalMembership>; canonical:string};
+type Data={selection:CollectionSelection; snapshot:Snapshot; affected:string[]; targets:{asset:LocalAsset;track:Track;sharedAlbum:boolean}[]; context:CollectionContext};
 const previews=new WeakMap<CollectionPreviewToken,Data>();
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
 function check(c:CollectionContext):void {if(c.signal.aborted||c.current()!==true)throw new Error('collection-stale');}
@@ -34,7 +35,8 @@ async function rows(tx:IDBTransaction, name:string):Promise<Row[]> {
  if(keys.length>20000||keys.length!==values.length)throw new Error('collection-limit');
  return keys.map((key,i)=>({key,value:values[i]}));
 }
-async function snapshot(tx:IDBTransaction,c:CollectionContext,includeCatalog:boolean):Promise<Snapshot> {
+async function snapshot(tx:IDBTransaction,c:CollectionContext,selection:CollectionSelection):Promise<Snapshot> {
+ const includeCatalog=selection.kind==='album';
  check(c);const [tr,pl,as]=await Promise.all(['tracks','playlists','assets'].map(n=>rows(tx,n)));check(c);
  const tracks=tr.map(r=>validateTrack(r.value,r.key)); const ids=new Set(tracks.map(t=>t.id));
  const playlists=pl.map(({key,value})=>{
@@ -52,8 +54,14 @@ async function snapshot(tx:IDBTransaction,c:CollectionContext,includeCatalog:boo
  const accountId=await request<string|undefined>(store.get(ACTIVE_LIBRARY_ACCOUNT));
  const view=includeCatalog&&accountId?await projectSpotifyReleases(store,tracks,accountId):tracks;
  const catalogEvidence=includeCatalog?view.flatMap(t=>t.catalogRelease?[[t.id,t.catalogRelease]]:[]):[];
- const canonical=describeRemovalData([tr,pl,as,relevant,rawQueue,accountId,catalogEvidence]);
- return {accountId,tracks:view,playlists,assets,membership,queued,canonical};
+ const savedAlbums=includeCatalog&&accountId?await readSavedAlbumsFrom(store,accountId):[];
+ const owned=view.filter(t=>t.accountId===accountId);
+ const album=selection.kind==='album'?albumRemovalMembership(libraryAlbumCards(owned.filter(t=>membership.get(t.id)),savedAlbums,
+  savedAlbums.length?await readSongAliasesFrom(store):undefined,owned),selection.key):undefined;
+ const selectedAlbum=album?.selected?.saved?savedAlbums.find(record=>savedAlbumGroupKey(record.edition.id)===album.selected?.key):undefined;
+ const shared=[...(album?.otherSavedTrackIds??[])].sort();
+ const canonical=describeRemovalData([tr,pl,as,relevant,rawQueue,accountId,catalogEvidence,selectedAlbum??null,shared]);
+ return {accountId,tracks:view,playlists,assets,membership,queued,album,canonical};
 }
 function affectedFor(s:Snapshot,selection:CollectionSelection):string[] {
  if(selection.kind==='playlist') {const p=s.playlists.find(p=>p.id===selection.id&&p.revision===selection.revision&&p.accountId===s.accountId);if(!p)throw new Error('collection-changed');return [...new Set(p.entries.map(e=>e.trackId))];}
@@ -63,23 +71,25 @@ function affectedFor(s:Snapshot,selection:CollectionSelection):string[] {
   const ids=new Set(assets.map(a=>a.id));return s.tracks.filter(t=>t.assetId!==null&&ids.has(t.assetId)).map(t=>t.id);
  }
  if(selection.scope!=='global-library')throw new Error('collection-invalid');
- const group=groupAlbums(s.tracks.filter(t=>s.membership.get(t.id)&&t.accountId===s.accountId)).find(g=>g.key===selection.key);
- if(!group||group.unknown)throw new Error('collection-changed');return [...new Set(group.trackIds)];
+ const group=s.album?.selected;
+ if(!group)throw new Error('collection-changed');return [...new Set(group.trackIds)];
 }
-async function read(c:CollectionContext,includeCatalog:boolean):Promise<Snapshot>{check(c);const db=await openExistingDatabase();try{check(c);const tx=admittedTransaction(db,['tracks','playlists','assets','settings']);const done=transactionDone(tx);try{const s=await snapshot(tx,c,includeCatalog);await done;check(c);return s;}catch(e){try{tx.abort();}catch{}await done.catch(()=>{});throw e;}}finally{closeDatabase(db);}}
+async function read(c:CollectionContext,selection:CollectionSelection):Promise<Snapshot>{check(c);const db=await openExistingDatabase();try{check(c);const tx=admittedTransaction(db,['tracks','playlists','assets','settings']);const done=transactionDone(tx);try{const s=await snapshot(tx,c,selection);await done;check(c);return s;}catch(e){try{tx.abort();}catch{}await done.catch(()=>{});throw e;}}finally{closeDatabase(db);}}
 export async function previewCollectionRemoval(selection:CollectionSelection,c:CollectionContext):Promise<CollectionPreview>{
  if(selection.kind==='playlist'&&(!uuid(selection.id)||!Number.isSafeInteger(selection.revision)||selection.revision<1)||selection.kind==='album'&&(selection.scope!=='global-library'||typeof selection.key!=='string')||selection.kind==='cache'&&selection.scope!=='global-listening-cache'||!['playlist','album','cache'].includes(selection.kind))throw new Error('collection-invalid');
- const s=await read(c,selection.kind==='album');const affected=affectedFor(s,selection);const affectedSet=new Set(affected);
+ const s=await read(c,selection);const affected=affectedFor(s,selection);const affectedSet=new Set(affected);
  const remainingLists=selection.kind==='playlist'?s.playlists.filter(p=>p.id!==selection.id):s.playlists;
  const protectedIds=new Set(remainingLists.flatMap(p=>p.entries.map(e=>e.trackId)));
  const firstTrackByAsset=new Map<string,Track>();
  for(const t of s.tracks)if(t.assetId!==null&&affectedSet.has(t.id)&&!firstTrackByAsset.has(t.assetId))firstTrackByAsset.set(t.assetId,t);
+ const sharedAlbumCopy=indexCopyProtection(s.tracks,t=>s.album?.otherSavedTrackIds.has(t.id)===true);
  const protectedCopy=indexCopyProtection(s.tracks,t=>t.favorite||protectedIds.has(t.id)||s.queued.has(t.id)||s.membership.get(t.id)===true&&!(selection.kind==='album'&&affectedSet.has(t.id)));
  const targets:Data['targets']=[];let eligible=0,estimatedBytes=0,shared=0;
  for(const asset of s.assets){
   const track=firstTrackByAsset.get(asset.id);if(!track)continue;
-  targets.push({asset,track});
-  if(protectedCopy(asset))shared++;else{eligible++;estimatedBytes+=asset.bytes;}
+  const sharedAlbum=sharedAlbumCopy(asset);
+  targets.push({asset,track,sharedAlbum});
+  if(sharedAlbum||protectedCopy(asset))shared++;else{eligible++;estimatedBytes+=asset.bytes;}
  }
  const token=Object.freeze({}) as CollectionPreviewToken;previews.set(token,{selection:{...selection},snapshot:s,affected,targets,context:c});
  return Object.freeze({token,tracks:affected.length,copiesEligible:eligible,estimatedBytes,retainedShared:shared,cleanupAvailable:true});
@@ -94,9 +104,14 @@ export async function confirmCollectionRemoval(token:CollectionPreviewToken,cons
   check(c);const db=await openExistingDatabase();let tx:IDBTransaction|undefined;let done:Promise<void>|undefined;let dispatched=false;
   try{check(c);tx=admittedTransaction(db,['tracks','playlists','assets','settings'],'readwrite');done=transactionDone(tx);const native=tx;
    const abort=()=>{try{native.abort();}catch{}};c.signal.addEventListener('abort',abort,{once:true});
-   try{const s=await snapshot(tx,c,d.selection.kind==='album');if(s.canonical!==d.snapshot.canonical)throw new Error('collection-changed');const ids=affectedFor(s,d.selection);if(describeRemovalData(ids)!==describeRemovalData(d.affected))throw new Error('collection-changed');check(c);
+   try{const s=await snapshot(tx,c,d.selection);if(s.canonical!==d.snapshot.canonical)throw new Error('collection-changed');const ids=affectedFor(s,d.selection);if(describeRemovalData(ids)!==describeRemovalData(d.affected))throw new Error('collection-changed');check(c);
     if(d.selection.kind==='playlist')tx.objectStore('playlists').delete(d.selection.id);
-    else if(d.selection.kind==='album')for(const id of ids)tx.objectStore('settings').put(makeLibraryMembership(id,false),libraryMembershipKey(id));
+    else if(d.selection.kind==='album'){
+     const store=tx.objectStore('settings');
+     const group=s.album?.selected;
+     if(group?.saved&&s.accountId)store.delete(savedAlbumKey(s.accountId,group.editionId));
+     for(const id of new Set(s.album?.detach))store.put(makeLibraryMembership(id,false),libraryMembershipKey(id));
+    }
     dispatched=true;await done;return {metadata:'committed',cleanup:'not-started',freedBytes:0,removed:0,skipped:0,skipReasons:[],reason:null} as CollectionOutcome;
    }finally{c.signal.removeEventListener('abort',abort);}
   }catch(e){if(tx&&done){try{tx.abort();}catch{}let aborted=false;await done.catch(()=>{aborted=true;});if(dispatched&&!aborted)return {...rejected('commit-settlement-unknown'),metadata:'unknown'} as CollectionOutcome;}return rejected(e instanceof Error?e.message:'collection-failed');}
@@ -105,8 +120,9 @@ export async function confirmCollectionRemoval(token:CollectionPreviewToken,cons
  if(metadata.metadata!=='committed')return metadata;
  let freedBytes=0,removed=0,skipped=0;const skipReasons:string[]=[];const skip=(reason:string)=>{skipped++;skipReasons.push(reason);};
  const stop=(reason:string):CollectionOutcome=>({metadata:'committed',cleanup:'stopped',freedBytes,removed,skipped,skipReasons,reason});
- for(const {asset,track} of d.targets){
+ for(const {asset,track,sharedAlbum} of d.targets){
   try{check(c);
+   if(sharedAlbum){skip('shared-saved-album');continue;}
    const discovery=await discoverCopyRemoval({namespace:'local',trackId:track.id,expectedTrackRevision:track.revision},host.readContext());
    if(discovery.kind!=='candidate'){skip(discovery.reason);continue;}
    const reserved=await host.reserve(discovery.target);if(reserved.kind==='blocked'){skip(reserved.reason);continue;}

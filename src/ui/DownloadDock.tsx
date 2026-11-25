@@ -268,8 +268,8 @@ export function DownloadDock({message,review,onReviewStorage,updateWait,onStopUp
  </>,document.body);
 }
 
-export function CollectionDownloadButton({label,disabled,complete,onStart,coordinator=albumCoordinator}:{
- label:string;disabled?:boolean;complete?:boolean;onStart:()=>void;coordinator?:AlbumCoordinator;
+export function CollectionDownloadButton({label,disabled,complete,onStart,showLabel=false,coordinator=albumCoordinator}:{
+ label:string;disabled?:boolean;complete?:boolean;onStart:()=>void;showLabel?:boolean;coordinator?:AlbumCoordinator;
 }){
  const {running,notice}=useAlbumDownloadState(coordinator);
  const {saved,total}=downloadCounts(notice);
@@ -277,6 +277,6 @@ export function CollectionDownloadButton({label,disabled,complete,onStart,coordi
  return <button type="button" className="collection-download" aria-label={name} title={name}
   disabled={!running&&(disabled||complete)} onClick={running?openDownloadDock:onStart}>
   <DownloadIcon done={!running&&complete}/>
-  {running&&<span aria-hidden="true">{saved}/{total}</span>}
+  {running?<span aria-hidden="true">{saved}/{total}</span>:showLabel&&<span>{name}</span>}
  </button>;
 }

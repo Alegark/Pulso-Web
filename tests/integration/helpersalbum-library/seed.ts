@@ -6,11 +6,11 @@ import {rememberSongAlias} from '../../../src/library/selected-song';
 import {libraryMembershipKey,makeLibraryMembership} from '../../../src/library/library-membership';
 import {readRecord} from '../../../src/storage/database';
 import type {Track} from '../../../src/library/library';
-export async function seed(){
+export async function seed(forceIdb=false){
  const tracks=[];
  for(const [i,name] of ['tone.wav','tone.mp3'].entries()){
   const bytes=await(await fetch('/__musicflow/'+name)).arrayBuffer();
-  const r=await importFileDetailed(new File([bytes],name,{type:i?'audio/mpeg':'audio/wav'}),new AbortController().signal,()=>{},{backend:i?'opfs':'idb'});
+  const r=await importFileDetailed(new File([bytes],name,{type:i?'audio/mpeg':'audio/wav'}),new AbortController().signal,()=>{},{backend:i&&!forceIdb?'opfs':'idb'});
   if(r.kind!=='confirmed')throw Error('MUSIC_FLOW importer not confirmed '+JSON.stringify(r.outcome));
   await editTrack(r.result.track.id,r.result.track.revision,{title:i?'MUSIC_FLOW Alternate':'MUSIC_FLOW Song (Live version)',artist:'MUSIC_FLOW Artist',album:i?null:'MUSIC_FLOW Album'});
   tracks.push(r.result.track.id);
@@ -46,8 +46,8 @@ export async function seedSingleExactAlias(){
  try{await new Promise<void>((resolve,reject)=>{const tx=db.transaction('settings','readwrite');tx.objectStore('settings').put(makeLibraryMembership(track.id,false),libraryMembershipKey(track.id));tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);});}finally{db.close();}
  return [track.id];
 }
-export async function seedTwoTrackAliasPlaylist(){
- const seeded=await seed();const track=await readRecord<Track>('tracks',seeded.tracks[0]);
+export async function seedTwoTrackAliasPlaylist(forceIdb=false){
+ const seeded=await seed(forceIdb);const track=await readRecord<Track>('tracks',seeded.tracks[0]);
  if(!track?.audioFingerprint||!seeded.tracks[1])throw Error('two-track playlist fixture incomplete');
  await rememberSongAlias({id:'itunes:42:1:1:81',source:'itunes',title:'MUSIC_FLOW Song (Live version)',artist:'MUSIC_FLOW Artist',album:'MUSIC_FLOW Album',duration:45},track.id,track.audioFingerprint.sha256,track.audioFingerprint.bytes,()=>true);
  return seeded;
@@ -90,4 +90,168 @@ export async function importArtistFixture(){
  const attempt=await importFileDetailed(new File([bytes],'second.mp3',{type:'audio/mpeg'}),new AbortController().signal,()=>{},{backend:'idb'});
  if(attempt.kind!=='confirmed'||attempt.result.track.artist!=='MUSIC_FLOW Artist')throw Error('artist fixture import');
  return attempt.result.track.id;
+}
+
+export async function playlistWithLocalCopies(ids:string[]){
+ let playlist=await createPlaylist('MUSIC_FLOW Portadas');
+ for(const trackId of ids){
+  await changePlaylist(playlist.id,playlist.revision,{type:'add',trackId});
+  playlist={...playlist,revision:playlist.revision+1};
+ }
+}
+
+export async function seedSpotifyAlbum(forceIdb=false){
+ const {writeRecord}=await import('../../../src/storage/database');
+ const {activeLibraryAccount}=await import('../../../src/accounts/library-local');
+ const {tracks:[id]}=await seed(forceIdb);
+ const track=await readRecord<Track>('tracks',id);
+ if(!track)throw Error('fixture track');
+ const spotifyId='A'.repeat(22);
+ const catalogChoice={source:'spotify' as const,id:'spotify:'+spotifyId,title:track.title,artist:track.artist,album:track.album,duration:track.duration};
+ await writeRecord('tracks',id,{...track,manualOverrides:{},catalogChoice});
+ await writeRecord('settings',libraryMembershipKey(id),makeLibraryMembership(id,true));
+ const account=await activeLibraryAccount()??'11111111-1111-4111-8111-111111111111';
+ const input=JSON.stringify([track.title,track.artist,track.album,catalogChoice.duration,catalogChoice.id,catalogChoice.source,
+  catalogChoice.title,catalogChoice.artist,catalogChoice.album,catalogChoice.duration]);
+ await writeRecord('settings',['spotify-catalog-release',1,account,id],{input,release:{
+  source:'spotify',releaseId:'B'.repeat(22),trackId:spotifyId,position:1,itunesReleaseId:42,title:track.album,artist:track.artist,
+ }});
+}
+
+export async function savedAlbumContracts(){
+ const {saveAlbumRecord,readSavedAlbums,savedAlbumKey,savedAlbumGroupKey}=await import('../../../src/library/saved-albums');
+ const {ACTIVE_LIBRARY_ACCOUNT,activeLibraryAccount}=await import('../../../src/accounts/library-local');
+ const {writeRecord}=await import('../../../src/storage/database');
+ const {WRITER_LOCK}=await import('../../../src/storage/asset-reader');
+ const {previewCollectionRemoval,confirmCollectionRemoval}=await import('../../../src/library/collection-removal');
+ const account=await activeLibraryAccount();
+ if(!account)throw Error('fixture account');
+ const id=77;
+ const detail={edition:{id,title:'Synthetic',artist:'Artist',trackCount:1,releaseDate:null},
+  tracks:[{releaseId:id,trackId:78,disc:1,position:1,title:'Song',artist:'Artist',durationMs:45000}]};
+ const ensure=(value:unknown)=>{if(!value)throw Error('saved album contract');};
+ let active=true,queued!:Promise<unknown>;
+ await navigator.locks.request(WRITER_LOCK,async()=>{
+  queued=saveAlbumRecord(account,detail,()=>active).catch(error=>error.message);
+  ensure((await navigator.locks.query()).pending?.some(lock=>lock.name===WRITER_LOCK));
+  active=false;
+ });
+ ensure(await queued==='account-changed');
+ await writeRecord('settings',ACTIVE_LIBRARY_ACCOUNT,'22222222-2222-4222-8222-222222222222');
+ try{ensure(await saveAlbumRecord(account,detail,()=>true).catch(error=>error.message)==='account-changed');}
+ finally{await writeRecord('settings',ACTIVE_LIBRARY_ACCOUNT,account);}
+ const saved=await saveAlbumRecord(account,detail,()=>true);
+ if(!saved)throw Error('save failed');
+ const update={savedAt:saved.savedAt,failedTracks:['itunes:77:1:1:78']};
+ const changed=await saveAlbumRecord(account,detail,()=>true,update);
+ ensure(changed?.savedAt===saved.savedAt&&changed?.failedTracks.length===1);
+ const replaced={...detail,tracks:[{...detail.tracks[0],title:'Synthetic replacement'}]};
+ await writeRecord('settings',savedAlbumKey(account,id),{...changed,...replaced});
+ ensure(await saveAlbumRecord(account,detail,()=>true,update)===null);
+ await writeRecord('settings',savedAlbumKey(account,id),changed);
+ const context={current:()=>true,signal:new AbortController().signal};
+ const selection={kind:'album' as const,scope:'global-library' as const,key:savedAlbumGroupKey(id)};
+ const consent={confirm:true as const,acceptPossibleOnlyCopyLoss:true as const};
+ const unused=()=>{throw Error('no copies to clean');};
+ const host={readContext:unused,reserve:unused,record:unused,forget:unused};
+ const stale=await previewCollectionRemoval(selection,context);
+ await saveAlbumRecord(account,detail,()=>true,{...update,failedTracks:[]});
+ ensure((await confirmCollectionRemoval(stale.token,consent,context,host)).reason==='collection-changed');
+ const fresh=await previewCollectionRemoval(selection,context);
+ ensure((await confirmCollectionRemoval(fresh.token,consent,context,host)).metadata==='committed');
+ ensure(await saveAlbumRecord(account,detail,()=>true,update)===null);
+ await writeRecord('settings',savedAlbumKey(account,id),{...saved,version:2});
+ ensure(!(await readSavedAlbums(account)).some(album=>album.edition.id===id));
+ ensure(await saveAlbumRecord(account,detail,()=>true,update)===null);
+ ensure((await saveAlbumRecord(account,detail,()=>true))?.version===1);
+ let checks=0;
+ const newDetail={edition:{...detail.edition,id:79},tracks:detail.tracks.map(track=>({...track,releaseId:79}))};
+ ensure(await saveAlbumRecord(account,newDetail,()=>++checks<4).catch(error=>error.message)==='account-changed');
+ return {lock:true,account:true,countGuard:true,failures:true,conflict:true,removed:true,corrupt:true};
+}
+
+export async function correctAlbumTrack(id:string){
+ const track=await readRecord<Track>('tracks',id);
+ if(!track)throw Error('fixture track missing');
+ await editTrack(id,track.revision,{title:'Síntesis corregida'});
+}
+
+export async function sharedSavedAlbumRemoval(){
+ const {saveAlbumRecord,readSavedAlbums,savedAlbumGroupKey}=await import('../../../src/library/saved-albums');
+ const {activeLibraryAccount}=await import('../../../src/accounts/library-local');
+ const {previewCollectionRemoval,confirmCollectionRemoval}=await import('../../../src/library/collection-removal');
+ const {albumTrackChoice}=await import('../../../src/library/album-acquisition');
+ const {readSongCopyStatus}=await import('../../../src/library/song-copy-status');
+ const accountId=await activeLibraryAccount();
+ if(!accountId)throw Error('TESTONLY account missing');
+ const context={current:()=>true,signal:new AbortController().signal};
+ const bytes=await(await fetch('/__musicflow/tone.wav')).arrayBuffer();
+ const imported=await importFileDetailed(new File([bytes],'tone.wav',{type:'audio/wav'}),context.signal,()=>{},{backend:'idb',accountId});
+ if(imported.kind!=='confirmed')throw Error('TESTONLY import failed');
+ const track=imported.result.track,fingerprint=track.audioFingerprint;
+ if(!fingerprint)throw Error('TESTONLY fingerprint missing');
+ const album=(id:number,title:string)=>({edition:{id,title,artist:'Artista',trackCount:1,releaseDate:null},
+  tracks:[{releaseId:id,trackId:81,disc:1,position:1,title:'Canción',artist:'Artista',durationMs:45000}]});
+ const a=album(42,'Edición estándar'),b=album(99,'Edición ampliada');
+ const choiceA=albumTrackChoice(a.tracks[0],a.edition.title),choiceB=albumTrackChoice(b.tracks[0],b.edition.title);
+ for(const choice of [choiceA,choiceB])await rememberSongAlias(choice,track.id,fingerprint.sha256,fingerprint.bytes,context.current);
+ const selection={kind:'album' as const,scope:'global-library' as const,key:savedAlbumGroupKey(42)};
+ const consent={confirm:true as const,acceptPossibleOnlyCopyLoss:true as const};
+ const unused=()=>{throw Error('Shared audio must never enter physical cleanup');};
+ const host={readContext:unused,reserve:unused,record:unused,forget:unused};
+ const ensure=(value:unknown)=>{if(!value)throw Error('shared saved album contract');};
+ await saveAlbumRecord(accountId,a,context.current);
+ const stale=await previewCollectionRemoval(selection,context);
+ ensure(stale.copiesEligible===1);
+ await saveAlbumRecord(accountId,b,context.current);
+ ensure((await confirmCollectionRemoval(stale.token,consent,context,host)).reason==='collection-changed');
+ const fresh=await previewCollectionRemoval(selection,context);
+ ensure(fresh.copiesEligible===0&&fresh.retainedShared===1);
+ const result=await confirmCollectionRemoval(fresh.token,consent,context,host);
+ ensure(result.metadata==='committed'&&result.cleanup==='complete'&&result.removed===0&&result.freedBytes===0&&result.skipped===1);
+ const saved=await readSavedAlbums(accountId);
+ const copy=await readSongCopyStatus(choiceB,context.current);
+ ensure(saved.length===1&&saved[0].edition.id===99&&copy.state==='available'&&copy.inLibrary&&copy.trackId===track.id);
+ return {cas:true,shared:1,physicalBytes:fingerprint.bytes,complete:true};
+}
+
+export async function seedSavedAlbumLimit(){
+ const {activeLibraryAccount}=await import('../../../src/accounts/library-local');
+ const {savedAlbumKey}=await import('../../../src/library/saved-albums');
+ const {admittedTransaction,openExistingDatabase,closeDatabase}=await import('../../../src/storage/database');
+ const {transactionDone}=await import('../../../src/storage/transaction-done');
+ const account=await activeLibraryAccount();
+ if(!account)throw Error('TESTONLY account missing');
+ const db=await openExistingDatabase();
+ try{
+  const tx=admittedTransaction(db,'settings','readwrite'),done=transactionDone(tx),store=tx.objectStore('settings');
+  for(let id=1000;id<1500;id++){
+   store.put({version:1,savedAt:'2026-11-23T00:00:00.000Z',failedTracks:[],
+    edition:{id,title:'Disco sintético',artist:'Artista',trackCount:1,releaseDate:null},
+    tracks:[{releaseId:id,trackId:id+500,disc:1,position:1,title:'Pista',artist:'Artista',durationMs:45000}]},savedAlbumKey(account,id));
+  }
+  await done;
+ }finally{closeDatabase(db);}
+}
+
+export async function seedPartiallyCoveredTagAlbum(forceIdb:boolean){
+ const {unknownLocalAlbum}=await import('../../../src/library/album-metadata');
+ const {activeLibraryAccount}=await import('../../../src/accounts/library-local');
+ const {saveAlbumRecord}=await import('../../../src/library/saved-albums');
+ const {writeRecord}=await import('../../../src/storage/database');
+ const account=await activeLibraryAccount();
+ if(!account)throw Error('TESTONLY account missing');
+ const {tracks:[covered,loose]}=await seed(forceIdb);
+ const first=await readRecord<Track>('tracks',covered),second=await readRecord<Track>('tracks',loose);
+ if(!first?.audioFingerprint||!second||!first.artist||!first.album)throw Error('TESTONLY album missing');
+ const known=unknownLocalAlbum('absent');
+ known.source.compilation={state:'known',value:true,evidence:{kind:'embedded-id3',tag:'TCMP'}};
+ await writeRecord('tracks',covered,{...first,localAlbum:known});
+ await writeRecord('tracks',loose,{...second,album:first.album,manualOverrides:{...second.manualOverrides,album:first.album},localAlbum:unknownLocalAlbum('absent')});
+ const choice={id:'itunes:42:1:1:81',source:'itunes' as const,title:first.title,artist:first.artist,album:first.album,duration:45};
+ await rememberSongAlias(choice,covered,first.audioFingerprint.sha256,first.audioFingerprint.bytes,()=>true);
+ const saved=await saveAlbumRecord(account,{edition:{id:42,title:first.album,artist:first.artist,trackCount:1,releaseDate:null},
+  tracks:[{releaseId:42,trackId:81,disc:1,position:1,title:first.title,artist:first.artist,durationMs:45000}]},()=>true);
+ if(!saved)throw Error('TESTONLY album save failed');
+ return {covered,loose};
 }

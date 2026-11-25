@@ -1,6 +1,6 @@
 import {ACTIVE_LIBRARY_ACCOUNT} from '../accounts/library-local';
 import {WRITER_LOCK} from '../storage/asset-reader';
-import {admittedTransaction, closeDatabase, openExistingDatabase, readRecord, request} from '../storage/database';
+import {admittedTransaction, closeDatabase, openExistingDatabase, request} from '../storage/database';
 import {transactionDone} from '../storage/transaction-done';
 import type {CatalogArtist} from './album-catalog';
 import {musicBrainzId} from './catalog-id';
@@ -21,8 +21,8 @@ function savedArtists(value: unknown): CatalogArtist[] {
  return value.map(({id,name}) => ({id,name}));
 }
 
-export async function readSavedArtists(accountId: string): Promise<CatalogArtist[]> {
- return savedArtists(await readRecord('settings', key(accountId)));
+export async function readSavedArtistsFrom(store:IDBObjectStore,accountId:string):Promise<CatalogArtist[]> {
+ return savedArtists(await request(store.get(key(accountId))));
 }
 
 export async function setSavedArtist(accountId: string, artist: CatalogArtist, save: boolean, current: () => boolean): Promise<CatalogArtist[]> {

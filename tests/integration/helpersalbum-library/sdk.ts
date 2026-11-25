@@ -2,7 +2,7 @@
  * This does NOT authenticate a real account or establish live bot compatibility.
  * Genuine pool/source/search drivers and typed SDK adapter remain in the worker. */
 import Long from 'long';
-import {sessionLease,saveTelegramSession,loadTelegramSession,clearTelegramSessionLease} from './saved-session';
+import {sessionLease,saveTelegramSession,loadTelegramSession,clearTelegramSessionLease,loadTelegramBotSelection,saveTelegramBots,type SavedBot} from './saved-session';
 import type {tl} from '@mtcute/core';
 import {createSourcesDriver,type SourcesDriver} from './sources-driver';
 import {createBotProvidersDriver,botProvidersFailure,type BotProvidersDriver} from './bot-providers-driver';
@@ -90,15 +90,27 @@ export async function openTemporaryTelegram(_identity:unknown,lifetime:AbortSign
   return wireMode==='download-metadata-budget'&&request._!=='upload.getFile'?{...result,incidental:'x'.repeat(8192)}:result;
  };
  let persistentLease='';
+ let savedBots:SavedBot[]=[],savedBotRevision=0;
  return {
-  async restore(s:AbortSignal){current(s);const config=await event('synthetic-restore-NOT-REAL');current(s);const saved=await loadTelegramSession();if(!saved)return false;persistentLease=saved.lease;if(config.mode==='persist-network')throw Error('synthetic-network');if(config.mode==='persist-revoked'){await clearTelegramSessionLease(persistentLease);throw Error('session-expired');}binding={accountRef:crypto.randomUUID(),accountEpoch:1};return true;},
+  async restore(s:AbortSignal){current(s);const config=await event('synthetic-restore-NOT-REAL');current(s);const saved=await loadTelegramSession();if(!saved)return false;persistentLease=saved.lease;const selection=await loadTelegramBotSelection(persistentLease);savedBots=selection.bots;savedBotRevision=selection.revision;if(config.mode==='persist-network')throw Error('synthetic-network');if(config.mode==='persist-revoked'){await clearTelegramSessionLease(persistentLease);throw Error('session-expired');}binding={accountRef:crypto.randomUUID(),accountEpoch:1};return true;},
   async forgetSavedAuthorization(s:AbortSignal){current(s);if(persistentLease)await clearTelegramSessionLease(persistentLease);current(s);},
   async begin(_phone:string,s:AbortSignal){current(s);await event('synthetic-begin');return 'app' as const;},
   async code(_phone:string,_code:string,s:AbortSignal){current(s);throw {errorMessage:'SESSION_PASSWORD_NEEDED'};},
   async password(_password:string,s:AbortSignal){current(s);const config=await event('synthetic-positive-auth-NOT-REAL');current(s);if(config.persistSession){persistentLease=await sessionLease();if(!await saveTelegramSession(persistentLease,'MUSIC_FLOW_SYNTHETIC_AUTH_ONLY'))throw Error('session-storage');}binding={accountRef:crypto.randomUUID(),accountEpoch:1};},
   async logout(s:AbortSignal){current(s);if(search&&!await search.quiesce()||bots&&!await bots.quiesce()||sources&&!await sources.quiesce())throw Error('synthetic logout unsettled');await event('synthetic-logout');await close();},
   close,getAccountCooldown,getAccountBinding:()=>closed?null:binding,
-  createBotProviders(sessionId:string){if(!binding||closed)throw Error('No synthetic binding');return bots??=createBotProvidersDriver(binding,sessionId,{invalidateSession,resolveIdentity:(username,s)=>call({_:'contacts.resolveUsername',username},{abortSignal:s,timeout:15000,maxRetryCount:0,floodSleepThreshold:0})});},
+  createBotProviders(sessionId:string){
+   if(!binding||closed)throw Error('No synthetic binding');
+   return bots??=createBotProvidersDriver(binding,sessionId,{invalidateSession,
+    resolveIdentity:(username,s)=>call({_:'contacts.resolveUsername',username},{abortSignal:s,timeout:15000,maxRetryCount:0,floodSleepThreshold:0}),
+    async saveSelection(next){
+     if(!persistentLease)return true;
+     const ok=await saveTelegramBots(persistentLease,next,savedBots,savedBotRevision);
+     if(ok){savedBots=next;savedBotRevision++;}
+     return ok;
+    },
+   },undefined,savedBots);
+  },
   createSources(sessionId:string){if(!binding||closed)throw Error('No synthetic binding');return sources??=createSourcesDriver(binding,sessionId,{invalidateSession,getDialogs:(r,s)=>call({_:'messages.getDialogs',...r},{abortSignal:s,timeout:15000,maxRetryCount:0,floodSleepThreshold:0})});},
   createBotSearch(sessionId:string){if(!binding||closed||!bots)throw Error('No synthetic pool');return search??=createBotSearchSdkDriver(binding,sessionId,{providers:bots,call:call as import('@mtcute/core/client.js').BaseTelegramClient['call'],current,invalidateSession,getAccountCooldown});},
  };
