@@ -2469,3 +2469,13 @@ Las 16 pruebas de aceptación en iPhone físico siguen **NO EJECUTADAS**. P0-W s
 ## 2026-11-25 · Velocidad de adquisición y primer sonido
 
 - [T25](T25-velocidad-bots.md) fija las métricas y pruebas de los incrementos de velocidad de bots.
+
+## 2026-11-25 · T25 incremento 1 publicado en v62
+
+Cloudflare Workers Free (USD 0) sirve [v62](https://pulso-web.pruebassoftware.workers.dev/releases/50ddc18edba3d338.html) desde `aeaf241` de `perf/t25-inc1`. El MCP oficial confirmó la versión `af60956e-ccd0-4372-838d-eda3e007cd1e` al 100 % en el despliegue `0fa6d430-0f89-44a4-a569-795e6dc4d460`, activo desde `2026-11-25T17:13:52.626Z`. Coincidieron los bytes y SHA-256 del Worker, los 13 bindings, los secretos, Turnstile, los límites, la configuración de ejecución y las 14 reglas de `run_worker_first` de v61.
+
+Pasaron el build, las 73 pruebas de Cloudflare, la preparación y la simulación de Wrangler. El freeze retuvo las 15 publicaciones anteriores y el inventario heredado. HTTPS confirmó `latest.json`, 307 desde la entrada `.html`, 200 en la ruta canónica, meta `pulso-release`, 310/310 rutas estáticas por bytes y SHA-256 (incluido `sw.js`), 56/56 entradas históricas y la entrada actual con cabeceras de navegación, CSP y clave pública de Turnstile, y HTTP 401 de perfil y biblioteca anónimos.
+
+La revisión independiente aprobó v62 con cero bloqueantes y cero altos. En el control sintético la ganancia determinista es de unos 200 ms menos por pista con menú (S02, un `getMessages` menos) y 200 ms menos de sondeo con bots lentos (S01). La serie concurrente de WebKit carece de comparabilidad por contención de CPU.
+
+Quedan M1 (conexión de Telegram durante toda la sesión), M2 (límites de la medición), M3 (cableado del SDK sin prueba unitaria directa) y los menores sobre `getState` al reconectar, la clasificación de `messageEmpty` en audio directo, el comentario sobre lecturas del callback y la verificación real. Telegram real y las 16 pruebas físicas de iPhone siguen **NO EJECUTADOS**. P0-W sigue abierto. [Matriz y recibos de T25](T25-velocidad-bots.md#2026-11-25--publicación-de-v62).

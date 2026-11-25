@@ -18,9 +18,9 @@ USD 0. Trabajar solo en este proyecto; no modificar servicios ajenos. Pruebas lo
 
 **Pendiente abierto del propietario (2026-11-25): aceptación física en iPhone.** Leer `docs/IPHONE-ACEPTACION.md` antes de cerrar cualquier entrega que toque descargas, reproducción, sesión de Telegram u offline. Tiene 16 pruebas que solo hace el propietario. Él las marca en la página privada que enlaza ese archivo. Sin su resultado, cada prueba sigue NO EJECUTADA. Transcribir lo que reporte a `odd/tasks/T3-gate-fisico.md`.
 
-**Publicación vigente (2026-11-25):** v61, rama `fix/artwork-rows-dock`. La PR 20 sigue abierta.
+**Publicación vigente (2026-11-25):** v62, rama `perf/t25-inc1`. La PR 20 sigue abierta.
 
-**Trabajo pausado por el propietario (2026-11-25):** las mejoras de velocidad de la rama local `perf/faster-bot-pipeline` siguen pausadas y sin revisar. Leer `docs/PENDIENTES.md` al retomar. La publicación o fusión de esa rama requiere que el propietario retome el trabajo.
+**Mejoras de velocidad (2026-11-25):** el propietario las retomó como T25 (`odd/tasks/T25-velocidad-bots.md`); el incremento 1 está publicado en v62. La rama local `perf/faster-bot-pipeline` queda solo como referencia; no publicarla ni fusionarla.
 
 ## Entregas y colaboración
 

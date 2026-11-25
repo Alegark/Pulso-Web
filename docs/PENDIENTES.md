@@ -1,6 +1,10 @@
 # Pendientes abiertos · 2026-11-25
 
-Pulso sirve [v61](https://pulso-web.pruebassoftware.workers.dev/releases/60735cae6f867d6e.html) desde `fix/artwork-rows-dock`. El registro de publicación está en [T7](../odd/tasks/T7-portadas-metadata.md) y [T8](../odd/tasks/T8-shell-funcional.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
+Pulso sirve [v62](https://pulso-web.pruebassoftware.workers.dev/releases/50ddc18edba3d338.html) desde `perf/t25-inc1`. El registro de publicación está en [T25](../odd/tasks/T25-velocidad-bots.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
+
+## Prioridad · M1 de T25
+
+La conexión de Telegram permanece abierta durante toda la sesión con `disableUpdates: false` y recibe los updates de todas las conversaciones. En cuentas con grupos activos, procesarlos aumenta el consumo de datos móviles y batería. La mitigación propuesta es cerrar la conexión por inactividad o abrirla bajo demanda. Queda por comprobar con Telegram real si la restauración o reconexión refresca la presencia «en línea».
 
 ## 1. Hallazgos abiertos de v60
 
