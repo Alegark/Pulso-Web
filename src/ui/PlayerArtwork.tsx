@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useContext,useEffect,useRef,useState} from 'react';
 import type {Activity} from '../playback/ownership';
 import {readSongArtworkIdentity} from '../library/selected-song';
 import {readRecord} from '../storage/database';
@@ -6,20 +6,22 @@ import type {Track} from '../library/library';
 import {readArtwork} from '../library/artwork';
 import {catalogArtwork} from '../library/catalog-artwork';
 import {PlayerArtworkProvider} from '../library/player-artwork-provider';
+import {PlayerArtworkCacheContext} from './CatalogArtwork';
 import './artwork.css';
 
 const provider=new PlayerArtworkProvider((...args)=>fetch(...args));
 export interface PlayerArtworkProps {
  activity:Activity; trackId:string; title:string; artist:string|null; album:string|null;
  durationSeconds:number|null; scopeKey:string; enabled:boolean; current:()=>boolean;
- catalogCover?:string; refreshToken:number; onArtwork?:(image:MediaImage|null,previousUrl?:string)=>void; onAlbum?:(album:string|null)=>void;
+ catalogCover?:string; sharedArtworkKey?:string; refreshToken:number; onArtwork?:(image:MediaImage|null,previousUrl?:string)=>void; onAlbum?:(album:string|null)=>void;
 }
 type View={key:string;current:()=>boolean;url:string|null};
-export function PlayerArtwork({activity,trackId,title,artist,album,durationSeconds,scopeKey,enabled,current,catalogCover,refreshToken,onAlbum,onArtwork}:PlayerArtworkProps){
+export function PlayerArtwork({activity,trackId,title,artist,album,durationSeconds,scopeKey,enabled,current,catalogCover,sharedArtworkKey,refreshToken,onAlbum,onArtwork}:PlayerArtworkProps){
+ const cache=useContext(PlayerArtworkCacheContext);
  const [view,setView]=useState<View|null>(null);const currentRef=useRef(current);currentRef.current=current;
  const artworkRef=useRef(onArtwork);artworkRef.current=onArtwork;
  const albumRef=useRef(onAlbum);albumRef.current=onAlbum;
- const key=JSON.stringify([trackId,title,artist,album,durationSeconds,scopeKey,enabled,refreshToken,catalogCover]);
+ const key=JSON.stringify([trackId,title,artist,album,durationSeconds,scopeKey,enabled,refreshToken,catalogCover,sharedArtworkKey]);
  useEffect(()=>{
   const scope=activity.scope(),controller=new AbortController();let objectUrl:string|null=null, cancelled=false;
   const active=()=>{try{return !cancelled&&!controller.signal.aborted&&scope()&&currentRef.current();}catch{return false;}};
@@ -39,9 +41,13 @@ export function PlayerArtwork({activity,trackId,title,artist,album,durationSecon
      end();
      const blob=await catalogArtwork(catalogCover);if(!blob||!active())return;
      const latest=await readArtwork(trackId,true);
-     if(!active()||latest.state==='unavailable'||'manual' in latest&&latest.manual)return;
-     publish(latest.state==='ready'?latest.blob:blob);return;
+     if(!active())return;
+     if(latest.state==='ready')publish(latest.blob);
+     else if(latest.state!=='unavailable'&&!('manual' in latest&&latest.manual))publish(blob);
+     return;
     }
+    const cached=sharedArtworkKey?cache?.get(sharedArtworkKey):undefined;
+    if(cached){publish(cached.blob);if(active())albumRef.current?.(cached.album);return;}
     const track=await readRecord<Track>('tracks',trackId);if(!active()||!operation.current())return;
     const identity=track?await readSongArtworkIdentity(track,active):null;if(!active()||!operation.current())return;
     if(!identity&&(!artist||durationSeconds===null))return;
@@ -50,12 +56,15 @@ export function PlayerArtwork({activity,trackId,title,artist,album,durationSecon
     const result=await provider.load(identity??{title,artist:artist!,album,durationSeconds:durationSeconds!},{signal:controller.signal,current:active});
     if(!result||!active())return;
     // Recheck local state after network and decode so a new manual edit wins.
-    const latest=await readArtwork(trackId,!!catalogCover);if(!active()||latest.state==='ready'||latest.state==='unavailable'||'manual' in latest&&latest.manual)return;
+    const latest=await readArtwork(trackId);if(!active())return;
+    if(latest.state==='ready'){publish(latest.blob);return;}
+    if(latest.state==='unavailable'||'manual' in latest&&latest.manual)return;
+    if(sharedArtworkKey)cache?.set(sharedArtworkKey,result);
     publish(result.blob);if(active())albumRef.current?.(result.album);
    }catch{/* Optional artwork must never block playback. */}finally{end();}
   })();
   return ()=>{cancelled=true;controller.abort();revoke();};
- },[activity,key]);
+ },[activity,key,cache]);
  const visible=enabled&&view?.key===key&&view.current()?view:null;
  return <div className="artwork-panel">{visible?.url?<img className="artwork-image" src={visible.url} alt={`Portada de ${title}`} onError={()=>setView(null)}/>:<div aria-hidden="true" className="artwork-placeholder">♪</div>}</div>;
 }
