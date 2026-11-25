@@ -181,3 +181,36 @@ Rama `perf/t26-inc1`, base de ejecución `f803135`. La decisión del propietario
 La prioridad estricta C04 se aplica también en la cabecera de una edición guardada. El inventario técnico describía una excepción histórica para la portada incrustada de esa vista. La indicación del propietario para este incremento da prioridad a la portada local en esa vista.
 
 Los controles de Ajustes y la precarga por lote corresponden al incremento 2. Las fichas de información corresponden al incremento 3. Las cabeceras y la cola del relay corresponden al incremento 4. La comprobación pública de variantes Apple CDN y la aceptación física en iPhone siguen pendientes. D4 y E1 deben comprobar también que las portadas vuelven a mostrarse tras abrir sin red y tras reiniciar el teléfono.
+
+### Evidencia funcional de reapertura
+
+`tests/integration/check-persistent-cache-main.mjs` usa una playlist de 30 pistas, imágenes sintéticas de 200×200 px, un proxy bloqueado fuera de loopback y páginas nuevas en un perfil persistente. Cuenta los cuerpos HTTP de catálogo y portadas junto con los intentos de `fetch`. Estos conteos proceden de Chromium con carga alta, en modo funcional.
+
+| Reapertura | `f803135`: portadas, peticiones, bytes | Incremento 1: portadas, peticiones, bytes |
+|---|---|---|
+| Con conexión | 30/30, 31, 17.802 B | 30/30, 0, 0 B |
+| Sin conexión | 0/30, 0, 0 B | 30/30, 0, 0 B, incluso con 120 días de antigüedad |
+
+Los tiempos M-C1 y M-C2 en `f803135` y en el incremento quedan pendientes de una serie admisible. El arnés `--measure --wait-load` comprueba `uptime` antes de lanzar cada motor, usa el SW del producto y simula 120 ms de latencia HTTP. La VM mantuvo una carga de un minuto por encima de 1,5 en los intentos que completaron la comprobación. Los milisegundos del modo funcional quedan excluidos de la comparación de rendimiento.
+
+### Matriz del incremento 1
+
+`tests/unit/persistent-artwork-cache.test.ts`: 0/6 en `f803135` y 6/6 en el incremento. Cinco fallos de base se deben a la ausencia de la política de caché. La prueba de transporte de base falla porque puede intentar resolver el relay estando offline.
+
+| Requisito | Prueba U/B | `f803135` | Incremento 1 |
+|---|---|---|---|
+| C01 | Límites de admisión U, almacén independiente y representación binaria B | FAIL U y Chromium, falta el almacén | PASS U y apertura real en Chromium y WebKit |
+| C02 | Dimensiones, bytes y marcas LRU U, normalización real y cuota B | FAIL U y normalización persistente en Chromium | PASS U y normalización 600×400 → 300×200 en Chromium. Diagnóstico de almacén real PASS en Chromium y WebKit, 801 → 640 registros y reintento de cuota 640 → 321. Recorrido completo del arnés pendiente |
+| C03 | Vigencia U, 30 filas y proveedor en fila, mini, reproductor, MediaSession, menú e Inicio B | FAIL U y Chromium, 31 peticiones al reabrir y proveedor ausente en la fila | PASS U y Chromium, 0 peticiones y proveedor decodificado en las superficies enumeradas |
+| C04 | Prioridad y ocultación U, portadas manual e incrustada B | FAIL U. La regresión nueva de portada incrustada en vista de edición queda pendiente de ejecución completa | PASS U. A02 confirma manual visible y oculta en Chromium. Falta el resultado de la ejecución completa del caso nuevo de edición |
+| C05 | Expiración offline y transporte sin sondeo U, 30 portadas envejecidas B | FAIL U y disponibilidad en Chromium, 0/30 | PASS U y Chromium, 30/30 y 0 intentos |
+| C06 | Rango de clave U, cambio de cuenta y cierre B | FAIL U y ausencia de almacén en Chromium | PASS U y A02c en Chromium para cambio y revocación en RAM. El diagnóstico de almacén PASS en ambos motores confirma aislamiento del mismo ID, bloqueo de escritura del ámbito retirado y purga selectiva. Falta el resultado del recorrido combinado hasta verificar cambio y cierre en ambas interfaces |
+| K05 | Snapshot de Biblioteca, OPFS y Cache API B | El inventario coincide. Falta el almacén para la aserción compuesta | PASS Chromium con portadas persistidas |
+
+La comparación de interfaz en Chromium mantuvo los tres destinos de la navegación, la playlist de 30 pistas, el orden de las filas y sus acciones. La carga elevada causó timeouts y terminaciones en las primeras ejecuciones completas. La batería de navegador en Chromium y WebKit y la comparación final de interfaz en WebKit se registran según los resultados observados, con aceptación física separada.
+
+### Memoria y batería local
+
+La lectura inicial de la copia Engram detectó una divergencia de T8. El SHA-256 del recibo coincide con T8 en el padre de `f803135` y el archivo canónico incorpora la modificación de `f803135`. Ante el timeout y la salida del MCP durante `initialize` en el clon SQLite, se prepara un almacén temporal aislado con otra copia de los archivos ODD para verificar sus bytes y SHA-256. La base compartida queda fuera de ambas operaciones.
+
+Validaciones locales completas: `npm run test:unit` 1047/1047, `npm run typecheck`, `npm run typecheck:tests`, `npm run lint`, `npm run build`, `npm run test:cloudflare` 73/73 y `npm run test:py` 10/10. El diagnóstico de IndexedDB real usó datos sintéticos y comprobó los stores separados, el enlace del proveedor, la cuenta con la misma clave, el desalojo exacto, una cuota inyectada seguida de reintento y la purga selectiva.

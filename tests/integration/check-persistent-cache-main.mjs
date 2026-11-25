@@ -142,7 +142,11 @@ async function color(page,selector){
   return [...ctx.getImageData(0,0,1,1).data].slice(0,3);
  });
 }
-async function closeAndReopen(page){await page.close();return newPage();}
+async function closeAndReopen(page){
+ const next=await newPage();
+ await page.close();
+ return next;
+}
 async function accountChange(page){
  await page.evaluate(()=>window.dispatchEvent(new StorageEvent('storage',{key:'pulso-account:changed:v1',
   newValue:JSON.stringify({version:1,type:'changed',source:crypto.randomUUID()})})));
@@ -199,6 +203,7 @@ try{
    let user=accountA;
    await context.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());
    await installRequiredAccountFixture(context,origin);
+   await context.route(origin+'/telegram-config.json',r=>r.fulfill({json:{}}));
    await context.route(origin+'/api/account-auth/get-session',r=>{
     if(offline)return r.abort();
     const now=new Date().toISOString();
