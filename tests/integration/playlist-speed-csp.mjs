@@ -5,6 +5,7 @@ import {dirname,relative,resolve} from 'node:path';
 const speedCspBaseRevisions=new Set([
  '086aaac62f330bbbb911b2a3b287fae2dc325171', // v60
  'd718b9dfaf82795bc1d5d4d3ae84c8268410c0c7', // v61
+ 'f97ebb5c8a77332ac86a6a51c9ae78cd2ab76711', // v62
 ]);
 export const isSpeedCspBaseRevision=revision=>speedCspBaseRevisions.has(revision);
 export const speedCspPrefix='TESTONLY playlist CSP ';
