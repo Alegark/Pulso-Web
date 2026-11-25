@@ -18,6 +18,14 @@ USD 0. Trabajar solo en este proyecto; no modificar servicios ajenos. Pruebas lo
 
 **Pendiente abierto del propietario (2026-11-25): aceptación física en iPhone.** Leer `docs/IPHONE-ACEPTACION.md` antes de cerrar cualquier entrega que toque descargas, reproducción, sesión de Telegram u offline. Tiene 16 pruebas que solo hace el propietario. Él las marca en la página privada que enlaza ese archivo. Sin su resultado, cada prueba sigue NO EJECUTADA. Transcribir lo que reporte a `odd/tasks/T3-gate-fisico.md`.
 
+**Trabajo pausado por el propietario (2026-11-25): leer `docs/PENDIENTES.md` al retomar.** Incluye:
+- la PR 20, que NO es publicable y tiene hallazgos abiertos;
+- las mejoras de velocidad, sin revisar;
+- Engram, desincronizado entre ramas;
+- decisiones del propietario sin responder.
+
+No publicar ni fusionar nada de eso hasta que el propietario lo retome.
+
 ## Entregas y colaboración
 
 - Indicación expresa del propietario (2026-11-17): publicar en Cloudflare los cambios verificados de Pulso al cerrar la entrega, además de Git/PR; no dejar una entrega autorizada sólo en local o en la PR ni volver a pedir la misma autorización. Conservar USD 0, configuración y datos existentes, verificar la versión pública y registrar el resultado. Esta preferencia no autoriza cambios de infraestructura, servicios ajenos ni publicar trabajo que no haya pasado sus verificaciones.
