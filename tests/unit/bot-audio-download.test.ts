@@ -322,3 +322,18 @@ test('callback history supplies the initial document and an edit after bytes sti
   assert.deepEqual(operations.slice(-3),['messages.getHistory','upload.getFile','messages.getMessages']);
  }finally{s.driver.close();}
 });
+
+test('deletion of the exact callback audio during transfer blocks delivery with conflict',async()=>{
+ let receivedBytes=false;
+ const s=await setup(true,(request,value)=>{
+  if(request._==='upload.getFile')receivedBytes=true;
+  if(request._==='messages.getMessages'&&receivedBytes)return history([{_:'messageEmpty',id:12}]);
+  return value;
+ });
+ try{
+  const reply=await s.download();
+  assert.equal(reply?.type,'bot-search.error');
+  if(reply?.type==='bot-search.error')assert.equal(reply.error,'conflict');
+  assert.equal(receivedBytes,true);
+ }finally{s.driver.close();}
+});

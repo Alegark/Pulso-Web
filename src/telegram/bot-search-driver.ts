@@ -170,8 +170,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      });
      if(c.type==='bot-search.download'){
       if(!dependency.readKnown||!dependency.readDocumentPart||!selection?.row||!previous)throw fail('unsupported');
-      const validateKnown=(raw:unknown,ref:BotSearchPrivateRef)=>{
-       const message=botSearchKnownMessage(raw,approved.botId,ref.messageId);
+      const validateKnown=(raw:unknown,ref:BotSearchPrivateRef,allowMissing=false)=>{
+       const message=botSearchKnownMessage(raw,approved.botId,ref.messageId,allowMissing);
        if(!message)throw fail('conflict');
        if(ref.row?.kind==='audio'&&ref.audioFingerprint){
         if(botSearchAudioFingerprint(message)!==ref.audioFingerprint)throw fail('conflict');
@@ -180,7 +180,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        }else if(botSearchMessageFingerprint(message)!==ref.fingerprint)throw fail('conflict');
        return message;
       };
-      const known=async(ref:BotSearchPrivateRef)=>validateKnown(await rpc(()=>dependency.readKnown!(approved.peer,ref.messageId,abort.signal)),ref);
+      const known=async(ref:BotSearchPrivateRef,allowMissing=false)=>validateKnown(await rpc(()=>dependency.readKnown!(approved.peer,ref.messageId,abort.signal)),ref,allowMissing);
       let selected=selection,message=await known(selected);
       if(selected.row?.kind==='option'){
        const selectedDocumentId=botSearchDocumentIdentity(message);
@@ -268,7 +268,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        else f.cause??=observe(error);
       });
       metrics.transferMs=elapsedMs(transferStart);transferStart=undefined;
-      await known(selected);check();
+      // Telegram may return an exact messageEmpty after a callback audio is deleted.
+      await known(selected,selection.row.kind==='option');check();
       if(reuseMenu)downloadedDocuments.add(documentId);
       else{retained=new Map();retainedSearch=null;}
       return {...e,type:'bot-search.downloaded',audio:{...result,target:c.target,...(fold(row.title)!==fold(c.target.title)?{recordingTitle:row.title}:{})}};
