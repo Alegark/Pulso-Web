@@ -7,15 +7,21 @@ import {artworkImageUrl,selectPlayerArtwork,type PlayerArtworkQuery} from './pla
 // search per row. Ambiguous editions are intentionally left without artwork.
 const searchCache=new Map<string,{data:unknown;expires:number}>();
 let searchTail:Promise<void>=Promise.resolve(),nextSearch=0;
+const online=()=>globalThis.navigator?.onLine!==false;
+const fetchOnline:typeof fetch=async(...args)=>{
+ if(!online())throw Error('offline');
+ return fetch(...args);
+};
 export async function searchArtwork(query:string,signal:AbortSignal):Promise<unknown|null>{
  if(query.trim().length<3||query.length>160)return null;
  const hit=searchCache.get(query);if(hit&&hit.expires>Date.now())return signal.aborted?null:hit.data;if(hit)searchCache.delete(query);
+ if(!online())return null;
  const previous=searchTail;let releaseSearch!:()=>void;searchTail=new Promise<void>(resolve=>{releaseSearch=resolve;});
  const controller=new AbortController(),abort=()=>controller.abort(),timer=setTimeout(abort,15000);signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();
  try{
   await previous;if(controller.signal.aborted)return null;
   const delay=Math.max(0,nextSearch-Date.now());if(delay)await new Promise<void>(resolve=>{const done=()=>{clearTimeout(wait);controller.signal.removeEventListener('abort',done);resolve();};const wait=setTimeout(done,delay);controller.signal.addEventListener('abort',done,{once:true});if(controller.signal.aborted)done();});
-  if(controller.signal.aborted)return null;nextSearch=Date.now()+3100;
+  if(controller.signal.aborted||!online())return null;nextSearch=Date.now()+3100;
   const params=new URLSearchParams({term:query,country:'US',media:'music',entity:'song',limit:'200'});
   const r=await fetchResponse(`https://itunes.apple.com/search?${params}`,controller.signal);
   if(r.status===429||r.status===503)nextSearch=Math.max(nextSearch,Date.now()+60000);
@@ -26,7 +32,9 @@ export async function searchArtwork(query:string,signal:AbortSignal):Promise<unk
 }
 export function songArtwork(data:unknown,query:PlayerArtworkQuery):string|null{return selectPlayerArtwork(data,query,200)?.url??null;}
 async function fetchResponse(url:string,signal:AbortSignal):Promise<Response>{
- const work=catalogFetch(url,{signal,credentials:'omit',referrerPolicy:'no-referrer',redirect:'error',cache:'no-store'}).then(response=>{if(signal.aborted)void response.body?.cancel().catch(()=>{});return response;});
+ if(!online())throw Error('offline');
+ // The relay capability probe may settle after connectivity changes.
+ const work=catalogFetch(url,{signal,credentials:'omit',referrerPolicy:'no-referrer',redirect:'error',cache:'no-store'},fetchOnline).then(response=>{if(signal.aborted)void response.body?.cancel().catch(()=>{});return response;});
  return abortable(work,signal);
 }
 async function abortable<T>(work:Promise<T>,signal:AbortSignal):Promise<T>{
@@ -49,6 +57,7 @@ export async function catalogArtwork(url:string):Promise<Blob|null>{
  const spotify=spotifyArtworkUrl(url);
  const safe=spotify?new URL('/catalog/artwork?'+new URLSearchParams({u:spotify}),location.origin).href:musicBrainzArtworkUrl(url)??artworkImageUrl(url);if(!safe)return null;
  const hit=cache.get(safe);if(hit&&hit.expires>Date.now())return hit.blob;if(hit)cache.delete(safe);
+ if(!online())return null;
  const existing=pending.get(safe);if(existing)return existing;if(pending.size>=80)return null;
  const task=(async()=>{await acquire();const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);try{
   const response=await fetchResponse(safe,controller.signal);

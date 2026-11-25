@@ -79,9 +79,14 @@ test('safe failure callback reports current NotAllowed and numeric media codes o
  const audio=new Fake(),seen:unknown[]=[];Object.assign(audio,{error:{code:2}});
  const player=new Player(audio,()=>true,phase=>code=>seen.push({phase,code}));player.setQueue(entries);player.select(0);
  for(let i=0;i<20;i++)audio.dispatchEvent(new Event('timeupdate'));assert.equal(seen.length,0);
- audio.dispatchEvent(new Event('error'));audio.dispatchEvent(new Event('error'));assert.deepEqual(seen,[{phase:'read',code:'media-network'}]);
+ audio.dispatchEvent(new Event('error'));assert.equal(seen.length,0);
+ audio.dispatchEvent(new Event('error'));assert.deepEqual(seen,[{phase:'read',code:'media-network'}]);
  audio.rejection=Promise.reject(new DOMException('private canary','NotAllowedError'));await player.play();assert.deepEqual(seen[1],{phase:'play',code:'autoplay-denied'});
- for(const [n,code]of [[1,'media-aborted'],[3,'media-decode'],[4,'media-unsupported'],[99,'media-unknown']] as const){player.select(0);Object.assign(audio,{error:{code:n}});audio.dispatchEvent(new Event('error'));assert.equal((seen.at(-1) as {code:string}).code,code);}
+ for(const [n,code]of [[1,'media-aborted'],[3,'media-decode'],[4,'media-unsupported'],[99,'media-unknown']] as const){
+  player.select(0);Object.assign(audio,{error:{code:n}});
+  audio.dispatchEvent(new Event('error'));audio.dispatchEvent(new Event('error'));
+  assert.equal((seen.at(-1) as {code:string}).code,code);
+ }
 });
 test('failure observer/notifier throws do not interfere; old/current-source and admission guards',async()=>{
  const audio=new Fake();let allowed=true,calls=0;const captured:EventListener[]=[];const add=audio.addEventListener.bind(audio);

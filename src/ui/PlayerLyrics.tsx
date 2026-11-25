@@ -59,9 +59,9 @@ function cueAvailable(timeMs:number,props:LyricPlayback){return !!props.canSeek&
 
 export function PlayerLyricsPreview(props:{result:PlayerLyricsResult|null;timeSeconds:number;loading:boolean}&LyricPlayback) {
  const {result,timeSeconds,loading}=props;
- if(loading)return <p>Cargando letra…</p>;
- if(result?.state==='instrumental')return <div className="player-lyrics-empty"><strong>Versión instrumental</strong><p>LRCLIB identifica esta canción como instrumental.</p></div>;
- if(result?.state!=='ready')return <div className="player-lyrics-empty"><strong>Letra no disponible</strong><p>Puedes seguir escuchando esta canción.</p></div>;
+ if(loading||result?.state!=='ready')return <p className="pulso-visually-hidden" role="status">{
+  loading?'Cargando letra…':result?.state==='instrumental'?'Versión instrumental.':'Letra no disponible.'
+ }</p>;
  if(result.lyrics.kind==='timed'&&props.onSeek){const start=Math.max(0,activeCue(result,timeSeconds));return <div className="player-lyrics-preview">{result.lyrics.cues.slice(start,start+2).map((cue,index)=><button key={start+index} type="button" disabled={!cueAvailable(cue.timeMs,props)} aria-label={`Reproducir desde este verso: ${cue.text||'Pausa instrumental'}`} onClick={()=>props.onSeek?.(cue.timeMs/1000)}>{cue.text||'♪'}</button>)}</div>;}
  const lines=result.lyrics.kind==='timed'?result.lyrics.cues.slice(Math.max(0,activeCue(result,timeSeconds)),Math.max(0,activeCue(result,timeSeconds))+2).map(c=>c.text):result.lyrics.text.split(/\r?\n/).filter(line=>line.trim()).slice(0,2);
  return <div className="player-lyrics-preview">{lines.map((line,index)=><p key={index}>{line}</p>)}</div>;

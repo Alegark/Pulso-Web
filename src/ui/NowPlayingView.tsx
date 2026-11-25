@@ -105,15 +105,15 @@ export function NowPlayingView(props:NowPlayingViewProps) {
     </div>;
   }
   return <div ref={root} className="now-playing-view" data-view={view}>
+    <div className="pulso-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{props.status}</div>
+    <div className="pulso-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{props.favoriteStatus}</div>
     <div className="np-main" hidden={view!=='player'}>
       <div className="np-visual"><div className="np-context">{props.album&&<strong>{props.album}</strong>}</div><div className="np-art">{props.artwork}</div></div>
       <div className="np-body"><div className="np-info"><div><h2 ref={props.headingRef} tabIndex={-1}>{props.title}</h2><p>{props.artist}</p></div><button key={props.trackId} type="button" className="np-favorite" aria-label={props.favorite?'Quitar canción actual de Favoritos':'Añadir canción actual a Favoritos'} title={props.favorite?'Quitar de Favoritos':'Añadir a Favoritos'} aria-pressed={props.favorite} disabled={!props.trackId||!props.canOrganize||props.favoritePending} onClick={()=>{if(active()&&props.canOrganize&&!props.favoritePending)props.onFavorite();}}><span className="np-favorite__icon np-favorite__plus"><Icon name="plus"/></span><span className="np-favorite__icon np-favorite__check"><Icon name="check"/></span></button></div>
-        {props.status&&<div className="np-status" role="status">{props.status}</div>}
-        <div className="np-status" role="status" aria-live="polite">{props.favoriteStatus}</div>
         <div className="np-seek"><input type="range" aria-label="Posición de reproducción" min="0" max={duration} step="0.1" value={position} disabled={!props.canSeek||!duration} onChange={event=>props.onSeek(Number(event.target.value))}/><div><span>{clock(position)}</span><span>−{clock(duration-position)}</span></div></div>
         {transport()}
         <div className="np-secondary"><button type="button" onClick={event=>openView('lyrics',event.currentTarget)}><Icon name="lyrics"/>Letra</button><button type="button" onClick={event=>openView('queue',event.currentTarget)}><Icon name="queue"/>Cola</button></div>
-        <div className="np-lyrics-card"><div className="np-lyrics-card__heading"><h3>Vista previa de la letra</h3></div><div className="np-lyrics-preview">{props.lyricsPreview??<p>Abre la letra para ver el contenido disponible de esta canción.</p>}</div><button type="button" onClick={event=>openView('lyrics',event.currentTarget)}>Mostrar letra</button></div>
+        <div className="np-lyrics-card"><div className="np-lyrics-card__heading"><h3>Vista previa de la letra</h3></div><div className="np-lyrics-preview">{props.lyricsPreview}</div><button type="button" onClick={event=>openView('lyrics',event.currentTarget)}>Mostrar letra</button></div>
       </div>
     </div>
     <div className="np-detail" hidden={view==='player'}><BackButton className="np-back" onClick={()=>setView('player')}>Volver al reproductor</BackButton><h2 ref={detailHeading} tabIndex={-1}>{view==='lyrics'?'Letra':'Cola de reproducción'}</h2><p className="np-detail-track">{props.title} · {props.artist}</p>

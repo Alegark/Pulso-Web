@@ -20,6 +20,7 @@
 }
 .mini-player__copy { display: block; min-inline-size: 0; }
 .mini-player__cover { display: block; flex: 0 0 44px; inline-size: 44px; block-size: 44px; overflow: hidden; border-radius: .4rem; }
+.mini-player__cover:empty { display: none; }
 .mini-player__cover img { display: block; inline-size: 100%; block-size: 100%; object-fit: cover; }
 .pulso-app .mini-player__title { font-size: .875rem; font-weight: 650; line-height: 1.4; }
 .pulso-app .mini-player__artist { margin-block-start: .15rem; font-size: .75rem; line-height: 1.4; }

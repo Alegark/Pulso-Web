@@ -67,29 +67,32 @@ export class PlayerArtworkProvider {
   if(!active())return null;
   const cached=this.cache.get(key);if(cached&&cached.expires>Date.now())return active()?cached.value:null;
   this.cache.delete(key);
+  const online=()=>globalThis.navigator?.onLine!==false;
+  if(!online())return null;
+  const fetchOnline:typeof fetch=(...args)=>online()?this.fetcher(...args):Promise.reject(new Error('offline'));
   const controller=new AbortController(); const abort=()=>controller.abort();request.signal.addEventListener('abort',abort,{once:true});
   const timer=setTimeout(abort,15000); if(request.signal.aborted)abort();
   const live=()=>active()&&!controller.signal.aborted;
   const previous=tail;
   const task=(async()=>{
-   await previous;if(!live())return null;
+   await previous;if(!live()||!online())return null;
    const options:RequestInit={signal:controller.signal,credentials:'omit',referrerPolicy:'no-referrer',redirect:'error',cache:'no-store'};
    let match:PlayerArtworkMatch|null=null;
    if(q.musicbrainzReleaseId){const url=musicBrainzArtwork(`musicbrainz:${q.musicbrainzReleaseId}`);if(!url||!q.album)return null;match={album:q.album,url};}
    else{
    const delay=Math.max(0,nextRequest-Date.now());
    if(delay)await new Promise<void>(resolve=>{const finish=()=>{clearTimeout(t);controller.signal.removeEventListener('abort',finish);resolve();};const t=setTimeout(finish,delay);controller.signal.addEventListener('abort',finish,{once:true});if(controller.signal.aborted)finish();});
-   if(!live())return null;nextRequest=Date.now()+3100;
+   if(!live()||!online())return null;nextRequest=Date.now()+3100;
    const exact=q.editionId!==undefined;
    const query=new URLSearchParams(exact?{id:String(q.editionId),country:'US',entity:'song',limit:'200'}:{term:`${q.title} ${q.artist}`,country:'US',media:'music',entity:'song',limit:'50'});
-   const response=await catalogFetch(`https://itunes.apple.com/${exact?'lookup':'search'}?${query}`,options,this.fetcher);
+   const response=await catalogFetch(`https://itunes.apple.com/${exact?'lookup':'search'}?${query}`,options,fetchOnline);
    if(response.status===429||response.status===503){nextRequest=Math.max(nextRequest,Date.now()+60000);await response.body?.cancel();return null;}
    const data=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(await bytes(response,1048576,controller.signal))) as unknown;
    if(!live())return null;match=selectPlayerArtwork(data,q,exact?201:50);if(!match)return null;
 
    }
-   if(!match)return null;
-   const image=await catalogFetch(match.url,options,this.fetcher);const mime=image.headers.get('content-type')?.split(';')[0].trim().toLowerCase()??'';
+   if(!match||!online())return null;
+   const image=await catalogFetch(match.url,options,fetchOnline);const mime=image.headers.get('content-type')?.split(';')[0].trim().toLowerCase()??'';
    if(!['image/png','image/jpeg','image/webp'].includes(mime)){await image.body?.cancel();return null;}
    const raw=await bytes(image,MAX_ARTWORK_BYTES,controller.signal);if(!live())return null;
    const validated=await validateArtwork(new Blob([new Uint8Array(raw)],{type:mime}));if(!live())return null;
