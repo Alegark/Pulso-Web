@@ -31,6 +31,7 @@ export class Player {
   private suspended = false;
   private endedConsumed = false;
   private restorePosition:number|null=null;
+  private retryPassiveRead = false;
   get pendingRestorePosition() { return this.restorePosition; }
   constructor(readonly audio: Media, private admitted: () => boolean = () => true, private failureObserver?:FailureObserver) {}
   private observe(phase:'play'|'read') {
@@ -97,6 +98,7 @@ export class Player {
   }
   private invalidate() {
     this.restorePosition=null;
+    this.retryPassiveRead=false;
     ++this.generation;
     this.listeners.forEach(([type, fn]) => this.audio.removeEventListener(type, fn));
     this.listeners = [];
@@ -106,6 +108,7 @@ export class Player {
     const entry = this.entries[index]; if (!entry) return;
     this.invalidate(); this.audio.pause(); this.index = index; this.error = '';this.lastFailure=null;
     this.restorePosition=Number.isFinite(restorePosition)&&restorePosition>0?restorePosition:null;
+    this.retryPassiveRead=!autoplay;
     const generation = this.generation; this.endedConsumed = false; const failed=this.observe('read');
     const on = (type: string, fn: () => void) => {
       const guarded: EventListener = () => { if (this.allowed && generation === this.generation && this.audio.src === entry.src) fn(); };
@@ -116,7 +119,21 @@ export class Player {
     on('waiting', () => { this.state = 'buffering'; this.emit(); });
     on('timeupdate', () => this.emit('progress'));
     on('loadedmetadata', () => { const position=this.restorePosition;this.restorePosition=null;if(position!==null)this.seek(position); if (this.state === 'loading') this.state = 'paused'; this.emit(); });
-    on('error', () => { let code:PlayerFailureCode='media-unknown';try{switch(this.audio.error?.code){case 1:code='media-aborted';break;case 2:code='media-network';break;case 3:code='media-decode';break;case 4:code='media-unsupported';break;}}catch{/* unknown */}failed(code);this.lastFailure=code; this.state = 'error'; this.error = 'No se pudo leer el audio. Puedes reintentar o elegir la siguiente pista.'; this.emit(); });
+    on('error', () => {
+      let mediaError:Media['error'];try{mediaError=this.audio.error;}catch{/* unknown */}
+      // A queued event can reach the new listener on the reused audio element.
+      if(mediaError===null)return;
+      if(mediaError&&this.retryPassiveRead){
+        this.retryPassiveRead=false;
+        const position=this.restorePosition??this.audio.currentTime;
+        this.restorePosition=Number.isFinite(position)&&position>0?position:null;
+        this.state='loading';
+        this.audio.load();this.emit();return;
+      }
+      let code:PlayerFailureCode='media-unknown';
+      switch(mediaError?.code){case 1:code='media-aborted';break;case 2:code='media-network';break;case 3:code='media-decode';break;case 4:code='media-unsupported';break;}
+      failed(code);this.lastFailure=code;this.state='error';this.error='No se pudo leer el audio. Puedes reintentar o elegir la siguiente pista.';this.emit();
+    });
     on('ended', () => {
       if (this.endedConsumed || !this.audio.ended) return; this.endedConsumed = true;
       if(this.repeat==='one')this.select(this.index,true);
@@ -142,6 +159,7 @@ export class Player {
         this.select(next>=0?next:this.index);
       }
     }
+    this.retryPassiveRead=false;
     const generation = this.generation,src=this.audio.src,failed=this.observe('play');
     try { if (fromSeconds !== undefined) { this.audio.currentTime = fromSeconds; this.endedConsumed = false; } await this.audio.play(); if (generation !== this.generation && !this.allowed) this.audio.pause(); }
     catch (error) { if (this.allowed && generation === this.generation && this.audio.src===src && !this.lastFailure?.startsWith('media-')) { let denied=false;try{denied=error instanceof Error&&error.name==='NotAllowedError';}catch{/* unknown */}failed(denied?'autoplay-denied':'unknown');this.lastFailure=denied?'autoplay-denied':'unknown';this.state = 'error'; this.error = denied ? 'Toca Reproducir para continuar; el navegador requiere una interacción.' : 'El navegador no pudo abrir este audio. Prueba otra pista o vuelve a preparar la cola.'; this.emit(); } }
