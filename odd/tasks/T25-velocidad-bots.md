@@ -1,7 +1,7 @@
 # T25 · Velocidad de adquisición y primer sonido de bots
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** S01 y S02 implementados. Validación local y de navegador ejecutada, con gate fallido. Revisión independiente pendiente.
+- **Estado:** S01 y S02 implementados. Segunda ronda del arnés de velocidad completada. Revisión independiente pendiente.
 - **Fecha:** 2026-11-25
 - **Línea base:** v60 publicada (`086aaac`, rama `fix/album-tap-save-queue`, PR 20). Rama paralela `fix/artwork-rows-dock` (v61) fuera del pipeline de bots.
 - **Requisitos SPEC vinculados:** W08, W10, W11, W13, W17, W18 · Invariantes SPEC: V2, V3, V5, V6, V8, V9, V10, V11, V13, V16, V17, V21, V22, V23, V24, V27, V28, V29, V30, V31
@@ -299,7 +299,7 @@ El rojo de S01/S02 sobre `086aaac` obtuvo 64 PASS y 15 FAIL con las aserciones n
 
 ### Estado de la validación
 
-El gate completo quedó fallido. WebKit registró la infracción CSP heredada en las corridas de velocidad y un timeout de audio directo del candidato. El reintento reprodujo el audio y la infracción CSP. V60 reprodujo además un timeout de `update-startup` en Chromium. El caso de minirreproductor al 200 % coincidió con la excepción conocida.
+En la primera ronda, el gate completo quedó fallido. WebKit registró la infracción CSP heredada en las corridas de velocidad y un timeout de audio directo del candidato. El reintento reprodujo el audio y la infracción CSP. V60 reprodujo además un timeout de `update-startup` en Chromium. El caso de minirreproductor al 200 % coincidió con la excepción conocida.
 
 El primer acceso a la memoria compartida agotó el tiempo de espera del MCP. La lectura de una copia SQLite de proyecto detectó una sola divergencia conocida en `T7-portadas-metadata.md`: el recibo `06d417bdb908` corresponde a `83e2c79` y v60 conserva `034c0485df0f`. Se usa la copia de proyecto en el presente worktree para conservar el recibo del otro árbol.
 
@@ -326,3 +326,51 @@ Los escenarios `pacing` de S05, `tags-tail` de S07 y el ciclo de vida del import
 ### Limpieza
 
 Se retiraron snapshots, bundles, perfiles interrumpidos y capturas redundantes. El espacio asignado a los artefactos identificados y eliminados fue de 204.816.384 bytes. `/data` tenía 6.100.840.448 bytes libres al inicio, 6.063.239.168 antes de la limpieza final y 6.166.953.984 después. Se conservan los recibos compactos y la memoria local de proyecto.
+
+
+### Segunda ronda del incremento 1
+
+Se comparó v60 (`086aaac`) con el producto de `5189c92` usando el mismo arnés de esta ronda (`54f0326`). Cada corrida de audio directo abrió un contexto nuevo, sembró 300 copias, usó la pista sintética de 16.527 bytes, 200 ms por RPC y una respuesta del bot a 400 ms. El arnés conserva la espera de 60 s por `playing` y avance de tiempo. WebKit WPE usó Blob e IDB y el control Chromium usó el SW de bucle local y OPFS. Cada motor mantuvo su backend entre base y candidato.
+
+| Motor y backend | v60, cuelgues | Candidato, cuelgues | v60, mediana / p90 [mín–máx] (ms) | Candidato, mediana / p90 [mín–máx] (ms) |
+| --- | ---: | ---: | --- | --- |
+| WebKit, IDB | 0/10 | 0/10 | 8957,5 / 9695 [8007–9904] | 7522,5 / 9538 [7455–9579] |
+| Chromium, OPFS | 0/10 | 0/10 | 3188,5 / 3379 [2294–3516] | 3197,5 / 3617 [2449–3810] |
+
+Las 40 corridas verificaron el audio por longitud y SHA-256. Ambos árboles usaron por pista directa dos `getMessages`, dos `getHistory` y siete RPC en total. En el timeout aislado de la primera ronda, el recibo ya registraba la transferencia y `result: saved` a los 2.481 ms, mientras `playing` seguía sin observarse. La repetición dio la misma tasa en ambos árboles y se registra aquel episodio como ruido del arnés. No se reprodujo una regresión de S01/S02 que justificara corregir el producto. El arnés conserva el estado del elemento de audio y hasta 24 eventos de reproducción si reaparece el timeout.
+
+#### Comparación de CSP
+
+El arnés registra eventos estructurados de CSP y resuelve su posición original con mapas de fuentes del bundle de prueba. La firma incluye directiva, origen y posición, elemento, recurso bloqueado y política. El perfil de v60 debe coincidir en motor y versión, escenario, backend y parámetros. Las ocurrencias heredadas se enumeran con repeticiones. Una firma nueva, un error de página o un mensaje de consola sin un evento CSP correspondiente mantienen el fallo. Tres pruebas unitarias cubren coincidencias heredadas, origen o elemento nuevos y referencia ausente o incompatible.
+
+El evento heredado corresponde al selector de Apariencia de `src/main.tsx:1538`. El mapa de fuentes ubica su origen en `node_modules/react-dom/cjs/react-dom-client.production.js:8514:39`, al crear el `select`. La política de `index.html:1` produjo `style-src-attr` con `blockedURI: inline`. En audio directo se observaron 20 ocurrencias en WebKit por árbol y cero en Chromium. Las 20 del candidato coincidieron con la referencia. El pendiente separado está en [docs/PENDIENTES.md](../../docs/PENDIENTES.md#6-infracción-csp-heredada-en-webkit).
+
+Para generar la referencia, se usa un worktree separado en `086aaac` y se copian sólo `tests/integration/check-playlist-full-download-main.mjs`, `playlist-full-download-sdk.ts` y `playlist-speed-csp.mjs`. En el candidato, `PLAYLIST_SPEED_CSP_REFERENCE` apunta al `report.json` de esa corrida base del mismo perfil. Las corridas de audio directo usaron `PLAYLIST_FULL_MODE=first-sound-direct` y `PLAYLIST_SPEED_REPEATS=10`, con `PLAYLIST_FULL_ENGINE` en el motor de cada par.
+
+#### Engram
+
+Se usó la «copia de proyecto en el presente worktree», en `.local/engram` de `t25-inc1`, con identidad `Pulso-Web`. La lectura inicial verificó sus 20 archivos. La base compartida corresponde a v61 (`d718b9d`, `fix/artwork-rows-dock`). Se consultó su recibo en lectura y se comprobó que el SHA-256 de T7 coincide con el de v61. No se escribió en la base compartida el contenido de T7 de v60. La sincronización compartida de T25 queda para la integración con v61.
+
+
+#### Mediciones comparables en WebKit
+
+Se usó `PLAYLIST_FULL_MODE=first-sound,benchmark`, tres corridas por perfil y el filtro `first-sound:opfs:400:1,first-sound:opfs:1200:1,benchmark:opfs:400:2,benchmark:opfs:400:30`. El backend efectivo fue IDB en todos los perfiles. El primer sonido directo está en la tabla anterior. En los lotes, la dispersión usa las muestras por pista de las tres corridas.
+
+| Escenario WebKit IDB | Corridas base/candidato | v60, mediana / p90 [mín–máx] (ms) | Candidato, mediana / p90 [mín–máx] (ms) | RPC/pista v60 (mensajes / historial / total) | RPC/pista candidato (mensajes / historial / total) |
+| --- | ---: | --- | --- | --- | --- |
+| Primer sonido con menú, bot a 400 ms | 3/3 | 9907 / 9959 [9580–9959] | 9683 / 9875 [9566–9875] | 3 / 4 / 26 | 2 / 4 / 25 |
+| Primer sonido con menú, bot a 1.200 ms | 3/3 | 12062 / 12080 [12008–12080] | 11467 / 11950 [11362–11950] | 3 / 8 / 30 | 2 / 8 / 29 |
+| Lote 2 (por pista) | 3/3 | 4144 / 4306 [3993–4306] | 4091 / 4502 [3896–4502] | 3 / 4 / 25,5 | 2 / 4 / 24,5 |
+| Lote 30 (por pista) | 3/3 | 4309,5 / 4816 [3986–5505] | 4012 / 4209 [3699–4425] | 3 / 4 / 25,0333 | 2 / 4 / 24,0333 |
+
+El lote de 30 verificó 90/90 copias por árbol. La mediana del total de la corrida pasó de 131.709 a 120.687 ms. La mediana por pista bajó 6,9 %. El ahorro de una llamada `getMessages` por pista con menú se reprodujo.
+
+La serie inicial del candidato a 400 ms tuvo una corrida con el diagnóstico de consola `Failed to load resource` sin URL, con audio reproducido, SHA-256 verificado y cero infracciones nuevas. Quedó como fallo de diagnóstico y se conservó su recibo. La tabla usa las tres corridas de la repetición focalizada de ese perfil, que pasaron con la misma configuración y referencia de v60.
+
+En la serie original de los cuatro perfiles, WebKit observó 21 ocurrencias CSP por árbol. Todas las del candidato coincidieron con v60. La repetición focalizada añadió seis ocurrencias del mismo origen. Se registraron cero infracciones nuevas en la segunda ronda completa. El diff de producto y política frente a `5189c92` es vacío.
+
+Pasaron `npm run test:unit` (1.038/1.038), `npm run typecheck`, `npm run typecheck:tests`, `npm run lint` y `npm run build`. Los recibos y los hashes de los tres archivos idénticos del arnés quedan en `.local/test-evidence/t25-inc1-r2/`. Telegram real e iPhone físico siguen NO EJECUTADOS.
+
+#### Limpieza de la segunda ronda
+
+Se retiraron el worktree temporal de v60, los perfiles y bundles de prueba y la compilación de verificación. Los artefactos retirados ocupaban 48.877.568 bytes. `/data` tenía 6.155.542.528 bytes libres al inicio, 6.133.116.928 antes de la limpieza final y 6.153.555.968 después. Se conservaron los recibos y la copia de Engram del worktree. El SHA-256 del recibo de Engram compartido coincidió antes y después de la comparación.
