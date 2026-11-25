@@ -22,8 +22,8 @@ export function normalizeSnapshot(value:unknown):{snapshot:Snapshot;warnings:str
  }
  return {snapshot:{version:1,entries,currentEntryId:s.currentEntryId as string|null,position:typeof s.position==='number'&&Number.isFinite(s.position)&&s.position>=0?s.position:0,repeat:s.repeat==='one'||s.repeat==='all'?s.repeat:'off',shuffleOrder},warnings};
 }
-export async function restoreAssetAvailable(id:string):Promise<boolean>{
- const result=await verifiedAssetDetailed(id,true);
+export async function restoreAssetAvailable(id:string,integrity:true|'presence'=true):Promise<boolean>{
+ const result=await verifiedAssetDetailed(id,integrity);
  if(result.state==='unknown')throw AppFailure.create(result.failure);
  return result.state==='valid';
 }

@@ -98,6 +98,7 @@ export type InsertionPreparation=Readonly<{
 }>;
 export type SourcePreparationControl=Readonly<{
  signal:AbortSignal;current():boolean;deadlineAt:number;
+  verifyOnRead?:boolean;
  reserveBlob(expectedUnique:readonly Readonly<LocalAsset>[]):BlobCredit|null;
 }>;
 export type SourcePreparationResult=
