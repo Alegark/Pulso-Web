@@ -138,7 +138,7 @@ self.addEventListener('message',event=>{
    assert.equal(result.second.length,131083);
    assert.deepEqual(result.cross,{status:206,length:16,first:65530%251,last:65545%251,contentRange:'bytes 65530-65545/131083'});
    assert.equal(result.oldTicket.status,409);
-   assert.equal(result.badReselection.status,409,'a fresh selection rejects changed bytes even when the manifest revision stayed the same');
+   if(result.badReselection.status!==409)process.exitCode=1;
    assert.equal(result.bad.status,409,'the first read of a new revision verifies bytes outside the requested range');
    assert.deepEqual(result.afterFirst,{opens:result.before.opens+1,hashes:result.before.hashes+1});
    assert.deepEqual(result.afterRanges,{opens:result.afterFirst.opens+2,hashes:result.afterFirst.hashes});
@@ -152,7 +152,8 @@ self.addEventListener('message',event=>{
    const offline=await page.goto(origin+notification.opened);
    assert.ok(offline?.ok()&&offline.fromServiceWorker());
    assert.equal(await page.title(),'Local SW media test');
-   console.log(JSON.stringify({backend,passed:true,reads:3,hashes:1,opens:3,foreignStatus,oldTicket:409,firstReadOfCorruptRevision:409,orphanV2Pruned:true,obsoleteShellPruned:true,newHashAfterReadmission:true,notification,offlineRoot:true}));
+   console.log(JSON.stringify({backend,passed:result.badReselection.status===409,reads:3,hashes:1,opens:3,foreignStatus,oldTicket:409,firstReadOfCorruptRevision:409,
+    sameRevisionReselection:result.badReselection.status,orphanV2Pruned:true,obsoleteShellPruned:true,newHashAfterReadmission:true,notification,offlineRoot:true}));
   }finally{await context.close();}
  }
 }finally{

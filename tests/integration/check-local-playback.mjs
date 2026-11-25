@@ -77,7 +77,11 @@ async function waitForLoad(key){
 async function setup(page,n,backend,short){
  await page.evaluate(async({n,backend,short,accountId})=>{
   const request=q=>new Promise((yes,no)=>{q.onsuccess=()=>yes(q.result);q.onerror=()=>no(q.error);});
-  const db=await request(indexedDB.open('pulso-web-local-v1'));
+  const open=indexedDB.open('pulso-web-local-v1',2);
+  open.onupgradeneeded=()=>{
+   for(const name of ['assets','chunks','jobs','tickets','settings','tracks','playlists'])open.result.createObjectStore(name);
+  };
+  const db=await request(open);
   const worker=backend==='opfs'?new Worker('/__t27/file-worker.js'):null;
   const write=(stores,apply)=>new Promise((yes,no)=>{
    const tx=db.transaction(stores,'readwrite');tx.oncomplete=yes;tx.onabort=()=>no(tx.error);apply(tx);
@@ -182,6 +186,15 @@ function installProbe(){
 const trackButton=(page,index)=>page.getByRole('button',{name:`Escuchar ${title(index)}`,exact:true});
 const waitPlaying=(page,count=1,timeout=30000)=>page.waitForFunction(n=>window.t27.playing.length>=n,count,{timeout});
 const playing=page=>page.evaluate(()=>window.t27.playing);
+async function nextTrack(page){
+ if(await page.evaluate(()=>{
+  if(!window.t27.actions.nexttrack)return false;
+  window.t27.actions.nexttrack();return true;
+ }))return 'media-session';
+ await page.getByRole('button',{name:'Abrir reproductor desde minirreproductor'}).click();
+ await page.getByRole('button',{name:'Siguiente canción'}).click();
+ return 'player';
+}
 
 async function withPage(engine,origin,n,backend,short,run){
  const free=await statfs('/data');
@@ -213,13 +226,12 @@ async function withPage(engine,origin,n,backend,short,run){
     store.put('TESTONLY_OFFLINE_SETUP','session');store.put(crypto.randomUUID(),'epoch');
    });}finally{db.close();}
   },accountId);
-  await page.goto(origin);
-  await page.locator('.shell-nav').waitFor();
-  await page.waitForFunction(async()=>(await navigator.locks.query()).held.some(lock=>lock.name==='pulso-web:local:playback'));
-  await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   await setup(page,n,backend,short);
   try{
-   await page.reload();
+   await page.goto(origin);
+   await page.locator('.shell-nav').waitFor();
+   await page.waitForFunction(async()=>(await navigator.locks.query()).held.some(lock=>lock.name==='pulso-web:local:playback'));
+   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
    await page.getByRole('navigation',{name:'Principal',exact:true}).getByRole('button',{name:'Biblioteca',exact:true}).click();
    await page.getByRole('button',{name:'Playlists',exact:true}).click();
    await page.locator('.library-grid').getByRole('button',{name:/T27 playlist/}).click();
@@ -233,6 +245,7 @@ async function withPage(engine,origin,n,backend,short,run){
 }
 function summary(samples){
  const values=samples.map(sample=>sample.ms).sort((a,b)=>a-b);
+ if(!values.length)return {median:null,min:null,max:null};
  const mid=Math.floor(values.length/2);
  return {median:values.length%2?values[mid]:(values[mid-1]+values[mid])/2,min:values[0],max:values.at(-1)};
 }
@@ -266,7 +279,7 @@ try{
        });
       }
       const stats=Object.fromEntries(Object.entries(samples).map(([key,values])=>[key,summary(values.filter(sample=>!sample.timeout))]));
-      const comparable=samples.playlist.every(sample=>!sample.timeout&&sample.loads.length===1)&&stats.playlist.median<=2*stats.single.median;
+      const comparable=stats.single.median!==null&&samples.playlist.every(sample=>!sample.timeout&&sample.loads.length===1)&&stats.playlist.median<=2*stats.single.median;
       const noMainAudioReads=Object.values(samples).flat().every(sample=>!sample.timeout&&sample.reads.idb===0&&sample.reads.blobBytes===0);
       return {samples,stats,comparable,noMainAudioReads};
      });
@@ -281,7 +294,7 @@ try{
        if(start===1){
         await waitPlaying(page,1,8000);
         await corrupt(page,start,fault);
-        await page.evaluate(()=>window.t27.actions.nexttrack());
+        await nextTrack(page);
        }
        await waitPlaying(page,start+1,8000);
        observed=(await playing(page)).map(event=>event.title);
@@ -291,7 +304,7 @@ try{
      });
     }
     await runCase({version,engine,backend,case:'selected-offline-next'},async()=>{
-     let observed;
+     let observed,nextControl;
      await withPage(engine,origin,3,backend,true,async(page,context)=>{
       await context.setOffline(true);
       await trackButton(page,1).click();
@@ -300,18 +313,28 @@ try{
       assert.equal(first.title,title(1));
       assert.equal(first.loads.length,1);
       assert.deepEqual(first.reads,{idb:0,blobBytes:0});
-      await page.evaluate(()=>window.t27.actions.nexttrack());
+      nextControl=await nextTrack(page);
       await waitPlaying(page,2,8000);
       observed=(await playing(page)).map(event=>event.title);
       assert.deepEqual(observed,[title(1),title(2)]);
      });
-     return {observed};
+     return {observed,nextControl};
     });
    }
   }finally{await new Promise(done=>server.httpServer.close(done));}
  }
 }finally{
+ if(mode==='timing'&&versions.v62&&versions.head){
+  report.comparison=engines.flatMap(engine=>backends.map(backend=>{
+   const result=version=>report.cases.find(item=>item.engine===engine&&item.backend===backend&&item.version===version);
+   const before=result('v62')?.stats?.single?.median,after=result('head')?.stats?.single?.median;
+   const decrease=before&&after?1-after/before:null;
+   const head=result('head');
+   return {engine,backend,decrease,p01:decrease!==null&&decrease>=.5,p02:!!head?.comparable,p05:!!head?.noMainAudioReads};
+  }));
+ }
  report.cleanup=await workspace.cleanup();
  await writeFile(resolve(workspace.evidence,'summary.json'),JSON.stringify(report,null,2)+'\n');
+ console.log(JSON.stringify({report:resolve(workspace.evidence,'summary.json'),comparison:report.comparison}));
 }
-if(report.cases.some(result=>!result.passed))process.exitCode=1;
+if(report.cases.some(result=>!result.passed)||report.comparison?.some(result=>!result.p01||!result.p02||!result.p05))process.exitCode=1;
