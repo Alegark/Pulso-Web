@@ -364,6 +364,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   let wasOffline=navigator.onLine===false;
   const updateConnectivity=()=>{
    const offline=navigator.onLine===false;
+   // Telegram renews its worker during a run, so its availability is not a reset.
    if(wasOffline&&!offline){
     if(queueRelaunches.current)queueRelaunches.current.count=0;
     if(pausedHead.current?.resumeAfterOffline)clearPausedHead();
@@ -579,8 +580,8 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
    if(result==='completed'||result==='cancelled-by-user'){
     if(job.kind==='library'&&readLibraryDownloadCheckpoint(account)?.queueId===job.id)return;
     if(!removeQueued(job.key,account,job.id))pause();
-   }else if(result==='interrupted'&&job.kind==='album'){
-    pause(true);
+   }else if(result==='interrupted'){
+    if(job.kind==='album'||readLibraryDownloadCheckpoint(account)?.queueId!==job.id)pause(true);
    }else if(result==='deferred'){
     if(!readinessLost)pause();
     else if(relaunches.count>=MAX_AUTOMATIC_QUEUE_RELAUNCHES)pause(true);

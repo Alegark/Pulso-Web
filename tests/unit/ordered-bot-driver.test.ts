@@ -15,16 +15,16 @@ const history=(messages:unknown[]=[])=>({_:'messages.messages',messages,users:[]
 const incoming=(botId:number,id:number,reply:number,message='')=>({
  _:'message',id,peerId:{_:'peerUser',userId:botId},message,replyTo:{_:'messageReplyHeader',replyToMsgId:reply},
 });
-const document=(botId:number,id:number,reply:number,key:number,bytes=audio.length)=>({
+const document=(botId:number,id:number,reply:number,key:number,bytes=audio.length,mimeType='audio/wav')=>({
  ...incoming(botId,id,reply),media:{_:'messageMediaDocument',document:{_:'document',id:Long.fromInt(key),
-  accessHash:Long.fromInt(99),fileReference:Uint8Array.of(4),dcId:2,mimeType:'audio/wav',size:bytes,
+  accessHash:Long.fromInt(99),fileReference:Uint8Array.of(4),dcId:2,mimeType,size:bytes,
   attributes:[{_:'documentAttributeAudio',title:target.title,performer:target.artist,duration:60}]}},
 });
 const menu=(botId:number,id:number,reply:number)=>({...incoming(botId,id,reply),replyMarkup:{_:'replyInlineMarkup',rows:[1,2].map(option=>({
  _:'keyboardInlineButtonRow',buttons:[{_:'keyboardInlineButton',text:'Song — Artist',type:{_:'inlineButtonTypeCallback',data:Uint8Array.of(option)}}],
 }))}});
 
-type Reply='direct-timeout'|'direct'|'menu-invalid'|'menu-large'|'callback-conflict'|'empty'|'unsupported'|'limit'|'needs-start';
+type Reply='direct-timeout'|'direct'|'menu-invalid'|'menu-large'|'callback-conflict'|'empty'|'unsupported'|'unsupported-format'|'limit'|'needs-start';
 function setup(t:TestContext,replies:readonly Reply[]){
  t.mock.timers.enable({apis:['setTimeout','Date'],now:10_000});
  t.mock.method(performance,'now',()=>Date.now());
@@ -56,7 +56,7 @@ function setup(t:TestContext,replies:readonly Reply[]){
    messages=scenario.startsWith('menu-')||scenario==='callback-conflict'?[menu(id,reply,outgoing)]:
     scenario==='empty'?[incoming(id,reply,outgoing,'No se encontraron resultados')]:
     scenario==='needs-start'?[incoming(id,reply,outgoing,'Envía /start para iniciar el bot')]:
-    [document(id,reply,outgoing,id)];
+    [document(id,reply,outgoing,id,audio.length,scenario==='unsupported-format'?'audio/ogg':undefined)];
    return {_:'updateShortSentMessage',out:true,id:outgoing};
   },
   async readHistory(peer,_min,limit){
@@ -235,6 +235,7 @@ for(const [scenario,message] of [
  ['needs-start','Un bot necesita que envíes /start en Telegram'],
  ['limit','Un bot alcanzó un límite de búsqueda o descarga'],
  ['unsupported','Ningún bot entregó un archivo compatible'],
+ ['unsupported-format','Ningún bot entregó un archivo compatible'],
  ['empty','No existe en tus bots'],
 ] as const)test(`M9 · ${scenario} from the driver has its own message`,async t=>{
  const f=setup(t,[scenario,'empty']);
@@ -244,5 +245,5 @@ for(const [scenario,message] of [
  assert.deepEqual(f.searches,providers.map(p=>p.providerRef));
  assert.equal(song.state,'failed');
  assert.equal('message' in song&&song.message,message);
- assert.deepEqual(f.errors.map(error=>error.error),scenario==='empty'?[]:[scenario==='limit'?'limit-history':scenario]);
+ assert.deepEqual(f.errors.map(error=>error.error),scenario==='empty'?[]:[scenario==='limit'?'limit-history':scenario==='unsupported-format'?'unsupported':scenario]);
 });
