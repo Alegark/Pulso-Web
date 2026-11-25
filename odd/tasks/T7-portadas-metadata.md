@@ -254,3 +254,25 @@ La cota de entradas, bytes, reemplazo y notificación de expulsión también tie
 | `check-download-feedback.mjs` | 5/5 → 5/5 | 5/5 → 5/5 | Arrastre, posición restaurada, controles y autoocultado. |
 
 Evidencia local resumida en `.local/test-evidence/artwork-rows-regresiones/matriz.json`. Las pruebas usaron vistas de navegador y un proveedor loopback con datos sintéticos. Quedan la revisión independiente y el iPhone físico.
+
+### Segunda ronda tras la revisión independiente de `10bc31c`
+
+`catalogArtwork` devuelve primero un Blob con vigencia en RAM. Si falta, comprueba la conexión antes de encolar y al despachar, incluso si entre medias tiene que resolver el relay. La búsqueda de imágenes por lote usa la misma guarda de transporte. `CatalogArtwork` delega esa decisión al módulo común para que lista, mini y acciones recuperen los aciertos de caché sin conexión. Pulso crea una instancia de `PlayerArtworkProvider` por cuenta activa y la reemplaza al cambiar el ámbito de cuenta. Se conserva la prioridad local/manual y la cadencia del proveedor. A01 compara también el inventario de Cache API antes y después del fallback.
+
+| Requisito | Criterio y prueba en `check-artwork-rows-dock.mjs` | Nivel | `10bc31c` | Rama |
+|---|---|---|---|---|
+| A02a | Desde un documento con `navigator.onLine=false`, abrir Favoritos y reproducir una pista con portada de catálogo fría. Observar tráfico de configuración, catálogo y proveedor. | B | FAIL en ambos motores. Salieron `/catalog-config.json` y `/catalog/artwork`. | PASS en ambos motores. Cero peticiones de carátula y se muestra el estado sin portada. |
+| A02b | Calentar la carátula de catálogo en RAM, salir de Favoritos, desconectar y volver en el mismo documento. Verificar píxeles del reproductor, fila, mini y acciones más el contador HTTP. | B | FAIL en ambos motores. Sólo el reproductor recuperó la imagen. | PASS en ambos motores. Las cuatro vistas recuperaron la portada sin petición nueva. |
+| A02c | Cambiar de la cuenta sintética A a B en el mismo documento por la notificación de sesión. Las pistas tienen metadatos iguales y copias distintas. El proveedor de prueba cambia el píxel de la respuesta. | B | FAIL en ambos motores. B mostró el píxel de A con una sola búsqueda. | PASS en ambos motores. Se revocó la URL de A y B mostró el píxel nuevo tras su propia búsqueda. |
+
+`check-artwork-rows-dock.mjs` pasó 12/12 casos en Chromium 154.0.8037.57 y WebKit 27.2. Se mantuvieron A01, A02 y A03, con las 16 mediciones del contador conformes. Pasaron 1.029/1.029 unitarias, `typecheck`, `typecheck:tests`, `lint` y `build`.
+
+| Regresión desde `3a33e9b` | Chromium base → rama | WebKit base → rama |
+|---|---|---|
+| Interfaz, con `PLAYLIST_DETAIL=1` | 16/21 → 16/21 | 16/21 → 16/21 |
+| Biblioteca, grupos 60–66 | 7/7 → 7/7 | 7/7 → 7/7 |
+| Dock | 5/5 → 5/5 | 5/5 → 5/5 |
+
+Interfaz repitió los mismos cinco fallos por motor, incluido el minirreproductor al 200 %. Los 7 casos de Biblioteca en Chromium base pasaron, pero venció el plazo de su auditoría de Engram al cierre. Se comprobó después que los 19 archivos seguían idénticos al recibo inicial y que fuentes y builds habían coincidido. Ambas auditorías de Biblioteca en la rama pasaron. La matriz local resumida queda en `.local/test-evidence/artwork-rows-r2/matriz-r2.json`.
+
+Los menores pendientes son el espacio de 44 px con «♪» cuando una pista con URL de catálogo tiene ocultación manual y compartir la portada del proveedor con Inicio y las cubiertas de colección. Queda incorporar al runner propio la expulsión visual de la novena entrada y la carrera de edición manual que ya observó la revisión independiente, además de la idempotencia de `set`. El arrastre por puntero se verifica en la suite del dock. La prueba de intervalo de letras pasó en esta corrida y su jitter previo queda fuera de esta tarea. La aceptación en iPhone físico sigue pendiente.
