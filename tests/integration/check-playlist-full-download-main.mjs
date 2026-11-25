@@ -771,19 +771,19 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await verifyAlbum();
     }else if(mode==='queue-album-clear-retry'){
      await saveAlbum();await openSavedAlbum();
-     await page.evaluate(()=>{window.testInterruptAlbumStorage=true;});
+     await page.evaluate(()=>{window.testInterruptAlbumStorage=true;window.testCheckKinds=[];});
      await enqueueAlbum();
      await dock.getByText(/No se pudo continuar/).first().waitFor({state:'attached'});
      await openDetails();
      const retry=dock.getByRole('button',{name:'Reintentar descarga en cola'});
      await retry.waitFor();
-     const hits=latestHits;
      await page.evaluate(()=>{
       window.testInterruptAlbumStorage=false;
       document.dispatchEvent(new Event('visibilitychange'));
      });
      await page.waitForTimeout(650);
-     assert.equal(latestHits,hits,'Recovering storage alone cannot relaunch an interrupted album');
+     assert.deepEqual(await page.evaluate(()=>window.testCheckKinds),['album'],
+      'Recovering storage alone cannot relaunch an interrupted album');
      await retry.waitFor();
      await online(false);
      await retry.waitFor({state:'hidden'});
@@ -849,8 +849,10 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
       await online(false);
       await enqueueAlbum();
       await enqueueNext();
-      await page.evaluate(()=>{window.testOriginalBotLifetime=window.testQueueTelegram.captureBotsCurrent();});
-      const hits=latestHits;
+      await page.evaluate(()=>{
+       window.testOriginalBotLifetime=window.testQueueTelegram.captureBotsCurrent();
+       window.testCheckKinds=[];
+      });
       await online(true);
       await openDetails();
       const retry=dock.getByRole('button',{name:'Reintentar descarga en cola'});
@@ -860,7 +862,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
       assert.deepEqual(await queuedTitles(),[albumTitle,playlistC]);
       const before=await verifyAlbum(albumSongs.slice(0,1));
       assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.trackId),['album-0',...Array(5).fill('album-1')]);
-      assert.equal(latestHits,hits+1);
+      assert.deepEqual(await page.evaluate(()=>window.testCheckKinds),['album']);
       assert.equal(await page.evaluate(()=>window.testQueueTelegram.reconnectForDownload()),true);
       await page.waitForFunction(()=>window.testQueueTelegram.searchSnapshot().available);
       await page.evaluate(()=>{
@@ -870,7 +872,8 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
        document.dispatchEvent(new Event('visibilitychange'));
       });
       await page.waitForTimeout(1100);
-      assert.equal(latestHits,hits+1,'An interrupted album must stay paused');
+      assert.deepEqual(await page.evaluate(()=>window.testCheckKinds),['album'],'An interrupted album must stay paused');
+      assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.trackId),['album-0',...Array(5).fill('album-1')]);
       await page.evaluate(()=>{
        const client=window.testQueueTelegram;
        client.bots={...client.bots,revision:client.bots.revision-1};
@@ -880,6 +883,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
       await retry.tap();
       await verifyNext();
       assert.equal((await verifyAlbum())[0],before[0]);
+      assert.deepEqual(await page.evaluate(()=>window.testCheckKinds),['album','album','library']);
      }else if(mode==='queue-album-interruption'){
       await page.evaluate(()=>{
        window.testAlbumTrackConfirmed=index=>{if(index===0){
