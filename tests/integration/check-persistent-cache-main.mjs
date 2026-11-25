@@ -12,7 +12,7 @@ import {createTestWorkspace} from './test-workspace.mjs';
 const timed=process.argv.includes('--measure');
 const engineArg=process.argv.find(arg=>arg.startsWith('--engine='))?.slice(9);
 const workspace=await createTestWorkspace('t26-inc1-cache');
-const report={cases:[],measurements:[],interface:{},load:null,errors:[]};
+const report={cases:[],measurements:[],interface:{},load:{},errors:[]};
 const fixture='tests/integration/persistent-cache-fixture.html';
 const cacheName='pulso-web-cache-v1';
 const accountA='11111111-1111-4111-8111-111111111111';
@@ -177,18 +177,19 @@ try{
  server=await preview({configFile:false,build:{outDir:out},preview:{host:'127.0.0.1',port:0},
   plugins:[{name:'t26-cache-fixture',configurePreviewServer(vite){vite.middlewares.use(catalog);}}]});
  const origin='http://127.0.0.1:'+server.httpServer.address().port;
- if(timed){
+ async function waitForLoad(engine){
   for(;;){
    const uptime=execFileSync('uptime',{encoding:'utf8',env:{...process.env,LC_ALL:'C'}}).trim();
    console.log(uptime);
    const load=Number(uptime.match(/load averages?:\s*([\d.]+)/)?.[1]);
-   if(load<1.5){report.load=load;break;}
+   if(load<1.5){report.load[engine]=load;break;}
    if(!process.argv.includes('--wait-load')||!Number.isFinite(load))throw Error('Measurement postponed: 1 minute load '+load+' >= 1.5');
    await new Promise(resolve=>setTimeout(resolve,15000));
   }
  }
  for(const [engine,launcher] of Object.entries({chromium,webkit})){
   if(engineArg&&engineArg!==engine)continue;
+  if(timed)await waitForLoad(engine);
   runEngine=engine;offline=false;requests.length=0;
   const options={headless:true,viewport:{width:390,height:844},hasTouch:true,isMobile:true,serviceWorkers:timed?'allow':'block',
    proxy:{server:'http://127.0.0.1:9',bypass:'127.0.0.1,localhost'}};
@@ -311,7 +312,7 @@ try{
    });
    const closePlayer=page.getByRole('button',{name:'Cerrar reproductor',exact:true});
    if(await closePlayer.isVisible())await closePlayer.click();
-   if(!await page.locator('.library-detail').isVisible())await library(page,'Favoritos');
+   await library(page,'Favoritos');
    await check('C04 · manual visible u oculta gana con caché persistente caliente',async()=>{
     assert.deepEqual(await color(page,rowFor('Portada manual')),[20,60,230]);
     assert.equal(await page.locator(rowFor('Portada oculta')).count(),0);
@@ -333,11 +334,11 @@ try{
    await check('C06 · cambio de cuenta y cierre de sesión purgan persistencia',async()=>{
     assert.ok((await inspect(page))?.artwork.some(x=>x.accountId===accountA));
     const previous=await page.locator(rowFor(providerTitle)).getAttribute('src');
+    const from=requests.length;
     user=accountB;await accountChange(page);
     await page.waitForFunction(id=>JSON.parse(localStorage.getItem('pulso-account:confirmed-profile:v1'))?.user?.id===id,accountB);
     await page.waitForFunction(url=>window.revoked.includes(url),previous??oldUrl);
     assert.ok(!(await inspect(page)).artwork.some(x=>x.accountId===accountA));
-    const from=requests.length;
     await library(page,'Favoritos');
     await page.locator(rowFor('Portada de la otra cuenta')).waitFor();
     assert.ok(requests.slice(from).some(x=>x.path==='/catalog/artwork'),'B obtiene su propia copia de la misma URL');
