@@ -961,7 +961,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
      assert.equal(await page.evaluate(()=>window.testInspectionCaptures),captures);
      await page.evaluate(()=>window.testSetDispatch(false));
-     await libraryAlbum.getByText('No descargada',{exact:true}).first().waitFor();
+     await libraryAlbum.getByText('No descargada',{exact:true}).nth(1).waitFor();
      assert.deepEqual(await badges.allTextContents(),['No descargada','No descargada']);
     }else if(mode==='queue-single-edition'){
      await search(single.collectionName);
