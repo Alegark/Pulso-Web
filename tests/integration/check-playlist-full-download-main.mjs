@@ -1534,6 +1534,8 @@ async function checkTurnaround(browser,engine,origin,scenario){
   await page.evaluate(()=>window.testTurnaroundDiagnostics());
   await page.getByRole('button',{name:startLabel,exact:true}).evaluate(button=>button.click());
   const handle=page.locator('.download-dock__handle');
+  // The queued entry can show a handle before the active run resets the panel.
+  await page.locator('.download-dock progress').waitFor({state:'attached'});
   await handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();});
   await page.waitForFunction(({timeout,total})=>window.turnaround.summary&&(timeout||window.turnaround.marks.length===total),
    {timeout,total:tracks.length},{timeout:timeout?30000:scenario==='muted'?200000:135000});
