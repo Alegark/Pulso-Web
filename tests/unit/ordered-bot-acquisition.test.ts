@@ -220,7 +220,8 @@ for(const row of failureCases)for(const mode of ['collection','interruptOnTelegr
   const params=(fixture:ReturnType<typeof failureFixture>):Omit<Parameters<typeof acquireFromOrderedBots>[0],'target'>=>({
    client:fixture.client,providers,revision:4,signal:new AbortController().signal,suspended:fixture.suspended,
    current:()=>true,networkCurrent:()=>true,progress:()=>{},
-   ...(mode==='collection'?{collection:{...collectionProgress(),ambiguous:new Set<number>(),responded:false}}:{interruptOnTelegram:true}),
+   ...(mode==='collection'?{collection:compareBase
+    ?Object.assign(collectionProgress(),{ambiguous:new Set<number>(),responded:false}):collectionProgress()}:{interruptOnTelegram:true}),
   });
   const result=await acquireFromOrderedBots({...params(f),target,accept:async()=>'saved'});
   const attempt:SongPlaybackAttempt={current:()=>true,lookup:async()=>null,save:async()=>{throw Error('must not save');},
