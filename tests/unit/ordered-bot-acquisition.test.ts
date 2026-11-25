@@ -154,7 +154,7 @@ const failureCases:FailureCase[]=[
  {row:1,name:'callback sin resultado tras suspensión breve',phase:'callback',error:'uncertain',delivery:'uncertain',suspended:true,expected:'suspended'},
  {row:1,name:'descarga inconclusa tras suspensión breve',phase:'download',error:'cancelled',suspended:true,expected:'suspended'},
  {row:2,name:'WebSocket caído pese a rechazo explícito',error:'unsupported',down:true,expected:'telegram'},
- {row:2,name:'flood vigente pese a respuesta del bot',phase:'callback',cooldown:true,expected:'telegram'},
+ {row:2,name:'flood vigente tras el acuse del callback',phase:'callback',error:'rate-limit',cooldown:true,expected:'telegram'},
  {row:3,name:'envío incierto con sesión viva',error:'uncertain',delivery:'uncertain',expected:'telegram'},
  {row:3,name:'callback incierto con sesión viva',phase:'callback',error:'uncertain',delivery:'uncertain',expected:'telegram'},
  {row:3,name:'error incierto incluso con acuse',error:'uncertain',delivery:'acknowledged',expected:'telegram'},
@@ -169,7 +169,7 @@ const failureCases:FailureCase[]=[
  {row:6,name:'búsqueda rechazada por el bot',error:'unsupported',expected:'unsupported'},
  {row:6,name:'callback incompatible antes del envío',phase:'callback',error:'unsupported',delivery:'not-dispatched',expected:'unsupported'},
  {row:6,name:'bot requiere inicio incluso tras suspensión',error:'needs-start',suspended:true,expected:'needs-start'},
- {row:6,name:'límite específico del bot',error:'limit',expected:'bot-limit'},
+ {row:6,name:'límite específico del bot',error:'limit-history',expected:'bot-limit'},
  {row:6,name:'límite específico al descargar',phase:'download',error:'limit-attempt',delivery:'not-dispatched',expected:'bot-limit'},
  {row:7,name:'archivo inválido confirmado en búsqueda',error:'file-invalid',expected:'no-valid-file'},
  {row:7,name:'archivo demasiado grande tras callback',phase:'callback',error:'file-too-large',expected:'no-valid-file'},
@@ -192,11 +192,11 @@ function failureFixture(row:FailureCase){
   if(!state.providerRef)return state;
   const expired=phase==='selection'&&++observations>=3;
   if(expired)completed=true;
-  if(!completed)return {...state,rows:[phase==='download'&&row.delivery==='not-dispatched'?direct:option]};
+  if(!completed)return {...state,rows:[phase==='download'&&row.delivery==='not-dispatched'?direct:option],expiresAt:Date.now()+120_000};
   const rows=row.mismatch?[{...direct,title:'Otro título'}]:
    phase==='search'&&!row.error?[{kind:'message' as const,rowRef:'absent',correlation:'reply' as const,text:'No se encontraron resultados'}]:[];
   return {...state,...(expired?{queryId:null,providerRef:null}:{}),error:row.error??null,delivery:row.delivery??'acknowledged',rows,available:!row.down,
-   retryAt:row.cooldown?Date.now()+30_000:null,expiresAt:phase==='selection'?Date.now()-1:null};
+   retryAt:row.cooldown?Date.now()+30_000:null,expiresAt:rows.length?Date.now()+120_000:null};
  };
  f.client.downloadBot=async(ref,_allowed,started)=>{
   const state=snapshot();
