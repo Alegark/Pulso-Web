@@ -545,3 +545,27 @@ Buscar protege la selección explícita durante la resolución de metadatos, las
 El barrido general de interfaz pasó 11/12 por motor. El minirreproductor fuera del viewport al 200 % y los avisos de `ResizeObserver` en WebKit se reprodujeron también en `7d41d25`.
 
 El diálogo de la colección sincroniza el cierre nativo y recorre sus dos acciones con Tab o Shift+Tab incluso si el foco está en el propio diálogo. Al cerrar recupera el botón habilitado. Si el botón se deshabilita cuando se actualiza la disponibilidad, el foco pasa al encabezado de la vista. La prueba del dock verificó la devolución y la deshabilitación posterior en ambos motores.
+
+## 2026-11-25 · Reproductor sin avisos
+
+Al restaurar la cola, `src/main.tsx:837` selecciona la entrada sin reproducción automática. El elemento `Audio` está configurado para precargar metadatos en `src/main.tsx:163` y `Player.select` asigna la fuente y llama a `load()` aunque la entrada quede en pausa. El gesto de apertura sólo cambia la vista y enfoca el título (`src/main.tsx:1254`). Por eso puede revelar un fallo que ya ocurrió. En `3a33e9b:src/playback/player.ts:119`, el evento `error` publicaba el aviso de la siguiente pista sin comprobar si quedaba un `MediaError` vigente. Chromium y WebKit reprodujeron el aviso con un evento tardío simulado que encontró `audio.error=null`. Una ruta loopback que falló con HTTP 503 causó además un `MediaError` nativo 4 antes de abrir la vista y sin ninguna llamada a `play()`. No se determinó qué condición concreta disparó el informe en el iPhone.
+
+`src/playback/player.ts:122` descarta un evento sin `MediaError` vigente. Ante un fallo real mientras la selección sigue en carga pasiva, reinicia una vez la carga de la fuente actual, conserva la posición pendiente y espera en pausa. El límite se consume antes de `load()`. Si falla de nuevo, el motor conserva el error final. El intento automático termina al pedir Play. La vista completa anuncia los estados en regiones accesibles sin ocupar su caja visual y el minirreproductor conserva sus avisos.
+
+- **N01.** Los avisos de error, preparación, espera, control en otra pestaña y cambios en Favoritos cumplen el mismo criterio visual. Sus textos quedan fuera del flujo y no ocupan espacio en el reproductor completo. El minirreproductor sigue mostrando sus avisos.
+- **N02.** Los estados de reproducción y Favoritos tienen regiones vivas persistentes. Un anuncio nuevo aparece en el árbol accesible sin hacer visible su caja.
+- **N03a.** Un evento sin error vigente no cambia a error una selección que ya estaba preparada.
+- **N03b.** Si la precarga en pausa falla, el motor prueba la misma fuente una vez. Conserva la selección y la posición y espera el gesto de reproducción.
+- **N03c.** Si también falla el intento adicional, se detiene la precarga y se conserva el error accesible.
+
+| Requisito | Prueba en `check-player-notice.mjs` | Nivel | `3a33e9b` | Rama |
+|---|---|---|---|---|
+| N01 | Mide la caja y el recorte CSS de los avisos del shell, de espera y de favorito en React de producción. Comprueba que el minirreproductor conserva su aviso al cerrar. | B | FAIL en ambos motores. Los mensajes ocupan espacio visible. | PASS en ambos motores. Los mensajes se recortan a una caja de 1 px fuera del flujo. |
+| N02 | Identifica las dos regiones vivas antes de actualizar el texto, comprueba que son los mismos nodos y lee espera y favorito en el árbol accesible. | B | FAIL en ambos motores. Sólo existía una región explícita persistente, cuya caja desaparecía al estar vacía. | PASS en ambos motores. Los dos estados permanecen en el árbol accesible. |
+| N03a | Con metadatos y posición ya preparados, entrega un evento tardío simulado sin `MediaError` y abre el reproductor. | B | FAIL en ambos motores. Se registra un fallo de lectura. | PASS en ambos motores. Sin aviso, una carga y cero solicitudes de Play. |
+| N03b | Restaura una cola en pausa con HTTP 503 en la primera carga nativa y audio sintético válido después. Comprueba dos cargas, posición 2 s, cero Play antes del gesto y reproducción al pulsar. | B | FAIL en ambos motores. El fallo anterior a la apertura deja el medio sin metadatos. | PASS en ambos motores. Recupera la misma fuente en pausa con un intento adicional. |
+| N03c | Repite HTTP 503 en cada carga y mide el límite antes de abrir. | B | FAIL en ambos motores. Sólo se hace la precarga que falla. | PASS en ambos motores. Dos cargas y dos fallos, sin bucle ni reproducción automática. El aviso final sigue accesible. |
+
+Las cinco pruebas fallan en v60 y pasan en la rama tanto con Chromium 154.0.8037.57 como con WebKit 27.2. `PlayerLyricsPreview` también anuncia la espera o la falta de letra fuera del flujo de la pantalla principal. La vista de letra que se abre por separado conserva sus propios controles y el minirreproductor conserva el aviso del shell.
+
+La ejecución usa el shell y la cola reales, con audio WAV sintético y fallos controlados en loopback. La reproducción y la lectura de pantalla en iPhone físico siguen pendientes.
