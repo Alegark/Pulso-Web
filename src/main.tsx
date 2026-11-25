@@ -168,17 +168,32 @@ let suspendedSnapshot:Snapshot|undefined;
 // A transfer requested with Play is an explicit, cancellable intent, not autoplay on focus.
 let transferPlayIntent:{generation:number;scheduled?:boolean}|null=null;
 let startupQueueAttempt:object|null=null;
-const control=new Ownership(()=>{owner=control.owner;if(control.state==='sin-control'&&status==='Abriendo biblioteca…')status='Otra pestaña tiene el control. Solicítalo o comprueba si está disponible. Para pilotos, muestras o versiones antiguas, cierra esa entrada.';emit();},async()=>{
+let startupStatus='Abriendo biblioteca…';
+const control=new Ownership(()=>{owner=control.owner;if(control.state==='sin-control'&&startupStatus==='Abriendo biblioteca…')startupStatus='Otra pestaña tiene el control. Solicítalo o comprueba si está disponible. Para pilotos, muestras o versiones antiguas, cierra esa entrada.';emit();},async()=>{
  if(!accountAvailable()){control.activity.close();return;}
- startupQueueAttempt=null;deferredQueueRestore=null;
+ startupQueueAttempt=null;deferredQueueRestore=null;startupStatus='Abriendo biblioteca…';
  ++scopeId;diagnostics.resetScope();copyRemovalPending=true;copyRemovalStartup=null;metadataRescanBlocked=true;control.activity.block('metadata-rescan',true);
  if(databaseState!=='ready'){if(databaseReloadRequired())control.activity.invalidate();return;}
  suspendedSnapshot=undefined;configuring=true;player.suspend();sourceProtection.invalidateScope();player.setQueue([]);configuring=false;installMediaSession();const opening=control.activity.begin();const scope=scopeId,proof=control.proof;const current=()=>scope===scopeId&&proof===control.proof&&control.owner&&!!opening?.current();const diagnostic=beginDiagnostic('open-library');
- try{await sourceProtection.releaseUnused();if(!current())return;await refresh();if(!current())return;await readRemovalStartup(current);if(!current())return;if(status==='Abriendo biblioteca…')status='';
- const [raw,position]=await Promise.all([readRecord<unknown>('settings','library-playback'),readRecord<unknown>('settings',queuePositionKey)]);
+ try{await sourceProtection.releaseUnused();if(!current())return;await refresh();if(!current())return;await readRemovalStartup(current);if(!current())return;if(startupStatus==='Abriendo biblioteca…')startupStatus='';
+ const [raw,position]=await Promise.allSettled([readRecord<unknown>('settings','library-playback'),readRecord<unknown>('settings',queuePositionKey)]);
  if(!current())return;
- if(raw!==undefined){const normalized=normalizeSnapshot(raw);if(normalized){if(!copyRemovalPending&&normalized.snapshot.entries.length&&normalized.snapshot.entries.every(entry=>tracks.some(track=>track.id===entry.trackId))){deferredQueueRestore={saved:withQueuePosition(normalized.snapshot,position),warnings:normalized.warnings,current:captureRemovalRaw()};}else if(copyRemovalPending)status='Hay una retirada pendiente. La cola guardada se conserva sin prepararla ni reproducirla.';}else status='La cola guardada no es válida. Se conserva sin cambios; prepara una nueva selección para reproducir.';}
- }catch(error){if(current()){diagnostics.complete(diagnostic,localFailure(error,'open'));control.activity.block('opening',true);status='No se pudo abrir el almacenamiento. Cierra otras pestañas o reintenta recargando.';}}finally{diagnostics.finish(diagnostic);opening?.end();}if(current()){resumeStartupQueue();emit();}
+ if(raw.status==='rejected'){
+  diagnostics.complete(diagnostic,localFailure(raw.reason,'read'));
+  startupStatus='No se pudo leer la cola guardada. Prepara una nueva selección para reproducir.';
+ }else if(raw.value!==undefined){
+  const normalized=normalizeSnapshot(raw.value);
+  if(!normalized)startupStatus='La cola guardada no es válida. Se conserva sin cambios; prepara una nueva selección para reproducir.';
+  else if(copyRemovalPending)startupStatus='Hay una retirada pendiente. La cola guardada se conserva sin prepararla ni reproducirla.';
+  else if(normalized.snapshot.entries.length&&normalized.snapshot.entries.every(entry=>tracks.some(track=>track.id===entry.trackId))){
+   if(position.status==='rejected'){
+    diagnostics.complete(diagnostic,localFailure(position.reason,'read'));
+    normalized.warnings.push('No se pudo leer la última posición. Se recuperó la posición de la cola guardada.');
+   }
+   deferredQueueRestore={saved:withQueuePosition(normalized.snapshot,position.status==='fulfilled'?position.value:undefined),warnings:normalized.warnings,current:captureRemovalRaw()};
+  }
+ }
+ }catch(error){if(current()){diagnostics.complete(diagnostic,localFailure(error,'open'));control.activity.block('opening',true);startupStatus='No se pudo abrir el almacenamiento. Cierra otras pestañas o reintenta recargando.';}}finally{diagnostics.finish(diagnostic);opening?.end();}if(current()){resumeStartupQueue();emit();}
 },undefined,{prepare:prepareRelease,blocked:()=>databaseState!=='ready'||releaseBlocked()});
 let databaseState:'ready'|DatabaseLifecycleState='ready';
 let databaseGeneration=0;
@@ -198,7 +213,7 @@ const databaseReloadRequired=()=>databaseState==='versionchange'||databaseState=
 const databaseRecoverable=()=>databaseState==='blocked'||databaseState==='connection-closed';
 let metadataRescanBlocked=true;
 let libraryLoadedFor:string|null=null;
-let owner=false;let busy=false,busyOwner:symbol|null=null;let status='Abriendo biblioteca…';let tracks:Track[]=[];let playlists:Playlist[]=[];let addedTrackIds:ReadonlySet<string>=new Set();
+let owner=false;let busy=false,busyOwner:symbol|null=null;let status='';let tracks:Track[]=[];let playlists:Playlist[]=[];let addedTrackIds:ReadonlySet<string>=new Set();
 const listeners=new Set<()=>void>();const emit=()=>{observeQueueAdmission();finishTransferPlay();listeners.forEach(fn=>fn());};
 let writes=Promise.resolve();let configuring=false;
 function startBusy(configure=false){
@@ -687,6 +702,7 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
  const accountId=accountController.getSnapshot().user?.id??null,auth=accountEpoch;const scope=scopeId,proof=control.proof,admission=databaseGeneration,activityScope=control.activity.scope(),diagnostic=parent===undefined?beginDiagnostic('refresh-library'):parent;
  const current=()=>auth===accountEpoch&&accountId===(accountController.getSnapshot().user?.id??null)&&scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&activityScope();
  const work=refreshTail.then(async()=>{
+ const openingLibrary=libraryLoadedFor!==accountId;
  try{
  if(!current())return;
  if(accountId&&preparedLibraryAccount!==accountId){await prepareAccountLibrary(accountId,current);if(!current())return;preparedLibraryAccount=accountId;}
@@ -728,9 +744,11 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
  availability=nextAvailability;libraryLoadedFor=accountId;
  if(firstFailure){
   diagnostics.complete(diagnostic,failurePhase?{...firstFailure,phase:failurePhase}:firstFailure,parent===undefined?'primary':'refresh');
-  availabilityNotice=`No se pudo comprobar la copia local de ${unknown===1?'una canción':unknown+' canciones'}. Vuelve a comprobar el almacenamiento.`;status=availabilityNotice;
+  availabilityNotice=`No se pudo comprobar la copia local de ${unknown===1?'una canción':unknown+' canciones'}. Vuelve a comprobar el almacenamiento.`;
+  if(openingLibrary)startupStatus=availabilityNotice;else status=availabilityNotice;
  }else if(availabilityNotice){
   if(status===availabilityNotice)status='';
+  if(startupStatus===availabilityNotice)startupStatus='';
   availabilityNotice='';
  }
  if(force||afterImport)artworkRefreshToken++;
@@ -738,7 +756,7 @@ function refresh(force=false,updateQueueTitles=true,parent?:Handle|null,failureP
  removalEligibleTracks.clear();for(const track of nextTracks){const asset=track.assetId?assets.get(track.assetId):null;if(validAsset(asset)&&asset.bytes<=AUDIO_FILE_MAX_BYTES&&nextAvailability.get(track.id)?.state==='available')removalEligibleTracks.add(track.id);}
  if(updateQueueTitles&&!copyRemovalPending&&!queueForeignBlocked())for(const entry of player.entries){const track=tracks.find(t=>t.id===entry.trackId);if(track)entry.title=track.title;}emit();
  const signature=JSON.stringify([accountId,nextTracks.map(t=>[t.id,t.revision,nextAddedTrackIds.has(t.id)]),nextPlaylists]);if(signature!==lastLibrarySyncSignature){lastLibrarySyncSignature=signature;if(!fromSync)librarySync.changed();}
- }catch(error){if(current()){diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'failed'});const failure=localFailure(error,'read');diagnostics.complete(diagnostic,failurePhase?{...failure,phase:failurePhase}:failure,parent===undefined?'primary':'refresh');status='No se pudo actualizar la biblioteca. '+failureText(failure);emit();throw error;}}finally{if(parent===undefined)diagnostics.finish(diagnostic);}
+ }catch(error){if(current()){diagnosticCapabilities=Object.freeze({...diagnosticCapabilities,storageOperation:'failed'});const failure=localFailure(error,'read');diagnostics.complete(diagnostic,failurePhase?{...failure,phase:failurePhase}:failure,parent===undefined?'primary':'refresh');const message='No se pudo actualizar la biblioteca. '+failureText(failure);if(openingLibrary)startupStatus=message;else status=message;emit();throw error;}}finally{if(parent===undefined)diagnostics.finish(diagnostic);}
  });
  refreshTail=work.catch(()=>{});
  return work;
@@ -807,7 +825,8 @@ async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[
  const owns=()=>scope===scopeId&&proof===control.proof&&control.owner&&operation.current();
  const current=()=>owns()&&callerCurrent()&&databaseState==='ready'&&admission===databaseGeneration;
  const preparation=sourceProtection.beginPreparation(saved?saved.entries.map(entry=>entry.trackId):ids,current);
- const sourceAbort=new AbortController(),diagnostic=beginDiagnostic('prepare-queue');let sourcePublished=false;let phase:Phase='validate';let known:Result|undefined;const endBusy=startBusy(true);player.pause();status='Preparando cola…';emit();
+ const announce=(message:string)=>{if(saved)startupStatus=message;else status=message;};
+ const sourceAbort=new AbortController(),diagnostic=beginDiagnostic('prepare-queue');let sourcePublished=false;let phase:Phase='validate';let known:Result|undefined;const endBusy=startBusy(true);player.pause();announce('Preparando cola…');emit();
  try{
  let restored=saved;let missing=0;
  if(saved){
@@ -835,14 +854,14 @@ async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[
  // A saved null selection unloads the old element before setQueue. Other
  // replacements select a new occurrence before releasing the old bundle.
  if(restored?.currentEntryId!==null)player.select(index>=0?index:0,false,index>=0?restored?.position??0:0);
- status='Cola lista y pausada. Pulsa Reproducir.'+(missing?` ${missing} entradas sin audio se omitieron. Podrás volver a descargarlas cuando esté disponible la conexión a Telegram.`:'')+(restoreWarnings.length?' '+restoreWarnings.join(' '):'')+(transportNotice?' '+transportNotice:'');
- }catch(error){if(!current())return;const failure=known??localFailure(error,phase);diagnostics.complete(diagnostic,failure);status=(saved?'No se pudo recuperar toda la cola. Se conserva la cola guardada y tu organización. ':'')+failureText(failure)+' Vuelve a comprobar el almacenamiento o prepara otra selección.';}
+ announce('Cola lista y pausada. Pulsa Reproducir.'+(missing?` ${missing} entradas sin audio se omitieron. Podrás volver a descargarlas cuando esté disponible la conexión a Telegram.`:'')+(restoreWarnings.length?' '+restoreWarnings.join(' '):'')+(transportNotice?' '+transportNotice:''));
+ }catch(error){if(!current())return;const failure=known??localFailure(error,phase);diagnostics.complete(diagnostic,failure);announce((saved?'No se pudo recuperar toda la cola. Se conserva la cola guardada y tu organización. ':'')+failureText(failure)+' Vuelve a comprobar el almacenamiento o prepara otra selección.');}
  finally{
   // Record the primary error above before best-effort resource settlement.
   // Keep Activity admitted through cleanup; an old finally never clears a new scope.
   try{if(!sourcePublished)sourceAbort.abort();await preparation.settle();}
   finally{
-   if(!sourcePublished&&status==='Preparando cola…')status='Se detuvo la preparación de la cola.';
+   if(owns()&&!sourcePublished&&(saved?startupStatus:status)==='Preparando cola…')announce('Se detuvo la preparación de la cola.');
    diagnostics.finish(diagnostic);endBusy();operation.end();if(sourcePublished&&current())schedulePositionSave('state');
   }
  }
@@ -986,7 +1005,7 @@ window.addEventListener('pagehide',()=>{
  ++scopeId;player.suspend();clearMediaSession();sourceProtection.invalidateScope();void sourceProtection.releaseUnused();
  queueInsertions.cancelAll('revoked');
 });
-window.addEventListener('pageshow',event=>{if(event.persisted){status='Página recuperada sin control. Comprueba la disponibilidad; si hay operaciones pendientes, cierra esta entrada y vuelve a abrir.';emit();}});
+window.addEventListener('pageshow',event=>{if(event.persisted){startupStatus='Página recuperada sin control. Comprueba la disponibilidad; si hay operaciones pendientes, cierra esta entrada y vuelve a abrir.';emit();}});
 // Realm-local native storage signals never authorize data cleanup or recovery.
 // A blocked open can be retried explicitly; version changes require a new document.
 const databaseAdmitted=()=>databaseState==='ready'||databaseRecoverable()&&[...databaseRetries].some(current=>current());
@@ -1028,7 +1047,7 @@ attachDatabaseTransportLifecycle(applyDatabaseLifecycle);
 let activeAccount:string|null=null,accountQueue:Snapshot|undefined,accountQueueOwner:string|null=null;
 function accountBoundary(){
  const next=accountController.getSnapshot().user?.id??null;if(next===activeAccount)return;
- const previous=activeAccount;activeAccount=next;libraryLoadedFor=null;if(previous)status='';librarySync.account(next);preparedLibraryAccount=null;lastLibrarySyncSignature='';savedArtists=[];savedArtistRevision++;savedAlbums=[];savedAlbumRevision++;songAliases=new Map();tracks=[];playlists=[];addedTrackIds=new Set();availability=new Map();
+ const previous=activeAccount;activeAccount=next;libraryLoadedFor=null;if(previous){status='';startupStatus='';}librarySync.account(next);preparedLibraryAccount=null;lastLibrarySyncSignature='';savedArtists=[];savedArtistRevision++;savedAlbums=[];savedAlbumRevision++;songAliases=new Map();tracks=[];playlists=[];addedTrackIds=new Set();availability=new Map();
  if(previous){
   const key=playbackCheckpointKey();accountEpoch++;accountQueue=snapshot();accountQueueOwner=previous;transferPlayIntent=null;cancelSelectedSongIntent();queueInsertions.cancelAll('user');control.cancelTransfer();audio.pause();player.suspend();player.setQueue([]);clearMediaSession();
   if(control.owner&&control.activity.idle&&!releaseBlocked()){
@@ -1039,7 +1058,7 @@ function accountBoundary(){
  if(next){
   if(control.state==='con-control'){control.activity.reopen();installMediaSession();if(accountQueueOwner===next&&accountQueue?.entries.length){deferredQueueRestore={saved:accountQueue,warnings:[],current:captureRemovalRaw()};accountQueue=undefined;resumeStartupQueue();}void refresh(true,false).catch(()=>{});}
   else void control.acquire();
-  if(!control.supported){status='Este navegador no dispone de Web Locks. Reproducción y mutaciones bloqueadas.';void refresh().catch(()=>{});}
+  if(!control.supported){startupStatus='Este navegador no dispone de Web Locks. Reproducción y mutaciones bloqueadas.';void refresh().catch(()=>{});}
  }
  emit();
 }
@@ -1516,7 +1535,10 @@ function App(){
    </li>;
   })}</ol></div>;
  };
- const notice=<ShellNotice message={status} onDismiss={()=>{status='';emit();}}/>;
+ const notice=<>
+  <p className="pulso-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{startupStatus}</p>
+  <ShellNotice message={status} onDismiss={()=>{status='';emit();}}/>
+ </>;
  if(!account.user)return <AccountRequired/>;
  return <PlayerArtworkCacheContext.Provider value={artworkCache}><TrackCatalogArtwork.Provider value={catalogCovers}><main className="pulso-app" inert={setupReadyFor!==account.user.id} aria-hidden={setupReadyFor!==account.user.id?true:undefined} data-setup-pending={setupReadyFor!==account.user.id?'true':undefined} data-player-open={playerOpen?'true':undefined}><MobileInstallNotice/><header className="pulso-header"><p className="pulso-wordmark" aria-label="Pulso Web">pulso</p><h1 className="pulso-visually-hidden">Tu música, en este navegador</h1><nav className="shell-nav" aria-label="Principal">{(['inicio','buscar','biblioteca']as const).map(p=><button key={p} aria-current={page===p?'page':undefined} onClick={()=>{if(p==='biblioteca')showLibrary(null);navigate(p);}}><svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{p==='inicio'?<path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/>:p==='buscar'?<><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>:<><path d="M4 4v16M9 4v16M14 5l5-1 2 15-5 1z"/></>}</svg><span>{p==='inicio'?'Inicio':p==='buscar'?'Buscar':'Biblioteca'}</span></button>)}</nav><button className="desktop-search-link" type="button" onClick={()=>{const current=navigate('buscar');requestAnimationFrame(()=>{if(current())musicSearchTarget?.querySelector<HTMLInputElement>('input[type=search]')?.focus();});}}><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span>¿Qué quieres escuchar?</span></button><AccountAccess/><button ref={settingsOpener} type="button" aria-expanded={settingsOpen} onClick={()=>{setSettingsSection('general');setSettingsOpen(true);requestAnimationFrame(()=>{settingsHeading.current?.focus();settingsHeading.current?.scrollIntoView({block:'start'});});}}>Configuración</button></header><aside className="desktop-library" aria-label="Accesos a tu biblioteca"><p>Tu biblioteca</p><button type="button" onClick={()=>{setLibraryAlbumSelection(null);showLibrary({favorites:true});navigate('biblioteca');}}><span className="desktop-library__cover"><CollectionCover favorite trackIds={[]}/></span><span><strong>Favoritos</strong><small>Playlist automática</small></span></button>{homeLists.map(list=><button type="button" key={list.id} onClick={()=>{setLibraryAlbumSelection(null);showLibrary({listId:list.id});navigate('biblioteca');}}><span className="desktop-library__cover"><CollectionCover trackIds={list.entries.map(entry=>entry.trackId)} enabled={!settingsOpen}/></span><span><strong>{list.name}</strong><small>{list.entries.length} canciones</small></span></button>)}</aside>{updateReady&&<p role="status">Hay una versión nueva preparada. Se actualizará automáticamente al terminar de escuchar y guardar los cambios.</p>}
 
@@ -1646,7 +1668,7 @@ function App(){
  <LocalCopyRemovalController key={`${removalKey}:${removalRecoveryEpoch}`} host={removalHost} startup={copyRemovalStartup?.key===removalKey?copyRemovalStartup.snapshot:null} request={removalRequest} onRequestHandled={(identity,started)=>{setRemovalRequest(request=>request?.identity===identity?null:request);if(!started)removalUnavailable();}} canUse={owner&&databaseState==='ready'} headingRef={removalHeading} onOpen={openPendingRemoval} onVisible={focusRemoval} onClose={closeRemoval}/>
  <MetadataRescanController key={`metadata-rescan:${scopeId}:${control.proof}:${databaseGeneration}`} activity={control.activity} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} canUse={owner&&!botImportActive&&databaseState==='ready'&&!sourceReview.hasReservation()&&!queueForeignBlocked()} canStart={owner&&!busy&&!botImportActive&&databaseState==='ready'&&!importRecoveryPending()&&!copyRemovalPending&&!sourceReview.hasReservation()&&control.activity.idle} track={rescanTrackId?trackIndex.get(rescanTrackId)??null:null} headingRef={rescanHeading} captureCurrent={captureRescanCurrent} captureAdmission={captureForeignMutationCurrent} onBlocking={setMetadataRescanBlocking} onCommitted={()=>refresh(true,false,null)} onClose={closeRescan}/>
  <div hidden={!settingsOpen||settingsSection!=='tools'} className="settings-secondary"><details className="settings-group"><summary><strong>Verificar playlists</strong><span>Revisar las copias de una selección</span></summary><div className="settings-group__body"><LocalBatchPanel key={`local-batch:${control.proof}`} activity={control.activity} beginDiagnostic={beginPanelDiagnostic} playlist={selected??null} canStart={canOrganize} captureWriteCurrent={captureForeignMutationCurrent} onStatus={text=>{status=text;emit();}}/></div></details></div>
- <PlaybackProgress subscribe={player.subscribe} enabled={playerOpen}>{()=> <PlayerSurface open={playerOpen} onClose={closePlayer} announcement={status}>
+ <PlaybackProgress subscribe={player.subscribe} enabled={playerOpen}>{()=> <PlayerSurface open={playerOpen} onClose={closePlayer} announcement={status||startupStatus}>
   <NowPlayingView open={playerOpen} view={playerView} onViewChange={setPlayerView} headingRef={playerHeading} title={player.current?.title??'Sin selección'}
    artist={playerDisplayArtist??'Artista desconocido'} album={currentTrack?displayTrackAlbum(currentTrack):null}
    artwork={currentTrack?<PlayerArtwork provider={artworkProvider} activity={control.activity} trackId={currentTrack.id} title={currentTrack.title} artist={playerDisplayArtist} album={displayTrackAlbum(currentTrack)} catalogCover={catalogCovers.get(currentTrack.id)} sharedArtworkKey={currentArtworkKey} durationSeconds={currentTrack.duration} scopeKey={`${scopeId}:${control.proof}:${databaseGeneration}`} enabled={owner} current={()=>owner&&playerReadScope()&&player.current?.trackId===currentTrack.id} onArtwork={(image,previousUrl)=>updateMediaSessionArtwork(currentTrack.id,image,previousUrl)} refreshToken={artworkRefreshToken}/>:<div className="artwork-placeholder" aria-hidden="true">♪</div>}
