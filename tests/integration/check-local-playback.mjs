@@ -19,11 +19,11 @@ const versions=Object.fromEntries(process.argv.slice(2).map(argument=>{
  return [argument.slice(0,split),resolve(argument.slice(split+1))];
 }));
 assert.ok(Object.keys(versions).length,'Pass label=path for each production build');
-assert.ok(['integrity','timing'].includes(mode));
+assert.ok(['integrity','playlist','timing'].includes(mode));
 const runs=Number(process.env.PULSO_T27_RUNS??3);
 assert.ok(Number.isInteger(runs)&&runs>=1);
 const workspace=await createTestWorkspace('t27-local-playback');
-const report={mode,runs,cases:[],loads:[]};
+const report={mode,runs,engines:{},cases:[],loads:[]};
 const accountId='11111111-1111-4111-8111-111111111111';
 const shortBytes=3*65536;
 const title=index=>`T27 pista ${String(index+1).padStart(2,'0')}`;
@@ -150,14 +150,26 @@ async function corrupt(page,index,kind){
 }
 function installProbe(){
  const probe=window.t27={started:null,loads:[],playing:[],reads:{idb:0,blobBytes:0},actions:{}};
+ const tickets=new Map();
+ const fixture=JSON.parse(sessionStorage.getItem('t27-fixture')??'[]');
+ const titles=new Map(fixture.map(({asset,track})=>[asset.id,track.title]));
+ const postMessage=ServiceWorker.prototype.postMessage;
+ ServiceWorker.prototype.postMessage=function(message,...args){
+  if(message?.type==='pinned-local-sources'){
+   message.tokens.forEach((token,i)=>tickets.set(token,titles.get(message.expected[i].id)));
+  }
+  return postMessage.call(this,message,...args);
+ };
  const NativeAudio=window.Audio;
  window.Audio=class extends NativeAudio{
   constructor(...args){
    super(...args);probe.audio=this;
    this.addEventListener('playing',()=>{
-    if(probe.started===null)return;
+    const url=this.currentSrc;
+    if(!url||probe.started===null||probe.playing.at(-1)?.url===url)return;
+    const token=new URL(url).pathname.split('/').at(-1);
     probe.playing.push({ms:performance.now()-probe.started,loads:[...probe.loads],reads:{...probe.reads},
-     url:this.currentSrc,title:document.querySelector('.collection-track-main[aria-current="true"] strong')?.textContent});
+     url,title:tickets.get(token)??document.querySelector('.collection-track-main[aria-current="true"] strong')?.textContent});
    });
   }
   load(){
@@ -217,6 +229,7 @@ async function withPage(engine,origin,n,backend,short,run,playlistSize=n){
  try{
   const chromiumOptions={executablePath:'/usr/bin/chromium',chromiumSandbox:true};
   context=await ({chromium,webkit})[engine].launchPersistentContext(profile,engine==='chromium'?{...launch,...chromiumOptions}:launch);
+  report.engines[engine]??=context.browser().version();
   await context.route('**/*',route=>route.request().url().startsWith(origin+'/')?route.continue():route.abort());
   await installRequiredAccountFixture(context,origin);
   await context.addInitScript(installProbe);
@@ -271,6 +284,22 @@ try{
   try{
    const origin=`http://127.0.0.1:${server.httpServer.address().port}`;
    for(const engine of engines)for(const backend of backends){
+    if(mode==='playlist'){
+     await runCase({version,engine,backend,case:'large-playlist-start'},async()=>{
+      await withPage(engine,origin,30,backend,false,async page=>{
+       await openPlaylist(page,0,29);
+       await trackButton(page,14).click();
+       await waitPlaying(page);
+       const [event]=await playing(page);
+       assert.ok(event.ms<30000,'La pista no empezó dentro de 30 s');
+       assert.equal(event.title,title(14));
+       assert.equal(event.loads.length,1);
+       assert.deepEqual(event.reads,{idb:0,blobBytes:0});
+      });
+      return {entries:30,loadCount:1,mainAudioReads:0,withinDeadline:true};
+     });
+     continue;
+    }
     if(mode==='timing'){
      await runCase({version,engine,backend,case:'cold-start'},async()=>{
       const samples={single:[],playlist:[]};
