@@ -27,9 +27,14 @@ const reviewModes=[...reconnectModes,'queue-dispatch-relaunch-cap','queue-dispat
  'queue-review-admission','queue-version-busy','queue-before-library-refresh','queue-album-expired-update','queue-album-clear-retry',
  'queue-cancel-exception','queue-unmount-update','queue-resumed-album-pagehide','queue-missing-paused-track',
  'queue-album-library-update',...botFailureModes];
-const modes=['full','resume','missing','stale-checkpoint','benchmark','turnaround','queue','queue-cancel','queue-reload','queue-admission','queue-song-save','queue-song-order','queue-cancel-empty','queue-removal-storage','tap-baseline','tap-active',...reviewModes];
+const modes=['full','resume','missing','stale-checkpoint','benchmark','first-sound','first-sound-direct','turnaround','queue','queue-cancel','queue-reload','queue-admission','queue-song-save','queue-song-order','queue-cancel-empty','queue-removal-storage','tap-baseline','tap-active',...reviewModes];
 const selectedMode=process.env.PLAYLIST_FULL_MODE;
-const selectedModes=selectedMode?.split(',');
+const speedModes=['benchmark','first-sound','first-sound-direct'];
+const selectedModes=selectedMode==='regression'?modes.filter(mode=>mode!=='tap-baseline'&&!speedModes.includes(mode)):selectedMode?.split(',');
+const measuring=selectedModes?.some(mode=>speedModes.includes(mode));
+const speedRepetitions=Number(process.env.PLAYLIST_SPEED_REPEATS??'3');
+const speedFilter=process.env.PLAYLIST_SPEED_FILTER;
+assert.ok(Number.isSafeInteger(speedRepetitions)&&speedRepetitions>=1);
 const selectedEngine=process.env.PLAYLIST_FULL_ENGINE;
 const baseline=process.env.PLAYLIST_TURNAROUND_BASE==='1';
 const cancelMode=mode=>mode==='queue-cancel'||mode==='queue-cancel-empty';
@@ -133,7 +138,8 @@ const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
   if(selectedModes?.includes('queue-removal-storage'))code=code.replace(
    "const downloadStorageReady=()=>databaseState==='ready';",
    "const downloadStorageReady=()=>databaseState==='ready'&&!window.testDownloadStorageUnavailable;");
-  if(selectedMode==='turnaround')code+='\nwindow.testTurnaroundDiagnostics=()=>{diagnostics.setEnabled(true);return diagnostics.getSnapshot().songs;};';
+  if(measuring)code+='\nwindow.testDownloadTiming=()=>{diagnostics.setEnabled(true);return diagnostics.getSnapshot().downloads;};';
+  if(selectedModes?.includes('turnaround'))code+='\nwindow.testTurnaroundDiagnostics=()=>{diagnostics.setEnabled(true);return diagnostics.getSnapshot().songs;};';
   return code;
  }
  if(selectedModes?.includes('queue-song-save')&&id.endsWith('/src/ui/MusicSearchController.tsx')){
@@ -1549,30 +1555,75 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
  return receipt;
 }
 
-async function checkBenchmark(browser,engine,origin,bundle,delayMs,backend){
- const ctx=await browser.newContext(config);
- const trace=[];
- const tracks=[1,2].map(n=>({id:uuid(n),title:`Silencio ${n}`,artist:'Prueba',album:null,duration:525,favorite:false,inLibrary:true,
-  createdAt:'2026-11-21T00:00:00Z',localAlbum:null,catalog:null}));
- const audio=tracks.map((track,i)=>({key:i+1,title:track.title,artist:track.artist,duration:track.duration,mime:'audio/mpeg',bytes:benchmarkBytes}));
- const cloud={accountId,revision:1,document:{version:1,tracks,
-  playlists:[{id:uuid(99),name:playlistName,entries:tracks.map((track,i)=>({trackId:track.id,id:uuid(100+i)}))}]}};
+async function seedSpeedLibrary(page,existingCount,source){
+ if(!existingCount)return;
+ const sha256=createHash('sha256').update(source).digest('hex');
+ await page.evaluate(async ({accountId,existingCount,source,sha256})=>{
+  const db=await new Promise((resolve,reject)=>{
+   const request=indexedDB.open('pulso-web-local-v1');
+   request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
+  });
+  try{
+   const bytes=Uint8Array.from(atob(source),char=>char.charCodeAt(0));
+   await new Promise((resolve,reject)=>{
+    const tx=db.transaction(['tracks','assets','chunks'],'readwrite');
+    for(let i=0;i<existingCount;i++){
+     const trackId=crypto.randomUUID(),assetId=crypto.randomUUID();
+     tx.objectStore('tracks').put({id:trackId,accountId,title:'Copia previa '+(i+1),artist:'Prueba',album:null,duration:1,
+      favorite:false,inLibrary:true,createdAt:'2026-11-20T00:00:00Z',revision:1,manualOverrides:{},assetId,
+      audioFingerprint:{algorithm:'sha256',sha256,bytes:bytes.length}},trackId);
+     tx.objectStore('assets').put({id:assetId,namespace:'local',storageKey:assetId,bytes:bytes.length,sha256,
+      mime:'audio/mpeg',chunks:1,state:'complete',revision:1,chunkSize:65536,backend:'idb',retention:'kept'},assetId);
+     tx.objectStore('chunks').put(bytes,[assetId,0]);
+    }
+    tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);
+   });
+  }finally{db.close();}
+ },{accountId,existingCount,source:source.toString('base64'),sha256});
+ await page.reload();
+ await openPlaylist(page);
+}
+
+async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,count,existingCount,repetition){
+ const ctx=await browser.newContext({...config,serviceWorkers:'allow'});
+ const trackMode=mode!=='benchmark',direct=mode==='first-sound-direct';
+ const countRpc={},errors=[],external=new Set();
+ const existingAudio=await readFile('public/fixtures/A.mp3');
+ const shortAudio=direct?await readFile('public/fixtures/C.mp3'):null;
+ const bytes=direct?shortAudio.length:benchmarkBytes;
+ const tracks=Array.from({length:count},(_,i)=>({
+  id:uuid(i+1),title:'Pulso medición '+(i+1),artist:'Prueba',album:null,duration:direct?4:525,favorite:false,inLibrary:true,
+  createdAt:'2026-11-21T00:00:00Z',localAlbum:null,catalog:null,
+ }));
+ const audio=tracks.map((track,i)=>({key:direct?401:i+1,title:track.title,artist:track.artist,duration:track.duration,mime:'audio/mpeg',bytes}));
+ const song={wrapperType:'track',kind:'song',collectionId:979,trackId:980,discNumber:1,discCount:1,trackNumber:1,trackCount:2,
+  collectionName:'Medición sintética',trackName:tracks[0].title,artistName:tracks[0].artist,trackTimeMillis:tracks[0].duration*1000};
+ let cloud={accountId,revision:1,document:{version:1,tracks:trackMode?[]:tracks,
+  playlists:[{id:uuid(99),name:playlistName,entries:trackMode?[]:tracks.map((track,i)=>({trackId:track.id,id:uuid(100+i)}))}]}};
+ const result={mode,engine,delayMs,rpcMs:200,requestedBackend:backend,count,existingCount,repetition,bytes};
+ let page;
  try{
-  await ctx.routeWebSocket('**/*',socket=>void socket.close());
+  await ctx.routeWebSocket('**/*',socket=>{external.add(new URL(socket.url()).origin);void socket.close();});
   await ctx.route('**/*',async route=>{
    const url=new URL(route.request().url());
-   if(url.origin!==origin)return route.abort();
+   if(url.hostname.endsWith('lrclib.net'))return route.fulfill({headers:{'access-control-allow-origin':origin},json:[]});
+   if(url.origin!==origin){external.add(url.origin);return route.abort();}
    if(url.pathname==='/testonly-seed')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>seed</title>'});
    if(url.pathname==='/__setup-event')return route.fulfill({json:{}});
+   if(url.pathname==='/catalog-config.json')return route.fulfill({json:{version:1,itunes:true,artwork:false}});
+   if(url.pathname.startsWith('/catalog/itunes/')){
+    const results=url.searchParams.get('entity')==='song'?[song]:[];
+    return route.fulfill({json:{resultCount:results.length,results}});
+   }
    if(url.pathname==='/__playlist-full-rpc'){
     const {kind,query,key,offset,limit}=route.request().postDataJSON();
-    trace.push({kind,key,offset});
     if(kind==='search'){
      const descriptor=audio.find(item=>query===item.title+' '+item.artist);
-     return route.fulfill({json:{delayMs,audio:[],menu:[{label:`1. ${descriptor.artist} - ${descriptor.title}`,
-      audio:descriptor}]}});
+     if(!descriptor)return route.fulfill({status:400});
+     return route.fulfill({json:direct?{delayMs,audio:[descriptor]}:{delayMs,audio:[],menu:[{label:`1. ${descriptor.artist} - ${descriptor.title}`,audio:descriptor}]}});
     }
     if(kind==='callback')return route.fulfill({json:{}});
+    if(kind==='read'&&direct&&key===401)return route.fulfill({body:shortAudio.subarray(offset,offset+limit),contentType:'application/octet-stream'});
     return route.abort();
    }
    if(backend==='idb'&&/\/assets\/import\.worker-[^/]+\.js$/.test(url.pathname)){
@@ -1583,46 +1634,98 @@ async function checkBenchmark(browser,engine,origin,bundle,delayMs,backend){
    return route.fallback();
   });
   await installRequiredAccountFixture(ctx,origin);
-  await ctx.route(origin+'/api/account-library',route=>route.fulfill({json:cloud}));
-  await ctx.addInitScript(()=>{
-   window.benchmark={start:null,marks:[],failed:false};
-   const scan=()=>{
-    const dock=document.querySelector('.download-dock');
-    const progress=dock?.querySelector('progress');
-    if(progress?.value===1&&window.benchmark.marks.length===0)window.benchmark.marks.push(performance.now());
-    const terminal=[...document.querySelectorAll('[role="status"]')].find(node=>node.textContent==='Descarga finalizada · 2 de 2 guardadas');
-    if(terminal&&window.benchmark.marks.length===1)window.benchmark.marks.push(performance.now());
-    if([...document.querySelectorAll('[role="status"]')].some(node=>/^Descarga (finalizada|detenida) ·/.test(node.textContent)&&node!==terminal))window.benchmark.failed=true;
+  await ctx.route(origin+'/api/account-library',route=>{
+   if(route.request().method()==='PUT')cloud={...cloud,revision:cloud.revision+1,document:route.request().postDataJSON().document};
+   return route.fulfill({json:cloud});
+  });
+  await ctx.addInitScript(({count,trackMode})=>{
+   const state=window.benchmark={start:null,marks:[],failed:false,playing:null,advanced:false};
+   const OriginalAudio=window.Audio;
+   window.Audio=function(...args){
+    const audio=new OriginalAudio(...args);
+    audio.addEventListener('playing',()=>{if(state.start!==null)state.playing??=performance.now();});
+    audio.addEventListener('timeupdate',()=>{if(state.playing!==null&&audio.currentTime>0)state.advanced=true;});
+    return audio;
    };
-   new MutationObserver(scan).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
+   window.Audio.prototype=OriginalAudio.prototype;
+   if(!trackMode)new MutationObserver(()=>{
+    const progress=document.querySelector('.download-dock progress');
+    if(progress?.value>state.marks.length&&state.marks.length<count-1)state.marks.push(performance.now());
+    const statuses=[...document.querySelectorAll('[role="status"]')].map(node=>node.textContent);
+    const final=`Descarga finalizada · ${count} de ${count} guardadas`;
+    if(statuses.includes(final)&&state.marks.length===count-1)state.marks.push(performance.now());
+    if(statuses.some(text=>/^Descarga (finalizada|detenida) ·/.test(text)&&text!==final))state.failed=true;
+   }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});
    document.addEventListener('click',event=>{
-    if(event.target.closest('button')?.getAttribute('aria-label')==='Descargar playlist completa')window.benchmark.start??=performance.now();
+    if(event.target.closest(trackMode?'[data-catalog-kind="track"]':'button[aria-label="Descargar playlist completa"]'))
+     state.start??=performance.now();
    },true);
+   document.addEventListener('securitypolicyviolation',event=>console.error('CSP '+event.violatedDirective));
+  },{count,trackMode});
+  page=await ctx.newPage();
+  page.setDefaultTimeout(20000);
+  page.on('pageerror',error=>errors.push(String(error)));
+  page.on('console',message=>{
+   const prefix='TESTONLY playlist RPC ',text=message.text();
+   if(text.startsWith(prefix)){const key=text.slice(prefix.length);countRpc[key]=(countRpc[key]??0)+1;}
+   else if(message.type()==='error')errors.push(text);
   });
-  const page=await ctx.newPage();
-  page.setDefaultTimeout(90000);
   await seed(page,origin,null,null);
+  await seedSpeedLibrary(page,existingCount,existingAudio);
+  await page.waitForFunction(()=>Boolean(navigator.serviceWorker.controller));
+  assert.equal((await inspect(page,[])).assetIds.length,existingCount);
+  await page.evaluate(()=>window.testDownloadTiming());
   await page.locator('.bot-providers-list li').nth(2).waitFor({state:'attached'});
-  await page.getByRole('button',{name:startLabel,exact:true}).evaluate(button=>button.click());
-  await page.waitForFunction(()=>window.benchmark.marks.length===2||window.benchmark.failed,null,{timeout:180000}).then(async()=>{assert.equal(await page.evaluate(()=>window.benchmark.failed),false);}).catch(async error=>{
-   const handle=page.locator('.download-dock__handle');
-   await handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();}).catch(()=>{});
-   const dock=await page.getByRole('region',{name:'Descargas',exact:true}).allTextContents();
-   throw Error(JSON.stringify({dock,trace}),{cause:error});
-  });
-  const {copies}=await inspect(page,tracks.map(track=>track.id));
+  if(trackMode){
+   await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).tap();
+   await page.locator('.music-search input[type=search]').fill(song.trackName);
+   await page.locator('[data-catalog-kind=track]').filter({hasText:song.trackName}).tap();
+   await page.waitForFunction(()=>window.benchmark.advanced,null,{timeout:25000});
+  }else{
+   await page.getByRole('button',{name:startLabel,exact:true}).tap();
+   await page.waitForFunction(count=>window.benchmark.marks.length===count||window.benchmark.failed,count,{timeout:360000});
+  }
+  const {start,marks,playing,failed}=await page.evaluate(()=>window.benchmark);
+  assert.notEqual(start,null);assert.equal(failed,false);
+  const ids=trackMode?await page.evaluate(async title=>{
+   const db=await new Promise((resolve,reject)=>{
+    const request=indexedDB.open('pulso-web-local-v1');
+    request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
+   });
+   try{return await new Promise((resolve,reject)=>{
+    const request=db.transaction('tracks').objectStore('tracks').getAll();
+    request.onsuccess=()=>resolve(request.result.filter(track=>track.title===title&&track.assetId).map(track=>track.id));
+    request.onerror=()=>reject(request.error);
+   });}finally{db.close();}
+  },song.trackName):tracks.map(track=>track.id);
+  assert.equal(ids.length,count);
+  const copies=[];
+  for(let i=0;i<ids.length;i+=2)copies.push(...(await inspect(page,ids.slice(i,i+2))).copies);
+  assert.equal((await inspect(page,[])).assetIds.length,existingCount+count);
   const actualBackend=copies[0]?.backend;
   for(const [i,copy] of copies.entries()){
-   assert.equal(copy?.sha256,createHash('sha256').update(benchmarkPart(i+1)).digest('hex'));
-   assert.equal(copy?.bytes,benchmarkBytes);
+   assert.equal(copy?.sha256,createHash('sha256').update(direct?shortAudio:benchmarkPart(i+1)).digest('hex'));
+   assert.equal(copy?.bytes,bytes);
    assert.equal(copy?.backend,actualBackend);
    if(backend==='idb')assert.equal(copy?.backend,'idb');
   }
-  const {start,marks}=await page.evaluate(()=>window.benchmark);
-  assert.notEqual(start,null);
-  const samplesMs=[Math.round(marks[0]-start),Math.round(marks[1]-marks[0])];
-  return {status:'PASS',engine,delayMs,rpcMs:200,requestedBackend:backend,backend:actualBackend,bytes:benchmarkBytes,
-   samplesMs,meanMs:Math.round((marks[1]-start)/2)};
+  const timing=await page.evaluate(()=>window.testDownloadTiming());
+  assert.equal(timing.length,count);
+  assert.equal(countRpc.sendMessage,count);
+  assert.equal(countRpc['upload.getFile'],Math.ceil(bytes/524288)*count);
+  assert.equal(countRpc.getHistory20,timing.reduce((total,item)=>total+item.searchReads+item.callbackReads,0));
+  assert.deepEqual([...external],[]);assert.deepEqual(errors,[]);
+  const samplesMs=trackMode?[Math.round(playing-start)]:marks.map((mark,i)=>Math.round(mark-(marks[i-1]??start)));
+  const sorted=[...samplesMs].sort((a,b)=>a-b);
+  const rpcPerTrack=Object.fromEntries(Object.entries(countRpc).map(([key,total])=>[key,total/count]));
+  const historyPerTrack=rpcPerTrack.getHistory1+rpcPerTrack.getHistory20;
+  const totalRpcPerTrack=Object.values(rpcPerTrack).reduce((sum,value)=>sum+value,0);
+  return {...result,status:'PASS',backend:actualBackend,verified:count,samplesMs,totalMs:Math.round((trackMode?playing:marks.at(-1))-start),
+   medianMs:(sorted[Math.floor((count-1)/2)]+sorted[Math.floor(count/2)])/2,p90Ms:sorted[Math.ceil(count*.9)-1],
+   rpcPerTrack,historyPerTrack,totalRpcPerTrack,timing};
+ }catch(error){
+  return {...result,status:'FAIL',error:String(error.stack??error),countRpc,errors,external:[...external],
+   state:await page?.evaluate(()=>({benchmark:window.benchmark,timing:window.testDownloadTiming?.()})).catch(()=>null)};
  }finally{await ctx.close();}
 }
 
@@ -1815,7 +1918,11 @@ try{
  tempDirectory=await open(work.dir,'r');
  process.env.TMPDIR=`/proc/${process.pid}/fd/${tempDirectory.fd}`;
  const bundle=resolve(work.dir,'bundle');
- await build({configFile:false,define:{__PLAYLIST_RPC_MS__:selectedMode==='benchmark'?'200':'0'},plugins:[tailwindcss(),sdk()],worker:{plugins:()=>[sdk()]},logLevel:'error',build:{outDir:bundle}});
+ await build({configFile:false,define:{__PLAYLIST_RPC_MS__:measuring?'200':'0'},plugins:[tailwindcss(),sdk()],worker:{plugins:()=>[sdk()]},logLevel:'error',build:{outDir:bundle}});
+ if(measuring){
+  await build({configFile:false,define:{SHELL_FILES:'[]'},logLevel:'error',
+   build:{outDir:bundle,emptyOutDir:false,lib:{entry:'src/service-worker/sw.ts',formats:['es'],fileName:()=> 'sw.js'}}});
+ }
  await writeFile(bundle+'/telegram-config.json',JSON.stringify({api_id:12345,api_hash:'0'.repeat(32)}));
  server=await preview({configFile:false,build:{outDir:bundle},preview:{host:'127.0.0.1',port:0}});
  const origin='http://127.0.0.1:'+server.httpServer.address().port;
@@ -1825,7 +1932,7 @@ try{
   report.engines[engine]=browser.version();
   try{
    for(const mode of modes){
-    if(selectedModes&&!selectedModes.includes(mode)||!selectedModes&&(['benchmark','turnaround'].includes(mode)||isQueueMode(mode)))continue;
+    if(selectedModes&&!selectedModes.includes(mode)||!selectedModes&&(['benchmark','first-sound','first-sound-direct','turnaround'].includes(mode)||isQueueMode(mode)))continue;
     if(mode==='turnaround'){
      for(const scenario of selectedScenarios){
       const result=await checkTurnaround(browser,engine,origin,scenario);
@@ -1833,10 +1940,16 @@ try{
      }
      continue;
     }
-    if(mode==='benchmark'){
-     for(const backend of ['opfs','idb'])for(const delayMs of [400,1200]){
-      const result=await checkBenchmark(browser,engine,origin,bundle,delayMs,backend);
-      report.cases.push(result);console.log(JSON.stringify(result));
+    if(speedModes.includes(mode)){
+     const variants=mode==='benchmark'?[['opfs',400,2,0],['opfs',1200,2,0],['idb',400,2,0],['idb',1200,2,0],['opfs',400,30,300]]:
+      mode==='first-sound'?[['opfs',400,1,300],['opfs',1200,1,300],['idb',1200,1,300]]:[['opfs',400,1,300]];
+     for(const [backend,delayMs,count,existing] of variants){
+      if(speedFilter&&!speedFilter.split(',').includes([mode,backend,delayMs,count].join(':')))continue;
+      for(let repetition=1;repetition<=speedRepetitions;repetition++){
+       const result=await checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,count,existing,repetition);
+       report.cases.push(result);console.log(JSON.stringify(result));
+       if(process.env.PLAYLIST_FULL_FAIL_FAST==='1'&&result.status!=='PASS')throw Error('Stopped after failed speed case');
+      }
      }
      continue;
     }

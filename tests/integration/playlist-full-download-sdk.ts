@@ -3,6 +3,7 @@ import Long from 'long';
 import {benchmarkPart} from './playlist-benchmark-audio.mjs';
 import {openTemporaryTelegram as setupSdk} from './required-setup-sdk';
 import {createBotSearchDriver} from '../../src/telegram/bot-search-driver';
+import type {BotSearchDependency} from '../../src/telegram/bot-search-driver';
 
 type Audio = {key:number;title:string;artist:string;duration:number;mime:string;bytes:number};
 declare const __PLAYLIST_RPC_MS__:number;
@@ -14,6 +15,12 @@ type Chat = {response?:Reply['response'];outgoing:number;messages:unknown[];late
 export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal){
  const base=await setupSdk(identity,signal);
  const chats=new Map<number,Chat>();
+ const wakeups=new Map<number,()=>void>();
+ const signalReady=(peer:number,chat:Chat)=>{
+  const hint=wakeups.get(peer);
+  if(hint)setTimeout(()=>{if(wakeups.get(peer)===hint&&chats.get(peer)===chat)hint();},chat.delayMs);
+ };
+ const countRpc=(kind:string)=>{if(benchmark)console.debug('TESTONLY playlist RPC '+kind);};
  const history=(messages:unknown[]=[])=>({_:'messages.messages',messages,users:[],chats:[]});
  const rpc=(kind:string,details:object,signal:AbortSignal)=>fetch('/__playlist-full-rpc',{
   method:'POST',body:JSON.stringify({kind,...details}),signal,
@@ -35,14 +42,20 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
  };
  return {...base,createBotSearch(session:string){
   const pool=base.createBotProviders(session);
-  return createBotSearchDriver(base.getAccountBinding()!,session,{
+  const dependency:BotSearchDependency & {subscribeBotWakeup(peer:number,hint:()=>void):()=>void}={
+   subscribeBotWakeup(peer,hint){
+    wakeups.set(peer,hint);
+    return ()=>{if(wakeups.get(peer)===hint)wakeups.delete(peer);};
+   },
    captureProvider:(ref,rev)=>pool.captureSearchProvider(ref,rev),
    async resolveIdentity(username){
+    countRpc('resolveUsername');
     await delayRpc();
     const id=101+['kdmusic_bot','deezermusicbot','lydbot'].indexOf(username);
     return {_:'contacts.resolvedPeer',peer:peerUser(id),users:[{_:'user',id,bot:true,username,firstName:username,accessHash:new Long(3,id,false)}],chats:[]};
    },
    async sendQuery(input,query,_randomId,abort){
+    countRpc('sendMessage');
     const peer=botId(input);
     await delayRpc();
     const response=await rpc('search',{peer,query},abort);
@@ -58,10 +71,13 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
     };
     const messages=silent?[]:options?[options]:audio.length?audio.map((candidate,index)=>document(peer,outgoing+1+index,outgoing,candidate))
      :[incoming(peer,outgoing+1,outgoing,fixtureResponse==='needs-start'?'Envía /start para iniciar el bot':'No se encontraron resultados')];
-    chats.set(peer,{response:fixtureResponse,outgoing,messages,latest:outgoing+messages.length,menu,readyAt:performance.now()+delayMs,delayMs});
+    const chat={response:fixtureResponse,outgoing,messages,latest:outgoing+messages.length,menu,readyAt:performance.now()+delayMs,delayMs};
+    chats.set(peer,chat);
+    if(!silent)signalReady(peer,chat);
     return {_:'updateShortSentMessage',out:true,id:outgoing,date:1,pts:outgoing,ptsCount:1};
    },
    async readHistory(input,_min,limit){
+    countRpc('getHistory'+limit);
     await delayRpc();
     const chat=chats.get(botId(input));
     if(chat?.response==='unsupported'&&limit===20)return {_:'messages.notModified'};
@@ -71,12 +87,14 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
     return history(limit===1?chat?.messages.slice(-1):chat?.messages);
    },
    async readKnown(input,id){
+    countRpc('getMessages');
     await delayRpc();
     const chat=chats.get(botId(input));
     const match=chat?.messages.find(message=>(message as {id:number}).id===id);
     return history(match?[match]:[]);
    },
    async callback(input,id,data,abort){
+    countRpc('getBotCallbackAnswer');
     const peer=botId(input),chat=chats.get(peer),audio=chat?.menu?.[data[0]-1]?.audio;
     if(!chat||!audio||id!==chat.outgoing+1)throw Error('Unexpected fixture callback');
     await delayRpc();
@@ -86,11 +104,13 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
     chat.quietCallback=silent;
     if(!silent)chat.messages.push(document(peer,++chat.latest,id,audio));
     chat.readyAt=performance.now()+chat.delayMs;
+    if(!silent)signalReady(peer,chat);
     return {_:'messages.botCallbackAnswer',cacheTime:0};
    },
    async readDocumentPart(doc,offset,limit,abort){
+    countRpc('upload.getFile');
     await delayRpc();
-    if(benchmark)return benchmarkPart(doc.location.id.toNumber(),offset,limit);
+    if(benchmark&&doc.location.id.toNumber()<400)return benchmarkPart(doc.location.id.toNumber(),offset,limit);
     const response=await rpc('read',{key:doc.location.id.toNumber(),offset,limit},abort);
     if(response.status===429)throw {errorMessage:'FLOOD_WAIT_2'};
     if(response.status===503)throw new TypeError('Synthetic network failure reading audio part');
@@ -98,6 +118,7 @@ export async function openTemporaryTelegram(identity:unknown,signal:AbortSignal)
     return new Uint8Array(await response.arrayBuffer());
    },
    invalidateSession(){void base.close();},
-  });
+  };
+  return createBotSearchDriver(base.getAccountBinding()!,session,dependency);
  }};
 }

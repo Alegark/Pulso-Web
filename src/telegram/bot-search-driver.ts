@@ -11,6 +11,7 @@ import {BOT_SEARCH_BOUNDS as B,copyBotSearchEnvelope,botPollDelay,botSearchText,
 import {assertBotSearchRawBudget,botSearchAck,botSearchBaseline,BotSearchProjectionError,projectBotSearchPage,projectBotCallbackPage,botSearchDocumentIdentity,botSearchKnownMessage,botSearchMessageFingerprint,botSearchAudioFingerprint,botSearchDocument,type BotSearchPrivateRef} from './bot-search-page';
 /** Inject only inside the worker. No generic RPC, root peers or arbitrary message identifiers. */
 export interface BotSearchDependency {
+ subscribeBotWakeup?(botId:number,hint:()=>void):()=>void;
  captureProvider(ref:string,revision:number):BotSearchProviderCapture|null;
  resolveIdentity(username:string,signal:AbortSignal,timeoutMs:number):Promise<unknown>;
  readHistory(peer:tl.TypeInputPeer,minId:number,limit:1|20,signal:AbortSignal,timeoutMs:number):Promise<unknown>;
@@ -88,13 +89,27 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    const metrics:NetworkTiming=emptyNetworkTiming();
    let transferStart:number|undefined,pollStart:number|undefined;
    let timer:ReturnType<typeof setTimeout>|undefined,grace:ReturnType<typeof setTimeout>|undefined,delay:ReturnType<typeof setTimeout>|undefined,delayWake:(()=>void)|undefined,finished=false,stopping=false;
-   const finish=(ok:boolean)=>{if(finished)return;finished=true;ctx.signal.removeEventListener('abort',onAbort);if(timer!==undefined)time.clearTimeout(timer);if(grace!==undefined)time.clearTimeout(grace);if(delay!==undefined)time.clearTimeout(delay);if(flight===f)flight=null;
+   let unsubscribeWakeup:(()=>void)|undefined,hintSeen=false,lastPollAt=-Infinity,pollBackstop=Infinity;
+   const releaseWakeup=()=>{unsubscribeWakeup?.();unsubscribeWakeup=undefined;hintSeen=false;};
+   const wakeupFloorMs=125;
+   const startWakeup=(botId:number)=>{
+    unsubscribeWakeup=dependency.subscribeBotWakeup?.(botId,()=>{
+     if(stopping||finished||!live(ctx,capture)||hintSeen)return;
+     hintSeen=true;
+     const eligibleAt=lastPollAt+wakeupFloorMs;
+     if(delayWake&&eligibleAt<pollBackstop){
+      if(delay!==undefined)time.clearTimeout(delay);
+      delay=time.setTimeout(delayWake,Math.max(0,eligibleAt-time.now()));
+     }
+    });
+   };
+   const finish=(ok:boolean)=>{if(finished)return;finished=true;releaseWakeup();ctx.signal.removeEventListener('abort',onAbort);if(timer!==undefined)time.clearTimeout(timer);if(grace!==undefined)time.clearTimeout(grace);if(delay!==undefined)time.clearTimeout(delay);if(flight===f)flight=null;
     if(transferStart!==undefined)metrics.transferMs=elapsedMs(transferStart);
     if(pollStart!==undefined)metrics[c.type==='bot-search.search'?'searchPollMs':'callbackPollMs']=elapsedMs(pollStart);
     try{ctx.timing?.(metrics);}catch{/* Observation cannot block settlement. */}
     settle(ok);};
    const f:Flight={e,delivery:'not-dispatched',cause:null,stop(cause){
-    if(stopping)return;stopping=true;cause=f.cause??cause;if(cause.error==='timeout'&&f.delivery==='uncertain')cause=fail('uncertain');
+    if(stopping)return;stopping=true;releaseWakeup();cause=f.cause??cause;if(cause.error==='timeout'&&f.delivery==='uncertain')cause=fail('uncertain');
     f.cause=cause;retained=new Map();retainedUntil=0;wake(response(e,cause,f.delivery));abort.abort();delayWake?.();
     grace=time.setTimeout(()=>{finish(false);invalidate();},B.settlementMs);
    }};
@@ -130,11 +145,17 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
    }};
    const poll=async(read:number,history:(ms:number)=>Promise<unknown>,immediate=false,maxDelay=Infinity)=>{
     pollStart??=performance.now();if(!immediate)await sleepPoll(Math.min(botPollDelay(read),maxDelay));
+    hintSeen=false;lastPollAt=time.now();
     metrics[c.type==='bot-search.search'?'searchReads':'callbackReads']++;return rpc(history);
    };
    const sleepPoll=async(ms:number)=>{
     check();
-    await new Promise<void>(resolve=>{delayWake=resolve;delay=time.setTimeout(()=>{delay=undefined;delayWake=undefined;resolve();},ms);});
+    pollBackstop=time.now()+ms;
+    const wait=hintSeen?Math.min(ms,Math.max(0,lastPollAt+wakeupFloorMs-time.now())):ms;
+    if(wait>0)await new Promise<void>(resolve=>{
+     delayWake=()=>{if(delay!==undefined)time.clearTimeout(delay);delay=undefined;delayWake=undefined;resolve();};
+     delay=time.setTimeout(delayWake,wait);
+    });
     check();
    };
    const work=Promise.resolve().then(async():Promise<BotSearchReply>=>{
@@ -149,8 +170,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      });
      if(c.type==='bot-search.download'){
       if(!dependency.readKnown||!dependency.readDocumentPart||!selection?.row||!previous)throw fail('unsupported');
-      const known=async(ref:BotSearchPrivateRef)=>{
-       const raw=await rpc(()=>dependency.readKnown!(approved.peer,ref.messageId,abort.signal));const message=botSearchKnownMessage(raw,approved.botId,ref.messageId);
+      const validateKnown=(raw:unknown,ref:BotSearchPrivateRef)=>{
+       const message=botSearchKnownMessage(raw,approved.botId,ref.messageId);
        if(!message)throw fail('conflict');
        if(ref.row?.kind==='audio'&&ref.audioFingerprint){
         if(botSearchAudioFingerprint(message)!==ref.audioFingerprint)throw fail('conflict');
@@ -159,12 +180,14 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
        }else if(botSearchMessageFingerprint(message)!==ref.fingerprint)throw fail('conflict');
        return message;
       };
+      const known=async(ref:BotSearchPrivateRef)=>validateKnown(await rpc(()=>dependency.readKnown!(approved.peer,ref.messageId,abort.signal)),ref);
       let selected=selection,message=await known(selected);
       if(selected.row?.kind==='option'){
        const selectedDocumentId=botSearchDocumentIdentity(message);
        const fold=(v:string)=>v.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
        if(!dependency.callback||!selected.callbackData||botOptionDurationMismatch(selected.row,c.target)||!(matchingSongRows([selected.row],c.target).length===1||!['kdmusic_bot','deezermusicbot'].includes(capture.username)&&fold(c.target.title).length>=3&&fold(selected.row.label).includes(fold(c.target.title))))throw fail('unsupported');
        const baseline=botSearchBaseline(await rpc(ms=>dependency.readHistory(approved.peer,0,1,abort.signal,ms)),approved.botId);
+       startWakeup(approved.botId);
        f.delivery='uncertain';if(ctx.publish&&live(ctx,capture))try{ctx.publish({...e,type:'bot-search.sending',delivery:'uncertain'});}catch{/* Observers cannot own or repeat the callback. */}
        const answer=await measure(ms=>{metrics.callbackMs=ms;},()=>rpc(()=>dependency.callback!(approved.peer,selected.messageId,selected.callbackData!.slice(),abort.signal)));
        if(!answer||typeof answer!=='object'||Object.getOwnPropertyDescriptor(answer,'_')?.value!=='messages.botCallbackAnswer')throw fail('unsupported');
@@ -204,7 +227,13 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
          // The first audio need not be the selected recording. Keep observing
          // this same callback's bounded window without fetching unrelated bytes
          // or sending another query/callback.
-         if(selectedAudio){metrics.callbackPollMs=elapsedMs(pollStart!);pollStart=undefined;selected=page.refs.get(selectedAudio.rowRef)!;message=await known(selected);break;}
+         if(selectedAudio){
+          metrics.callbackPollMs=elapsedMs(pollStart!);pollStart=undefined;
+          selected=page.refs.get(selectedAudio.rowRef)!;
+          // The bounded history just supplied this exact message. Validate it
+          // now and keep the exact-message RPC after bytes before publication.
+          message=validateKnown(raw,selected);break;
+         }
          if(!compatible.length)unmatched=page;
         }
        }
@@ -216,6 +245,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       const documentId=botSearchDocumentIdentity(message)!;
       if(reuseMenu&&downloadedDocuments.has(documentId))throw fail('file-invalid');
       check();
+      releaseWakeup();
       // A verified direct audio reply has already been delivered by the bot.
       f.delivery='acknowledged';
       const transferMs=botDownloadTransferMs(row.bytes);
@@ -245,6 +275,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
      }
      const baseline=botSearchBaseline(await rpc(ms=>dependency.readHistory(approved.peer,0,1,abort.signal,ms)),approved.botId);check();
      const randomId=randomLong();check();
+     startWakeup(approved.botId);
      f.delivery='uncertain';
      // Progress is advisory only, guarded immediately; it contains neither query nor peer.
      if(ctx.publish&&live(ctx,capture)){try{ctx.publish(Object.freeze({...e,type:'bot-search.sending',delivery:'uncertain'}));}catch{/* UI observers cannot change authority. */}}
@@ -301,10 +332,12 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
  * Injectable call is worker-private, never a root/session API. */
 export function createBotSearchSdkDriver(binding:AccountBinding,sessionId:string,sdk:{
  readonly call:BaseTelegramClient['call'];readonly providers:BotProvidersDriver;
+ readonly subscribeBotWakeup?:BotSearchDependency['subscribeBotWakeup'];
  readonly current:(signal:AbortSignal)=>void;readonly invalidateSession:()=>void;readonly isOtherDc?:(dcId:number)=>boolean|null;
  readonly getAccountCooldown:NonNullable<BotSearchDependency['getAccountCooldown']>;
 },time?:BotProvidersClock):BotSearchDriver {
  return createBotSearchDriver(binding,sessionId,{
+  subscribeBotWakeup:sdk.subscribeBotWakeup,
   captureProvider:(ref,revision)=>sdk.providers.captureSearchProvider(ref,revision),
   async resolveIdentity(username,abort,_timeout){sdk.current(abort);const r=await sdk.call({_: 'contacts.resolveUsername',username},{timeout:0,floodSleepThreshold:0,maxRetryCount:0});sdk.current(abort);return r;},
   async readHistory(peer,minId,limit,abort,_timeout){sdk.current(abort);const r=await sdk.call({_: 'messages.getHistory',peer,offsetId:0,offsetDate:0,addOffset:0,limit,maxId:0,minId,hash:Long.ZERO},{timeout:0,floodSleepThreshold:0,maxRetryCount:0});sdk.current(abort);return r;},

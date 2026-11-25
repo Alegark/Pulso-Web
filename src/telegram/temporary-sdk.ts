@@ -4,9 +4,10 @@ import {WebPlatform,WebSocketTransport,MemoryStorage} from '@mtcute/web';
 import {LogManager} from '@mtcute/core/utils.js';
 import {sendCode,resendCode,signIn,checkPassword,getMe} from '@mtcute/core/methods.js';
 import {getWasmUrl} from '@mtcute/wasm';
-import type {User} from '@mtcute/core';
+import type {tl,User} from '@mtcute/core';
 import Long from 'long';
 import {createBotSearchSdkDriver,type BotSearchDriver} from './bot-search-driver';
+import {isBotWakeupUpdate} from './bot-wakeup-update';
 import {createSourcesDriver,type SourcesDriver} from './sources-driver';
 import {createBotProvidersDriver,type BotProvidersDriver} from './bot-providers-driver';
 import type {AccountBinding} from './sources-protocol';
@@ -47,7 +48,7 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  const module=await WebAssembly.compile(await wasm.arrayBuffer());if(signal.aborted)throw Error('cancelled');
  const crypto=await openCrypto(module);if(signal.aborted)throw Error('cancelled');
  const platform=new WebPlatform();platform.log=()=>{};platform.getDefaultLogLevel=()=>LogManager.OFF;platform.getDeviceModel=()=> 'Pulso Web';
- const client=new BaseTelegramClient({apiId:identity.apiId,apiHash:identity.apiHash,storage:new MemoryStorage(),platform,crypto,transport:new WebSocketTransport(),updates:false,disableUpdates:true,storageOptions:{peers:{updatesWriteInterval:0}},logLevel:LogManager.OFF,initConnectionOptions:{appVersion:'Pulso Web 0.1',deviceModel:'Pulso Web',systemVersion:'Web',langCode:'es',systemLangCode:'es'}});
+ const client=new BaseTelegramClient({apiId:identity.apiId,apiHash:identity.apiHash,storage:new MemoryStorage(),platform,crypto,transport:new WebSocketTransport(),updates:false,disableUpdates:false,storageOptions:{peers:{updatesWriteInterval:0}},logLevel:LogManager.OFF,initConnectionOptions:{appVersion:'Pulso Web 0.1',deviceModel:'Pulso Web',systemVersion:'Web',langCode:'es',systemLangCode:'es'}});
  // Disable automatic RPC retries/flood sleeps. DC migration remains SDK-managed.
  const call=client.call.bind(client);client.call=async(message,params)=>{
   if(!message._.startsWith('auth.')&&message._!=='account.getPassword')admitAccountRead();
@@ -100,10 +101,16 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
   void closing.catch(()=>{});return closing;
  };
  const current=(abort:AbortSignal)=>{if(closed||signal.aborted||abort.aborted)throw Error('cancelled');};
- const authorized=(user:User)=>{if(user.type!=='user'||!user.isSelf||user.isBot||!Number.isSafeInteger(user.id)||user.id<=0)throw Error('unsupported');
+ const authorized=(user:User,restored=false)=>{if(user.type!=='user'||!user.isSelf||user.isBot||!Number.isSafeInteger(user.id)||user.id<=0)throw Error('unsupported');
   const key=`telegram-user:${user.id}`;
   if(accountKey&&accountKey!==key){void close().catch(()=>{});throw Error('unsupported');}
-  if(!binding){if(!Number.isSafeInteger(nextAccountEpoch+1))throw Error('unsupported');accountKey=key;binding=Object.freeze({accountRef:globalThis.crypto.randomUUID(),accountEpoch:++nextAccountEpoch});}
+  if(!binding){
+   if(!Number.isSafeInteger(nextAccountEpoch+1))throw Error('unsupported');
+   accountKey=key;binding=Object.freeze({accountRef:globalThis.crypto.randomUUID(),accountEpoch:++nextAccountEpoch});
+   // The main connection requests state when it becomes usable. During a fresh
+   // login that can happen before authorization, so repeat once for this session.
+   if(!restored&&!getAccountCooldown())void client.call({_:'updates.getState'}).catch(()=>{});
+  }
   phone=challenge='';codeResend=null;};
  const persist=async(abort:AbortSignal)=>{current(abort);let value:string;try{value=await client.exportSession();}catch{throw Error('session-storage');}current(abort);if(!await saveTelegramSession(lease,value))throw Error('session-storage');persisted=true;current(abort);};
  const qr=createQrLoginDriver({
@@ -115,7 +122,7 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  try{await client.prepare();current(signal);}catch(error){await close().catch(()=>{});throw error;}
  return Object.freeze({
   async forgetSavedAuthorization(abort:AbortSignal){current(abort);await clearTelegramSessionLease(lease);persisted=false;current(abort);},
-  async restore(abort:AbortSignal){current(abort);const saved=await loadTelegramSession();current(abort);if(!saved)return false;lease=saved.lease;persisted=true;try{await client.importSession(saved.value);current(abort);const user=await getMe(client);current(abort);if(!await telegramSessionLeaseCurrent(saved.lease))throw Error('session-expired');current(abort);const selection=await loadTelegramBotSelection(saved.lease);savedBots=selection.bots;confirmedBotRevision=selection.revision;current(abort);authorized(user);return true;}catch(error){if(classifyTelegramFailure(error).error==='session-expired'){if(persisted){await clearTelegramSessionLease(saved.lease);persisted=false;}throw Error('session-expired');}throw error;}},
+  async restore(abort:AbortSignal){current(abort);const saved=await loadTelegramSession();current(abort);if(!saved)return false;lease=saved.lease;persisted=true;try{await client.importSession(saved.value);current(abort);const user=await getMe(client);current(abort);if(!await telegramSessionLeaseCurrent(saved.lease))throw Error('session-expired');current(abort);const selection=await loadTelegramBotSelection(saved.lease);savedBots=selection.bots;confirmedBotRevision=selection.revision;current(abort);authorized(user,true);return true;}catch(error){if(classifyTelegramFailure(error).error==='session-expired'){if(persisted){await clearTelegramSessionLease(saved.lease);persisted=false;}throw Error('session-expired');}throw error;}},
   async begin(number:string,abort:AbortSignal){current(abort);lease=await sessionLease();current(abort);phone=number;const value=await sendCode(client,{phone,abortSignal:abort});current(abort);if(value.type==='user'){await persist(abort);authorized(value);return null;}return rememberCode(value);},
   getCodeResend,
   async beginQr(abort:AbortSignal){current(abort);lease=await sessionLease();current(abort);return qr.begin(abort);},
@@ -183,7 +190,13 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
    botSearchSession=sessionId;signal.addEventListener('abort',sourceLifetimeAbort,{once:true});
    let primaryDc:number|undefined;void client.getPrimaryDcId().then(id=>{primaryDc=id;}).catch(()=>{});
    botSearch=createBotSearchSdkDriver(binding,sessionId,{
-    call:accountRead,providers:botProviders,current,getAccountCooldown,isOtherDc:dcId=>primaryDc===undefined?null:primaryDc!==dcId,
+    call:accountRead,providers:botProviders,current,getAccountCooldown,
+    subscribeBotWakeup(botId,hint){
+     const onUpdate=(update:tl.TypeUpdates)=>{if(isBotWakeupUpdate(update,botId))hint();};
+     client.onServerUpdate.add(onUpdate);
+     return ()=>client.onServerUpdate.remove(onUpdate);
+    },
+    isOtherDc:dcId=>primaryDc===undefined?null:primaryDc!==dcId,
     invalidateSession(){void close().catch(()=>{});},
    });return botSearch;
   },
