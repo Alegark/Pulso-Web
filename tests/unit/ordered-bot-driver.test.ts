@@ -28,7 +28,8 @@ type Reply='direct-timeout'|'direct'|'menu-invalid'|'menu-large'|'callback-confl
 function setup(t:TestContext,replies:readonly Reply[]){
  t.mock.timers.enable({apis:['setTimeout','Date'],now:10_000});
  t.mock.method(performance,'now',()=>Date.now());
- const binding={accountRef:crypto.randomUUID(),accountEpoch:1},sessionId=crypto.randomUUID();
+ const binding={accountRef:crypto.randomUUID(),accountEpoch:1};
+ let sessionId=crypto.randomUUID(),activeProviders=providers;
  const searches:string[]=[],callbacks:number[]=[],errors:Extract<BotSearchReply,{type:'bot-search.error'}>[]=[];
  const listeners=new Set<(value:BotSearchSnapshot)=>void>();
  const allowed={search:true,selection:true};
@@ -38,9 +39,9 @@ function setup(t:TestContext,replies:readonly Reply[]){
   assert.equal(peer._,'inputPeerUser');
   return peer.userId;
  };
- const driver=createBotSearchDriver(binding,sessionId,{
+ const dependency:BotSearchDependency={
   captureProvider(ref){
-   const index=providers.findIndex(p=>p.providerRef===ref);
+   const index=activeProviders.findIndex(p=>p.providerRef===ref);
    if(index<0)return null;
    const username=index===0?'ivkmbot':'lydbot';
    return {username,current:()=>true,verifyIdentity:()=>({botId:index+101,
@@ -88,7 +89,8 @@ function setup(t:TestContext,replies:readonly Reply[]){
    return audio;
   },
   invalidateSession(){invalidated=true;},
- });
+ };
+ let driver=createBotSearchDriver(binding,sessionId,dependency);
  t.after(()=>{pendingTransfer?.();driver.close();});
  let state:BotSearchSnapshot={binding,scopeKey:'fixture',providerRevision:4,providerRef:null,queryId:null,expectedTarget:null,
   pending:false,available:true,cancelling:false,retryBlocked:false,retryAt:null,error:null,delivery:'not-dispatched',
@@ -153,7 +155,14 @@ function setup(t:TestContext,replies:readonly Reply[]){
   return result;
  }
  return {params,searches,callbacks,errors,allowed,drive,get transferStarted(){return transferStarted;},
-  clearSelection:()=>publish({queryId:null,providerRef:null,rows:[],expiresAt:null,error:null}),
+  reconnect(){
+   driver.close();
+   sessionId=crypto.randomUUID();
+   activeProviders=activeProviders.map(provider=>({...provider,providerRef:crypto.randomUUID()}));
+   params.providers=activeProviders;
+   driver=createBotSearchDriver(binding,sessionId,dependency);
+   publish({queryId:null,providerRef:null,rows:[],expiresAt:null,error:null});
+  },
   async foreignExpired(){
    const previous=lastSearch!;
    const reply=await execute(previous);
@@ -208,9 +217,9 @@ for(const [scenario,expectedError] of [['menu-invalid','file-invalid'],['menu-la
   assert.equal(collection.completed.size,0);
   assert.deepEqual(f.callbacks,[1]);
   f.params.client.captureSearchActionCurrent=capture;
-  f.clearSelection();
+  f.reconnect();
   assert.equal((await f.drive(acquireFromOrderedBots({...f.params,collection,accept}))).state,'audio');
-  assert.deepEqual(f.searches,[providers[0].providerRef,providers[0].providerRef]);
+  assert.deepEqual(f.searches,[providers[0].providerRef,f.params.providers[0].providerRef]);
   assert.deepEqual(f.callbacks,[1,2]);
  });
 

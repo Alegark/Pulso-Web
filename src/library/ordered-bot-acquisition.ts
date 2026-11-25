@@ -50,7 +50,7 @@ export interface CollectionBotProgress {
  reasons:AcquisitionFailureReason[];
  timedOut?:boolean;
  resumeBot?:number;
- rejectedRows?:Set<string>;
+ rejectedOptions?:Set<string>;
 }
 
 type Result={state:'audio';audio:BotDownloadedAudio}|{state:'known-failure';reasons:readonly AcquisitionFailureReason[]}|{state:'uncertain'|'unavailable'|'timed-out'|'parked'|'stopped'|'telegram'|'suspended'};
@@ -73,7 +73,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
  const resume=order.findIndex(provider=>provider.i===collection?.resumeBot);
  if(resume>0)order.unshift(...order.splice(resume,1));
  let precedingBot=false;
- const reasons=collection?.reasons??[],excludedRows=new Set([...(p.excludedRowKeys??[]),...(collection?.rejectedRows??[])]);
+ const reasons=collection?.reasons??[],excludedRows=new Set(p.excludedRowKeys);
  let expired=false,unavailable=false,incompleteBot=false,botTimedOut=false,botUntil=Infinity;
  const botExpired=()=>botTimedOut||botUntil<deadline&&performance.now()>=botUntil;
  const until=()=>Math.min(botUntil,deadline);
@@ -170,7 +170,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
    const botStarted=performance.now();
    let healthOutcome:BotSearchError|'reply'|undefined;
    let selections=0,retries=0,metadataRejections=0,selectionRetried=false,reusableQuery:string|null=null,callbackBudget:number=BOT_SEARCH_BOUNDS.callbackBudgetMs;
-   const filteredOptions=new Set<string>(),optionKeys=new Map<string,string>();
+   const filteredOptions=new Set<string>(),optionKeys=new Map<string,{key:string;resumeKey?:string}>();
    const markBotTimeout=()=>{
     incompleteBot=true;
     if(collection)collection.timedOut=true;
@@ -253,17 +253,21 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     healthOutcome??='reply';
     const occurrences=new Map<string,number>();
     const matches=matchingSongRows(reuse?found.rows.filter(row=>row.kind==='option'):found.rows,target).map(row=>{
-     const retainedKey=optionKeys.get(row.rowRef);
-     if(retainedKey)return {row,key:retainedKey};
-     const identity=JSON.stringify([provider.providerRef,...candidateIdentity(row)]);
+     const retained=optionKeys.get(row.rowRef);
+     if(retained)return {row,...retained};
+     const fields=candidateIdentity(row);
+     const identity=JSON.stringify([provider.providerRef,...fields]);
      const occurrence=occurrences.get(identity)??0;
      occurrences.set(identity,occurrence+1);
      // The first occurrence uses the key already stored in v50 checkpoints.
      const key=bytesToHex(sha256(new TextEncoder().encode(occurrence?JSON.stringify([identity,occurrence]):identity)));
-     if(row.kind==='option')optionKeys.set(row.rowRef,key);
-     return {row,key};
-    }).filter(({row,key})=>{
-     if(excludedRows.has(key))return false;
+     // A restored worker issues new refs. The collection verifies the bot order
+     // before reusing this slot, while checkpoint keys keep their existing format.
+     const resumeKey=collection&&row.kind==='option'?JSON.stringify([i,fields,occurrence]):undefined;
+     if(row.kind==='option')optionKeys.set(row.rowRef,{key,resumeKey});
+     return {row,key,resumeKey};
+    }).filter(({row,key,resumeKey})=>{
+     if(excludedRows.has(key)||resumeKey!==undefined&&collection?.rejectedOptions?.has(resumeKey))return false;
      if(!botOptionDurationMismatch(row,target))return true;
      if(!filteredOptions.has(key)){
       filteredOptions.add(key);measurement?.candidate(true);if(measurement)measurement.values.candidatesRejected++;
@@ -431,7 +435,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     if(audio&&measurement)measurement.values.candidatesRejected++;
     if(excludedAudio)measurement?.rejection('file-invalid');
     excludedRows.add(selected.key);
-    if(collection)(collection.rejectedRows??=new Set()).add(selected.key);
+    if(collection&&selected.resumeKey!==undefined)(collection.rejectedOptions??=new Set()).add(selected.resumeKey);
     selections++;
     if(!p.accept||!hasAlternate||metadataRejections>=METADATA_REJECTIONS_PER_BOT)break;
     if(menu&&afterOwn&&after.expiresAt!==null&&after.rows.some(row=>row.kind==='option'))reusableQuery=queryId;
