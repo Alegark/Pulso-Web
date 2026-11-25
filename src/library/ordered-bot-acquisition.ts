@@ -332,7 +332,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     const afterOwn=owned(after,provider.providerRef,queryId);
     if(admittedDownload&&!audio&&(expired||botExpired()))observeError('timeout',downloadStarted);
     else if(admittedDownload&&afterOwn&&after.error)observeError(after.error,downloadStarted);
-    if(reuse&&afterOwn&&after.delivery==='not-dispatched'&&(after.error==='conflict'||after.error==='expired')&&!selectionRetried&&live()){
+    if(!batch&&reuse&&afterOwn&&after.delivery==='not-dispatched'&&(after.error==='conflict'||after.error==='expired')&&!selectionRetried&&live()){
      selectionRetried=true;continue;
     }
     if(admittedDownload&&measurement){
@@ -344,7 +344,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     if(failure==='timed-out'){markBotTimeout();break;}
     if(failure==='no-compatible-row'){reasons.push(failure);break;}
     if(failure==='selection-changed'){
-     if(after.error!=='conflict'&&!selectionRetried&&live()){selectionRetried=true;continue;}
+     if((reuse||after.error!=='conflict')&&!selectionRetried&&live()){selectionRetried=true;continue;}
      reasons.push(failure);break;
     }
     if(failure==='inconclusive'){
