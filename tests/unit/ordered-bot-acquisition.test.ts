@@ -137,8 +137,8 @@ test('acknowledged incompatible full credit reports artist only and never return
 function collectionProgress():CollectionBotProgress{
  return {completed:new Set(),reasons:[]};
 }
-function collect(client:TelegramSessionClient,collection=collectionProgress()){
- return acquireFromOrderedBots({client,collection,providers,revision:4,target,signal:new AbortController().signal,
+function collect(client:TelegramSessionClient,collection=collectionProgress(),suspended?:()=>boolean){
+ return acquireFromOrderedBots({client,collection,providers,revision:4,target,signal:new AbortController().signal,suspended,
   current:()=>true,networkCurrent:client.captureBotsCurrent(),progress:()=>{},accept:async()=>'saved'});
 }
 
@@ -152,7 +152,7 @@ test('collection tries the next provider after an isolated timeout or unsupporte
 
 test('collection continues after all bots time out or reject the song while Telegram remains available',async()=>{
  const silent=fixture(['timeout','uncertain']);
- assert.deepEqual(await collect(silent.client),{state:'known-failure',reasons:['no-compatible-row']});
+ assert.deepEqual(await collect(silent.client,collectionProgress(),()=>true),{state:'known-failure',reasons:['no-compatible-row']});
  assert.deepEqual(silent.searches,['one','two']);
  const answered=fixture(['empty','timeout']);
  assert.deepEqual(await collect(answered.client),{state:'known-failure',reasons:['no-compatible-row']});

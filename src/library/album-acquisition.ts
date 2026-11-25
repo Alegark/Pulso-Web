@@ -50,7 +50,7 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<'completed'|'inte
     let pending:PendingDownload|undefined;
     const result=await downloadSong({client:p.client,providers,revision:p.revision,signal:p.signal,current:live,networkCurrent:()=>networkCurrent()&&globalThis.navigator?.onLine!==false,remoteClock,interruptOnTelegram:p.interruptOnTelegram,
      attempt:p.attempt,choice,index:i,mark:value=>{pending=value;},message:message=>{row.message=message;update(message);},progress:()=>{}});
-    if(result.state==='stopped'||result.state==='telegram'||!live()){
+    if(result.state==='stopped'||result.state==='telegram'||result.state==='suspended'||!live()){
      if(pending?.kind==='save')park();
      interruption=result.state==='telegram'?'Telegram se interrumpió. Las copias ya confirmadas se conservan.':storageStopped;
      break;

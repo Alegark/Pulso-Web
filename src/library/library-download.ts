@@ -156,12 +156,12 @@ export async function downloadLibrarySelection(p:{
      const audioCurrent=()=>captured()&&p.client.botsSnapshot().revision===bots.revision;
      const crossedSuspension=()=>wait.generation()!==generation&&wait.generation()!==lastSuspension;
      const result=await downloadSong({...p,providers,revision:bots.revision,collection,measurement,choice,trackId:track.id,index:i,current:live,
-      networkCurrent:()=>audioCurrent()&&wait.online(),audioCurrent,remoteClock,
+      networkCurrent:()=>audioCurrent()&&wait.online(),audioCurrent,suspended:crossedSuspension,remoteClock,
       waitForDownload,previousAttempts:attempts.get(track.id),onFailedCandidates:candidates=>attempts.set(track.id,candidates),
       mark:value=>{pending=value;mark(i,value);},message:status,progress:()=>{}});
      if(!live())return stop();
      if(result.state==='stopped')return storagePause();
-     if(result.state!=='telegram'){
+     if(result.state!=='telegram'&&result.state!=='suspended'){
       Object.assign(row,result);
       if(result.reason==='missing-metadata')row.state='unattempted';
       break;

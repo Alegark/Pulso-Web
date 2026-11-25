@@ -46,7 +46,7 @@ export interface CollectionBotProgress {
  reasons:AcquisitionFailureReason[];
 }
 
-type Result={state:'audio';audio:BotDownloadedAudio}|{state:'known-failure';reasons:readonly AcquisitionFailureReason[]}|{state:'uncertain'|'unavailable'|'timed-out'|'parked'|'stopped'|'telegram'};
+type Result={state:'audio';audio:BotDownloadedAudio}|{state:'known-failure';reasons:readonly AcquisitionFailureReason[]}|{state:'uncertain'|'unavailable'|'timed-out'|'parked'|'stopped'|'telegram'|'suspended'};
 /** Reissued queries get fresh rowRefs. Exclude the same projected selection across queries. */
 function candidateIdentity(row:BotSearchRow):readonly unknown[]{
  return row.kind==='option'?[row.kind,row.label]:row.kind==='audio'?[row.kind,row.title,row.performer,row.durationSeconds,row.mimeType,row.bytes]:[row.kind,row.text];
@@ -56,7 +56,7 @@ const mismatchReason=(field:ReturnType<typeof botAudioMismatchFields>[number])=>
 const mismatchText=(fields:ReadonlySet<SongRejection>)=>[fields.has('mismatch-title')?'título/versión':'',fields.has('mismatch-artist')?'artista':'',fields.has('mismatch-duration')?'duración':''].filter(Boolean).join(', ');
 const mb=(bytes:number,total:number)=>{const digits=total<100_000?2:1;return (bytes/1_000_000).toLocaleString('es',{minimumFractionDigits:digits,maximumFractionDigits:digits});};
 
-export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;providers:readonly OrderedProvider[];revision:number;target:BotSearchTarget;signal:AbortSignal;current:()=>boolean;networkCurrent:()=>boolean;audioCurrent?:()=>boolean;interruptOnTelegram?:boolean;remoteClock?:{settledAt:number};collection?:CollectionBotProgress;accept?:(audio:BotDownloadedAudio,rowKey:string)=>Promise<CandidateDisposition|'saved'>;excludedDigests?:ReadonlySet<string>;excludedRowKeys?:ReadonlySet<string>;measurement?:SongMeasurement;status?:(message:string)=>void;progress:(provider:OrderedProvider,index:number,queryId:string|null)=>void}):Promise<Result> {
+export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;providers:readonly OrderedProvider[];revision:number;target:BotSearchTarget;signal:AbortSignal;current:()=>boolean;networkCurrent:()=>boolean;audioCurrent?:()=>boolean;suspended?:()=>boolean;interruptOnTelegram?:boolean;remoteClock?:{settledAt:number};collection?:CollectionBotProgress;accept?:(audio:BotDownloadedAudio,rowKey:string)=>Promise<CandidateDisposition|'saved'>;excludedDigests?:ReadonlySet<string>;excludedRowKeys?:ReadonlySet<string>;measurement?:SongMeasurement;status?:(message:string)=>void;progress:(provider:OrderedProvider,index:number,queryId:string|null)=>void}):Promise<Result> {
  const {client}=p,target={...p.target},network=p.networkCurrent,current=p.current,revision=p.revision,collection=p.collection;
  let deadline=performance.now()+SONG_SEARCH_MS;
  const ownMeasurement=!p.accept&&!p.measurement,measurement=p.measurement??(ownMeasurement?beginSongAggregate():undefined);
@@ -85,6 +85,9 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
  });
  const wait=async()=>{const ms=p.remoteClock?Math.max(0,p.remoteClock.settledAt+1000-Date.now()):0;if(ms)await delay(ms);};
  const batch=!!(collection||p.interruptOnTelegram);
+ // A document that slept through the entire song budget lost the operation
+ // to local cancellation. Retry it on wake without counting a bot failure.
+ const expiredDuringSuspension=()=>!!p.suspended?.()&&performance.now()>=deadline;
  const channelDown=(state:ReturnType<TelegramSessionClient['searchSnapshot']>,ownError=false)=>
   !network()||client.botsSnapshot().revision!==revision||!state.available||state.retryBlocked||(state.retryAt??0)>Date.now()||
   (client.snapshot?.().retryAt??0)>Date.now()||ownError&&['network','session-expired','rate-limit'].includes(state.error??'');
@@ -194,6 +197,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     const found=client.searchSnapshot();
     if(!same(found,provider.providerRef,queryId)||!reuse&&found.error||found.delivery!=='acknowledged'||!live()){
      const ownReply=owned(found,provider.providerRef,queryId);
+     if(queryId&&expiredDuringSuspension()&&!confirmedRejection(found,ownReply)&&current()&&!p.signal.aborted)return {state:'suspended'};
      if(queryId&&(expired||botExpired()))observeError('timeout',searchStarted);
      else if(ownReply&&found.error)observeError(found.error,searchStarted);
      if(botExpired()&&!channelDown(found,ownReply)){
@@ -294,6 +298,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     if(batch&&audio&&!audioAuthorized)return {state:current()&&!p.signal.aborted?'telegram':'stopped'};
     const received=collection&&audio&&admittedDownload&&audioAuthorized&&!!p.audioCurrent;
     const afterOwn=owned(after,provider.providerRef,queryId);
+    if(admittedDownload&&!audio&&expiredDuringSuspension()&&!confirmedRejection(after,afterOwn)&&current()&&!p.signal.aborted)return {state:'suspended'};
     if(admittedDownload&&!audio&&(expired||botExpired()))observeError('timeout',downloadStarted);
     else if(admittedDownload&&afterOwn&&after.error)observeError(after.error,downloadStarted);
     if(reuse&&afterOwn&&after.delivery==='not-dispatched'&&(after.error==='conflict'||after.error==='expired')&&!selectionRetried&&live()){
