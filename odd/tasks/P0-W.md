@@ -2493,4 +2493,6 @@ Caché: 17/22 inicialmente; C03 WebKit (dos casos) pasó al repetir. C04 portada
 
 Corrección C06: la prueba móvil estaba en detalle de biblioteca, que oculta la cabecera; volver a Inicio permite cerrar sesión. C06 pasa en ambos motores con purga por cuenta y comparación de biblioteca/OPFS/Cache API; la comparación de IndexedDB local no cubre todos sus almacenes. En la batería de caché, C02 WebKit falló en el recuento de desalojo (21/22).
 
+Corrección C02: la prueba esperaba menos de 670 entradas aunque 31 escrituras nuevas dejan 670 tras el desalojo; WebKit midió 669/670/670 y finalmente 639 antiguas + 31 nuevas. Ahora espera las 30 portadas persistidas y comprueba 639 antiguas y el tope: C02 PASS en ambos motores; batería Chromium 11/11, WebKit 9/11 (fallos C03 reapertura y C04 incrustada, ya observados); tipos y lint PASS.
+
 Mediciones sintéticas Chromium, cinco corridas por versión: primer sonido de una pista v62→v63, IDB 550→495 ms y OPFS 1114→574 ms; playlist de 30 pistas IDB 6467→718 ms y OPFS 13796→627 ms. T27 P01 no alcanzó la reducción exigida del 50 % para una pista (10,0 % IDB y 48,5 % OPFS); P02 y P05 pasaron en estas mediciones. Tras volver de segundo plano M1: 2633→2642 ms. Revisión independiente y aceptación física en iPhone pendientes; esta integración no constituye publicación.

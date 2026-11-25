@@ -381,8 +381,17 @@ try{
     },{cacheName,accountA});
     page=await closeAndReopen(page);
     await observe(page,origin,'after-seeding-lru');
+    // Las imágenes visibles pueden cargarse antes de que finalicen sus escrituras en IDB.
+    await page.waitForFunction(async cacheName=>{
+     const db=await new Promise((ok,fail)=>{const req=indexedDB.open(cacheName);req.onsuccess=()=>ok(req.result);req.onerror=fail;});
+     try{
+      const rows=await new Promise((ok,fail)=>{const req=db.transaction('artwork').objectStore('artwork').getAll();req.onsuccess=()=>ok(req.result);req.onerror=fail;});
+      return rows.filter(x=>x.artworkKey.includes('/fixture/')).length===30&&rows.filter(x=>x.artworkKey.startsWith('old-')).length===639;
+     }finally{db.close();}
+    },cacheName);
     const compact=await inspect(page);
-    assert.ok(compact.artwork.length>=640&&compact.artwork.length<670);
+    assert.equal(compact.artwork.filter(x=>x.artworkKey.startsWith('old-')).length,639);
+    assert.ok(compact.artwork.length<=800);
     assert.ok(compact.artwork.some(x=>x.artworkKey==='old-799'));
     assert.ok(!compact.artwork.some(x=>x.artworkKey==='old-0'));
     page=await closeAndReopen(page);
