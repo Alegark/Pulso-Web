@@ -8,7 +8,7 @@ import {bytesToHex} from '@noble/hashes/utils.js';
 import {formatStorageMB} from './storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {matchingSongRows,type SongImportRejection} from './selected-song';
-import {BOT_SEARCH_BOUNDS,botAudioMismatchFields,botOptionDurationMismatch,isBotSearchLimitError,type BotSearchError,type BotSearchTarget,type BotDownloadedAudio,type BotSearchRow} from '../telegram/bot-search-protocol';
+import {BOT_SEARCH_BOUNDS,botAudioMismatchFields,botOptionDurationMismatch,botSearchReportsNoResults,isBotSearchLimitError,type BotSearchError,type BotSearchTarget,type BotDownloadedAudio,type BotSearchRow} from '../telegram/bot-search-protocol';
 import type {BotSearchSnapshot,BotsSnapshot,TelegramSessionClient} from '../telegram/session-client';
 
 export type OrderedProvider={providerRef:string;label:string};
@@ -16,13 +16,17 @@ export function orderedProviders(bots:BotsSnapshot|null):OrderedProvider[] {
  const seen=new Set<string>(),usernames=new Set<string>();
  return (bots?.providers??[]).filter(p=>{const username=p.username.toLowerCase();if(!['ivkmbot','lydbot','ansmusicbot','kdmusic_bot','deezermusicbot'].includes(username)||seen.has(p.providerRef)||usernames.has(username))return false;seen.add(p.providerRef);usernames.add(username);return true;}).slice(0,5).map(p=>({providerRef:p.providerRef,label:p.label}));
 }
-export type AcquisitionFailureReason='no-compatible-row'|'returned-audio-mismatch'|'file-too-large'|'file-invalid'|'selection-changed'|'audio-title-version-mismatch'|'audio-artist-mismatch'|'audio-duration-mismatch';
+export type AcquisitionFailureReason='no-results'|'needs-start'|'bot-limit'|'unsupported'|'no-compatible-row'|'returned-audio-mismatch'|'file-too-large'|'file-invalid'|'selection-changed'|'audio-title-version-mismatch'|'audio-artist-mismatch'|'audio-duration-mismatch';
 /** Closed explanations shared by individual and album acquisition. Never assert
  * catalogue absence from a local validation failure. */
 export function acquisitionFailureText(reasons:readonly AcquisitionFailureReason[]):string {
  const fields=[...new Set(reasons)].flatMap(reason=>reason==='audio-title-version-mismatch'?['título/versión']:reason==='audio-artist-mismatch'?['artista']:reason==='audio-duration-mismatch'?['duración']:[]);
  const mismatch=fields.length?`Diferencias observadas en los audios recibidos: ${fields.join(', ')}. [D02]`:'El audio recibido no coincide con la canción. [D02]';
  const messages:Record<AcquisitionFailureReason,string>={
+  'no-results':'No existe en tus bots',
+  'needs-start':'Un bot necesita que envíes /start en Telegram',
+  'bot-limit':'Un bot alcanzó un límite de búsqueda o descarga',
+  'unsupported':'Ningún bot entregó un archivo compatible',
   'no-compatible-row':'Las opciones del bot no pudieron vincularse con el título y artista elegidos. [D01]',
   'returned-audio-mismatch':mismatch,
   'audio-title-version-mismatch':'En los audios recibidos se observó título o versión incompatible.',
@@ -46,6 +50,7 @@ export interface CollectionBotProgress {
  reasons:AcquisitionFailureReason[];
  timedOut?:boolean;
  resumeBot?:number;
+ rejectedRows?:Set<string>;
 }
 
 type Result={state:'audio';audio:BotDownloadedAudio}|{state:'known-failure';reasons:readonly AcquisitionFailureReason[]}|{state:'uncertain'|'unavailable'|'timed-out'|'parked'|'stopped'|'telegram'|'suspended'};
@@ -68,7 +73,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
  const resume=order.findIndex(provider=>provider.i===collection?.resumeBot);
  if(resume>0)order.unshift(...order.splice(resume,1));
  let precedingBot=false;
- const reasons=collection?.reasons??[],excludedRows=new Set(p.excludedRowKeys);
+ const reasons=collection?.reasons??[],excludedRows=new Set([...(p.excludedRowKeys??[]),...(collection?.rejectedRows??[])]);
  let expired=false,unavailable=false,incompleteBot=false,botTimedOut=false,botUntil=Infinity;
  const botExpired=()=>botTimedOut||botUntil<deadline&&performance.now()>=botUntil;
  const until=()=>Math.min(botUntil,deadline);
@@ -128,25 +133,27 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
   owned(s,provider,q)&&!s.pending&&s.available&&!s.retryBlocked&&(s.retryAt===null||s.retryAt<=Date.now());
  // Only the current operation can establish a bot failure. A foreign
  // snapshot can still report a channel-wide outage or cooldown.
- const classifyBatchFailure=(state:BotSearchSnapshot,own:boolean,phase:'search'|'selection'|'download')=>{
-  const error=own?state.error:null,delivery=own?state.delivery:null;
+ const classifyBatchFailure=(state:BotSearchSnapshot,own:boolean,phase:'search'|'selection'|'download',displaced=false)=>{
+  // A retained menu can still carry the previous option's failure before admission.
+  const ownReply=own&&phase!=='selection';
+  const error=ownReply?state.error:null,delivery=ownReply?state.delivery:null;
   const invalid=error==='file-too-large'||error==='file-invalid';
-  const absent=error==='unsupported'||error==='needs-start'||error==='limit'||isBotSearchLimitError(error);
-  const acknowledged=own&&delivery==='acknowledged'&&!state.pending;
-  const noMatch=acknowledged&&error===null&&!matchingSongRows(
-   phase==='download'?state.rows.filter(row=>row.kind==='audio'):state.rows,target).length;
-  const empty=noMatch&&(phase==='search'||!state.rows.length);
-  const mismatch=noMatch&&phase==='download'&&state.rows.some(row=>row.kind==='audio');
-  const conclusive=delivery!=='uncertain'&&(invalid||absent||empty||mismatch);
+  const rejected=error==='unsupported'||error==='needs-start'?error:
+   error==='limit'||isBotSearchLimitError(error)?'bot-limit':null;
+  const mismatch=phase==='download'&&delivery==='acknowledged'&&!state.pending&&error===null&&
+   state.rows.some(row=>row.kind==='audio')&&!matchingSongRows(state.rows.filter(row=>row.kind==='audio'),target).length;
+  const conflictAfterReply=phase==='download'&&error==='conflict'&&delivery==='acknowledged';
+  const conclusive=delivery!=='uncertain'&&(invalid||rejected||mismatch||conflictAfterReply);
   if(!current()||p.signal.aborted)return 'stopped';
   if(p.suspended?.()&&!conclusive)return 'suspended';
   if(channelDown(state)||delivery==='uncertain'||error==='network'||error==='session-expired'||error==='rate-limit'||error==='uncertain'||
    error==='timeout'&&delivery==='not-dispatched')return 'telegram';
   if(error==='timeout'||!conclusive&&(expired||botExpired()))return 'timed-out';
   if(invalid)return error;
-  if(absent||empty)return 'no-compatible-row';
+  if(rejected)return rejected;
   if(mismatch)return 'audio-mismatch';
-  if(phase==='selection'||state.error==='expired'||own&&error==='conflict'&&delivery==='not-dispatched')return 'selection-changed';
+  if(conflictAfterReply)return 'delivery-conflict';
+  if(displaced||phase==='download'&&(error==='expired'||error==='conflict'&&delivery==='not-dispatched'))return 'selection-changed';
   return 'inconclusive';
  };
  try {
@@ -231,9 +238,9 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
       if(failure==='suspended'||failure==='telegram'||failure==='stopped')return {state:failure};
       if(failure==='timed-out'){markBotTimeout();break;}
       if(!queryId&&(found.pending||found.cancelling))continue;
-      if((!ownReply||failure==='selection-changed')&&!selectionRetried&&live()){selectionRetried=true;continue;}
+      if(!ownReply&&!selectionRetried&&live()){selectionRetried=true;continue;}
       if(failure==='inconclusive')return {state:'telegram'};
-      if(failure!=='audio-mismatch')reasons.push(failure);
+      if(failure!=='audio-mismatch'&&failure!=='delivery-conflict')reasons.push(failure);
       break;
      }
      if(botExpired()&&!channelDown(found)){markBotTimeout();break;}
@@ -267,7 +274,14 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      return false;
     });
     const selected=matches[0];
-    if(!selected){if(!selections&&!filteredOptions.size){reasons.push('no-compatible-row');measurement?.rejection('no-compatible-row');}break;}
+    if(!selected){
+     if(!selections&&!filteredOptions.size){
+      const absent=!reuse&&found.rows.some(botSearchReportsNoResults)&&found.rows.every(row=>row.kind==='message');
+      reasons.push(absent?'no-results':'no-compatible-row');
+      measurement?.rejection('no-compatible-row');
+     }
+     break;
+    }
     const menu=selected.row.kind==='option';
     if(menu&&callbackBudget<=0)break;
     const hasAlternate=matches.some(candidate=>candidate.key!==selected.key);
@@ -284,17 +298,17 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      return {state:current()&&!p.signal.aborted?'unavailable':'stopped'};
     }
     const prior=client.searchSnapshot(),allowed=client.captureSearchActionCurrent();
-    if(!live()||!same(prior,provider.providerRef,queryId)||(!reuse&&prior.error)||prior.delivery!=='acknowledged'||!prior.rows.some(r=>r.rowRef===selected.row.rowRef)||!allowed()){
+    const retained=prior.rows.some(row=>row.rowRef===selected.row.rowRef);
+    if(!live()||!same(prior,provider.providerRef,queryId)||(!reuse&&prior.error)||prior.delivery!=='acknowledged'||!retained||!allowed()){
      if(batch){
-      const failure=classifyBatchFailure(prior,owned(prior,provider.providerRef,queryId),'selection');
+      const displaced=prior.queryId!==queryId||!retained;
+      const failure=classifyBatchFailure(prior,false,'selection',displaced);
       if(failure==='suspended'||failure==='telegram'||failure==='stopped')return {state:failure};
       if(failure==='timed-out'){markBotTimeout();break;}
       // A manual search or expiry may replace the selected row.
-      if(!same(prior,provider.providerRef,queryId)&&!selectionRetried&&live()){
-       selectionRetried=true;continue;
-      }
-      const reason=failure==='file-invalid'||failure==='file-too-large'||failure==='no-compatible-row'?failure:'selection-changed';
-      reasons.push(reason);measurement?.rejection(reason);break;
+      if(failure!=='selection-changed')return {state:'telegram'};
+      if(!selectionRetried&&live()){selectionRetried=true;continue;}
+      reasons.push(failure);measurement?.rejection(failure);break;
      }
      if((expired||botExpired())&&!channelDown(prior)){markBotTimeout();break;}
      if(!p.accept)return {state:'uncertain'};
@@ -342,7 +356,8 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     const failure=batch&&!audio?classifyBatchFailure(after,afterOwn&&admittedDownload,'download'):undefined;
     if(failure==='suspended'||failure==='telegram'||failure==='stopped')return {state:failure};
     if(failure==='timed-out'){markBotTimeout();break;}
-    if(failure==='no-compatible-row'){reasons.push(failure);break;}
+    if(failure==='unsupported'||failure==='needs-start'||failure==='bot-limit'){reasons.push(failure);break;}
+    if(failure==='delivery-conflict'){reasons.push('selection-changed');break;}
     if(failure==='selection-changed'){
      if((reuse||after.error!=='conflict')&&!selectionRetried&&live()){selectionRetried=true;continue;}
      reasons.push(failure);break;
@@ -416,6 +431,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     if(audio&&measurement)measurement.values.candidatesRejected++;
     if(excludedAudio)measurement?.rejection('file-invalid');
     excludedRows.add(selected.key);
+    if(collection)(collection.rejectedRows??=new Set()).add(selected.key);
     selections++;
     if(!p.accept||!hasAlternate||metadataRejections>=METADATA_REJECTIONS_PER_BOT)break;
     if(menu&&afterOwn&&after.expiresAt!==null&&after.rows.some(row=>row.kind==='option'))reusableQuery=queryId;
@@ -427,8 +443,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
   if(!current()||p.signal.aborted)return {state:p.accept?'stopped':'uncertain'};
   if(batch&&channelDown(client.searchSnapshot()))return {state:'telegram'};
   if(incompleteBot||collection?.timedOut)return {state:batch?'timed-out':p.accept?'unavailable':'uncertain'};
-  if(batch&&!reasons.length)reasons.push('no-compatible-row');
-  if(!batch&&unavailable&&reasons.every(reason=>reason==='no-compatible-row'))return {state:'unavailable'};
+  if(!batch&&unavailable&&reasons.every(reason=>reason==='no-compatible-row'||reason==='no-results'))return {state:'unavailable'};
   return {state:'known-failure',reasons};
  }catch{cancel();return {state:batch&&channelDown(client.searchSnapshot())?'telegram':'uncertain'};}finally{clearTimeout(timer);p.signal.removeEventListener('abort',cancel);if(ownMeasurement)measurement?.finish();}
 }

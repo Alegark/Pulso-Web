@@ -25,6 +25,8 @@ export interface CollectionDownloadAction {
  disabled:boolean;
 }
 
+const MAX_AUTOMATIC_QUEUE_RELAUNCHES=1;
+
 export function LibraryDownloadController(props:{libraryPending?:boolean;libraryLoaded:boolean;captureAlbum?:()=>SongPlaybackAttempt|null;saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure:SavedAlbumFailures)=>Promise<SaveAlbumResult>;captureAlbumManagement?:(id:string)=>SongManagement|null;captureOwner?:()=>()=>boolean;storageReady?:()=>boolean;updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;collection?:CollectionDownloadAction;storageTarget?:HTMLElement|null;accountId?:string;captureLifetime?:()=>()=>boolean;onReviewStorage?:()=>void;onReviewed?:(operationId?:string)=>void;tracks:readonly Track[];client:TelegramSessionClient|null;bots:BotsSnapshot|null;connected:boolean;connectionPhase?:'initializing'|'connected'|'disconnected'|'blocked';capture?:()=>SongPlaybackAttempt|null;capturePlay?:()=>SongPlaybackAttempt|null;captureBatch?:(recoverPending?:boolean)=>SongPlaybackAttempt|null}){
  const download=useAlbumDownloadState();
  const latest=useRef(props);latest.current=props;
@@ -34,7 +36,8 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
  const [retaking,setRetaking]=useState(false);
  const [,wake]=useState(0);
  const dispatch=useRef<{account:string;key:string;cancelled:boolean}|null>(null);
- const pausedHead=useRef<{id:string;untilReady:boolean}|null>(null);
+ const pausedHead=useRef<{id:string;resumeAfterOffline:boolean}|null>(null);
+ const queueRelaunches=useRef<{id:string;count:number}|null>(null);
  const clearPausedHead=()=>{if(pausedHead.current){pausedHead.current=null;wake(value=>value+1);}};
  const ownedNotice=useRef<typeof albumCoordinator.notice>(undefined);
  const [notice,setNoticeMessage]=useState<{text:string}|null>(null);
@@ -358,15 +361,25 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
    if(albumCoordinator.active?.accountId===latest.current.accountId)albumCoordinator.active?.abort.abort();
   };
   const networkChanged=()=>wake(value=>value+1);
+  let wasOffline=navigator.onLine===false;
+  const updateConnectivity=()=>{
+   const offline=navigator.onLine===false;
+   if(wasOffline&&!offline){
+    if(queueRelaunches.current)queueRelaunches.current.count=0;
+    if(pausedHead.current?.resumeAfterOffline)clearPausedHead();
+   }
+   wasOffline=offline;
+  };
   const foreground=()=>{
+   updateConnectivity();
    if(document.visibilityState==='hidden'){networkChanged();return;}
-   if(pausedHead.current?.untilReady)pausedHead.current=null;
    autoArmed.current=true;networkChanged();
   };
+  const offline=()=>{updateConnectivity();networkChanged();};
   const restored=(event:PageTransitionEvent)=>{if(event.persisted){pageLive.current=true;foreground();}};
   document.addEventListener('visibilitychange',foreground);
   addEventListener('online',foreground);
-  addEventListener('offline',networkChanged);
+  addEventListener('offline',offline);
   addEventListener('pageshow',restored);
   addEventListener('pagehide',suspend);
   const changed=(event:StorageEvent)=>{
@@ -379,11 +392,11 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   return()=>{
    pageLive.current=false;
    unsubscribe();unsubscribeReview();removeEventListener('pagehide',suspend);removeEventListener('pageshow',restored);
-   removeEventListener('online',foreground);removeEventListener('offline',networkChanged);document.removeEventListener('visibilitychange',foreground);removeEventListener('storage',changed);
+   removeEventListener('online',foreground);removeEventListener('offline',offline);document.removeEventListener('visibilitychange',foreground);removeEventListener('storage',changed);
   };
  },[]);
  useEffect(()=>{
-  autoArmed.current=true;cleanedOrphan.current=false;pausedHead.current=null;setRetaking(false);
+  autoArmed.current=true;cleanedOrphan.current=false;pausedHead.current=null;queueRelaunches.current=null;setRetaking(false);
   waiting.current=null;setNotice('');setPending(null);setReview(null);
   try{publishQueue(props.accountId);}catch{albumCoordinator.queued=[];notifyAlbumDownload(albumCoordinator);setNotice('No se pudo leer la cola de descargas.');}
   if(props.accountId)try{setPending(readLibraryDownloadCheckpoint(props.accountId));}catch{setNotice('No se pudo leer el progreso guardado de la descarga.');}
@@ -489,6 +502,8 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   const job=download.queueAccount===account?download.queued?.[0]:undefined;
   if(!job)return;
   if(pausedHead.current?.id!==job.id)clearPausedHead();
+  if(queueRelaunches.current?.id!==job.id)queueRelaunches.current={id:job.id,count:0};
+  const relaunches=queueRelaunches.current;
   const ownerCurrent=props.captureOwner?.()??props.captureLifetime?.();
   const sameOwner=()=>pageLive.current&&latest.current.accountId===account&&(ownerCurrent?.()??true);
   const token={account,key:job.key,cancelled:false};
@@ -509,26 +524,16 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
    if(readLibraryDownloadCheckpoint(account)||queue.read()[0]?.id!==job.id)return false;
    return !!(job.kind==='album'?p.captureAlbum??p.capture:p.captureBatch??p.capture)?.()?.current();
   };
-  const pause=(untilReady=false)=>{
+  const pause=(resumeAfterOffline=false)=>{
    if(!sameOwner()||pausedHead.current?.id===job.id)return;
-   pausedHead.current={id:job.id,untilReady};
+   pausedHead.current={id:job.id,resumeAfterOffline};
    setNotice(`No se pudo continuar «${job.title}». Revisa Telegram o Almacenamiento.`);
   };
   try{
-   const paused=pausedHead.current?.id===job.id?pausedHead.current:null;
-   if(paused&&!paused.untilReady)return;
-   if(!ready()){
-    // An interrupted head can resume when it next becomes ready.
-    if(paused)clearPausedHead();
-    return;
-   }
-   if(paused)return;
+   if(pausedHead.current?.id===job.id||!ready())return;
   }catch{pause();return;}
 
   const intent=pendingDownloadAfterUpdate(account);
-  const client=props.client;
-  const sessionCurrent=client?.captureBotsCurrent();
-  const revision=props.bots?.revision;
   let readinessLost=false;
   const stillReady=()=>{
    try{
@@ -570,15 +575,16 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   notifyAlbumDownload(albumCoordinator);
   const settle=(outcome:CollectionDownloadOutcome)=>{
    const result=token.cancelled?'cancelled-by-user':outcome;
-   if(!sameOwner())return;
+   if(!sameOwner()||queue.read()[0]?.id!==job.id)return;
    if(result==='completed'||result==='cancelled-by-user'){
     if(job.kind==='library'&&readLibraryDownloadCheckpoint(account)?.queueId===job.id)return;
     if(!removeQueued(job.key,account,job.id))pause();
-   }else if(result==='deferred'&&!readinessLost&&!pausedHead.current){
-    pause();
-   }else if(result==='interrupted'&&job.kind==='album'&&latest.current.client===client&&sessionCurrent?.()&&
-    latest.current.bots?.revision===revision&&client?.searchSnapshot().retryAt===retryAt){
+   }else if(result==='interrupted'&&job.kind==='album'){
     pause(true);
+   }else if(result==='deferred'){
+    if(!readinessLost)pause();
+    else if(relaunches.count>=MAX_AUTOMATIC_QUEUE_RELAUNCHES)pause(true);
+    else relaunches.count++;
    }
   };
   void run().then(settle,()=>{if(token.cancelled)settle('cancelled-by-user');else pause();}).catch(()=>pause()).finally(()=>{
@@ -587,9 +593,10 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   });
  });
  const retryQueued=()=>{
+  if(queueRelaunches.current)queueRelaunches.current.count=0;
   pausedHead.current=null;setNotice('');wake(value=>value+1);
  };
- const pausedJob=download.queueAccount===props.accountId?download.queued?.find(job=>job.id===pausedHead.current?.id):undefined;
+ const pausedJob=download.queueAccount===props.accountId&&navigator.onLine!==false?download.queued?.find(job=>job.id===pausedHead.current?.id):undefined;
  const collection=props.collection;
  function resumeRequest(checkpoint:LibraryDownloadCheckpoint):LibraryDownloadRequest{
   const selection=collection?.request;

@@ -58,6 +58,10 @@ export function botSearchText(v:unknown,max=160):string|null {
  const s=Array.from(v.normalize('NFC').replace(/[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029]/gu,' ').trim()).slice(0,max).join('');return s||null;
 }
 function text(v:unknown,max=160):v is string {return typeof v==='string'&&v.length<=max*2&&utf8Bytes(v)<=max*4&&botSearchText(v,max)===v;}
+export function botSearchReportsNoResults(row:BotSearchRow):boolean {
+ return row.kind==='message'&&row.correlation==='reply'&&
+  /^(?:no (?:se )?encontraron resultados|no results found)[.!]?$/iu.test(row.text);
+}
 export function parseBotSearchTarget(raw:unknown):BotSearchTarget|null {
  const r=dataRecord(raw,['title','artist','album','durationSeconds']);
  if(!r||!text(r.title)||r.artist!==null&&!text(r.artist)||r.album!==null&&!text(r.album)||r.durationSeconds!==null&&(typeof r.durationSeconds!=='number'||!Number.isFinite(r.durationSeconds)||r.durationSeconds<0||r.durationSeconds>86400))return null;

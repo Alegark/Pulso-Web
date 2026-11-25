@@ -40,7 +40,7 @@ function fixture(checkpoint=batch(),options:{onAudio?:()=>void;twoBots?:boolean;
   searchBot(input:{providerRef:string;target:BotSearchTarget},_allowed:unknown,started:Parameters<typeof start>[0]){
    assert.ok(!state.retryAt||Date.now()>=state.retryAt,'cannot query before retryAt');
    requests.push(input.target.title);queries.push(input.providerRef);
-   const rows:BotSearchRow[]=options.absent&&input.target.title==='Pista 3'?[]:[{
+   const rows:BotSearchRow[]=options.absent&&input.target.title==='Pista 3'?[{kind:'message',rowRef:'absent',correlation:'reply',text:'No se encontraron resultados'}]:[{
     kind:'option',rowRef:'row',correlation:'reply',label:input.target.title+' — '+input.target.artist,
    }];
    if(rows.length&&options.alternates)rows.push({...rows[0],rowRef:'alternate'} as BotSearchRow);

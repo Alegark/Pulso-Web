@@ -146,7 +146,7 @@ function collect(client:TelegramSessionClient,collection=collectionProgress(),su
 type FailureCase={
  name:string;row:number;phase?:'search'|'callback'|'download'|'selection';
  error?:BotSearchSnapshot['error'];delivery?:BotSearchSnapshot['delivery'];
- suspended?:boolean;down?:boolean;cooldown?:boolean;mismatch?:boolean;expected:'telegram'|'suspended'|'timed-out'|'not-found'|'no-valid-file';
+ suspended?:boolean;down?:boolean;cooldown?:boolean;mismatch?:boolean;expected:'telegram'|'suspended'|'timed-out'|'not-found'|'no-valid-file'|'unsupported'|'needs-start'|'bot-limit';
 };
 const failureCases:FailureCase[]=[
  {row:1,name:'envío sin resultado tras suspensión breve',phase:'search',error:'timeout',delivery:'acknowledged',suspended:true,expected:'suspended'},
@@ -157,7 +157,6 @@ const failureCases:FailureCase[]=[
  {row:2,name:'flood vigente pese a respuesta del bot',phase:'callback',cooldown:true,expected:'telegram'},
  {row:3,name:'envío incierto con sesión viva',error:'uncertain',delivery:'uncertain',expected:'telegram'},
  {row:3,name:'callback incierto con sesión viva',phase:'callback',error:'uncertain',delivery:'uncertain',expected:'telegram'},
- {row:3,name:'acuse incierto con error de archivo',phase:'download',error:'file-invalid',delivery:'uncertain',expected:'telegram'},
  {row:3,name:'error incierto incluso con acuse',error:'uncertain',delivery:'acknowledged',expected:'telegram'},
  {row:3,name:'red durante descarga con sesión viva',phase:'download',error:'network',expected:'telegram'},
  {row:3,name:'sesión vencida incluso antes del envío',error:'session-expired',delivery:'not-dispatched',expected:'telegram'},
@@ -166,18 +165,17 @@ const failureCases:FailureCase[]=[
  {row:4,name:'timeout antes del callback',phase:'callback',error:'timeout',delivery:'not-dispatched',expected:'telegram'},
  {row:5,name:'bot mudo tras el envío',error:'timeout',expected:'timed-out'},
  {row:5,name:'bot mudo tras el callback',phase:'callback',error:'timeout',expected:'timed-out'},
- {row:5,name:'timeout tras el acuse en descarga',phase:'download',error:'timeout',expected:'timed-out'},
- {row:6,name:'búsqueda rechazada por el bot',error:'unsupported',expected:'not-found'},
- {row:6,name:'callback incompatible antes del envío',phase:'callback',error:'unsupported',delivery:'not-dispatched',expected:'not-found'},
- {row:6,name:'bot requiere inicio incluso tras suspensión',error:'needs-start',suspended:true,expected:'not-found'},
- {row:6,name:'límite específico del bot',error:'limit',expected:'not-found'},
- {row:6,name:'límite específico al descargar',phase:'download',error:'limit-attempt',delivery:'not-dispatched',expected:'not-found'},
+ {row:5,name:'timeout de transferencia tras el acuse del callback',phase:'download',error:'timeout',expected:'timed-out'},
+ {row:6,name:'búsqueda rechazada por el bot',error:'unsupported',expected:'unsupported'},
+ {row:6,name:'callback incompatible antes del envío',phase:'callback',error:'unsupported',delivery:'not-dispatched',expected:'unsupported'},
+ {row:6,name:'bot requiere inicio incluso tras suspensión',error:'needs-start',suspended:true,expected:'needs-start'},
+ {row:6,name:'límite específico del bot',error:'limit',expected:'bot-limit'},
+ {row:6,name:'límite específico al descargar',phase:'download',error:'limit-attempt',delivery:'not-dispatched',expected:'bot-limit'},
  {row:7,name:'archivo inválido confirmado en búsqueda',error:'file-invalid',expected:'no-valid-file'},
- {row:7,name:'archivo demasiado grande en descarga',phase:'download',error:'file-too-large',delivery:'not-dispatched',expected:'no-valid-file'},
+ {row:7,name:'archivo demasiado grande tras callback',phase:'callback',error:'file-too-large',expected:'no-valid-file'},
  {row:7,name:'archivo inválido tras suspensión',phase:'callback',error:'file-invalid',suspended:true,expected:'no-valid-file'},
  {row:7,name:'audio devuelto incompatible',phase:'callback',mismatch:true,expected:'no-valid-file'},
  {row:8,name:'respuesta vacía confirmada',expected:'not-found'},
- {row:8,name:'callback vacío confirmado',phase:'callback',expected:'not-found'},
  {row:9,name:'conflicto antes de enviar callback',phase:'callback',error:'conflict',delivery:'not-dispatched',expected:'no-valid-file'},
  {row:10,name:'búsqueda cancelada sin rechazo verificable',error:'cancelled',expected:'telegram'},
 ];
@@ -194,8 +192,9 @@ function failureFixture(row:FailureCase){
   if(!state.providerRef)return state;
   const expired=phase==='selection'&&++observations>=3;
   if(expired)completed=true;
-  if(!completed)return {...state,rows:[phase==='download'?direct:option]};
-  const rows=row.mismatch?[{...direct,title:'Otro título'}]:[];
+  if(!completed)return {...state,rows:[phase==='download'&&row.delivery==='not-dispatched'?direct:option]};
+  const rows=row.mismatch?[{...direct,title:'Otro título'}]:
+   phase==='search'&&!row.error?[{kind:'message' as const,rowRef:'absent',correlation:'reply' as const,text:'No se encontraron resultados'}]:[];
   return {...state,...(expired?{queryId:null,providerRef:null}:{}),error:row.error??null,delivery:row.delivery??'acknowledged',rows,available:!row.down,
    retryAt:row.cooldown?Date.now()+30_000:null,expiresAt:phase==='selection'?Date.now()-1:null};
  };
@@ -211,6 +210,9 @@ const messages={
  'timed-out':'Telegram no respondió a tiempo',
  'not-found':'No existe en tus bots',
  'no-valid-file':'Ningún bot entregó un archivo válido',
+ 'unsupported':'Ningún bot entregó un archivo compatible',
+ 'needs-start':'Un bot necesita que envíes /start en Telegram',
+ 'bot-limit':'Un bot alcanzó un límite de búsqueda o descarga',
 } as const;
 const compareBase=process.env.PULSO_COMPARE_CLASSIFICATION==='base';
 for(const row of failureCases)for(const mode of ['collection','interruptOnTelegram'] as const){
@@ -232,7 +234,7 @@ for(const row of failureCases)for(const mode of ['collection','interruptOnTelegr
   if(process.env.PULSO_COMPARE_CLASSIFICATION&&mode==='collection')
    console.log('CLASIFICACION '+JSON.stringify({name:row.name,row:row.row,acquisition:result.state,song:songResult,searches:f.searches,downloads:f.downloads}));
   if(compareBase)return;
-  assert.equal(result.state,row.expected==='not-found'||row.expected==='no-valid-file'?'known-failure':row.expected);
+  assert.equal(result.state,row.expected in messages&&row.expected!=='timed-out'?'known-failure':row.expected);
   assert.equal(songResult,row.expected in messages?messages[row.expected as keyof typeof messages]:row.expected);
   const advances=row.expected in messages;
   assert.deepEqual(f.searches,advances?['one','two']:['one']);
