@@ -1,12 +1,13 @@
 import test, {type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import Long from 'long';
+import {Activity} from '../../src/playback/ownership';
 import {acquireFromOrderedBots,acquisitionFailureText,type CollectionBotProgress} from '../../src/library/ordered-bot-acquisition';
 import {downloadSong} from '../../src/library/download-song';
 import {createBotSearchDriver,type BotSearchDependency} from '../../src/telegram/bot-search-driver';
 import {BOT_DOWNLOAD_MAX_BYTES,botDownloadTransferMs} from '../../src/telegram/bot-download-bytes';
-import {isBotSearchFileError,parseBotSearchReply,type BotSearchCommand,type BotSearchReply} from '../../src/telegram/bot-search-protocol';
-import type {BotSearchAdmission,BotSearchSnapshot,TelegramSessionClient} from '../../src/telegram/session-client';
+import {BOT_SEARCH_BOUNDS,isBotSearchFileError,parseBotSearchReply,type BotSearchCommand,type BotSearchReply} from '../../src/telegram/bot-search-protocol';
+import {TelegramSessionClient,type BotSearchAdmission,type BotSearchSnapshot,type SessionWorker} from '../../src/telegram/session-client';
 
 const target={title:'Song',artist:'Artist',album:'Album',durationSeconds:60};
 const providers=[{providerRef:crypto.randomUUID(),label:'One'},{providerRef:crypto.randomUUID(),label:'Two'}];
@@ -20,7 +21,7 @@ const document=(botId:number,id:number,reply:number,key:number,bytes=audio.lengt
   accessHash:Long.fromBits(99,0),fileReference:Uint8Array.of(4),dcId:2,mimeType,size:bytes,
   attributes:[{_:'documentAttributeAudio',title:target.title,performer:target.artist,duration:60}]}},
 });
-const menu=(botId:number,id:number,reply:number)=>({...incoming(botId,id,reply),replyMarkup:{_:'replyInlineMarkup',rows:[1,2].map(option=>({
+const menu=(botId:number,id:number,reply:number,options=[1,2])=>({...incoming(botId,id,reply),replyMarkup:{_:'replyInlineMarkup',rows:options.map(option=>({
  _:'keyboardInlineButtonRow',buttons:[{_:'keyboardInlineButton',text:'Song — Artist',type:{_:'inlineButtonTypeCallback',data:Uint8Array.of(option)}}],
 }))}});
 
@@ -31,7 +32,7 @@ const startPrompts={
  'start-es':'🎵 Primero, envía /start.',
  'start-mention':'Encontré una canción llamada «Use /start».',
 };
-type Reply='direct-timeout'|'direct'|'menu-invalid'|'menu-large'|'menu-ogg'|'menu-flac'|'menu-all-ogg'|'callback-conflict'|'empty'|'unsupported'|'unsupported-format'|'limit'|'blocked'|keyof typeof startPrompts;
+type Reply='direct-timeout'|'direct'|'menu-valid'|'menu-blocked'|'menu-invalid'|'menu-large'|'menu-ogg'|'menu-ogg-three'|'menu-flac'|'menu-all-ogg'|'callback-conflict'|'empty'|'unsupported'|'unsupported-format'|'limit'|'blocked'|keyof typeof startPrompts;
 function setup(t:TestContext,replies:readonly Reply[]){
  t.mock.timers.enable({apis:['setTimeout','Date'],now:10_000});
  t.mock.method(performance,'now',()=>Date.now());
@@ -62,7 +63,7 @@ function setup(t:TestContext,replies:readonly Reply[]){
    const outgoing=++nextId;
    const reply=++nextId;
    const prompt=Object.hasOwn(startPrompts,scenario)?startPrompts[scenario as keyof typeof startPrompts]:null;
-   messages=scenario.startsWith('menu-')||scenario==='callback-conflict'?[menu(id,reply,outgoing)]:
+   messages=scenario.startsWith('menu-')||scenario==='callback-conflict'?[menu(id,reply,outgoing,scenario==='menu-ogg-three'?[1,2,3]:undefined)]:
     scenario==='empty'?[incoming(id,reply,outgoing,'No se encontraron resultados')]:
     prompt?[{...incoming(id,reply,outgoing,prompt),...(scenario==='needs-start'?{}:{replyTo:undefined})}]:
     [document(id,reply,outgoing,id,audio.length,scenario==='unsupported-format'?'audio/ogg':undefined)];
@@ -81,8 +82,9 @@ function setup(t:TestContext,replies:readonly Reply[]){
   async callback(peer,id,data){
    const option=data[0];
    callbacks.push(option);
+   if(scenario==='menu-blocked')throw Object.assign(Error('USER_IS_BLOCKED'),{text:'USER_IS_BLOCKED'});
    const overLimit=scenario==='menu-large'&&option===1;
-   const mime=scenario==='menu-all-ogg'||scenario==='menu-ogg'&&option===1?'audio/ogg':
+   const mime=scenario==='menu-all-ogg'||(scenario==='menu-ogg'||scenario==='menu-ogg-three')&&option===1?'audio/ogg':
     scenario==='menu-flac'&&option===1?'audio/flac':undefined;
    messages.push(document(botId(peer),++nextId,id,option,overLimit?BOT_DOWNLOAD_MAX_BYTES+1:audio.length,mime));
    return {_:'messages.botCallbackAnswer'};
@@ -165,7 +167,7 @@ function setup(t:TestContext,replies:readonly Reply[]){
   assert.ok(settled,'Operation did not settle on the mock clock');
   return result;
  }
- return {params,searches,callbacks,errors,allowed,drive,get transferStarted(){return transferStarted;},
+ return {params,searches,callbacks,errors,allowed,drive,binding,dependency,get transferStarted(){return transferStarted;},
   reconnect(){
    driver.close();
    sessionId=crypto.randomUUID();
@@ -183,12 +185,98 @@ function setup(t:TestContext,replies:readonly Reply[]){
 }
 const progress=():CollectionBotProgress=>({completed:new Set(),reasons:[]});
 const accept=async()=>'saved' as const;
-const downloadFixtureSong=(f:ReturnType<typeof setup>,trackId?:string)=>f.drive(downloadSong({
+const downloadFixtureSong=(f:Pick<ReturnType<typeof setup>,'params'|'drive'>,trackId?:string)=>f.drive(downloadSong({
  ...f.params,collection:progress(),choice:{...target,id:'song',source:'itunes',duration:60},
  attempt:{current:()=>true,lookup:async()=>null,save:async()=>trackId?{state:'saved',trackId}:assert.fail('No valid audio'),
   addToLibrary:async()=>true,play:async()=>'failed'},
  index:0,mark:()=>{},message:()=>{},
 }));
+
+function setupRealClient(t:TestContext,replies:readonly Reply[]){
+ const fixture=setup(t,replies);
+ const activity=new Activity();
+ activity.open();
+ const abort=new AbortController();
+ const transcript:BotSearchReply[]=[];
+ const snapshots:BotSearchSnapshot[]=[];
+ let driver:ReturnType<typeof createBotSearchDriver>;
+ let terminations=0;
+ let bridgeError:unknown;
+ const emit=(data:unknown)=>worker.onmessage?.({data} as MessageEvent);
+ const worker:SessionWorker={
+  onmessage:null,onerror:null,onmessageerror:null,
+  postMessage(command){
+   if(command.type==='restore'){
+    driver=createBotSearchDriver(fixture.binding,command.session,fixture.dependency);
+    queueMicrotask(()=>emit({version:2,session:command.session,request:command.request,phase:'connected',error:null,
+     retryAt:null,delivery:null,binding:fixture.binding,saved:{peerRef:crypto.randomUUID(),kind:'saved',name:'Mensajes guardados'},
+     bots:providers.map((provider,index)=>({...provider,username:index===0?'ivkmbot':'lydbot',
+      status:'verified-profile',compatibility:'unverified'}))}));
+    return;
+   }
+   assert.ok(command.type==='bot-search.search'||command.type==='bot-search.download');
+   const post=(reply:BotSearchReply,sessionClosed=false)=>{
+    assert.ok(parseBotSearchReply(reply,command));
+    transcript.push(reply);
+    emit({protocol:'pulso-bot-search',version:1,reply,sessionClosed,retryAt:null,retryBlocked:false});
+   };
+   void driver.handle(command,{signal:abort.signal,current:()=>!abort.signal.aborted,publish:post}).then(async reply=>{
+    assert.ok(reply);
+    post(reply,!await driver.whenSettled());
+   }).catch(error=>{bridgeError=error;worker.onerror?.({} as ErrorEvent);});
+  },
+  terminate(){terminations++;abort.abort();driver.close();},
+ };
+ const client=new TelegramSessionClient(activity,()=>activity.scope(),()=>{},()=>worker);
+ t.after(()=>client.dispose());
+ client.subscribeSearch(state=>snapshots.push(state));
+ client.restore();
+ const params={...fixture.params,client,revision:client.botsSnapshot().revision,progress:()=>{}};
+ return {...fixture,params,client,transcript,snapshots,async connected(){
+  await Promise.resolve();
+  assert.equal(client.snapshot().phase,'connected');
+  assert.equal(client.botsSnapshot().providers.length,2);
+ },assertConnected(){
+  assert.equal(bridgeError,undefined);
+  assert.equal(client.snapshot().error,null);
+  assert.equal(client.snapshot().phase,'connected');
+  assert.equal(terminations,0);
+ }};
+}
+
+for(const scenario of ['blocked','menu-blocked'] as const){
+ for(const fallback of ['direct','empty'] as const)test(`R3 · real session survives ${scenario} and continues to the ${fallback} bot`,async t=>{
+  const f=setupRealClient(t,[scenario,fallback]);
+  await f.connected();
+  const song=await downloadFixtureSong(f,fallback==='direct'?'next-bot-copy':undefined);
+  f.assertConnected();
+  const rejection=f.transcript.find(reply=>reply.type==='bot-search.error');
+  const sending=f.transcript.find(reply=>reply.type==='bot-search.sending'&&reply.requestId===rejection?.requestId);
+  assert.equal(sending?.type,'bot-search.sending');
+  assert.equal(rejection?.type==='bot-search.error'&&rejection.error,'needs-start');
+  assert.equal(rejection?.type==='bot-search.error'&&rejection.delivery,'uncertain');
+  assert.ok(f.transcript.indexOf(sending!)<f.transcript.indexOf(rejection!));
+  assert.equal(f.transcript.filter(reply=>reply.type==='bot-search.sending').length,scenario==='blocked'?2:3);
+  assert.deepEqual(f.callbacks,scenario==='blocked'?[]:[1]);
+  assert.equal(song.state,fallback==='direct'?'downloaded':'failed');
+  if(fallback==='empty')assert.equal('message' in song&&song.message,'Un bot necesita que envíes /start en Telegram');
+ });
+}
+
+for(const scenario of ['menu-valid','menu-ogg-three'] as const)test(`R4 · real individual search consumes ${scenario} on success without later expiry`,async t=>{
+ const f=setupRealClient(t,[scenario]);
+ await f.connected();
+ assert.equal((await f.drive(acquireFromOrderedBots(f.params))).state,'audio');
+ assert.deepEqual(f.callbacks,scenario==='menu-valid'?[1]:[1,2]);
+ assert.equal(f.transcript.filter(reply=>reply.type==='bot-search.sending').length,1+f.callbacks.length);
+ t.mock.timers.tick(BOT_SEARCH_BOUNDS.resultTtlMs+1);
+ await Promise.resolve();
+ f.assertConnected();
+ assert.equal(f.client.searchSnapshot().error,null);
+ assert.equal(f.snapshots.some(state=>state.error==='expired'),false);
+ assert.equal(f.client.searchSnapshot().rows.length,0);
+ assert.equal(f.client.searchSnapshot().expiresAt,null);
+});
 
 for(const scenario of ['menu-ogg','menu-flac'] as const)
  test(`R1 · ${scenario} preserves the second option and saves with the same bot`,async t=>{

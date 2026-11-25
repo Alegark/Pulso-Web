@@ -8,7 +8,7 @@ import {bytesToHex} from '@noble/hashes/utils.js';
 import {formatStorageMB} from './storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {matchingSongRows,type SongImportRejection} from './selected-song';
-import {BOT_SEARCH_BOUNDS,botAudioMismatchFields,botOptionDurationMismatch,botSearchReportsNoResults,isBotSearchFileError,isBotSearchLimitError,type BotSearchError,type BotSearchFileError,type BotSearchTarget,type BotDownloadedAudio,type BotSearchRow} from '../telegram/bot-search-protocol';
+import {BOT_SEARCH_BOUNDS,botAudioMismatchFields,botOptionDurationMismatch,botSearchReportsNoResults,isBotSearchFileError,isBotSearchLimitError,type BotSearchDelivery,type BotSearchError,type BotSearchFileError,type BotSearchTarget,type BotDownloadedAudio,type BotSearchRow} from '../telegram/bot-search-protocol';
 import type {BotSearchSnapshot,BotsSnapshot,TelegramSessionClient} from '../telegram/session-client';
 
 export type OrderedProvider={providerRef:string;label:string};
@@ -63,7 +63,8 @@ function candidateIdentity(row:BotSearchRow):readonly unknown[]{
  return row.kind==='option'?[row.kind,row.label]:row.kind==='audio'?[row.kind,row.title,row.performer,row.durationSeconds,row.mimeType,row.bytes]:[row.kind,row.text];
 }
 const diagnosticError=(error:BotSearchError):SongRejection=>isBotSearchLimitError(error)?'limit':error;
-const providerRejection=(error:BotSearchError|null)=>error==='unsupported'||error==='needs-start'?error:
+const providerRejection=(error:BotSearchError|null,delivery:BotSearchDelivery|null)=>error==='needs-start'?error:
+ delivery==='uncertain'?null:error==='unsupported'?error:
  error==='limit'||isBotSearchLimitError(error)?'bot-limit':null;
 const mismatchReason=(field:ReturnType<typeof botAudioMismatchFields>[number])=>field==='title-version'?'mismatch-title':field==='artist'?'mismatch-artist':'mismatch-duration';
 const mismatchText=(fields:ReadonlySet<SongRejection>)=>[fields.has('mismatch-title')?'título/versión':'',fields.has('mismatch-artist')?'artista':'',fields.has('mismatch-duration')?'duración':''].filter(Boolean).join(', ');
@@ -145,14 +146,14 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
   const ownReply=own&&phase!=='selection';
   const error=ownReply?state.error:null,delivery=ownReply?state.delivery:null;
   const invalid=isBotSearchFileError(error);
-  const rejected=providerRejection(error);
+  const rejected=providerRejection(error,delivery);
   const mismatch=phase==='download'&&delivery==='acknowledged'&&!state.pending&&error===null&&
    state.rows.some(row=>row.kind==='audio')&&!matchingSongRows(state.rows.filter(row=>row.kind==='audio'),target).length;
   const conflictAfterReply=phase==='download'&&error==='conflict'&&delivery==='acknowledged';
-  const conclusive=delivery!=='uncertain'&&(invalid||rejected||mismatch||conflictAfterReply);
+  const conclusive=!!rejected||delivery!=='uncertain'&&(invalid||mismatch||conflictAfterReply);
   if(!current()||p.signal.aborted)return 'stopped';
   if(p.suspended?.()&&!conclusive)return 'suspended';
-  if(channelDown(state)||delivery==='uncertain'||error==='network'||error==='session-expired'||error==='rate-limit'||error==='uncertain'||
+  if(channelDown(state)||delivery==='uncertain'&&!rejected||error==='network'||error==='session-expired'||error==='rate-limit'||error==='uncertain'||
    error==='timeout'&&delivery==='not-dispatched')return 'telegram';
   if(error==='timeout'||!conclusive&&(expired||botExpired()))return 'timed-out';
   if(invalid)return error;
@@ -250,7 +251,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
       break;
      }
      if(botExpired()&&!channelDown(found)){markBotTimeout();break;}
-     const rejection=ownReply&&found.delivery!=='uncertain'?providerRejection(found.error):null;
+     const rejection=ownReply?providerRejection(found.error,found.delivery):null;
      const fileError=ownReply&&found.delivery==='acknowledged'&&isBotSearchFileError(found.error)?found.error:null;
      if(!p.accept&&(!live()||rejection!=='needs-start'&&!fileError))return {state:'uncertain'};
      if((!queryId||ownReply&&transient(found))&&await retryTransient())continue;
@@ -347,7 +348,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
       rejectedStatus='';
       if(expired||botTimedOut||p.signal.aborted)cancel();
      },timing||measurement?value=>{timing?.download(value);measurement?.network(value);}:undefined,
-     menu&&(p.accept||hasAlternate||reuse)?callbackBudget:undefined);
+     menu&&(p.accept||hasAlternate||reuse)?callbackBudget:undefined,p.accept?'retain':'consume');
     }finally{unsubscribe?.();ownedCancel=undefined;}
     if(menu)callbackBudget-=Math.round((transferStarted??performance.now())-downloadStarted);
     const after=client.searchSnapshot();
@@ -380,8 +381,8 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      if(!afterOwn&&!selectionRetried&&live()){selectionRetried=true;continue;}
      return {state:'telegram'};
     }
-    const rejection=!batch&&admittedDownload&&afterOwn&&after.delivery!=='uncertain'&&
-     (p.accept||after.error==='needs-start'&&live())?providerRejection(after.error):null;
+    const rejection=!batch&&admittedDownload&&afterOwn&&
+     (p.accept||after.error==='needs-start'&&live())?providerRejection(after.error,after.delivery):null;
     if(rejection){reasons.push(rejection);break;}
     if(!batch&&!audio&&(expired||botExpired()||menu&&admittedDownload&&afterOwn&&after.error==='timeout')){
      if(!p.accept&&expired)return {state:'uncertain'};

@@ -114,11 +114,9 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
     // SDK late failures are observed independently of a winning cancel/deadline cause.
     const kind=classifyTelegramFailure(error).error;
     if(kind==='invalid-peer'||kind==='access'||invalidatesBotIdentity(error))identities.delete(c.providerRef);
-    if(kind==='blocked-user'&&!f.cause&&f.delivery==='uncertain'){
-     // Telegram explicitly rejected the request before delivering it to the bot.
-     f.delivery='not-dispatched';
-     return fail('needs-start');
-    }
+    // Keep the published sending state. Telegram's rejection is conclusive
+    // even though the bot did not acknowledge the request.
+    if(kind==='blocked-user'&&!f.cause&&f.delivery==='uncertain')return fail('needs-start');
     const cause=botProvidersFailure(error,time.now());
     if(cause.error==='session-expired'){if(!f.cause)f.cause=cause;invalidate();}
     if(cause.error==='rate-limit'){
