@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {speedCspBaseRevision,speedCspDiagnostics} from '../integration/playlist-speed-csp.mjs';
+import {speedCspDiagnostics} from '../integration/playlist-speed-csp.mjs';
 
 const baseOrigin='http://127.0.0.1:1000',headOrigin='http://127.0.0.1:2000';
 const profile={engine:'webkit',mode:'first-sound-direct',requestedBackend:'opfs',backend:'idb',delayMs:400,count:1,
@@ -10,8 +10,8 @@ const violation={directive:'style-src-attr',blockedURI:'inline',sourceFile:baseO
  disposition:'enforce',policy:"style-src 'self'",sample:'',target:[['select','','settings-appearance',null,null]]};
 const headViolation={...violation,sourceFile:headOrigin+'/'};
 
-async function reference(){
- const {csp,errors}=await speedCspDiagnostics('.',baseOrigin,speedCspBaseRevision,undefined)(profile,[violation],[cssMessage]);
+async function reference(revision='086aaac62f330bbbb911b2a3b287fae2dc325171'){
+ const {csp,errors}=await speedCspDiagnostics('.',baseOrigin,revision,undefined)(profile,[violation],[cssMessage]);
  assert.equal(csp.novel.length,0);
  assert.deepEqual(errors,[]);
  return {cases:[{...profile,status:'PASS',csp}]};
@@ -21,6 +21,15 @@ test('speed CSP comparison lists inherited events even when they repeat on a new
  const compare=speedCspDiagnostics('.',headOrigin,'candidate',await reference());
  const {csp,errors}=await compare(profile,[headViolation,headViolation],[cssMessage]);
  assert.equal(csp.inherited.length,2);
+ assert.equal(csp.novel.length,0);
+ assert.deepEqual(errors,[]);
+});
+
+test('speed CSP comparison can record a reference from the exact v61 revision',async()=>{
+ const recorded=await reference('d718b9dfaf82795bc1d5d4d3ae84c8268410c0c7');
+ const compare=speedCspDiagnostics('.',headOrigin,'candidate',recorded);
+ const {csp,errors}=await compare(profile,[headViolation],[cssMessage]);
+ assert.equal(csp.inherited.length,1);
  assert.equal(csp.novel.length,0);
  assert.deepEqual(errors,[]);
 });

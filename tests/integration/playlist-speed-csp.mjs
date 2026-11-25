@@ -2,7 +2,11 @@ import {readFile} from 'node:fs/promises';
 import {SourceMap} from 'node:module';
 import {dirname,relative,resolve} from 'node:path';
 
-export const speedCspBaseRevision='086aaac62f330bbbb911b2a3b287fae2dc325171';
+const speedCspBaseRevisions=new Set([
+ '086aaac62f330bbbb911b2a3b287fae2dc325171', // v60
+ 'd718b9dfaf82795bc1d5d4d3ae84c8268410c0c7', // v61
+]);
+export const isSpeedCspBaseRevision=revision=>speedCspBaseRevisions.has(revision);
 export const speedCspPrefix='TESTONLY playlist CSP ';
 const webkitStyleMessage="Refused to apply a stylesheet because its hash, its nonce, or 'unsafe-inline' does not appear in the style-src directive of the Content Security Policy.";
 const profileFields=['engine','mode','requestedBackend','backend','delayMs','count','existingCount','rpcMs','serviceWorker'];
@@ -50,7 +54,7 @@ export function speedCspDiagnostics(bundle,origin,revision,reference){
   const errors=consoleErrors.filter(text=>!(profile.engine==='webkit'&&text===webkitStyleMessage&&
    observed.some(event=>event.directive==='style-src-attr'||event.directive==='style-src-elem')));
   const inherited=[],novel=[];
-  const recordingBase=revision===speedCspBaseRevision&&!reference;
+  const recordingBase=isSpeedCspBaseRevision(revision)&&!reference;
   const matches=reference?.cases.filter(item=>item.status==='PASS'&&profileFields.every(field=>item[field]===profile[field]));
   if(reference&&!matches.length)errors.push('No completed CSP reference for this speed profile');
   const known=new Set(matches?.flatMap(item=>item.csp.observed.map(signature)));

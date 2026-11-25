@@ -10,7 +10,7 @@ import {chromium,webkit} from 'playwright-core';
 import {createTestWorkspace} from './test-workspace.mjs';
 import {installRequiredAccountFixture} from './required-account-fixture.mjs';
 import {benchmarkPart,benchmarkBytes} from './playlist-benchmark-audio.mjs';
-import {captureSpeedCsp,speedCspBaseRevision,speedCspDiagnostics,speedCspPrefix} from './playlist-speed-csp.mjs';
+import {captureSpeedCsp,isSpeedCspBaseRevision,speedCspDiagnostics,speedCspPrefix} from './playlist-speed-csp.mjs';
 import {taggedM4a} from './tagged-audio-fixture.mjs';
 import {accountId,bots,playlistFixture,uuid} from './playlist-full-download-fixture.mjs';
 
@@ -1951,10 +1951,10 @@ try{
   const referencePath=process.env.PLAYLIST_SPEED_CSP_REFERENCE;
   if(referencePath){
    speedReference=JSON.parse(await readFile(referencePath,'utf8'));
-   assert.equal(speedReference.speedRevision,speedCspBaseRevision,'CSP reference revision');
+   assert.ok(isSpeedCspBaseRevision(speedReference.speedRevision),'CSP reference revision');
    assert.ok(!speedReference.speedCspReference&&Array.isArray(speedReference.cases)&&!speedReference.errors.length,'CSP reference run');
    report.speedCspReference=speedReference.speedRevision;
-  }else if(report.speedRevision===speedCspBaseRevision){
+  }else if(isSpeedCspBaseRevision(report.speedRevision)){
    execFileSync('git',['diff','--quiet','HEAD','--','src','public','index.html','package.json','package-lock.json']);
   }
  }
