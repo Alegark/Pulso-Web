@@ -27,7 +27,7 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<'completed'|'inte
  const providers=p.providers??(p.provider?[{providerRef:p.provider,label:'Bot'}]:[]);
  const initialBots=p.interruptOnTelegram?p.client?.botsSnapshot():undefined;
  const providerNames=providers.map(provider=>initialBots?.providers?.find(row=>row.providerRef===provider.providerRef)?.username);
- const telegramWait=p.interruptOnTelegram&&p.client?collectionTelegramWait(p.client,p.signal,live,0,()=>{}):null;
+ const telegramWait=p.interruptOnTelegram&&p.client?collectionTelegramWait(p.client,p.signal,live,0,()=>{},'Reintentar descarga en cola'):null;
  let interruption:string|undefined;
  const storageStopped='No se pudo continuar con el almacenamiento actual.';
  update('Comprobando copias…');
@@ -65,7 +65,7 @@ export async function acquireAlbum(p:AlbumAcquisition):Promise<'completed'|'inte
      const activeProviders=bots&&!sameSession?orderedProviders(bots):providers;
      if(bots&&(sameSession?bots.revision!==p.revision:activeProviders.length!==providers.length||
       activeProviders.some((provider,index)=>bots.providers.find(row=>row.providerRef===provider.providerRef)?.username!==providerNames[index]))){
-      interruption='La selección de bots cambió. Revisa Telegram y pulsa Reintentar.';break;
+      interruption='La selección de bots cambió. Revisa Telegram y pulsa Reintentar descarga en cola.';break;
      }
      const captured=bots?p.client.captureBotsCurrent():networkCurrent;
      const audioCurrent=()=>captured()&&(!bots||p.client?.botsSnapshot().revision===bots.revision);

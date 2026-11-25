@@ -72,7 +72,7 @@ export async function downloadSong(p:Omit<Parameters<typeof acquireFromOrderedBo
   return (p.collection||p.interruptOnTelegram)&&result.state!=='timed-out'?{state:'telegram'}:{state:'failed',message:'Telegram no respondió a tiempo'};
  if(result.state==='known-failure'){
   const reasons=new Set(result.reasons);
-  const providerRejections:AcquisitionFailureReason[]=['needs-start','bot-limit','unsupported'];
+  const providerRejections:AcquisitionFailureReason[]=['needs-start','bot-limit','unsupported','file-unsupported'];
   const rejection=providerRejections.find(reason=>reasons.has(reason));
   if(rejection)return {state:'failed',message:acquisitionFailureText([rejection])};
   if(!failedDigests.size&&reasons.size===1&&reasons.has('no-results'))

@@ -1,11 +1,11 @@
 import test, {type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import Long from 'long';
-import {acquireFromOrderedBots,type CollectionBotProgress} from '../../src/library/ordered-bot-acquisition';
+import {acquireFromOrderedBots,acquisitionFailureText,type CollectionBotProgress} from '../../src/library/ordered-bot-acquisition';
 import {downloadSong} from '../../src/library/download-song';
 import {createBotSearchDriver,type BotSearchDependency} from '../../src/telegram/bot-search-driver';
 import {BOT_DOWNLOAD_MAX_BYTES,botDownloadTransferMs} from '../../src/telegram/bot-download-bytes';
-import {parseBotSearchReply,type BotSearchCommand,type BotSearchReply} from '../../src/telegram/bot-search-protocol';
+import {isBotSearchFileError,parseBotSearchReply,type BotSearchCommand,type BotSearchReply} from '../../src/telegram/bot-search-protocol';
 import type {BotSearchAdmission,BotSearchSnapshot,TelegramSessionClient} from '../../src/telegram/session-client';
 
 const target={title:'Song',artist:'Artist',album:'Album',durationSeconds:60};
@@ -17,14 +17,21 @@ const incoming=(botId:number,id:number,reply:number,message='')=>({
 });
 const document=(botId:number,id:number,reply:number,key:number,bytes=audio.length,mimeType='audio/wav')=>({
  ...incoming(botId,id,reply),media:{_:'messageMediaDocument',document:{_:'document',id:Long.fromInt(key),
-  accessHash:Long.fromInt(99),fileReference:Uint8Array.of(4),dcId:2,mimeType,size:bytes,
+  accessHash:Long.fromBits(99,0),fileReference:Uint8Array.of(4),dcId:2,mimeType,size:bytes,
   attributes:[{_:'documentAttributeAudio',title:target.title,performer:target.artist,duration:60}]}},
 });
 const menu=(botId:number,id:number,reply:number)=>({...incoming(botId,id,reply),replyMarkup:{_:'replyInlineMarkup',rows:[1,2].map(option=>({
  _:'keyboardInlineButtonRow',buttons:[{_:'keyboardInlineButton',text:'Song — Artist',type:{_:'inlineButtonTypeCallback',data:Uint8Array.of(option)}}],
 }))}});
 
-type Reply='direct-timeout'|'direct'|'menu-invalid'|'menu-large'|'callback-conflict'|'empty'|'unsupported'|'unsupported-format'|'limit'|'needs-start';
+const startPrompts={
+ 'needs-start':'Envía /start para iniciar el bot',
+ 'start-recent':'Use /start',
+ 'start-welcome':'👋 Welcome!\nPlease press /start first.',
+ 'start-es':'🎵 Primero, envía /start.',
+ 'start-mention':'Encontré una canción llamada «Use /start».',
+};
+type Reply='direct-timeout'|'direct'|'menu-invalid'|'menu-large'|'menu-ogg'|'menu-flac'|'menu-all-ogg'|'callback-conflict'|'empty'|'unsupported'|'unsupported-format'|'limit'|'blocked'|keyof typeof startPrompts;
 function setup(t:TestContext,replies:readonly Reply[]){
  t.mock.timers.enable({apis:['setTimeout','Date'],now:10_000});
  t.mock.method(performance,'now',()=>Date.now());
@@ -51,11 +58,13 @@ function setup(t:TestContext,replies:readonly Reply[]){
   async sendQuery(peer){
    const id=botId(peer);
    scenario=replies[id-101]??'direct';
+   if(scenario==='blocked')throw Object.assign(Error('USER_IS_BLOCKED'),{text:'USER_IS_BLOCKED'});
    const outgoing=++nextId;
    const reply=++nextId;
+   const prompt=Object.hasOwn(startPrompts,scenario)?startPrompts[scenario as keyof typeof startPrompts]:null;
    messages=scenario.startsWith('menu-')||scenario==='callback-conflict'?[menu(id,reply,outgoing)]:
     scenario==='empty'?[incoming(id,reply,outgoing,'No se encontraron resultados')]:
-    scenario==='needs-start'?[incoming(id,reply,outgoing,'Envía /start para iniciar el bot')]:
+    prompt?[{...incoming(id,reply,outgoing,prompt),...(scenario==='needs-start'?{}:{replyTo:undefined})}]:
     [document(id,reply,outgoing,id,audio.length,scenario==='unsupported-format'?'audio/ogg':undefined)];
    return {_:'updateShortSentMessage',out:true,id:outgoing};
   },
@@ -73,7 +82,9 @@ function setup(t:TestContext,replies:readonly Reply[]){
    const option=data[0];
    callbacks.push(option);
    const overLimit=scenario==='menu-large'&&option===1;
-   messages.push(document(botId(peer),++nextId,id,option,overLimit?BOT_DOWNLOAD_MAX_BYTES+1:audio.length));
+   const mime=scenario==='menu-all-ogg'||scenario==='menu-ogg'&&option===1?'audio/ogg':
+    scenario==='menu-flac'&&option===1?'audio/flac':undefined;
+   messages.push(document(botId(peer),++nextId,id,option,overLimit?BOT_DOWNLOAD_MAX_BYTES+1:audio.length,mime));
    return {_:'messages.botCallbackAnswer'};
   },
   async readDocumentPart(doc,_offset,_limit,signal){
@@ -138,7 +149,7 @@ function setup(t:TestContext,replies:readonly Reply[]){
     publish({pending:false,delivery:'acknowledged',rows:menu,expiresAt});return reply.audio;
    }
    assert.equal(reply.type,'bot-search.error');
-   const retain=menu.length&&['file-invalid','file-too-large'].includes(reply.error);
+   const retain=menu.length&&isBotSearchFileError(reply.error);
    publish({pending:false,error:reply.error,delivery:reply.delivery,rows:retain?menu:[],expiresAt:retain?expiresAt:null});
    return null;
   },
@@ -172,6 +183,64 @@ function setup(t:TestContext,replies:readonly Reply[]){
 }
 const progress=():CollectionBotProgress=>({completed:new Set(),reasons:[]});
 const accept=async()=>'saved' as const;
+const downloadFixtureSong=(f:ReturnType<typeof setup>,trackId?:string)=>f.drive(downloadSong({
+ ...f.params,collection:progress(),choice:{...target,id:'song',source:'itunes',duration:60},
+ attempt:{current:()=>true,lookup:async()=>null,save:async()=>trackId?{state:'saved',trackId}:assert.fail('No valid audio'),
+  addToLibrary:async()=>true,play:async()=>'failed'},
+ index:0,mark:()=>{},message:()=>{},
+}));
+
+for(const scenario of ['menu-ogg','menu-flac'] as const)
+ test(`R1 · ${scenario} preserves the second option and saves with the same bot`,async t=>{
+  const f=setup(t,[scenario,'empty']);
+  const song=await downloadFixtureSong(f,'same-bot-copy');
+  assert.equal(song.state,'downloaded',JSON.stringify({song,callbacks:f.callbacks,errors:f.errors.map(reply=>reply.error)}));
+  assert.deepEqual(f.callbacks,[1,2]);
+  assert.deepEqual(f.searches,[providers[0].providerRef]);
+ });
+
+test('R1 · unsupported audio across the menu never penalizes the bot',async t=>{
+ const f=setup(t,['menu-all-ogg','direct']);
+ for(let i=0;i<3;i++)assert.equal((await downloadFixtureSong(f,'fallback-copy')).state,'downloaded');
+ assert.deepEqual(f.searches,Array.from({length:3},()=>providers.map(p=>p.providerRef)).flat(),JSON.stringify(f.errors.map(reply=>reply.error)));
+ assert.deepEqual(f.callbacks,[1,2,1,2,1,2]);
+});
+
+test('R1 · only an exhausted incompatible menu reports the compatibility warning',async t=>{
+ const f=setup(t,['menu-all-ogg','empty']);
+ const song=await downloadFixtureSong(f);
+ assert.deepEqual(f.callbacks,[1,2]);
+ assert.equal('message' in song&&song.message,'Ningún bot entregó un archivo compatible');
+});
+
+test('R1 · a delivered compatible file rejected locally does not produce a format warning',async t=>{
+ const f=setup(t,['unsupported-format','direct']);
+ const result=await f.drive(acquireFromOrderedBots({...f.params,collection:progress(),accept:async()=>'retry'}));
+ assert.equal(result.state,'known-failure');
+ if(result.state==='known-failure')assert.doesNotMatch(acquisitionFailureText(result.reasons),/Ningún bot entregó un archivo compatible/);
+});
+
+for(const scenario of ['blocked','start-recent','start-welcome','start-es'] as const)
+ test(`M9 · ${scenario} falls back to the next bot and preserves the start warning`,async t=>{
+  const f=setup(t,[scenario,'empty']);
+  const song=await downloadFixtureSong(f);
+  assert.deepEqual(f.searches,providers.map(p=>p.providerRef));
+  assert.deepEqual(f.errors.map(reply=>reply.error),['needs-start']);
+  assert.equal('message' in song&&song.message,'Un bot necesita que envíes /start en Telegram');
+ });
+
+test('M9 · a song title mentioning /start is not a bot start prompt',async t=>{
+ const f=setup(t,['start-mention','direct']);
+ assert.equal((await downloadFixtureSong(f,'fallback-copy')).state,'downloaded');
+ assert.deepEqual(f.errors.map(reply=>reply.error),['unsupported']);
+});
+
+test('M9 · mixed interactive replies do not assert catalogue absence',async t=>{
+ const f=setup(t,['empty','needs-start']);
+ const result=await f.drive(acquireFromOrderedBots({...f.params,accept}));
+ assert.equal(result.state,'known-failure');
+ if(result.state==='known-failure')assert.equal(acquisitionFailureText(result.reasons),'Un bot necesita que envíes /start en Telegram');
+});
 
 test('H2 · real direct audio transfer timeout falls back and saves through downloadSong',async t=>{
  const f=setup(t,['direct-timeout','direct']);
@@ -245,5 +314,5 @@ for(const [scenario,message] of [
  assert.deepEqual(f.searches,providers.map(p=>p.providerRef));
  assert.equal(song.state,'failed');
  assert.equal('message' in song&&song.message,message);
- assert.deepEqual(f.errors.map(error=>error.error),scenario==='empty'?[]:[scenario==='limit'?'limit-history':scenario==='unsupported-format'?'unsupported':scenario]);
+ assert.deepEqual(f.errors.map(error=>error.error),scenario==='empty'?[]:[scenario==='limit'?'limit-history':scenario==='unsupported-format'?'file-unsupported':scenario]);
 });

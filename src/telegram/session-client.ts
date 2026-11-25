@@ -2,7 +2,7 @@ import type {NetworkTiming} from '../diagnostics/download-timing';
 import {cooldownDeadline} from './rpc-failure';
 import {botDownloadTransferMs,BOT_DOWNLOAD_MAX_BYTES} from './bot-download-bytes';
 import {clearTelegramSessionLease} from './saved-session';
-import {BOT_SEARCH_BOUNDS,parseBotSearchCommand,type BotSearchCommand,type BotSearchRow,type BotSearchTarget,type BotSearchError,type BotSearchDelivery,type BotDownloadedAudio} from './bot-search-protocol';
+import {BOT_SEARCH_BOUNDS,isBotSearchFileError,parseBotSearchCommand,type BotSearchCommand,type BotSearchRow,type BotSearchTarget,type BotSearchError,type BotSearchDelivery,type BotDownloadedAudio} from './bot-search-protocol';
 import type {QrLoginChallenge} from './qr-login-protocol';
 import {parseBotSearchBridgeReply} from './bot-search-bridge-protocol';
 import {parseBotProvidersCommand,parseBotUsername,type BotProvidersCommand,type BotProviderRow,type BotProvidersReply} from './bot-providers-protocol';
@@ -107,7 +107,7 @@ export class TelegramSessionClient {
    if(reply.type==='bot-search.downloaded'){if(p.command.type!=='bot-search.download'){this.quarantineSearch('protocol');return true;}if(!p.cancelled&&Date.now()<p.until){p.audio=reply.audio;this.search={...this.search,error:null,rows:[],downloadProgress:null};}}
    if(this.state.phase==='connected'){
     if(reply.type==='bot-search.error')this.search={...this.search,delivery:reply.delivery,error:p.cancelled?this.search.error:reply.error,
-     ...(menu&&['file-invalid','file-too-large'].includes(reply.error)?menu:p.menu?{rows:[]}:{})};
+     ...(menu&&isBotSearchFileError(reply.error)?menu:p.menu?{rows:[]}:{})};
     else if(reply.type==='bot-search.result'){
      const valid=!p.cancelled&&Date.now()<p.until&&Date.now()<reply.expiresAt&&reply.expiresAt<=Date.now()+BOT_SEARCH_BOUNDS.resultTtlMs;
      this.search={...this.search,delivery:reply.delivery,rows:valid?[...(menu?.rows??[]),...reply.rows].slice(0,BOT_SEARCH_BOUNDS.rows):[],expiresAt:valid?(menu?Math.min(menu.expiresAt,reply.expiresAt):reply.expiresAt):null,error:valid?null:p.cancelled?this.search.error:'expired'};

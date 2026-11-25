@@ -20,7 +20,8 @@ const work=await createTestWorkspace('playlist-full-download');
 const checkpointKey='pulso:library-download:v1:'+accountId;
 const botFailureModes=['album','playlist'].flatMap(kind=>
  ['timeout','unsupported','limit','needs-start'].map(error=>'queue-'+kind+'-bot-'+error));
-const reviewModes=['queue-album-reconnect-exhausted','queue-dispatch-relaunch-cap','queue-album-uncertain-send','queue-album-network','queue-album-interruption','queue-stop-update','queue-retry-at','queue-disconnected',
+const reconnectModes=['queue-album-reconnect-exhausted','queue-album-reconnect-foreground','queue-album-reconnect-online','queue-album-reconnect-online-before-settle'];
+const reviewModes=[...reconnectModes,'queue-dispatch-relaunch-cap','queue-dispatch-normal-deferrals','queue-album-uncertain-send','queue-album-network','queue-album-interruption','queue-stop-update','queue-retry-at','queue-disconnected',
  'queue-claim-error','queue-album-read-error','queue-cancel-save','queue-paused-removal','queue-missing-track',
  'queue-album-refresh','queue-album-external-removal','queue-single-edition','queue-inspection',
  'queue-review-admission','queue-version-busy','queue-before-library-refresh','queue-album-expired-update','queue-album-clear-retry',
@@ -33,7 +34,7 @@ const selectedEngine=process.env.PLAYLIST_FULL_ENGINE;
 const baseline=process.env.PLAYLIST_TURNAROUND_BASE==='1';
 const cancelMode=mode=>mode==='queue-cancel'||mode==='queue-cancel-empty';
 const isQueueMode=mode=>mode.startsWith('queue')||mode.startsWith('tap-');
-const turnaroundScenarios=['mismatch','muted','reuse','tags-compound','tags-unrelated'];
+const turnaroundScenarios=['mismatch','muted','reuse','tags-compound','tags-unrelated','unsupported-format'];
 const selectedScenarios=process.env.PLAYLIST_TURNAROUND_SCENARIOS?.split(',')??turnaroundScenarios;
 const callbackTimeout=selectedScenarios.length===1&&selectedScenarios[0]==='callback-timeout';
 assert.ok(callbackTimeout||selectedScenarios.every(scenario=>turnaroundScenarios.includes(scenario)));
@@ -80,7 +81,7 @@ const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
    code=insert("createRoot(document.getElementById('root')!).render(<App/>);",
     "const testAppRoot=createRoot(document.getElementById('root')!);testAppRoot.render(<App/>);")+
     '\nwindow.testUnmountPulso=()=>testAppRoot.unmount();window.testUpdateWait=()=>downloadUpdateWait;';
-  if(selectedModes.includes('queue-album-reconnect-exhausted')&&id.endsWith('/src/library/collection-telegram-wait.ts'))
+  if(selectedModes.some(mode=>reconnectModes.includes(mode))&&id.endsWith('/src/library/collection-telegram-wait.ts'))
    return insert('[5_000,10_000,20_000,40_000]',
     'globalThis.testFastQueueReconnect?[10,20,40,80]:[5_000,10_000,20_000,40_000]');
   if(id.endsWith('/src/telegram/session-client.ts'))
@@ -88,6 +89,10 @@ const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
   if(id.endsWith('/src/library/album-download.ts'))
    return insert('for(const notify of coordinator.listeners)notify();',`
     if(window.testObserveAlbum&&coordinator.active)window.testObservedAlbum=coordinator.active;
+    if(window.testAlbumPausing&&coordinator.active&&coordinator.notice?.progress.waiting&&coordinator.notice.progress.message.startsWith('Telegram sigue sin responder.')){
+     delete window.testAlbumPausing;
+     dispatchEvent(new Event('online'));
+    }
     if(coordinator.notice?.progress.rows.some(row=>row.message==='No existe en tus bots'))window.testSawMissingSong=true;
     if(window.testSongMessages)for(const row of coordinator.notice?.progress.rows??[])window.testSongMessages.add(row.message);
     for(const notify of coordinator.listeners)notify();`);
@@ -101,7 +106,7 @@ const sdk=()=>({name:'playlist-full-download-sdk',enforce:'pre',resolveId(id){
    return insert('export async function readSavedAlbum(accountId:string,id:CatalogId):Promise<SavedAlbum|null> {',
     "export async function readSavedAlbum(accountId:string,id:CatalogId):Promise<SavedAlbum|null> { if(window.testAlbumReadError)throw new DOMException('Synthetic album read failure','QuotaExceededError'); if(window.testAlbumReadGate)await window.testAlbumReadGate();");
   if(id.endsWith('/src/service-worker/download-update.ts')){
-   let result=insert(' if(!current())return false;', ' if(!current())return false;\n window.testCheckKinds?.push(action.kind);\n if(window.testDispatchGate)await window.testDispatchGate(current,action);\n if(!current())return false;');
+   let result=insert(' if(!current())return false;', ' if(!current())return false;\n window.testCheckKinds?.push(action.kind);\n if(window.testDispatchGate&&await window.testDispatchGate(current,action)===false)return false;\n if(!current())return false;');
    if(selectedModes.includes('queue-version-busy'))result+=`
     window.testOccupyVersionCheck=(account,trackId,title)=>downloadWithCurrentApp(account,{kind:'repair',trackId,title,retry:'safe'},()=>true);
    `;
@@ -367,7 +372,8 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     const reply=replies.get(query);
     trace.push({kind,peer,trackId:reply?.trackId,ms:elapsed(started)});
     if(!reply?.plan[peer-101])return route.fulfill({status:400});
-    if(mode==='queue-album-reconnect-exhausted'&&reply.trackId==='album-1'&&!faulted.has('allow-album-retry'))
+    if(reconnectModes.includes(mode)&&reply.trackId==='album-1'&&!faulted.has('allow-album-retry')&&
+       !(mode==='queue-album-reconnect-online-before-settle'&&trace.filter(event=>event.kind==='search'&&event.trackId==='album-1').length>5))
      return route.abort('connectionreset');
     if(mode==='queue-album-uncertain-send'&&reply.trackId==='album-1'&&!faulted.has(mode)){
      faulted.add(mode);return route.abort('connectionreset');
@@ -506,7 +512,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     if(dock&&Array.from(document.querySelectorAll('[role="status"]')).some(status=>status.textContent.startsWith('Descarga finalizada ·')))data.finishedAt??=performance.now();
     if(data.finishedAt!==null&&!dock)data.closedAt??=performance.now();
    }).observe(document,{childList:true,subtree:true,characterData:true,attributes:true});
-  },{startLabel,resumeLabel,reviewButtons,fastQueueReconnect:mode==='queue-album-reconnect-exhausted'});
+  },{startLabel,resumeLabel,reviewButtons,fastQueueReconnect:reconnectModes.includes(mode)});
   page=await context.newPage();
   page.setDefaultTimeout(15000);
   page.on('pageerror',error=>errors.push(String(error)));
@@ -626,6 +632,10 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      Object.defineProperty(navigator,'onLine',{configurable:true,value});
      dispatchEvent(new Event(value?'online':'offline'));
     },value);
+    const foreground=value=>page.evaluate(value=>{
+     Object.defineProperty(document,'visibilityState',{configurable:true,value:value?'visible':'hidden'});
+     document.dispatchEvent(new Event('visibilitychange'));
+    },value);
     const changeSavedAlbum=deleteAlbum=>page.evaluate(async ({accountId,editionId,deleteAlbum})=>{
      const db=await new Promise((ok,fail)=>{
       const req=indexedDB.open('pulso-web-local-v1');req.onsuccess=()=>ok(req.result);req.onerror=()=>fail(req.error);
@@ -718,15 +728,38 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
       assert.deepEqual(await queuedTitles(),[playlistC]);
      }finally{await page.evaluate(()=>{const release=window.testReleaseLibrarySnapshot;delete window.testLibrarySnapshotGate;release();});}
      await verifyNext();
+    }else if(mode==='queue-dispatch-normal-deferrals'){
+     await saveAlbum();await openSavedAlbum();
+     await page.evaluate(()=>{
+      window.testCheckKinds=[];
+      window.testDispatchGate=current=>{
+       const client=window.testQueueTelegram;
+       if(window.testCheckKinds.filter(kind=>kind==='album').length>2)return;
+       client.remoteRetryAt=Date.now()+550;
+       client.publishSearch();
+       if(current())throw Error('Expected a real Telegram cooldown to defer admission');
+      };
+      window.testAlbumReadGate=()=>{
+       delete window.testAlbumReadGate;
+       const client=window.testQueueTelegram;
+       client.remoteRetryAt=Date.now()+550;
+       client.publishSearch();
+      };
+     });
+     await enqueueAlbum();
+     await page.waitForFunction(key=>!localStorage.getItem(key),queueKey,{timeout:5500});
+     await verifyAlbum();
+     assert.deepEqual(await page.evaluate(()=>window.testCheckKinds.filter(kind=>kind==='album')),Array(4).fill('album'));
     }else if(mode==='queue-dispatch-relaunch-cap'){
      await saveAlbum();await openSavedAlbum();
      await page.evaluate(()=>{
       window.testCheckKinds=[];
       window.testDispatchGate=current=>{
        const client=window.testQueueTelegram;
-       client.remoteRetryAt=Date.now()+400;
-       client.publishSearch();
-       current();
+       client.remoteRetryAt=Date.now()+30_000;
+       if(current())throw Error('Expected admission to defer');
+       client.remoteRetryAt=null;
+       return false;
       };
      });
      const hits=latestHits;
@@ -738,7 +771,6 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      assert.equal(latestHits,hits,'Version checks were deferred before fetching the manifest');
      assert.equal(trace.length,0);
      await page.evaluate(()=>{
-      dispatchEvent(new Event('online'));
       document.dispatchEvent(new Event('visibilitychange'));
       const client=window.testQueueTelegram;
       client.bots={...client.bots,revision:client.bots.revision+1};
@@ -746,8 +778,10 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      });
      await page.waitForTimeout(650);
      assert.deepEqual(await page.evaluate(()=>window.testCheckKinds),['album','album']);
-     await online(false);
-     await online(true);
+     await page.waitForTimeout(4500);
+     await dock.getByText(/«.*» sigue en cola porque la descarga no pudo empezar/).waitFor({timeout:1000});
+     await foreground(false);
+     await foreground(true);
      await page.waitForFunction(()=>window.testCheckKinds.length===4);
      await retry.waitFor();
      assert.deepEqual(await queuedTitles(),[albumTitle]);
@@ -845,14 +879,30 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
       assert.ok(faulted.has(mode));
       assert.equal(await page.evaluate(()=>!!window.testSawMissingSong),false);
       assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.trackId),['album-0','album-1','album-1',cTrack.id]);
-     }else if(mode==='queue-album-reconnect-exhausted'){
+     }else if(mode==='queue-album-reconnect-online-before-settle'){
       await online(false);
       await enqueueAlbum();
       await enqueueNext();
-      await page.evaluate(()=>{
+      await page.evaluate(()=>{window.testAlbumPausing=true;});
+      await online(true);
+      await verifyNext();
+      await verifyAlbum();
+      assert.equal(await page.evaluate(()=>window.testAlbumPausing),undefined);
+      assert.deepEqual(trace.filter(event=>event.kind==='search').map(event=>event.trackId),['album-0',...Array(6).fill('album-1'),cTrack.id]);
+     }else if(reconnectModes.includes(mode)){
+      await online(false);
+      await enqueueAlbum();
+      await enqueueNext();
+      await page.evaluate(background=>{
        window.testOriginalBotLifetime=window.testQueueTelegram.captureBotsCurrent();
        window.testCheckKinds=[];
-      });
+       if(background)window.testAlbumTrackConfirmed=index=>{
+        if(index!==0)return;
+        delete window.testAlbumTrackConfirmed;
+        Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});
+        document.dispatchEvent(new Event('visibilitychange'));
+       };
+      },mode==='queue-album-reconnect-foreground');
       await online(true);
       await openDetails();
       const retry=dock.getByRole('button',{name:'Reintentar descarga en cola'});
@@ -880,7 +930,9 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
        client.publishBots();
       });
       faulted.add('allow-album-retry');
-      await retry.tap();
+      if(mode==='queue-album-reconnect-foreground')await foreground(true);
+      else if(mode==='queue-album-reconnect-online')await online(true);
+      else await retry.tap();
       await verifyNext();
       assert.equal((await verifyAlbum())[0],before[0]);
       assert.deepEqual(await page.evaluate(()=>window.testCheckKinds),['album','album','library']);
@@ -1575,7 +1627,9 @@ async function checkTurnaround(browser,engine,origin,scenario){
   }
  }
  const descriptor=(track,variant=0)=>({key:byId.get(track.id).goodKey+variant,title:track.title,artist:track.artist,
-  duration:scenario==='mismatch'&&variant?52:track.duration,mime:tagged?'audio/mp4':'audio/wav',bytes:taggedFiles.get(byId.get(track.id).goodKey+variant)?.length??byId.get(track.id).payload.length});
+  duration:scenario==='mismatch'&&variant?52:track.duration,
+  mime:scenario==='unsupported-format'&&variant?'audio/ogg':tagged?'audio/mp4':'audio/wav',
+  bytes:taggedFiles.get(byId.get(track.id).goodKey+variant)?.length??byId.get(track.id).payload.length});
  const cloud={accountId,revision:1,document:{version:1,tracks,
   playlists:[{id:uuid(99),name:playlistName,entries:tracks.map((track,i)=>({trackId:track.id,id:uuid(100+i)}))}]}};
  try{
@@ -1601,6 +1655,7 @@ async function checkTurnaround(browser,engine,origin,scenario){
      return route.fulfill({json:{audio:peer===102&&(index===0||index===3)?[descriptor(track)]:[],menu}});
     }
     if(scenario==='muted')return route.fulfill({json:peer===101?{silent:true,audio:[]}:{audio:[descriptor(track)]}});
+    if(scenario==='unsupported-format'&&peer===102)return route.fulfill({json:{audio:[descriptor(track)]}});
     if(tagged){
      if(peer===102)return route.fulfill({json:{audio:compound?[]:[descriptor(track)]}});
      return route.fulfill({json:{audio:[],delayMs:400,menu:[1,2,3].map(variant=>({
@@ -1713,6 +1768,10 @@ async function checkTurnaround(browser,engine,origin,scenario){
     if(scenario==='mismatch'){
      assert.ok(states.some(text=>text.includes('no coincide (duración)')));
      assert.equal(songs[0].rejections['mismatch-duration'],1);
+    }
+    if(scenario==='unsupported-format'){
+     assert.equal(songs[0].rejections['file-unsupported'],1);
+     assert.deepEqual(trace.filter(e=>e.kind==='read').map(e=>e.key),[descriptor(tracks[0]).key]);
     }
    }
   }

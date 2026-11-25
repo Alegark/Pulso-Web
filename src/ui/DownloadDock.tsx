@@ -57,7 +57,7 @@ function readPosition():Point|null{
  return null;
 }
 
-export function DownloadDock({accountId,message,review,onReviewStorage,updateWait,onStopUpdate,pendingDownload,onRetryQueued}:{accountId?:string;updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;onRetryQueued?:()=>void;pendingDownload?:{saved:number;total:number;title?:string;reason?:string;retaking:boolean;onContinue:()=>void};message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
+export function DownloadDock({accountId,message,review,onReviewStorage,updateWait,onStopUpdate,pendingDownload,queuedPauseReason,onRetryQueued}:{accountId?:string;updateWait?:'checking'|'updating'|null;onStopUpdate?:()=>void;queuedPauseReason?:string;onRetryQueued?:()=>void;pendingDownload?:{saved:number;total:number;title?:string;reason?:string;retaking:boolean;onContinue:()=>void};message?:{text:string}|null;review?:ReactNode;onReviewStorage?:()=>void}){
  const {active:activeRun,notice,queued,queueAccount,removeQueued}=useAlbumDownloadState();
  const scoped=(run:AlbumCoordinator['active'])=>run?.accountId===undefined||run.accountId===accountId?run:undefined;
  const active=scoped(activeRun),running=!!active;
@@ -135,7 +135,7 @@ export function DownloadDock({accountId,message,review,onReviewStorage,updateWai
  const pendingBatch=!running?pendingDownload:undefined;
  useLayoutEffect(()=>{if(pendingBatch)setFinished(null);},[!!pendingBatch]);
  const pendingMessage=pendingBatch&&(pendingBatch.retaking?'Retomando…':`Descarga pendiente · ${pendingBatch.saved} de ${pendingBatch.total} guardadas`);
- const pauseReason=displayMessage(pendingBatch?.reason);
+ const pauseReason=displayMessage(pendingBatch?.reason??(!running?queuedPauseReason:undefined));
  const visible=!!updateMessage||running||!!finished||!!transient||reviewing||!!pendingBatch||waiting.length>0;
  const currentNotice=running?notice:pendingBatch?undefined:finished?.notice;
  const rows=currentNotice?.progress.rows??[];
@@ -223,7 +223,7 @@ export function DownloadDock({accountId,message,review,onReviewStorage,updateWai
  },[visible]);
 
  return createPortal(<>
-  <div className="pulso-visually-hidden" role="status">{updateMessage||(pendingMessage?[pendingMessage,transient,pauseReason].filter(Boolean).join(' · '):null)||transient||(running?`Descargando · ${summary}`:finished?`${finished.stopped?'Descarga detenida':'Descarga finalizada'} · ${summary}`:'')}</div>
+  <div className="pulso-visually-hidden" role="status">{updateMessage||(pendingMessage?[pendingMessage,transient,pauseReason].filter(Boolean).join(' · '):null)||transient||pauseReason||(running?`Descargando · ${summary}`:finished?`${finished.stopped?'Descarga detenida':'Descarga finalizada'} · ${summary}`:'')}</div>
   {visible&&<div ref={bounds} className="download-dock-area">
    <section ref={card} className="download-dock" aria-label={reviewing?'Revisión de descarga':'Descargas'} tabIndex={-1}
     data-positioned={!!position} data-expanded={showingDetails} data-pending={!!pendingBatch&&!updateMessage&&!reviewing&&!showingDetails&&!transient&&!pauseReason}>

@@ -94,7 +94,7 @@ export function failureText(r:Result):string {
 
 export const songFlows=['none','direct-audio','callback-menu'] as const;
 export const songRejectionReasons=['timeout','no-compatible-row','mismatch-title','mismatch-artist','mismatch-duration',
- 'import-tag-mismatch','import-duration-mismatch','file-too-large','file-invalid','rate-limit','network','uncertain',
+ 'import-tag-mismatch','import-duration-mismatch','file-too-large','file-invalid','file-unsupported','rate-limit','network','uncertain',
  'unsupported','needs-start','limit','conflict','identity-changed','expired','session-expired','busy','cancelled','selection-changed'] as const;
 export type SongRejection=typeof songRejectionReasons[number];
 export const songTimeKeys=['firstBotReplyMs','searchPollMs','callbackPollMs','transferMs','importMs','timeoutMs','reconnectMs','floodWaitMs','totalMs'] as const;

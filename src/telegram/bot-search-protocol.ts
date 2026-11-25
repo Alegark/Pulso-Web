@@ -26,7 +26,10 @@ export const BOT_SEARCH_LIMIT_DIAGNOSTICS=Object.freeze({
 } as const);
 export type BotSearchLimitError=keyof typeof BOT_SEARCH_LIMIT_DIAGNOSTICS;
 export function isBotSearchLimitError(value:unknown):value is BotSearchLimitError {return typeof value==='string'&&Object.hasOwn(BOT_SEARCH_LIMIT_DIAGNOSTICS,value);}
-export type BotSearchError='cancelled'|'timeout'|'busy'|'expired'|'session-expired'|'limit'|'unsupported'|'identity-changed'|'rate-limit'|'network'|'uncertain'|'needs-start'|'file-too-large'|'file-invalid'|'conflict'|BotSearchLimitError;
+export type BotSearchFileError='file-too-large'|'file-invalid'|'file-unsupported';
+export const isBotSearchFileError=(error:unknown):error is BotSearchFileError=>
+ error==='file-too-large'||error==='file-invalid'||error==='file-unsupported';
+export type BotSearchError='cancelled'|'timeout'|'busy'|'expired'|'session-expired'|'limit'|'unsupported'|'identity-changed'|'rate-limit'|'network'|'uncertain'|'needs-start'|'conflict'|BotSearchFileError|BotSearchLimitError;
 export type BotSearchDelivery='not-dispatched'|'uncertain'|'acknowledged';
 interface Row {readonly rowRef:string;readonly correlation:'reply'|'recent'}
 export type BotSearchRow=
@@ -61,6 +64,12 @@ function text(v:unknown,max=160):v is string {return typeof v==='string'&&v.leng
 export function botSearchReportsNoResults(row:BotSearchRow):boolean {
  return row.kind==='message'&&row.correlation==='reply'&&
   /^(?:no (?:se )?encontraron resultados|no results found)[.!]?$/iu.test(row.text);
+}
+export function botSearchReportsNeedsStart(row:BotSearchRow):boolean {
+ if(row.kind!=='message')return false;
+ const prompt=row.text.replace(/\s+/gu,' ').replace(/^[\p{Extended_Pictographic}\uFE0F ]+|[\p{Extended_Pictographic}\uFE0F ]+$/gu,'')
+  .replace(/^(?:welcome(?: to (?:the|this) bot)?|bienvenid[oa]s?)[.!:][\p{Extended_Pictographic}\uFE0F ]+/iu,'');
+ return /^(?:(?:please )?(?:send|press|use|type) \/start(?: first| to (?:start|activate) (?:the|this) bot)?|(?:primero,? )?(?:env[ií]a|pulsa|usa|escribe) \/start(?: primero| para (?:iniciar|activar) (?:el|este) bot)?)[.!]?$/iu.test(prompt);
 }
 export function parseBotSearchTarget(raw:unknown):BotSearchTarget|null {
  const r=dataRecord(raw,['title','artist','album','durationSeconds']);
@@ -102,7 +111,7 @@ export function parseBotSearchReply(raw:unknown,expected:BotSearchEnvelope):BotS
  case 'bot-search.cancelled':if(!isUuid(r.targetRequestId))return null;extra=['targetRequestId'];out={...e,type:r.type,targetRequestId:r.targetRequestId};break;
  case 'bot-search.result':{const a=dataArray(r.rows,20);if(!a||!a.length||r.delivery!=='acknowledged'||!timestamp(r.expiresAt))return null;const rows=a.map(row);if(!rows.every((x):x is BotSearchRow=>x!==null)||new Set(rows.map(x=>x.rowRef)).size!==rows.length)return null;const expectedTarget=r.expectedTarget===null?null:parseBotSearchTarget(r.expectedTarget);if(r.expectedTarget!==null&&!expectedTarget)return null;extra=['delivery','rows','expiresAt','expectedTarget'];out={...e,type:r.type,delivery:'acknowledged',rows:Object.freeze(rows),expiresAt:r.expiresAt,expectedTarget};break;}
  case 'bot-search.error':
-  if(!(['cancelled','timeout','busy','expired','session-expired','limit','unsupported','identity-changed','rate-limit','network','uncertain','needs-start','file-too-large','file-invalid','conflict'].includes(r.error as string)||isBotSearchLimitError(r.error))||!['not-dispatched','uncertain','acknowledged'].includes(r.delivery as string)||r.retryAt!==null&&!timestamp(r.retryAt)||typeof r.retryBlocked!=='boolean'||(r.error==='rate-limit'?(r.retryBlocked!==(r.retryAt===null)):(r.retryAt!==null||r.retryBlocked)))return null;
+  if(!(['cancelled','timeout','busy','expired','session-expired','limit','unsupported','identity-changed','rate-limit','network','uncertain','needs-start','conflict'].includes(r.error as string)||isBotSearchFileError(r.error)||isBotSearchLimitError(r.error))||!['not-dispatched','uncertain','acknowledged'].includes(r.delivery as string)||r.retryAt!==null&&!timestamp(r.retryAt)||typeof r.retryBlocked!=='boolean'||(r.error==='rate-limit'?(r.retryBlocked!==(r.retryAt===null)):(r.retryAt!==null||r.retryBlocked)))return null;
   extra=['error','delivery','retryAt','retryBlocked'];out={...e,type:r.type,error:r.error as BotSearchError,delivery:r.delivery as BotSearchDelivery,retryAt:r.retryAt as number|null,retryBlocked:r.retryBlocked};break;
  default:return null;
  }

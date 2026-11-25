@@ -8,7 +8,7 @@ import {bytesToHex} from '@noble/hashes/utils.js';
 import {formatStorageMB} from './storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {matchingSongRows,type SongImportRejection} from './selected-song';
-import {BOT_SEARCH_BOUNDS,botAudioMismatchFields,botOptionDurationMismatch,botSearchReportsNoResults,isBotSearchLimitError,type BotSearchError,type BotSearchTarget,type BotDownloadedAudio,type BotSearchRow} from '../telegram/bot-search-protocol';
+import {BOT_SEARCH_BOUNDS,botAudioMismatchFields,botOptionDurationMismatch,botSearchReportsNoResults,isBotSearchFileError,isBotSearchLimitError,type BotSearchError,type BotSearchFileError,type BotSearchTarget,type BotDownloadedAudio,type BotSearchRow} from '../telegram/bot-search-protocol';
 import type {BotSearchSnapshot,BotsSnapshot,TelegramSessionClient} from '../telegram/session-client';
 
 export type OrderedProvider={providerRef:string;label:string};
@@ -16,7 +16,7 @@ export function orderedProviders(bots:BotsSnapshot|null):OrderedProvider[] {
  const seen=new Set<string>(),usernames=new Set<string>();
  return (bots?.providers??[]).filter(p=>{const username=p.username.toLowerCase();if(!['ivkmbot','lydbot','ansmusicbot','kdmusic_bot','deezermusicbot'].includes(username)||seen.has(p.providerRef)||usernames.has(username))return false;seen.add(p.providerRef);usernames.add(username);return true;}).slice(0,5).map(p=>({providerRef:p.providerRef,label:p.label}));
 }
-export type AcquisitionFailureReason='no-results'|'needs-start'|'bot-limit'|'unsupported'|'no-compatible-row'|'returned-audio-mismatch'|'file-too-large'|'file-invalid'|'selection-changed'|'audio-title-version-mismatch'|'audio-artist-mismatch'|'audio-duration-mismatch';
+export type AcquisitionFailureReason='no-results'|'needs-start'|'bot-limit'|'unsupported'|'no-compatible-row'|'returned-audio-mismatch'|BotSearchFileError|'selection-changed'|'audio-title-version-mismatch'|'audio-artist-mismatch'|'audio-duration-mismatch';
 /** Closed explanations shared by individual and album acquisition. Never assert
  * catalogue absence from a local validation failure. */
 export function acquisitionFailureText(reasons:readonly AcquisitionFailureReason[]):string {
@@ -34,9 +34,12 @@ export function acquisitionFailureText(reasons:readonly AcquisitionFailureReason
   'audio-duration-mismatch':'En los audios recibidos se observó duración fuera de la tolerancia permitida.',
   'file-too-large':`El bot entregó un archivo que supera el límite actual de ${formatStorageMB(AUDIO_FILE_MAX_BYTES)} de Pulso. No se descargó. [D03]`,
   'file-invalid':'El archivo recibido está incompleto o su formato no es compatible. No se guardó. [D04]',
+  'file-unsupported':'Ningún bot entregó un archivo compatible',
   'selection-changed':'La opción del bot cambió antes de confirmar la descarga. [D05]',
  };
- return [...new Set(reasons)].filter(reason=>!reason.startsWith('audio-')).map(reason=>messages[reason]).join(' ')||'No se pudo confirmar una coincidencia musical.';
+ const distinct=new Set(reasons);
+ if(distinct.size>1)distinct.delete('no-results');
+ return [...new Set([...distinct].filter(reason=>!reason.startsWith('audio-')).map(reason=>messages[reason]))].join(' ')||'No se pudo confirmar una coincidencia musical.';
 }
 const CANDIDATES_PER_BOT=5;
 const TRANSIENT_RETRIES_PER_BOT=2;
@@ -51,6 +54,7 @@ export interface CollectionBotProgress {
  timedOut?:boolean;
  resumeBot?:number;
  rejectedOptions?:Set<string>;
+ receivedCompatibleAudio?:boolean;
 }
 
 type Result={state:'audio';audio:BotDownloadedAudio}|{state:'known-failure';reasons:readonly AcquisitionFailureReason[]}|{state:'uncertain'|'unavailable'|'timed-out'|'parked'|'stopped'|'telegram'|'suspended'};
@@ -76,6 +80,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
  if(resume>0)order.unshift(...order.splice(resume,1));
  let precedingBot=false;
  const reasons=collection?.reasons??[],excludedRows=new Set(p.excludedRowKeys);
+ let receivedCompatibleAudio=collection?.receivedCompatibleAudio??false;
  let expired=false,unavailable=false,incompleteBot=false,botTimedOut=false,botUntil=Infinity;
  const botExpired=()=>botTimedOut||botUntil<deadline&&performance.now()>=botUntil;
  const until=()=>Math.min(botUntil,deadline);
@@ -139,7 +144,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
   // A retained menu can still carry the previous option's failure before admission.
   const ownReply=own&&phase!=='selection';
   const error=ownReply?state.error:null,delivery=ownReply?state.delivery:null;
-  const invalid=error==='file-too-large'||error==='file-invalid';
+  const invalid=isBotSearchFileError(error);
   const rejected=providerRejection(error);
   const mismatch=phase==='download'&&delivery==='acknowledged'&&!state.pending&&error===null&&
    state.rows.some(row=>row.kind==='audio')&&!matchingSongRows(state.rows.filter(row=>row.kind==='audio'),target).length;
@@ -211,7 +216,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     const searchStarted=performance.now();
     const reuse=!!queryId&&same(before,provider.providerRef,queryId)&&before.expiresAt!==null&&
      before.expiresAt>Date.now()&&before.rows.some(row=>row.kind==='option')&&
-     (!before.error||before.error==='file-invalid'||before.error==='file-too-large');
+     (!before.error||isBotSearchFileError(before.error));
     if(!reuse){
      optionKeys.clear();
      p.status?.(`${switching?'Probando otro bot… ':''}Consultando bot ${i+1} de ${providers.length}…`);
@@ -249,7 +254,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      if((!queryId||ownReply&&transient(found))&&await retryTransient())continue;
      const rejection=ownReply&&found.delivery!=='uncertain'?providerRejection(found.error):null;
      if(rejection)reasons.push(rejection);
-     else if(ownReply&&found.delivery==='acknowledged'&&(found.error==='file-too-large'||found.error==='file-invalid'))reasons.push(found.error);
+     else if(ownReply&&found.delivery==='acknowledged'&&isBotSearchFileError(found.error))reasons.push(found.error);
      else unavailable=true;
      break;
     }
@@ -391,6 +396,10 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      if(!p.accept)return {state:'uncertain'};
      reasons.push('returned-audio-mismatch');break;
     }
+    if(audio){
+     receivedCompatibleAudio=true;
+     if(collection)collection.receivedCompatibleAudio=true;
+    }
     const excludedAudio=!!audio&&p.excludedDigests?.has(audio.sha256);
     if(audio&&!excludedAudio){
      timing?.attach(audio);
@@ -420,9 +429,9 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      if(await retryTransient())continue;
      reasons.push('file-invalid');
      break;
-    }else if(audio||after.delivery!=='uncertain'&&after.error==='file-invalid')reasons.push('file-invalid');
+    }else if(audio)reasons.push('file-invalid');
     else if(after.error==='conflict'&&after.delivery==='not-dispatched')reasons.push('selection-changed');
-    else if(after.error==='file-too-large'&&after.delivery!=='uncertain')reasons.push('file-too-large');
+    else if(after.delivery!=='uncertain'&&isBotSearchFileError(after.error))reasons.push(after.error);
     else if(after.delivery==='acknowledged'&&after.error===null&&after.rows.some(r=>r.kind==='audio')&&!matchingSongRows(after.rows.filter(r=>r.kind==='audio'),target).length){
      reasons.push('returned-audio-mismatch');
      const fields=new Set<SongRejection>();
@@ -453,6 +462,6 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
   if(batch&&channelDown(client.searchSnapshot()))return {state:'telegram'};
   if(incompleteBot||collection?.timedOut)return {state:batch?'timed-out':p.accept?'unavailable':'uncertain'};
   if(!batch&&unavailable&&reasons.every(reason=>reason==='no-compatible-row'||reason==='no-results'))return {state:'unavailable'};
-  return {state:'known-failure',reasons};
+  return {state:'known-failure',reasons:receivedCompatibleAudio?reasons.filter(reason=>reason!=='unsupported'&&reason!=='file-unsupported'):reasons};
  }catch{cancel();return {state:batch&&channelDown(client.searchSnapshot())?'telegram':'uncertain'};}finally{clearTimeout(timer);p.signal.removeEventListener('abort',cancel);if(ownMeasurement)measurement?.finish();}
 }
