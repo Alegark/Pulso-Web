@@ -81,7 +81,7 @@ export class TelegramSessionClient {
  }
  private reconcileConnection(){
   if(this.connectionVisible===null||!this.worker||this.state.phase!=='connected'||!this.current())return;
-  if(this.pending||this.searchPlan||this.botPlan||this.sourceRead||this.sourceControl||this.activity.count||this.connectionHolds.size||this.connectionWork()){
+  if(this.pending||this.searchPlan||this.botPlan||this.sourceRead||this.sourceControl||this.connectionHolds.size||this.connectionWork()){
    this.clearConnectionTimer();
    this.connectionIdleSince=null;
    // An admitted RPC may wake the transport even without a foreground hint.

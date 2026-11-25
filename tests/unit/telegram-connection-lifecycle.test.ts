@@ -110,12 +110,14 @@ test('M1-02 · search, download, preparation, active collection and batch wait k
   assert.equal(await downloading,null);
   t.mock.timers.tick(idleMs+1);await flush();
   assert.equal(f.connected,true);
-  const preparing=f.activity.begin()!;
+  const unrelatedStorage=f.activity.begin()!;
+  const preparing=f.client.holdConnection?.();
   const catalog=f.client.holdConnection?.();
   f.work(false);await flush();assert.equal(f.connected,true);
-  preparing.end();f.client.revalidate();await flush();assert.equal(f.connected,true);
+  preparing?.();await flush();assert.equal(f.connected,true);
   catalog?.();await flush();
   assert.equal(f.connected,false,'hidden transport after the last hold ends');
+  unrelatedStorage.end();
   assert.deepEqual(f.connectionCommands().map(command=>command.type),['suspend']);
  }finally{f.dispose();}
 });
