@@ -2,6 +2,8 @@
 interface RelayConfig {version:1;itunes:boolean;artwork:boolean;musicbrainz?:boolean}
 const disabled:RelayConfig=Object.freeze({version:1,itunes:false,artwork:false});
 const nativeFetch:typeof fetch=(...args)=>fetch(...args);
+const online=()=>globalThis.navigator?.onLine!==false;
+function requireConnection(){if(!online())throw new TypeError('Catalog unavailable offline');}
 function cancelled(signal:AbortSignal|null|undefined){if(signal?.aborted)throw new DOMException('Consulta cancelada.','AbortError');}
 async function withSignal<T>(work:Promise<T>,signal:AbortSignal|null|undefined):Promise<T>{
  cancelled(signal);if(!signal)return work;
@@ -25,13 +27,14 @@ export function createCatalogTransport(deps:{fetcher?:typeof fetch;origin?:strin
    if(cooldown>Date.now())return new Response(null,{status:429,headers:{'Retry-After':String(Math.ceil((cooldown-Date.now())/1000))}});
    const delay=Math.max(0,nextMetadata-Date.now());
    if(delay){let timer:ReturnType<typeof setTimeout>|undefined;try{await withSignal(new Promise<void>(resolve=>{timer=setTimeout(resolve,delay);}),init.signal);}finally{clearTimeout(timer);}}
-   cancelled(init.signal);nextMetadata=Date.now()+interval;
+   cancelled(init.signal);requireConnection();nextMetadata=Date.now()+interval;
    const response=await direct(url,init);
    if(response.status===429||response.status===503){const raw=response.headers.get('retry-after'),ms=raw&&/^\d+$/.test(raw)?Number(raw)*1000:raw?Date.parse(raw)-Date.now():NaN;cooldown=Math.max(cooldown,Date.now()+(Number.isFinite(ms)&&ms>=0?Math.max(3100,ms):60000));}
    return response;
   }finally{release();}
  }
  function capabilities():Promise<RelayConfig>{
+  if(!online())return Promise.resolve(disabled);
   if(config)return Promise.resolve(config);if(probe)return probe;
   const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;
   const expired=new Promise<RelayConfig>(resolve=>{timer=setTimeout(()=>{controller.abort();resolve(disabled);},timeout);});
@@ -50,11 +53,11 @@ export function createCatalogTransport(deps:{fetcher?:typeof fetch;origin?:strin
   return probe;
  }
  async function request(url:string,init:RequestInit={},direct:typeof fetch=fetcher):Promise<Response>{
-  cancelled(init.signal);const address=new URL(url);
+  cancelled(init.signal);requireConnection();const address=new URL(url);
   const itunes=address.protocol==='https:'&&address.hostname==='itunes.apple.com'&&!address.port&&!address.username&&!address.password&&['/search','/lookup'].includes(address.pathname);
   const artwork=address.protocol==='https:'&&/^is[1-5]-ssl\.mzstatic\.com$/.test(address.hostname)&&!address.port&&!address.username&&!address.password;
   if(!origin||!itunes&&!artwork||init.method&&init.method!=='GET')return direct(url,init);
-  const mode=await withSignal(capabilities(),init.signal);cancelled(init.signal);
+  const mode=await withSignal(capabilities(),init.signal);cancelled(init.signal);requireConnection();
   if(itunes&&!mode.itunes){
    const api=new URL(address);
    // On mobile Safari, media=music can route /search into the native musics:

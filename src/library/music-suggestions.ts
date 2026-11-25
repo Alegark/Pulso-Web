@@ -86,6 +86,7 @@ export function createMusicSuggestionsClient(deps:MusicSuggestionsDependencies={
   const hit=cache.get(q);
   if(hit&&now()-hit.at>=0&&now()-hit.at<300000){cache.delete(q);cache.set(q,hit);return current()?{state:'ready',tracks:hit.tracks,groups:deriveMusicSuggestionGroups(hit.tracks),cached:true}:{state:'cancelled'};}
   if(hit)cache.delete(q);
+  if(globalThis.navigator?.onLine===false)return {state:'unavailable',reason:'network'};
   if(active)return {state:'busy'};
   if(blocked||now()<nextAt)return {state:'rate-limited',retryAt:blocked?null:nextAt};
   const controller=new AbortController();let reader:ReadableStreamDefaultReader<Uint8Array>|undefined,response:Response|undefined;

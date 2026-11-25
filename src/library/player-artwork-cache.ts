@@ -1,40 +1,149 @@
+import {ARTWORK_TOUCH_INTERVAL,artworkFreshness} from '../cache/artwork-policy';
+import {PersistentArtwork,type StoredArtwork} from '../cache/persistent-artwork';
+import {artworkThumbnail,type ValidatedArtwork} from '../cache/thumbnail';
+
 export interface CachedPlayerArtwork {
  readonly blob:Blob;
  readonly album:string;
 }
-
-const maxEntries=8;
+type Entry=StoredArtwork & {readonly stamp:symbol};
+type ProviderEntry=Entry & CachedPlayerArtwork;
+const maxEntries=64;
 const maxBytes=8*1024*1024;
-type Entry=CachedPlayerArtwork & {readonly stamp:symbol};
+const providerKey=(key:string)=>'provider:'+key;
+const online=()=>globalThis.navigator?.onLine!==false;
+const canRefresh=()=>online()&&globalThis.document?.visibilityState!=='hidden';
 
-/** Holds decoded provider artwork for the current library scope. Views own their object URLs. */
 export class PlayerArtworkCache {
+ private controller=new AbortController();
+ readonly signal=this.controller.signal;
+ private storage?:PersistentArtwork;
  private entries=new Map<string,Entry>();
  private bytes=0;
  private listeners=new Set<()=>void>();
+ private reads=new Map<string,Promise<Entry|undefined>>();
+ private flights=new Map<string,Promise<Blob|null>>();
 
- get(key:string){return this.entries.get(key);}
+ constructor(accountId?:string){
+  if(accountId)this.storage=new PersistentArtwork(accountId,this.signal);
+ }
+
+ get(key:string):ProviderEntry|undefined{
+  const entry=this.entries.get(providerKey(key));
+  if(entry?.album&&artworkFreshness(entry.fetchedAt,Date.now(),online())!=='expired')return entry as ProviderEntry;
+ }
 
  subscribe=(listener:()=>void)=>{
   this.listeners.add(listener);
   return ()=>{this.listeners.delete(listener);};
  };
 
- set(key:string,artwork:CachedPlayerArtwork){
-  if(artwork.blob.size>maxBytes)return;
+ retire(){
+  this.controller.abort();
+  this.entries.clear();this.bytes=0;this.reads.clear();this.flights.clear();
+  for(const listener of this.listeners)listener();
+  this.listeners.clear();
+ }
+
+ async readProvider(key:string):Promise<ProviderEntry|undefined>{
+  await this.read(providerKey(key),key);
+  return this.get(key);
+ }
+
+ set(key:string,artwork:CachedPlayerArtwork,now=Date.now(),sha256?:string){
+  return this.remember(providerKey(key),{...artwork,sha256,fetchedAt:now,lastAccessedAt:now}).blob;
+ }
+
+ async saveProvider(key:string,album:string,image:ValidatedArtwork):Promise<Blob|null>{
+  const thumbnail=await artworkThumbnail(image);
+  if(this.signal.aborted)return null;
+  const now=Date.now(),blob=thumbnail?.blob??image.blob;
+  if(thumbnail)await this.storage?.put(providerKey(key),thumbnail,now,{key,album});
+  if(this.signal.aborted)return null;
+  return this.set(key,{blob,album},now,(thumbnail??image).sha256);
+ }
+
+ async loadCatalog(key:string,fetchImage:()=>Promise<ValidatedArtwork|null>,onRefresh?:(blob:Blob)=>void):Promise<Blob|null>{
+  const entry=await this.read(key);
+  if(this.signal.aborted)return null;
+  const freshness=entry&&artworkFreshness(entry.fetchedAt,Date.now(),online());
+  if(entry&&freshness==='fresh')return entry.blob;
+  if(entry&&freshness==='stale'){
+   if(canRefresh())void this.refreshCatalog(key,fetchImage).then(blob=>{
+    if(blob&&blob!==entry.blob&&!this.signal.aborted)onRefresh?.(blob);
+   }).catch(()=>{});
+   return entry.blob;
+  }
+  if(!online())return entry?.blob??null;
+  return this.refreshCatalog(key,fetchImage);
+ }
+
+ private refreshCatalog(key:string,fetchImage:()=>Promise<ValidatedArtwork|null>){
+  const pending=this.flights.get(key);
+  if(pending)return pending;
+  if(this.flights.size>=80)return Promise.resolve(null);
+  const flight=(async()=>{
+   const image=await fetchImage();
+   if(!image||this.signal.aborted)return null;
+   const thumbnail=await artworkThumbnail(image);
+   if(this.signal.aborted)return null;
+   const now=Date.now(),blob=thumbnail?.blob??image.blob;
+   if(thumbnail)await this.storage?.put(key,thumbnail,now);
+   if(this.signal.aborted)return null;
+   return this.remember(key,{blob,sha256:(thumbnail??image).sha256,fetchedAt:now,lastAccessedAt:now}).blob;
+  })().catch(()=>null).finally(()=>{this.flights.delete(key);});
+  this.flights.set(key,flight);
+  return flight;
+ }
+
+ private async read(key:string,provider?:string):Promise<Entry|undefined>{
+  if(this.signal.aborted)return undefined;
+  const memory=this.entries.get(key);
+  if(memory){this.access(key,memory);return memory;}
+  const pending=this.reads.get(key);
+  if(pending)return pending;
+  if(!this.storage)return undefined;
+  const hydration=this.storage.get(key,provider).then(stored=>{
+   if(!stored||this.signal.aborted)return undefined;
+   const entry=this.entries.get(key)??this.remember(key,stored);
+   this.access(key,entry);
+   return entry;
+  }).finally(()=>{this.reads.delete(key);});
+  this.reads.set(key,hydration);
+  return hydration;
+ }
+
+ private access(key:string,entry:Entry){
+  this.entries.delete(key);
+  this.entries.set(key,entry);
+  const now=Date.now();
+  if(now-entry.lastAccessedAt<ARTWORK_TOUCH_INTERVAL)return;
+  entry.lastAccessedAt=now;
+  void this.storage?.touch(key,now);
+ }
+
+ private remember(key:string,artwork:StoredArtwork){
+  const entry={...artwork,stamp:Symbol()};
+  if(this.signal.aborted||artwork.blob.size>maxBytes)return entry;
   const previous=this.entries.get(key);
-  if(previous?.blob===artwork.blob&&previous.album===artwork.album)return;
+  if(previous&&previous.album===artwork.album&&
+   (previous.blob===artwork.blob||artwork.sha256&&previous.sha256===artwork.sha256)){
+   previous.fetchedAt=artwork.fetchedAt;this.access(key,previous);return previous;
+  }
   if(previous){
    this.bytes-=previous.blob.size;
    this.entries.delete(key);
   }
-  this.entries.set(key,{...artwork,stamp:Symbol()});
+  this.entries.set(key,entry);
   this.bytes+=artwork.blob.size;
-  for(const [oldest,entry] of this.entries){
+  let changed=!!entry.album;
+  for(const [oldest,old] of this.entries){
    if(this.entries.size<=maxEntries&&this.bytes<=maxBytes)break;
    this.entries.delete(oldest);
-   this.bytes-=entry.blob.size;
+   this.bytes-=old.blob.size;
+   changed||=!!old.album;
   }
-  for(const listener of this.listeners)listener();
+  if(changed)for(const listener of this.listeners)listener();
+  return entry;
  }
 }
