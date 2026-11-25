@@ -1,7 +1,7 @@
 # T25 · Velocidad de adquisición y primer sonido de bots
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** S01 y S02 implementados. Verificación de navegador en curso, con fallos registrados.
+- **Estado:** S01 y S02 implementados. Validación local y de navegador ejecutada, con gate fallido. Revisión independiente pendiente.
 - **Fecha:** 2026-11-25
 - **Línea base:** v60 publicada (`086aaac`, rama `fix/album-tap-save-queue`, PR 20). Rama paralela `fix/artwork-rows-dock` (v61) fuera del pipeline de bots.
 - **Requisitos SPEC vinculados:** W08, W10, W11, W13, W17, W18 · Invariantes SPEC: V2, V3, V5, V6, V8, V9, V10, V11, V13, V16, V17, V21, V22, V23, V24, V27, V28, V29, V30, V31
@@ -293,12 +293,36 @@ El rojo de S01/S02 sobre `086aaac` obtuvo 64 PASS y 15 FAIL con las aserciones n
 | J06, J07 | R · Diff de dependencias, SW y DTOs. Aviso filtrado dentro de `TemporarySdk`; el driver recibe sólo la señal | PASS | PASS |
 | J08 | B · `check-download-feedback` (foco, posición, arrastre, autoocultado y cancelación del dock) | Chromium 5/5, WebKit 5/5 | Chromium 5/5, WebKit 5/5 |
 | J01, J08 | B · `tap-baseline` en `7d41d25` | PASS 2/2 en `7d41d25`, reproduce el bloqueo histórico | Aplica únicamente a `7d41d25` |
-| J08 | B · `check-interface-main` | Chromium 10 PASS/2 FAIL, WebKit 4 PASS/5 FAIL; en la base hubo timeouts adicionales durante la corrida bajo presión de memoria | 11/12 por motor; mismo escenario conocido de minirreproductor a 200 % con movimiento reducido |
+| J08 | B · `check-interface-main` | 11/12 por motor en la repetición. Minirreproductor al 200 % con movimiento reducido | 11/12 por motor; mismo escenario conocido de minirreproductor a 200 % con movimiento reducido |
 | S01, J02, J03 | T · Telegram real y cooldown real | NO EJECUTADO | NO EJECUTADO |
 | J01, J05, J08 | D · Aceptación física de `docs/IPHONE-ACEPTACION.md` | NO EJECUTADA | NO EJECUTADA |
 
 ### Estado de la validación
 
-El gate completo queda fallido por las corridas WebKit de velocidad y por el caso directo que agotó el tiempo en el candidato. Las matrices funcional y de reanudación de playlist siguen en ejecución en este punto. El timeout de callback y la comprobación de copia purgada pasaron 2/2 motores en cada árbol.
+El gate completo quedó fallido. WebKit registró la infracción CSP heredada en las corridas de velocidad y un timeout de audio directo del candidato. El reintento reprodujo el audio y la infracción CSP. V60 reprodujo además un timeout de `update-startup` en Chromium. El caso de minirreproductor al 200 % coincidió con la excepción conocida.
 
 El primer acceso a la memoria compartida agotó el tiempo de espera del MCP. La lectura de una copia SQLite de proyecto detectó una sola divergencia conocida en `T7-portadas-metadata.md`: el recibo `06d417bdb908` corresponde a `83e2c79` y v60 conserva `034c0485df0f`. Se usa la copia de proyecto en el presente worktree para conservar el recibo del otro árbol.
+
+### Comparación de navegador y cierre del incremento
+
+| ID | Prueba y nivel | Base `086aaac` | Candidato con `4926e72` |
+| --- | --- | --- | --- |
+| S01, S02, S11, J03 | B · `first-sound`, `first-sound-direct` y `benchmark` con Telegram sintético | Chromium 21/21 muestras comparables. WebKit 0/11 en el gate CSP, con 90/90 copias verificadas en el lote de 30 | Chromium 21/21 en la serie de confirmación. WebKit 0/11 en el gate de velocidad, con 90/90 copias verificadas en el lote de 30 |
+| J01 | B · `check-playlist-full-download-main.mjs`, modo `regression`, 54 modos y 61 casos efectivos por motor con las tres corridas completas y los escenarios de `turnaround` | Chromium 61/61, WebKit 61/61 | Chromium 61/61, WebKit 61/61 |
+| J01, J05 | B · `check-playlist-resume-main.mjs`, incluidos cambios de versión, recuperación y deduplicación | Chromium 45/46. `update-startup` agotó la espera de navegación en v60. WebKit 46/46 | Chromium 46/46, WebKit 46/46 |
+| J02 | B · `full/flood`, espera de tasa, recuperación de transferencia y `long-cooldown` | PASS en ambos motores | PASS en ambos motores |
+| J02, J04 | B · `turnaround/callback-timeout` | PASS 2/2 | PASS 2/2 |
+| J03 | B · `wrong-live`, `wrong-remix`, `wrong-artist`, `wrong-duration`, `tags-compound` y `tags-unrelated` | PASS en ambos motores | PASS en ambos motores |
+| J04 | B · `missing`, `stale-checkpoint` y ocho variantes `queue-*-bot-*` | PASS en ambos motores | PASS en ambos motores |
+| J05 | B · `connected` con copia purgada y comparación de SHA-256 en OPFS/IDB local | Copia purgada PASS 2/2. Verificación Chromium PASS y WebKit con el fallo CSP registrado | Copia purgada PASS 2/2. Verificación Chromium PASS y WebKit con el fallo CSP registrado |
+| J06 | B · DTO cerrado de tiempos, conteo sintético de RPC y verificación de audio en el worker | PASS en el recorrido instrumentado | PASS en el recorrido instrumentado |
+| J07 | B · Consola, CSP y orígenes ajenos en el arnés de velocidad | Chromium PASS. WebKit FAIL, infracción `style-src-attr` conocida, 0 orígenes ajenos | Chromium PASS. WebKit FAIL, misma infracción, 0 orígenes ajenos |
+| J08 | B · `tap-active` y comparación de interfaz | `tap-active` PASS 2/2. Interfaz 11/12 por motor, con el mismo fallo conocido | `tap-active` PASS 2/2. Interfaz 11/12 por motor, falla el minirreproductor al 200 % con movimiento reducido |
+
+La repetición de audio directo en WebKit tras `4926e72` consiguió `playing` y verificó 2/2 copias. Observó 12.020 y 13.694 ms, mediana 12.857 ms y p90 13.694 ms. Ambas corridas conservaron el FAIL de CSP. La corrida con timeout queda en el registro.
+
+Los escenarios `pacing` de S05, `tags-tail` de S07 y el ciclo de vida del importador reutilizable de S03 corresponden a incrementos posteriores. Esta comparación ejecuta las pruebas de versiones del arnés de reanudación en cada árbol. El código y layout del Service Worker se conservan en su fuente de v60.
+
+### Limpieza
+
+Se retiraron snapshots, bundles, perfiles interrumpidos y capturas redundantes. El espacio asignado a los artefactos identificados y eliminados fue de 204.816.384 bytes. `/data` tenía 6.100.840.448 bytes libres al inicio, 6.063.239.168 antes de la limpieza final y 6.166.953.984 después. Se conservan los recibos compactos y la memoria local de proyecto.
