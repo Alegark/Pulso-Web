@@ -2450,3 +2450,18 @@ Cloudflare Workers Free (USD 0) sirve [v60](https://pulso-web.pruebassoftware.wo
 Pasaron el build, 73 pruebas de servidor, la preparación y la simulación de Wrangler. El freeze conservó 13 publicaciones previas y el inventario heredado, con cero rutas retiradas. HTTPS verificó el puntero `latest.json`, el 307, el 200 y el meta `pulso-release`; 299/299 recursos por bytes y SHA-256, incluido `sw.js`; las 54 entradas históricas y la actual con cabeceras de navegación; la CSP de Turnstile y la igualdad de su clave pública; y HTTP 401 para el perfil y la biblioteca anónimos. T24 registra el manifiesto y los recibos.
 
 P0-W sigue abierto. Q09b continúa como fallo heredado de v59. Quedan los dos menores de la revisión 8 sobre una reconexión adicional acotada y un motivo de archivo que puede pasar a `expired` a los 120 s. Las 16 pruebas de iPhone siguen **NO EJECUTADAS**.
+
+
+## 2026-11-25 · Publicación v61
+
+Cloudflare Workers Free (USD 0) sirve [v61](https://pulso-web.pruebassoftware.workers.dev/releases/60735cae6f867d6e.html) desde el commit `9b84d6e` de `fix/artwork-rows-dock`. El MCP oficial confirmó la versión `3e48afcc-c7f9-47bb-bd3f-8af90288d078` al 100 % en el despliegue `c5011460-a839-47c6-b763-bf290c216ba0`, activo desde `2026-11-25T12:03:55.867Z`. El Worker coincide con el bundle de 330.474 bytes y SHA-256 `0e19eceae5ed70bec91e41e36ac05f70b5e1a0590d5c79d439443a6b13bfcb5a`. Conserva los 13 bindings, los nombres de los secretos, Turnstile, los límites, la configuración de ejecución y las 14 reglas de `run_worker_first`. El PUT omitió `serve_directly`.
+
+T7 y T8 documentan las matrices de carátulas, contador del dock y reproductor. En la revisión final pasaron las suites focales de carátulas y contador (12/12), avisos del reproductor (10/10) y dock (10/10) en Chromium y WebKit. Q09b y los dos menores de la revisión 8 siguen registrados en T24.
+
+Pasaron el build, las 73 pruebas de Cloudflare, la preparación y la simulación de Wrangler 4.161.0. El freeze conservó las 14 publicaciones anteriores y el inventario heredado, con 309 archivos y cero retiradas. HTTPS confirmó `latest.json`, el 307 a la ruta canónica, el 200 de esa ruta y el meta `pulso-release`. Coincidieron bytes y SHA-256 de las 306 rutas estáticas públicas, incluido `sw.js`. Las 55 entradas históricas y la actual sirvieron el shell vigente con Fetch Metadata y Accept, y también con Accept solo. La CSP conserva Turnstile en scripts y marcos, la clave pública coincide y el perfil y la biblioteca anónimos devuelven 401.
+
+La revisión independiente final de `df3575f` frente a v60 dio «Seguro publicar», sin hallazgos bloqueantes ni altos. Quedan dos medios. Un fallo permanente de audio carece de indicador visual aunque conserva el anuncio accesible. El orden de `audio.load()` en `Player.select()` permite que un error síncrono de un medio sintético se sobrescriba con `loading`. Los menores son el margen vacío de la vista previa de letra, el reintento tras un rechazo de `audio.play()` sin evento de error, el marcador del mini con ocultación manual, la portada compartida pendiente en Inicio y cubiertas de colección, la prueba unitaria de idempotencia de la caché de carátulas y la sensibilidad de algunas pruebas a la contención de CPU en la VM.
+
+Los recibos y el manifiesto publicado están en `.local/test-evidence/publish-v61/`. `site-manifest.json` contiene 309 archivos, ocupa 75.383 bytes y tiene SHA-256 `9ad4e2b31fdd0a928d01cddcb2325caa402aa08d422373fd293f40fb5197248c`.
+
+Las 16 pruebas de aceptación en iPhone físico siguen **NO EJECUTADAS**. P0-W sigue abierto.
