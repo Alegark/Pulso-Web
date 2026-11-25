@@ -476,3 +476,32 @@ Los recibos están en `.local/test-evidence/publish-v62/`. El manifiesto publica
 | **M1-07** | Mantener el material de Telegram en el worker (J06), con mensajes de ciclo de vida de forma cerrada. Usar solo el ciclo de vida normal del documento (J07). | U · rechaza propiedades adicionales y getters en los mensajes de ciclo de vida, verifica el envelope mínimo. B · trabajador de sesión real con transporte en loopback. R · límites del diff frente a v62. |
 
 **Pendientes T y D.** La presencia «en línea» y «última vez» requiere una comprobación con Telegram real. Las 16 pruebas físicas de iPhone siguen NO EJECUTADAS. [Aceptación física](../../docs/IPHONE-ACEPTACION.md).
+
+### Resultados de M1 en `c6161bc`
+
+Las cuatro pruebas U de ciclo de vida dieron 0/4 en `f97ebb5` y 4/4 en el candidato. La comprobación B con socket sintético dio 0/2 y 2/2 en Chromium 154 y WebKit 27.2.
+
+| ID | v62 | Candidato |
+| --- | --- | --- |
+| M1-01 | Transporte abierto al ocultar y tras la espera del arnés. | Cierra al ocultar y en el umbral de 180.000 ms del reloj U. Conserva el almacén y la generación. |
+| M1-02 | Mantiene el transporte durante el trabajo y también tras liquidarlo. | Mantiene el socket durante búsqueda y transferencia en B. Cierra tras terminar la preparación en segundo plano. U cubre los planes, las reservas de colección y la espera entre RPCs. |
+| M1-03 | Sin precalentamiento observable en el regreso, foco, escritura o toque. | Los cuatro disparadores funcionan en ambos motores. Comparación de latencia abajo. |
+| M1-04 | La primera restauración funciona. Sin ciclo de reimportación tras dormir. | El arnés registra cuatro reimportaciones por caso, conserva las dos restauraciones de inicialización del arnés y nunca muestra el formulario de código. U verifica una generación estable y cero comandos de logout o borrado. |
+| M1-05 | Procesa 3/3 avisos en abierto y 9/9 al ocultar. | Procesa 3/3 en abierto y 0/9 al ocultar, en ambos motores. El control con `BaseTelegramClient` 0.32.7 y flujo sintético observa abrir, cerrar, abrir y cerrar al recrear el SDK. |
+| M1-06 | Sin ciclo de reapertura que observe el antirrebote. | U verifica cuatro aperturas por minuto, espera de cuenta, vencimiento y cancelación al volver a ocultar la app. |
+| M1-07 | Sin mensajes de ciclo de vida M1. | U verifica la forma cerrada y el rechazo de propiedades adicionales o getters. El arnés B usa loopback y la app usa la visibilidad y temporizadores normales. |
+
+#### Primer sonido tras volver
+
+Dos series en el mismo host, en secuencia y sin otra suite de navegador de este encargo, con tres corridas válidas por versión, motor y perfil. Cada corrida usa 300 copias sintéticas previas, 200 ms por RPC y 150 ms de apertura del socket de prueba. El arnés espera 300 ms antes de iniciar el toque. El intervalo observado del regreso al toque incluye la acción de Playwright. Las columnas indican mediana y rango mín–máx en milisegundos.
+
+| Motor y perfil | Desde el regreso v62 | Desde el regreso candidato | Desde el toque v62 | Desde el toque candidato |
+| --- | ---: | ---: | ---: | ---: |
+| Chromium · menú | 13.209 [8.579–13.603] | 8.649 [8.557–9.000] | 12.596 [8.230–12.798] | 8.306 [8.207–8.653] |
+| Chromium · directo | 3.912 [3.634–4.599] | 2.852 [2.787–2.942] | 3.500 [3.229–4.196] | 2.506 [2.438–2.592] |
+| WebKit · menú | 13.713 [13.439–15.709] | 12.585 [12.464–12.753] | 13.377 [13.101–15.300] | 12.234 [12.116–12.398] |
+| WebKit · directo | 8.007 [7.830–8.158] | 8.259 [8.171–8.355] | 7.658 [7.486–7.814] | 7.914 [7.823–8.003] |
+
+El control adicional de audio directo WebKit alternó v62, candidato, candidato y v62. Dio 8.439 [8.342–8.536] → 8.656 [8.061–9.251] ms desde el regreso y 8.092 [7.994–8.190] → 8.311 [7.709–8.913] ms desde el toque. Con las cinco muestras por versión, la mediana desde el regreso fue 8.158 → 8.259 ms. **El criterio estricto de latencia de M1-03 sigue abierto para WebKit directo.** La reapertura terminó antes del toque en todas las muestras del candidato, con 7 RPC en directo y 29 con menú en ambas versiones. También coincidieron las dos relecturas exactas y los recuentos de historial (2 en directo y 8 con menú). El perfil directo WebKit muestra dispersión en el trabajo local de análisis y guardado. Las mediciones acreditan el arnés sintético y quedan pendientes en iPhone.
+
+Pasaron `npm run test:unit` (1.045/1.045), ambos typechecks, lint, build, 73/73 pruebas de servidor y 10/10 de Python. Los recibos compactos de la comparación y el control nativo están en `.local/test-evidence/t25-m1/`.
