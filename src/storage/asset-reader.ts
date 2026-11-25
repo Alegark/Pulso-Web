@@ -56,17 +56,24 @@ export async function openAssetReader(asset:LocalAsset,current=true,control?:{si
  catch(error){if(nativeDOMName(error)==='NotFoundError')throw missingAssetException();throw issuedFailure(error)?error:AppFailure.create(fromKnownError(error,{phase:'open',backend:asset.backend}));}
  }
  checkSignal();
+ const readFileRange=async(start:number,end:number)=>{
+  const bytes=new Uint8Array(await file!.slice(start,end).arrayBuffer());
+  if(bytes.length!==end-start)fail('read','integrity','length-mismatch','opfs');
+  return bytes;
+ };
  const readRange=async(start:number,end:number)=>atBoundary('read',asset.backend,async()=>{
  if(released)fail('read','internal','input-invalid',asset.backend);
  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<=start||end>asset.bytes||end-start>65536)fail('read','internal','input-invalid',asset.backend);
- if(file){const bytes=new Uint8Array(await file.slice(start,end).arrayBuffer());if(bytes.length!==end-start)fail('read','integrity','length-mismatch','opfs');return bytes;}
+ if(file)return readFileRange(start,end);
  const parts:Uint8Array[]=[];let length=0;
  for(let i=Math.floor(start/65536);i<=Math.floor((end-1)/65536);i++){
  const chunk=await read<unknown>('chunks',[asset.storageKey,i]);
  if(chunk===undefined)fail('read','integrity','asset-missing','idb');
  if(!(chunk instanceof Uint8Array))fail('read','integrity','local-corrupt','idb');
  if(chunk.length!==Math.min(65536,asset.bytes-i*65536))fail('read','integrity','length-mismatch','idb');
- const part=chunk.slice(Math.max(0,start-i*65536),Math.min(chunk.length,end-i*65536));parts.push(part);length+=part.length;
+ const from=Math.max(0,start-i*65536),to=Math.min(chunk.length,end-i*65536);
+ if(from===0&&to===chunk.length&&chunk.length===end-start)return chunk;
+ const part=chunk.subarray(from,to);parts.push(part);length+=part.length;
  }
  const bytes=new Uint8Array(length);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.length;}return bytes;
  });
@@ -88,20 +95,42 @@ export async function openAssetReader(asset:LocalAsset,current=true,control?:{si
  if(file&&file.size!==asset.bytes)fail('verify','integrity','length-mismatch',asset.backend);
  const hash=integrity===true?sha256.create():null;
  const consume=(bytes:Uint8Array)=>{check();hash?.update(bytes);if(scan?.onChunk)callback(()=>scan.onChunk!(bytes));};
- if(file&&hash)for(let offset=0;offset<asset.bytes;offset+=65536){
-  check();consume(await readRange(offset,Math.min(offset+65536,asset.bytes)));
+ if(file&&hash){
+  // An incremental consumer keeps the 64 KiB chunk contract while sharing
+  // one filesystem read for sixteen consecutive chunks.
+  const step=scan?.onChunk?1024*1024:65536;
+  for(let offset=0;offset<asset.bytes;offset+=step){
+   check();
+   const end=Math.min(offset+step,asset.bytes);
+   if(step===65536){consume(await readRange(offset,end));continue;}
+   const block=await atBoundary('read','opfs',()=>readFileRange(offset,end));
+   for(let start=0;start<block.length;start+=65536)consume(block.subarray(start,start+65536));
+  }
  }
  if(!file)await atBoundary('verify','idb',async()=>{
   const db=control?.database??await openDatabase();
+  const batchChunks=scan?.onChunk?16:8;
   try{
    if(integrity==='presence'){
     const range=IDBKeyRange.bound([asset.storageKey,0],[asset.storageKey,asset.chunks-1]);
     const tx=admittedTransaction(db,'chunks'),done=committed(tx);
     const count=await request(tx.objectStore('chunks').count(range));await done;
     if(count!==asset.chunks)fail('verify','integrity','asset-missing','idb');
-   }else for(let first=0;first<asset.chunks;first+=8){
+   }else for(let first=0;first<asset.chunks;first+=batchChunks){
     check();const tx=admittedTransaction(db,'chunks'),done=committed(tx),store=tx.objectStore('chunks');
-    const parts=await Promise.all(Array.from({length:Math.min(8,asset.chunks-first)},(_,i)=>request<unknown>(store.get([asset.storageKey,first+i]))));
+    void done.catch(()=>{});
+    const count=Math.min(batchChunks,asset.chunks-first);
+    let parts:unknown[];
+    if(scan?.onChunk){
+     const range=IDBKeyRange.bound([asset.storageKey,first],[asset.storageKey,first+count-1]);
+     const [values,keys]=await Promise.all([request(store.getAll(range,count)),request(store.getAllKeys(range,count))]);
+     if(values.length!==count||keys.length!==count||keys.some((key,i)=>!Array.isArray(key)||key.length!==2||key[0]!==asset.storageKey||key[1]!==first+i)){
+      fail('read','integrity','asset-missing','idb');
+     }
+     parts=values;
+    }else{
+     parts=await Promise.all(Array.from({length:count},(_,i)=>request<unknown>(store.get([asset.storageKey,first+i]))));
+    }
     await done;
     for(let i=0;i<parts.length;i++){
      const chunk=parts[i];

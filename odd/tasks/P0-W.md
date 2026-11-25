@@ -2469,6 +2469,7 @@ Las 16 pruebas de aceptación en iPhone físico siguen **NO EJECUTADAS**. P0-W s
 ## 2026-11-25 · Velocidad de adquisición y primer sonido
 
 - [T25](T25-velocidad-bots.md) fija las métricas y pruebas de los incrementos de velocidad de bots.
+- [T27](T27-inicio-local-rapido.md) cubre el primer sonido, el avance y la integridad del audio ya descargado.
 
 ## 2026-11-25 · T25 incremento 1 publicado en v62
 

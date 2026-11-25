@@ -59,8 +59,8 @@ import {transactionDone} from './storage/transaction-done';
 import {canParkImport} from './storage/import-operations';
 import {registerDatabaseRealmHost,beginWorkerAttempt,revokeDatabaseWorkerAttempts,activeDatabaseWorkerAttempts,type RealmAttempt} from './storage/database-realms';
 import {attachDatabaseTransportLifecycle,revalidateDatabaseTransport} from './playback/database-transport';
-import {prepareLocalSources,startLocalSourcePreparation,transportNotice} from './playback/transport';
-import {copySourceAsset,dataObject} from './playback/local-source-protocol';
+import {controllerVerifiesLocalPlayback,startLocalSourcePreparation,transportNotice} from './playback/transport';
+import {copySourceAsset,dataObject,sourceUUID} from './playback/local-source-protocol';
 import {createQueueInsertionController,type SelectedOccurrence,type InsertionStatus} from './playback/queue-insertion-controller';
 import type {Placement} from './playback/queue-insertion';
 import {createLocalCopyProtection} from './playback/local-copy-protection';
@@ -162,6 +162,15 @@ let accountEpoch=0;
 const accountAvailable=()=>accountController.getSnapshot().user!==null;
 const audio=new Audio();audio.preload='metadata';const player=new Player(audio,()=>accountAvailable()&&control.owner&&!updateNavigationLocked,phase=>{
  const handle=beginDiagnostic('play');return code=>{const failure=result(phase,code==='autoplay-denied'?'autoplay-blocked':code==='media-decode'?'integrity':code==='media-unsupported'?'unsupported-format':'internal',code);diagnostics.complete(handle,failure);diagnostics.finish(handle);};
+},src=>{
+ const url=new URL(src,location.origin);
+ if(url.origin!==location.origin||!url.pathname.startsWith('/_pulso/media/')||!sourceUUID(url.pathname.slice('/_pulso/media/'.length)))return src;
+ url.searchParams.set('selection',crypto.randomUUID());
+ return url.href;
+});
+navigator.serviceWorker?.addEventListener?.('message',event=>{
+ const message=event.data;
+ if(event.source===navigator.serviceWorker.controller&&message?.version===1&&message.type==='local-media-invalid'&&typeof message.url==='string')player.rejectLocalSource(message.url);
 });
 let scopeId=0;
 let suspendedSnapshot:Snapshot|undefined;
@@ -198,7 +207,7 @@ const control=new Ownership(()=>{owner=control.owner;if(control.state==='sin-con
 let databaseState:'ready'|DatabaseLifecycleState='ready';
 let databaseGeneration=0;
 const sourceProtection=createLocalCopyProtection({
- getPlayer:()=>({entries:player.entries,currentEntryId:player.current?.id??null,source:audio.getAttribute('src')?audio.src:null}),
+ getPlayer:()=>({entries:player.entries,currentEntryId:player.current?.id??null,source:audio.getAttribute('src')?player.sourceForProtection:null}),
  captureCurrent:()=>{const scope=scopeId,proof=control.proof,admission=databaseGeneration,activityScope=control.activity.scope();return()=>scope===scopeId&&proof===control.proof&&admission===databaseGeneration&&activityScope()&&control.owner&&databaseState==='ready';},
 });
 // Private root admission for explicit copy review and recovery.
@@ -564,7 +573,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
     if(!id)return null;const track=await readRecord<Track>('tracks',id);if(!live())throw Error('cancelled');
     if(track&&track.id!==id)throw Error('La identidad de la ficha local ha cambiado.');
     if(!track||track.assetId===null)return null;
-    const checked=await verifiedAssetDetailed(track.assetId,true);if(!live())throw Error('cancelled');
+    const checked=await verifiedAssetDetailed(track.assetId,purpose==='playback'&&!repair?'presence':true);if(!live())throw Error('cancelled');
     if(repair&&(checked.state==='missing'||checked.state==='corrupt')){
      const accountId=accountController.getSnapshot().user?.id;
      if(accountId&&await prepareBatchCopyReplacement(track,accountId,signal,()=>live()&&token.current()))return null;
@@ -819,7 +828,7 @@ async function checkFiles(){
  if(current()&&hadPending&&!unverifiedImportResponses.size){status='Los registros locales ya confirman el resultado. Revisa la biblioteca antes de repetir una descarga.';emit();}
  else if(current()&&hadDatabaseBlock&&databaseState==='ready'&&!unverifiedImportResponses.size){status='Base local abierta y revisada. Comprueba las copias pendientes antes de continuar.';emit();}
 }
-async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[],callerCurrent:()=>boolean=()=>true){
+async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[],callerCurrent:()=>boolean=()=>true,startIndex=0){
  if(!callerCurrent()||!owner||busy||copyRemovalBlocked()||queueForeignBlocked()||!sourceReview.canPrepare())return;deferredQueueRestore=null;const operation=control.activity.begin();if(!operation)return;
  const scope=scopeId,proof=control.proof,admission=databaseGeneration;
  const owns=()=>scope===scopeId&&proof===control.proof&&control.owner&&operation.current();
@@ -830,27 +839,54 @@ async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[
  try{
  let restored=saved;let missing=0;
  if(saved){
- phase='read';const plan=await planQueueRestore(saved,async id=>{const track=tracks.find(t=>t.id===id);return !!track&&track.assetId!==null&&await restoreAssetAvailable(track.assetId);});
+ phase='read';
+ const integrity=await controllerVerifiesLocalPlayback()?'presence':true;
+ if(!current())return;
+ const plan=await planQueueRestore(saved,async id=>{const track=tracks.find(t=>t.id===id);return !!track&&track.assetId!==null&&await restoreAssetAvailable(track.assetId,integrity);});
  if(!current())return;restored=plan.snapshot;missing=plan.missing;
  if(!restored.entries.length){known=result('verify','integrity','asset-missing');throw null;}
  }
- const planned=(restored?restored.entries.map(entry=>({track:tracks.find(t=>t.id===entry.trackId),entry})):ids.map(id=>({track:tracks.find(t=>t.id===id),entry:undefined}))).filter((p):p is {track:Track;entry:Snapshot['entries'][number]|undefined}=>!!p.track);
- const selected=planned.map(p=>p.track);if(!preparation.setPlanned(selected.map(track=>track.id)))return;if(!selected.length){known=result('validate','internal','empty-selection');throw null;}phase='read';
- if(!saved)for(const track of selected){
- if(track.assetId===null)throw AppFailure.create(makeFailure('read','integrity','asset-missing','none'));
- const checked=await verifiedAssetDetailed(track.assetId);if(!current())return;
- if(checked.state!=='valid')throw AppFailure.create(checked.failure);
- }
+ const byTrack=new Map(tracks.map(track=>[track.id,track]));
+ const requested=restored?restored.entries:ids.map(trackId=>({id:crypto.randomUUID(),trackId}));
+ phase='read';
+ const manifests=new Map<string,LocalAsset>();
+ const db=await openExistingDatabase();
+ try{
+  if(!current())return;
+  const tx=admittedTransaction(db,'assets'),done=transactionDone(tx),store=tx.objectStore('assets');
+  const assetIds=new Set(requested.map(entry=>byTrack.get(entry.trackId)?.assetId).filter((id):id is string=>typeof id==='string'));
+  await Promise.all([done,...[...assetIds].map(async id=>{
+   const asset=copySourceAsset(await request(store.get(id)));
+   if(asset?.id===id)manifests.set(id,asset);
+  })]);
+ }finally{closeDatabase(db);}
  if(!current())return;
- phase='transport';const bundle=await prepareLocalSources(selected.map(t=>{if(t.assetId===null)throw AppFailure.create(makeFailure('read','integrity','asset-missing','none'));return t.assetId;}),proof,current,{signal:sourceAbort.signal,current,deadlineAt:performance.now()+30000,reserveBlob:preparation.reserveBlob});
- const entries=selected.map((t,i)=>({id:planned[i].entry?.id??crypto.randomUUID(),trackId:t.id,title:t.title,src:bundle.sources[i].url}));
+ const planned=requested.flatMap((entry,index)=>{
+  const track=byTrack.get(entry.trackId),asset=track?.assetId?manifests.get(track.assetId):undefined;
+  if(!track||!asset)return [];
+  const fingerprint=track.audioFingerprint;
+  if(validAudioFingerprint(fingerprint)&&(fingerprint.sha256!==asset.sha256||fingerprint.bytes!==asset.bytes))return [];
+  return [{entry,track,asset,index}];
+ });
+ if(!preparation.setPlanned(planned.map(row=>row.track.id)))return;
+ missing+=requested.length-planned.length;
+ if(!planned.length){known=result('verify','integrity','asset-missing');throw null;}
+ phase='transport';
+ const attempt=startLocalSourcePreparation(planned.map(row=>row.asset),proof,{signal:sourceAbort.signal,current,deadlineAt:performance.now()+30000,verifyOnRead:true,reserveBlob:preparation.reserveBlob});
+ const prepared=await attempt.result;
+ if(prepared.kind!=='prepared'){
+  await attempt.settled;
+  throw AppFailure.create(prepared.kind==='failed'?prepared.failure:makeFailure('transport','cancelled','cancelled','none'));
+ }
+ const bundle=prepared.prepared.bundle;
+ const entries=planned.map(({entry,track},i)=>({id:entry.id,trackId:track.id,title:track.title,src:bundle.sources[i].url}));
  preparation.stage(bundle,entries);
  if(!current()||!preparation.publish())return;
  sourcePublished=true;
  suspendedSnapshot=undefined;installMediaSession();
  if(restored?.currentEntryId===null)player.suspend();
  player.setQueue(entries);if(restored?.currentEntryId===null)player.state='paused';if(restored)player.restoreModes(restored.repeat,restored.shuffleOrder);
- const index=restored?entries.findIndex(e=>e.id===restored.currentEntryId):0;
+ const index=restored?entries.findIndex(e=>e.id===restored.currentEntryId):planned.findIndex(row=>row.index>=startIndex);
  // A saved null selection unloads the old element before setQueue. Other
  // replacements select a new occurrence before releasing the old bundle.
  if(restored?.currentEntryId!==null)player.select(index>=0?index:0,false,index>=0?restored?.position??0:0);
@@ -1403,9 +1439,9 @@ function App(){
   const live=()=>playbackIntent===selectedSongIntent&&view()&&raw()&&review()&&latestCollectionPlaybackView.current===key;
   const ids=playableCollection.map(({track})=>track.id),epoch=player.queueEpoch;
   const preparing={view:key,trackId:ids[startIndex??0]};setCollectionPreparing(preparing);
-  try{await viewQueue(ids,undefined,[],live);
-  if(!live()||document.visibilityState==='hidden'||busy||copyRemovalBlocked()||queueForeignBlocked()||!sourceReview.canPrepare()||player.queueEpoch!==epoch+1||!player.current||player.entries.length!==ids.length||!player.entries.every((entry,index)=>entry.trackId===ids[index]))return;
-  transferPlayIntent=null;if(startIndex!==null&&startIndex!==player.index)player.select(startIndex,true);else void player.play();
+  try{await viewQueue(ids,undefined,[],live,startIndex??0);
+  if(!live()||document.visibilityState==='hidden'||busy||copyRemovalBlocked()||queueForeignBlocked()||!sourceReview.canPrepare()||player.queueEpoch!==epoch+1||!player.current)return;
+  transferPlayIntent=null;void player.play();
   }finally{setCollectionPreparing(value=>value===preparing?null:value);}
  }
  const pageRows=visible.slice(pagination.start,pagination.end);
