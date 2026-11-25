@@ -2484,3 +2484,11 @@ Quedan M1 (conexión de Telegram durante toda la sesión), M2 (límites de la me
 ## 2026-11-25 · Caché de portadas e información
 
 La decisión del propietario del 2026-11-25 autoriza la caché persistente y acotada en el teléfono. [T26](T26-cache-portadas-info.md) define los incrementos. El primero parte de `f803135` y cubre el almacén dedicado, portadas de catálogo y proveedor, reapertura offline y purga de cuenta.
+
+## 2026-11-25 · Integración v63
+
+Se integraron sobre v62 `perf/t25-m1`, `fix/startup-splash-notice`, `perf/t26-inc1` y `perf/t27-local-start`, sin conflictos; se aplicaron limpiamente las actas pendientes de T25 y T27. En local: unitarias 1053/1053, servidor 73/73, Python 10/10, tipos, tipos de pruebas, lint y build PASS. En Chromium y WebKit: matriz funcional 122/122, reanudación 92/92, carátulas/dock 12/12, avisos 10/10, splash 14/14, T27 integridad 28/28 y playlist 4/4. M1 verificó sus condiciones en ambos motores; WebKit señaló la CSP heredada también en la repetición.
+
+Caché: 17/22 inicialmente; C03 WebKit (dos casos) pasó al repetir. C04 portada incrustada WebKit se repitió y falló igual en v62. C06 cierre de sesión falló dos veces en ambos motores al buscar «Mi cuenta»; en v62 el mismo caso falla antes por no existir la caché, por lo que su causa y clasificación siguen pendientes, sin afirmar regresión ni aceptación.
+
+Mediciones sintéticas Chromium, cinco corridas por versión: primer sonido de una pista v62→v63, IDB 550→495 ms y OPFS 1114→574 ms; playlist de 30 pistas IDB 6467→718 ms y OPFS 13796→627 ms. T27 P01 no alcanzó la reducción exigida del 50 % para una pista (10,0 % IDB y 48,5 % OPFS); P02 y P05 pasaron en estas mediciones. Tras volver de segundo plano M1: 2633→2642 ms. Revisión independiente y aceptación física en iPhone pendientes; esta integración no constituye publicación.

@@ -520,3 +520,9 @@ Archivos de la rama frente a `f97ebb5`:
 - Interfaz. `LibraryDownloadController.tsx`, `MusicSearchController.tsx`, `MusicSearchPanel.tsx` y `TelegramPanel.tsx` dentro de `src/ui/`.
 - Pruebas. `tests/unit/telegram-connection-lifecycle.test.ts` y `check-playlist-full-download-main.mjs`, `playlist-connection-m1.mjs`, `playlist-full-download-sdk.ts`, `playlist-speed-csp.mjs` dentro de `tests/integration/`.
 - Documentación. `odd/tasks/T25-velocidad-bots.md` y `docs/IPHONE-ACEPTACION.md`.
+
+### Segunda ronda de M1 · `feb3e89`, frente a `f97ebb5`
+
+**M1-03 · PENDIENTE DE VENTANA.** La medición desde el regreso y su veredicto quedan para la ventana reservada con menos de 1,5 de carga de un minuto en `uptime`. Esta ronda cubre las matrices de T24.
+
+La matriz funcional agrupa los 61 casos del modo `regression` de `check-playlist-full-download-main.mjs`, incluidas tres descargas completas, seis escenarios de `turnaround`, toda la cola y `tap-active`. La matriz de reanudación comprende los 46 casos de `check-playlist-resume-main.mjs`, incluidas reapertura y suspensión, actualización, espera, reparación y traspaso entre pestañas. Ambas usan los mismos arneses sobre el producto de cada revisión, con workers, almacenamiento y reproducción de navegador y un transporte de prueba en loopback. `tap-baseline` corresponde al control histórico en v59 y queda fuera del modo de regresión. Se conservaron 8 PASS funcionales de v62 y 14 del candidato de la primera ronda tras verificar que entre `c6161bc` y `feb3e89` el producto y los arneses son idénticos. Si un caso con PASS previo agotó la espera en esta ronda, se incluyó en el reintento focalizado.
