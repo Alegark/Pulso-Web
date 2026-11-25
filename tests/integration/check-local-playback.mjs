@@ -358,6 +358,7 @@ try{
        await trackButton(page,index).click();
        if(start===1){
         await waitPlaying(page,1,12000);
+        await page.evaluate(()=>window.t27.audio.pause());
         await corrupt(page,index+start,fault);
         await nextTrack(page);
        }
