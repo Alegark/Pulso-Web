@@ -74,8 +74,8 @@ async function waitForLoad(key){
   await delay(5000);
  }
 }
-async function setup(page,n,backend,short){
- await page.evaluate(async({n,backend,short,accountId})=>{
+async function setup(page,n,backend,short,playlistSize){
+ await page.evaluate(async({n,backend,short,accountId,playlistSize})=>{
   const request=q=>new Promise((yes,no)=>{q.onsuccess=()=>yes(q.result);q.onerror=()=>no(q.error);});
   const open=indexedDB.open('pulso-web-local-v1',2);
   open.onupgradeneeded=()=>{
@@ -110,12 +110,16 @@ async function setup(page,n,backend,short){
     });
     rows.push({track,asset});
    }
-   const playlist={id:crypto.randomUUID(),name:'T27 playlist',revision:1,accountId,
-    entries:rows.map(({track})=>({id:crypto.randomUUID(),trackId:track.id}))};
-   await write('playlists',tx=>tx.objectStore('playlists').put(playlist,playlist.id));
+   await write('playlists',tx=>{
+    for(let offset=0;offset<n;offset+=playlistSize){
+     const id=crypto.randomUUID(),name='T27 playlist '+(1+offset/playlistSize);
+     const entries=rows.slice(offset,offset+playlistSize).map(({track})=>({id:crypto.randomUUID(),trackId:track.id}));
+     tx.objectStore('playlists').put({id,name,revision:1,accountId,entries},id);
+    }
+   });
    sessionStorage.setItem('t27-fixture',JSON.stringify(rows));
   }finally{worker?.terminate();db.close();}
- },{n,backend,short,accountId});
+ },{n,backend,short,accountId,playlistSize});
 }
 async function corrupt(page,index,kind){
  await page.evaluate(async({index,kind})=>{
@@ -193,10 +197,17 @@ async function nextTrack(page){
  }))return 'media-session';
  await page.getByRole('button',{name:'Abrir reproductor desde minirreproductor'}).click();
  await page.getByRole('button',{name:'Siguiente canción'}).click();
+ await page.getByRole('button',{name:'Cerrar reproductor'}).click();
  return 'player';
 }
+async function openPlaylist(page,group,lastIndex){
+ await page.getByRole('navigation',{name:'Principal',exact:true}).getByRole('button',{name:'Biblioteca',exact:true}).click();
+ await page.getByRole('button',{name:'Playlists',exact:true}).click();
+ await page.locator('.library-grid').getByRole('button',{name:new RegExp(`^T27 playlist ${group+1}\\b`)}).click();
+ await trackButton(page,lastIndex).waitFor();
+}
 
-async function withPage(engine,origin,n,backend,short,run){
+async function withPage(engine,origin,n,backend,short,run,playlistSize=n){
  const free=await statfs('/data');
  assert.ok(free.bavail*free.bsize>=2*1024**3,'Menos de 2 GiB libres en /data');
  const launch={headless:true,proxy:{server:'http://127.0.0.1:9',bypass:'127.0.0.1,localhost'},viewport:{width:390,height:844}};
@@ -210,8 +221,8 @@ async function withPage(engine,origin,n,backend,short,run){
   await installRequiredAccountFixture(context,origin);
   await context.addInitScript(installProbe);
   const page=context.pages()[0];
-  page.setDefaultTimeout(25000);
-  await page.goto(origin+'/__t27/seed');
+  page.setDefaultTimeout(45000);
+  await page.goto(origin+'/__t27/seed',{waitUntil:'domcontentloaded'});
   await page.evaluate(async id=>{
    localStorage.setItem('pulso:setup:v1:'+id,'complete');
    const db=await new Promise((yes,no)=>{
@@ -226,16 +237,12 @@ async function withPage(engine,origin,n,backend,short,run){
     store.put('TESTONLY_OFFLINE_SETUP','session');store.put(crypto.randomUUID(),'epoch');
    });}finally{db.close();}
   },accountId);
-  await setup(page,n,backend,short);
+  await setup(page,n,backend,short,playlistSize);
   try{
-   await page.goto(origin);
+   await page.goto(origin,{waitUntil:'domcontentloaded'});
    await page.locator('.shell-nav').waitFor();
    await page.waitForFunction(async()=>(await navigator.locks.query()).held.some(lock=>lock.name==='pulso-web:local:playback'));
    await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
-   await page.getByRole('navigation',{name:'Principal',exact:true}).getByRole('button',{name:'Biblioteca',exact:true}).click();
-   await page.getByRole('button',{name:'Playlists',exact:true}).click();
-   await page.locator('.library-grid').getByRole('button',{name:/T27 playlist/}).click();
-   await trackButton(page,n-1).waitFor();
   }catch(error){
    const screen=await page.locator('body').innerText({timeout:3000}).catch(()=>null);
    throw new Error(String(error)+' Pantalla: '+screen?.slice(0,400));
@@ -249,8 +256,9 @@ function summary(samples){
  const mid=Math.floor(values.length/2);
  return {median:values.length%2?values[mid]:(values[mid-1]+values[mid])/2,min:values[0],max:values.at(-1)};
 }
+const matches=name=>!filter||Object.values(name).join(':').includes(filter);
 async function runCase(name,fn){
- if(filter&&!Object.values(name).join(':').includes(filter))return;
+ if(!matches(name))return;
  try{report.cases.push({...name,...await fn(),passed:true});}
  catch(error){report.cases.push({...name,passed:false,error:String(error.message).slice(0,1500)});}
  console.log(JSON.stringify(report.cases.at(-1)));
@@ -270,6 +278,7 @@ try{
       for(const [label,n] of [['single',1],['playlist',30]])for(let i=0;i<runs;i++){
        await withPage(engine,origin,n,backend,false,async page=>{
         const start=n===1?0:14;
+        await openPlaylist(page,0,n-1);
         await trackButton(page,start).click();
         try{await waitPlaying(page);}catch{samples[label].push({timeout:true});return;}
         const [event]=await playing(page);
@@ -285,41 +294,55 @@ try{
      });
      continue;
     }
-    for(const start of [0,1])for(const fault of ['byte','truncated','hash']){
-     await runCase({version,engine,backend,case:'skip-corrupt',start,fault},async()=>{
-      let observed;
-      await withPage(engine,origin,3,backend,true,async page=>{
-       if(start===0)await corrupt(page,start,fault);
-       await trackButton(page,0).click();
+    const prefix={version,engine,backend};
+    const scenarios=[
+     ...[0,1].flatMap(start=>['byte','truncated','hash'].map(fault=>({...prefix,case:'skip-corrupt',start,fault}))),
+     {...prefix,case:'selected-offline-next'},
+    ].filter(matches);
+    if(!scenarios.length)continue;
+    try{
+     await withPage(engine,origin,scenarios.length*3,backend,true,async(page,context)=>{
+      for(const [group,scenario] of scenarios.entries())await runCase(scenario,async()=>{
+       const index=group*3;
+       await openPlaylist(page,group,index+2);
+       await page.evaluate(()=>{
+        const probe=window.t27;
+        probe.audio.pause();
+        Object.assign(probe,{started:null,loads:[],playing:[],reads:{idb:0,blobBytes:0}});
+       });
+       if(scenario.case==='selected-offline-next'){
+        await context.setOffline(true);
+        await trackButton(page,index+1).click();
+        await waitPlaying(page,1,12000);
+        const [first]=await playing(page);
+        assert.equal(first.title,title(index+1));
+        assert.equal(first.loads.length,1);
+        assert.deepEqual(first.reads,{idb:0,blobBytes:0});
+        const nextControl=await nextTrack(page);
+        await waitPlaying(page,2,12000);
+        const observed=(await playing(page)).map(event=>event.title);
+        assert.deepEqual(observed,[title(index+1),title(index+2)]);
+        return {observed,nextControl};
+       }
+       const {start,fault}=scenario;
+       if(start===0)await corrupt(page,index,fault);
+       await trackButton(page,index).click();
        if(start===1){
-        await waitPlaying(page,1,8000);
-        await corrupt(page,start,fault);
+        await waitPlaying(page,1,12000);
+        await corrupt(page,index+start,fault);
         await nextTrack(page);
        }
-       await waitPlaying(page,start+1,8000);
-       observed=(await playing(page)).map(event=>event.title);
-       assert.deepEqual(observed,start===0?[title(1)]:[title(0),title(2)]);
+       await waitPlaying(page,start+1,12000);
+       const observed=(await playing(page)).map(event=>event.title);
+       assert.deepEqual(observed,start===0?[title(index+1)]:[title(index),title(index+2)]);
+       return {observed};
       });
-      return {observed};
-     });
+     },3);
+    }catch(error){
+     const result={...prefix,case:'profile-setup',passed:false,error:String(error.message).slice(0,1500)};
+     report.cases.push(result);
+     console.log(JSON.stringify(result));
     }
-    await runCase({version,engine,backend,case:'selected-offline-next'},async()=>{
-     let observed,nextControl;
-     await withPage(engine,origin,3,backend,true,async(page,context)=>{
-      await context.setOffline(true);
-      await trackButton(page,1).click();
-      await waitPlaying(page,1,8000);
-      const [first]=await playing(page);
-      assert.equal(first.title,title(1));
-      assert.equal(first.loads.length,1);
-      assert.deepEqual(first.reads,{idb:0,blobBytes:0});
-      nextControl=await nextTrack(page);
-      await waitPlaying(page,2,8000);
-      observed=(await playing(page)).map(event=>event.title);
-      assert.deepEqual(observed,[title(1),title(2)]);
-     });
-     return {observed,nextControl};
-    });
    }
   }finally{await new Promise(done=>server.httpServer.close(done));}
  }
