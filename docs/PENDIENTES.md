@@ -1,6 +1,10 @@
 # Pendientes abiertos · 2026-11-25
 
-Pulso sirve [v61](https://pulso-web.pruebassoftware.workers.dev/releases/60735cae6f867d6e.html) desde `fix/artwork-rows-dock`. El registro de publicación está en [T7](../odd/tasks/T7-portadas-metadata.md) y [T8](../odd/tasks/T8-shell-funcional.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
+Pulso sirve [v62](https://pulso-web.pruebassoftware.workers.dev/releases/50ddc18edba3d338.html) desde `perf/t25-inc1`. El registro de publicación está en [T25](../odd/tasks/T25-velocidad-bots.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
+
+## Prioridad · M1 de T25
+
+La conexión de Telegram permanece abierta durante toda la sesión con `disableUpdates: false` y recibe los updates de todas las conversaciones. En cuentas con grupos activos, procesarlos aumenta el consumo de datos móviles y batería. La mitigación propuesta es cerrar la conexión por inactividad o abrirla bajo demanda. Queda por comprobar con Telegram real si la restauración o reconexión refresca la presencia «en línea».
 
 ## 1. Hallazgos abiertos de v60
 
@@ -34,10 +38,14 @@ El propietario retomó las mejoras de velocidad como T25 en `perf/t25-inc1` el 2
 
 ## 5. Engram de Pulso Web
 
-La base local compartida `.local/engram` está sincronizada con los ODD de `fix/artwork-rows-dock` tras registrar v61. Una invocación posterior en modo lectura verificó el proyecto `Pulso-Web`, contenido íntegro, bytes y SHA-256 de los 19 archivos. Un checkout con ODD de otra rama puede mostrar divergencias respecto a ese recibo.
+Al registrar v61 se sincronizó la base local compartida `.local/engram` con los ODD de `fix/artwork-rows-dock`. La lectura posterior verificó el proyecto `Pulso-Web`, contenido íntegro, bytes y SHA-256 de los 19 archivos. Un checkout con ODD de otra rama puede mostrar divergencias respecto a ese recibo. En las primeras rondas de T25 se usó una copia de proyecto en su propio worktree. La integración de T25 con v61 se sincronizó en la base compartida. Una invocación posterior en modo lectura verificó los 20 archivos, con contenido íntegro, bytes y SHA-256. El acta y la ubicación de la copia de proyecto previa están en [T25](../odd/tasks/T25-velocidad-bots.md#engram-compartido-y-limpieza).
 
 ## 6. Decisiones del propietario
 
 - El 2026-11-25 el propietario decidió descartar la caché temporal de canciones de Telegram porque la primera reproducción sigue esperando la descarga completa. El informe está en `.local/research/telegram-cache-playback-2026-11-25/report.md`.
 - Despliegue automático en Cloudflare al hacer push: sin decidir. No configurar nada.
 - Bot privado de YouTube Music en un equipo de su casa: idea opcional, sin respuesta. El acceso directo desde la app web a YouTube no es viable; ver `.local/research/ytmusic-direct-neon-2026-11-24/report.md` y `.local/research/youtube-viability-2026-11-24/report.md`.
+
+## 7. Infracción CSP heredada en WebKit
+
+WebKit WPE emite `style-src-attr` con `blockedURI: inline` para el selector de Apariencia de [src/main.tsx:1547](../src/main.tsx#L1547). El mapa de fuentes sitúa el evento en `node_modules/react-dom/cjs/react-dom-client.production.js:8514`, en la llamada que crea el elemento `select`. La política aplicada procede de [index.html:1](../index.html#L1). La reproducción se confirmó en v60 (`086aaac`) y v61 (`d718b9d`). El arnés de velocidad registra esa infracción y la compara con la ejecución de referencia del mismo perfil.

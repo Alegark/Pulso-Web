@@ -10,14 +10,17 @@ const identity=(username='ivkmbot',id=101,hash=123)=>({_: 'contacts.resolvedPeer
 const history=(messages:unknown[]=[])=>({_: 'messages.messages',messages,users:[],chats:[]});
 const msg=(id=12,extra:Record<string,unknown>={})=>({_: 'message',id,peerId:{_: 'peerUser',userId:101},fromId:{_: 'peerUser',userId:101},message:'Fixture recent reply',replyMarkup:{_:'replyInlineMarkup',rows:[{_:'keyboardInlineButtonRow',buttons:[{_:'keyboardInlineButton',text:'Fixture song — Fixture artist',type:{_:'inlineButtonTypeCallback',data:new Uint8Array([1])}}]}]},...extra});
 const ack=()=>({_: 'updateShortSentMessage',out:true,id:10});
-async function setup(hook?:(request:any,options:any)=>Promise<unknown>,username='ivkmbot'){
+async function setup(hook?:(request:any,options:any)=>Promise<unknown>,username='ivkmbot',wakeupEnabled=false){
  const binding={accountRef:randomUUID(),accountEpoch:1},sessionId=randomUUID(),time=fakeClock(),ctx={signal:new AbortController().signal,current:()=>true};let invalidations=0;
  const pool=createBotProvidersDriver(binding,sessionId,{resolveIdentity:async u=>identity(u,u==='lydbot'?102:101),invalidateSession(){invalidations++;}},time);
  const pe=()=>({protocol:'pulso-bot-providers',version:1,...binding,sessionId,providerRevision:pool.getSnapshot()!.revision,operationId:randomUUID(),requestId:randomUUID()});
  const offer=await pool.handle({...pe(),type:'bots.validate',input:username},ctx);assert.equal(offer?.type,'bots.validated');const ref=offer!.type==='bots.validated'?offer!.offer.providerRef:'';
  await pool.handle({...pe(),type:'bots.setOrder',expectedRevision:0,providerRefs:[ref]},ctx);
  const calls:any[]=[],progress:any[]=[];let verifyCalls=0,rejectIdentity=false;let cooldown:null|{retryAt:number|null;retryBlocked:boolean}=null;
- const driver=createBotSearchSdkDriver(binding,sessionId,{providers:{captureSearchProvider(ref:string,revision:number){
+ let wakeup:(()=>void)|undefined;
+ const driver=createBotSearchSdkDriver(binding,sessionId,{subscribeBotWakeup:wakeupEnabled?(_id:number,hint:()=>void)=>{
+  assert.equal(_id,101);wakeup=hint;return ()=>{wakeup=undefined;};
+ }:undefined,providers:{captureSearchProvider(ref:string,revision:number){
   const capture=pool.captureSearchProvider(ref,revision);
   return capture&&{...capture,verifyIdentity(raw:unknown){verifyCalls++;return rejectIdentity?null:capture.verifyIdentity(raw);}};
  }},call:async(r:any,o:any)=>{calls.push({request:r,options:o});return hook?hook(r,o):r._==='contacts.resolveUsername'?identity():r._==='messages.sendMessage'?ack():history(r.limit===1?[]:[msg()]);},current(s:AbortSignal){if(s.aborted)throw Error('cancelled');},invalidateSession(){invalidations++;},getAccountCooldown:()=>cooldown} as never,time);
@@ -25,7 +28,7 @@ async function setup(hook?:(request:any,options:any)=>Promise<unknown>,username=
  const command=(extra:Record<string,unknown>={},context:any={...ctx,publish:(r:any)=>progress.push(r)})=>{const c={...e(),type:'bot-search.search',providerRef:ref,query:'Fixture song',consent:true,...extra};return {c,p:driver.handle(c,context)};};
  const check=async(p:Promise<any>,c:any)=>{const r=await p;assert.ok(parseBotSearchReply(r,c));return r;};
  const cancel=(c:any)=>driver.handle({...e(),type:'bot-search.cancel',queryId:c.queryId,targetRequestId:c.requestId},ctx);
- return {driver,pool,ref,pe,e,ctx,time,calls,progress,command,check,cancel,get verifyCalls(){return verifyCalls;},rejectIdentity(value:boolean){rejectIdentity=value;},setCooldown(v:typeof cooldown){cooldown=v;},get invalidations(){return invalidations;}};
+ return {driver,pool,ref,pe,e,ctx,time,calls,progress,command,check,cancel,hint:()=>wakeup?.(),get listening(){return !!wakeup;},get verifyCalls(){return verifyCalls;},rejectIdentity(value:boolean){rejectIdentity=value;},setCooldown(v:typeof cooldown){cooldown=v;},get invalidations(){return invalidations;}};
 }
 test('typed SDK foundation performs exact identity, baseline1, one plaintext stable-Long send, peer-specific20 poll',async()=>{
  const s=await setup();assert.equal(s.calls.length,0);const {c,p}=s.command({target:{title:'Song (Live remix)',artist:'Artist',album:'Album not sent',durationSeconds:222}});await advancePolls(s.time,0);const result=await s.check(p,c);assert.equal(result.type,'bot-search.result');assert.equal(result.rows[0].correlation,'recent');assert.equal(result.expectedTarget.album,'Album not sent');assert.equal(s.progress.length,1);
@@ -187,5 +190,65 @@ for(const code of ['USER_ID_INVALID','INPUT_USER_DEACTIVATED','USER_IS_BLOCKED']
   rejected=false;assert.equal((await search()).type,'bot-search.result');
   assert.equal(s.calls.filter(call=>call.request._==='contacts.resolveUsername').length,2);
   assert.equal(s.invalidations,0);
+ }finally{s.driver.close();}
+});
+
+test('wake-up during the send ACK is only a signal and burst hints pace actual history reads',async()=>{
+ const send=deferred(),times:number[]=[];
+ const s=await setup(async r=>{
+  if(r._==='contacts.resolveUsername')return identity();
+  if(r._==='messages.sendMessage')return send.promise;
+  if(r.limit!==20)return history();
+  times.push(s.time.now());
+  return history(times.length===1?[msg(8)]:[msg(12)]);
+ },'ivkmbot',true);
+ try{
+  const {c,p}=s.command();await tick();
+  assert(s.listening);
+  s.hint();await tick();assert.deepEqual(times,[]);
+  send.resolve(ack());await tick();assert.deepEqual(times,[1000]);
+  for(let i=0;i<10;i++)s.hint();
+  s.time.advance(124);await tick();assert.deepEqual(times,[1000]);
+  s.time.advance(1);await tick();
+  const result=await s.check(p,c);
+  assert.equal(result.type,'bot-search.result');
+  assert.deepEqual(times,[1000,1125]);
+  assert.equal(s.listening,false);
+  assert.equal(s.time.timers.size,0);
+ }finally{s.driver.close();}
+});
+
+test('cancel releases a wake-up subscription and keeps its pending poll from running',async()=>{
+ const s=await setup(undefined,'ivkmbot',true);
+ try{
+  const {c,p}=s.command();await tick();assert(s.listening);
+  s.hint();await s.cancel(c);
+  assert.equal((await s.check(p,c)).error,'cancelled');
+  assert.equal(await s.driver.whenSettled(),true);
+  assert.equal(s.listening,false);
+  s.time.advance(250);
+  assert.equal(s.calls.filter(call=>call.request.limit===20).length,0);
+ }finally{s.driver.close();}
+});
+
+test('persistent search hints cannot exceed the read cap',async()=>{
+ let reads=0;
+ const s=await setup(async request=>{
+  if(request._==='contacts.resolveUsername')return identity();
+  if(request._==='messages.sendMessage'){s.hint();return ack();}
+  if(request.limit===20){reads++;s.hint();}
+  return history();
+ },'ivkmbot',true);
+ try{
+  const {c,p}=s.command();
+  await tick();
+  for(let read=1;read<19;read++){
+   s.time.advance(125);
+   await tick();
+  }
+  assert.equal(reads,19);
+  assert.equal((await s.check(p,c)).error,'timeout');
+  assert.equal(s.listening,false);
+  assert.equal(s.time.timers.size,0);
  }finally{s.driver.close();}
 });

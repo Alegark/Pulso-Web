@@ -44,10 +44,15 @@ function incomingBot(message:unknown,botId:number):boolean {
  return searchOwn(message,'_')==='message'&&samePeer(searchOwn(message,'peerId'),botId)&&
   (out===undefined||out===false)&&(sender===undefined||samePeer(sender,botId));
 }
-function history(raw:unknown,botId:number,limit:number):readonly unknown[] {
+function history(raw:unknown,botId:number,limit:number,missingId?:number):readonly unknown[] {
  if(!['messages.messages','messages.messagesSlice'].includes(searchOwn(raw,'_') as string))bad();
  const a=dataArray(searchOwn(raw,'messages'),limit);if(!a)bad('limit',limit===1?'limit-baseline':'limit-history');
- for(const m of a){if(!['message','messageService'].includes(searchOwn(m,'_') as string)||!messageId(searchOwn(m,'id'))||!samePeer(searchOwn(m,'peerId'),botId))bad();}
+ for(const m of a){
+  const type=searchOwn(m,'_'),id=searchOwn(m,'id'),peer=searchOwn(m,'peerId');
+  if(!messageId(id))bad();
+  if(type==='messageEmpty'&&a.length===1&&id===missingId&&(peer===undefined||samePeer(peer,botId)))continue;
+  if((type!=='message'&&type!=='messageService')||!samePeer(peer,botId))bad();
+ }
  return a;
 }
 export function botSearchBaseline(raw:unknown,botId:number):number {return history(raw,botId,1).reduce<number>((n,m)=>Math.max(n,searchOwn(m,'id') as number),0);}
@@ -162,7 +167,9 @@ export function botSearchDocument(message:unknown):{location:{_: 'inputDocumentF
  if(!id||!accessHash||!(ref instanceof Uint8Array)||ref.length>4096||typeof dcId!=='number'||!Number.isSafeInteger(dcId)||dcId<1||dcId>5)return null;
  return {location:{_:'inputDocumentFileLocation',id,accessHash,fileReference:ref.slice(),thumbSize:''},dcId};
 }
-export function botSearchKnownMessage(raw:unknown,botId:number,id:number):unknown {return history(raw,botId,20).find(m=>searchOwn(m,'id')===id&&incomingBot(m,botId));}
+export function botSearchKnownMessage(raw:unknown,botId:number,id:number,allowMissing=false):unknown {
+ return history(raw,botId,20,allowMissing?id:undefined).find(m=>searchOwn(m,'id')===id&&incomingBot(m,botId));
+}
 
 /** Re-reading a recording may refresh its caption, preview or optional sender.
  * Pin the exact private message, reply anchor and immutable file descriptor;
