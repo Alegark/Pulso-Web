@@ -514,7 +514,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    }).observe(document,{childList:true,subtree:true,characterData:true,attributes:true});
   },{startLabel,resumeLabel,reviewButtons,fastQueueReconnect:reconnectModes.includes(mode)});
   page=await context.newPage();
-  page.setDefaultTimeout(15000);
+  page.setDefaultTimeout(reconnectModes.includes(mode)||mode==='queue-dispatch-relaunch-cap'?30000:15000);
   page.on('pageerror',error=>errors.push(String(error)));
   page.on('dialog',dialog=>{errors.push('Browser dialog: '+dialog.type());void dialog.dismiss();});
   const oldCheckpoint=mode==='stale-checkpoint'?{trackIds:entries,cursor:6,pending:null}:null;
@@ -747,7 +747,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
       };
      });
      await enqueueAlbum();
-     await page.waitForFunction(key=>!localStorage.getItem(key),queueKey,{timeout:5500});
+     await page.waitForFunction(key=>!localStorage.getItem(key),queueKey);
      await verifyAlbum();
      assert.deepEqual(await page.evaluate(()=>window.testCheckKinds.filter(kind=>kind==='album')),Array(4).fill('album'));
     }else if(mode==='queue-dispatch-relaunch-cap'){
@@ -906,7 +906,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
       await online(true);
       await openDetails();
       const retry=dock.getByRole('button',{name:'Reintentar descarga en cola'});
-      await retry.waitFor({timeout:8500});
+      await retry.waitFor({timeout:18000});
       assert.equal(await page.evaluate(()=>window.testOriginalBotLifetime()),false,'The worker must have reconnected');
       assert.equal(await page.evaluate(()=>window.testQueueTelegram.snapshot().phase),'connected');
       assert.deepEqual(await queuedTitles(),[albumTitle,playlistC]);

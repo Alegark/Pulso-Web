@@ -250,11 +250,12 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
       break;
      }
      if(botExpired()&&!channelDown(found)){markBotTimeout();break;}
-     if(!p.accept)return {state:'uncertain'};
-     if((!queryId||ownReply&&transient(found))&&await retryTransient())continue;
      const rejection=ownReply&&found.delivery!=='uncertain'?providerRejection(found.error):null;
+     const fileError=ownReply&&found.delivery==='acknowledged'&&isBotSearchFileError(found.error)?found.error:null;
+     if(!p.accept&&(!live()||rejection!=='needs-start'&&!fileError))return {state:'uncertain'};
+     if((!queryId||ownReply&&transient(found))&&await retryTransient())continue;
      if(rejection)reasons.push(rejection);
-     else if(ownReply&&found.delivery==='acknowledged'&&isBotSearchFileError(found.error))reasons.push(found.error);
+     else if(fileError)reasons.push(fileError);
      else unavailable=true;
      break;
     }
@@ -346,7 +347,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
       rejectedStatus='';
       if(expired||botTimedOut||p.signal.aborted)cancel();
      },timing||measurement?value=>{timing?.download(value);measurement?.network(value);}:undefined,
-     menu&&p.accept?callbackBudget:undefined);
+     menu&&(p.accept||hasAlternate||reuse)?callbackBudget:undefined);
     }finally{unsubscribe?.();ownedCancel=undefined;}
     if(menu)callbackBudget-=Math.round((transferStarted??performance.now())-downloadStarted);
     const after=client.searchSnapshot();
@@ -379,7 +380,8 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
      if(!afterOwn&&!selectionRetried&&live()){selectionRetried=true;continue;}
      return {state:'telegram'};
     }
-    const rejection=!batch&&p.accept&&admittedDownload&&afterOwn&&after.delivery!=='uncertain'?providerRejection(after.error):null;
+    const rejection=!batch&&admittedDownload&&afterOwn&&after.delivery!=='uncertain'&&
+     (p.accept||after.error==='needs-start'&&live())?providerRejection(after.error):null;
     if(rejection){reasons.push(rejection);break;}
     if(!batch&&!audio&&(expired||botExpired()||menu&&admittedDownload&&afterOwn&&after.error==='timeout')){
      if(!p.accept&&expired)return {state:'uncertain'};
@@ -451,7 +453,7 @@ export async function acquireFromOrderedBots(p:{client:TelegramSessionClient;pro
     excludedRows.add(selected.key);
     if(collection&&selected.resumeKey!==undefined)(collection.rejectedOptions??=new Set()).add(selected.resumeKey);
     selections++;
-    if(!p.accept||!hasAlternate||metadataRejections>=METADATA_REJECTIONS_PER_BOT)break;
+    if(!hasAlternate||!p.accept&&after.error!=='file-unsupported'||metadataRejections>=METADATA_REJECTIONS_PER_BOT)break;
     if(menu&&afterOwn&&after.expiresAt!==null&&after.rows.some(row=>row.kind==='option'))reusableQuery=queryId;
     }finally{timing?.finish(p.signal.aborted&&timingResult==='failed'?'cancelled':timingResult);}
    }

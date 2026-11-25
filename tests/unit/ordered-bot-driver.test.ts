@@ -140,7 +140,7 @@ function setup(t:TestContext,replies:readonly Reply[]){
   async downloadBot(rowRef:string,_allowed:()=>boolean,admit:(value:BotSearchAdmission)=>void,_timing:unknown,callbackBudgetMs?:number){
    const command={...envelope(state.queryId!),type:'bot-search.download' as const,providerRef:state.providerRef!,
     rowRef,target:state.expectedTarget!,consent:true as const,...(callbackBudgetMs===undefined?{}:{callbackBudgetMs})};
-   const menu=state.rows.filter(row=>row.kind==='option'&&row.rowRef!==rowRef);
+   const menu=callbackBudgetMs===undefined?[]:state.rows.filter(row=>row.kind==='option'&&row.rowRef!==rowRef);
    const expiresAt=state.expiresAt;
    admit({queryId:command.queryId,cancel:()=>{}});
    publish({pending:true,error:null,delivery:'not-dispatched',expiresAt:null});
@@ -237,9 +237,23 @@ test('M9 · a song title mentioning /start is not a bot start prompt',async t=>{
 
 test('M9 · mixed interactive replies do not assert catalogue absence',async t=>{
  const f=setup(t,['empty','needs-start']);
- const result=await f.drive(acquireFromOrderedBots({...f.params,accept}));
+ const result=await f.drive(acquireFromOrderedBots(f.params));
  assert.equal(result.state,'known-failure');
  if(result.state==='known-failure')assert.equal(acquisitionFailureText(result.reasons),'Un bot necesita que envíes /start en Telegram');
+});
+
+test('M9 · interactive search also advances after a blocked bot',async t=>{
+ const f=setup(t,['blocked','direct']);
+ assert.equal((await f.drive(acquireFromOrderedBots(f.params))).state,'audio');
+ assert.deepEqual(f.searches,providers.map(p=>p.providerRef));
+});
+
+test('R1 · interactive search uses the retained menu after unsupported audio',async t=>{
+ const f=setup(t,['menu-ogg','empty']);
+ const result=await f.drive(acquireFromOrderedBots(f.params));
+ assert.equal(result.state,'audio',JSON.stringify({result,callbacks:f.callbacks,errors:f.errors.map(reply=>reply.error)}));
+ assert.deepEqual(f.callbacks,[1,2]);
+ assert.deepEqual(f.searches,[providers[0].providerRef]);
 });
 
 test('H2 · real direct audio transfer timeout falls back and saves through downloadSong',async t=>{
