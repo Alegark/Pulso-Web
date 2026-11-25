@@ -26,7 +26,8 @@ USD 0. Trabajar solo en este proyecto; no modificar servicios ajenos. Pruebas lo
 
 - Indicación expresa del propietario (2026-11-17): publicar en Cloudflare los cambios verificados de Pulso al cerrar la entrega, además de Git/PR; no dejar una entrega autorizada sólo en local o en la PR ni volver a pedir la misma autorización. Conservar USD 0, configuración y datos existentes, verificar la versión pública y registrar el resultado. Esta preferencia no autoriza cambios de infraestructura, servicios ajenos ni publicar trabajo que no haya pasado sus verificaciones.
 
-- Preferencia del propietario: usar un agente económico para las publicaciones en Cloudflare y las actualizaciones de Git al cerrar cambios verificados.
+- Indicación expresa del propietario (2026-11-25): publicar sin volver a preguntar cuando la entrega quede validada. Validada significa que cada parte corregida tiene su prueba en la matriz ODD de su tarea, en el nivel donde vive el fallo; que la batería completa pasa; y que la revisión independiente no deja hallazgos bloqueantes ni altos frente a la versión publicada. Si algo de eso falla, no se publica y se informa.
+- Indicación expresa del propietario (2026-11-25): usar el agente de menor rango capaz para cada tarea. Implementar código: Codex `gpt-6.2-sol` alto. Rondas solo de pruebas: `gpt-6.2-sol` medio. Requisitos y revisión independiente: Antigravity `gemini-4-neon` alto. Publicar en Cloudflare: Codex `gpt-6.1-terra` medio, con `gpt-6.2-sol` medio como respaldo; debe ser Codex porque ahí está el OAuth del MCP de Cloudflare. Commits, push, descripción de PR y notas mecánicas: Codex `gpt-6-luna` bajo. Si un agente falla en su tarea, subir un nivel.
 - Entregar los cambios de Git en una rama y una PR con problema, comportamiento resultante, validación y pendientes, para que los colaboradores puedan revisarlos.
 
 ## Espacio de disco y limpieza de pruebas
