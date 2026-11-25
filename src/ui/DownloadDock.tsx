@@ -233,7 +233,7 @@ export function DownloadDock({accountId,message,review,onReviewStorage,updateWai
      onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={endPointer} onPointerCancel={endPointer} onLostPointerCapture={endPointer}
      onKeyDown={moveWithKey} onClick={event=>{if(event.detail&&ignoreClick.current){ignoreClick.current=false;return;}setExpanded(value=>!value);}}>
       <DownloadIcon done={!pendingBatch&&!running&&total>0&&saved===total}/>
-      {running?<><span>{saved}/{total}</span><progress aria-hidden="true" value={saved} max={Math.max(1,total)}/></>:<span>{pendingMessage??(currentNotice?summary:`En cola (${waiting.length})`)}</span>}
+      {running?<><span className="download-dock__count">{`${saved}/${total}`}</span><progress aria-hidden="true" value={saved} max={Math.max(1,total)}/></>:<span>{pendingMessage??(currentNotice?summary:`En cola (${waiting.length})`)}</span>}
       <span className="download-dock__chevron" aria-hidden="true">{expanded?'⌃':'⌄'}</span>
      </button>
      <span id={hintId} className="pulso-visually-hidden">Usa las flechas para mover la ventana.</span>

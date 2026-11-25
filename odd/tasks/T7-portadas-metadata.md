@@ -223,3 +223,71 @@ Entrega A e12756b183df05fc permitió demostrar actualización A→B d586ee3e5492
 Incluye owned-ready de versos: Player.play(fromSeconds?) realiza seek y nativeplay en mismo gesto, preview/lector interactivos sólo con tiempos válidos.703unidades deA más incremento combinado hasta708;MP3propio de tonos10/10local y nueva comprobación sobre bundle público B con fixtureincognito: versos5/9s producen440/880Hz aproximadamente, seeked y audio realplaying, mismoelemento, sin cuenta. La evidencia del responsable UI es .local/verse-playback-review/published-audio.json; no equivale a asegurar timestamps de cualquier letra externa.
 
 Evidencia segura docs/evidence-automatic-update-web.json, informe .local/automatic-update/REPORT.md y owned UI design/LYRIC-PLAYBACK.md. Perfil real conservado, autenticado y pausado; pestañas auxiliares cerradas. Sin nuevas consultas/descargas musicales del bot, borrado de almacenamiento, exportación de sesión ni pago. Engram15 inicial verificado completo y bytes/SHA actuales; sync y lectura independiente final se registran por separado. iPhone físico/P0global y3audiosMOSCA continúan pendientes.
+
+
+## 2026-11-25 · Carátula compartida en lista y minirreproductor; contador del dock
+
+El propietario observó en v60 que Favoritos mostraba «♪» y el minirreproductor no tenía imagen, aunque MediaSession ya recibía una carátula. La consulta terminaba en `PlayerArtwork`. Las filas y el panel de acciones leían únicamente la ficha local y el catálogo, y el minirreproductor sólo reservaba espacio si conocía una URL de catálogo. En el dock, la posición guardada junto al borde reducía el ancho disponible al crecer de `1/2` a `53/72`. El contador podía partirse por `overflow-wrap: anywhere` y el shorthand `font` del botón anulaba la variante numérica heredada.
+
+| Requisito | Criterio de aceptación |
+|---|---|
+| A01 | En Favoritos, al reproducir una copia local sin carátula ni URL de catálogo, la imagen validada que recibe MediaSession también se decodifica en la fila, el minirreproductor y el panel de acciones. La navegación revoca el object URL de la fila y al volver reutiliza el Blob. No cambian los registros de carátula en IndexedDB ni el inventario OPFS. |
+| A02 | Una portada local, incluida la manual, prevalece. Una ocultación manual impide usar la imagen de catálogo. El catálogo se usa antes que el fallback. Sin conexión, seleccionar una pista sin imagen en caché no origina consultas de carátula. |
+| A03 | El contador `53/72` se mantiene en una línea con cifras tabulares a 320, 375, 390 y 430 px. Con el texto al 200 % cabe entero en el dock situado junto al borde. El dock conserva el arrastre, el autoocultado y los controles. |
+
+**Invariantes.** La caché compartida conserva hasta 8 entradas y 8 MiB de Blobs validados en RAM por ámbito de biblioteca. La clave incluye la pista, su copia y sus metadatos; las vistas liberan sus object URLs al desmontarse o invalidar la imagen. El fallback no escribe imágenes externas ni URLs en IndexedDB u OPFS. Las decisiones manuales incluyen la ocultación y se vuelven a comprobar después de la red. Las filas sin reproducir consultan las fuentes locales o de catálogo que ya tenían. No añaden consultas al proveedor del reproductor: su cadencia de 3,1 s gobierna los metadatos iTunes, pero Cover Art Archive puede recibir acceso directo por MBID y el catálogo tiene flujos concurrentes. No existe un limitador común que garantice 1 petición por segundo por cliente al añadir solicitudes desde las filas. El fallback comprueba el estado de conexión antes de despachar cada petición y conserva la cancelación al cambiar de pista o ámbito.
+
+| Requisito | Prueba | Nivel | Resultado en `3a33e9b` | Resultado en esta rama |
+|---|---|---|---|---|
+| A01 | `node tests/integration/check-artwork-rows-dock.mjs`, A01. React de producción, píxeles de las tres vistas, MediaSession, revocación, recuento HTTP y comparación del almacenamiento. | B | FAIL en Chromium y WebKit. El reproductor y MediaSession reciben la imagen, pero faltan la fila, el mini y las acciones. | PASS en Chromium y WebKit. Las tres vistas muestran el mismo valor RGBA, se revoca la URL al salir y el almacenamiento coincide. |
+| A02 | Mismo runner, A02. Píxeles de portada manual y de catálogo, ocultación y proveedor loopback observado al simular desconexión. | B | FAIL en Chromium y WebKit. Se observa una búsqueda iTunes con `navigator.onLine=false`. | PASS en Chromium y WebKit. Se mantienen las tres prioridades y se observan cero búsquedas ni descargas de fallback sin conexión. |
+| A03 | Mismo runner, A03. Rango de texto y caja del dock tras moverlo al borde, ocho combinaciones de ancho y escala por motor. | B | FAIL en Chromium y WebKit, 0/8 combinaciones por motor. El texto ocupa dos líneas al 100 % y dos a cinco al 200 %. | PASS en Chromium y WebKit, 8/8 por motor. Una línea, cifras tabulares y caja contenida. |
+
+La cota de entradas, bytes, reemplazo y notificación de expulsión también tiene dos comprobaciones de nivel U en `tests/unit/player-artwork-cache.test.ts`. Las imágenes PNG y el audio WAV se generan para la prueba. La aceptación en iPhone físico sigue pendiente.
+
+**Validación de la rama.** Pasaron 1.029/1.029 unitarias, `typecheck`, `typecheck:tests`, `lint` y `build`. Chromium 154.0.8037.57 y WebKit 27.2 validaron 6/6 casos focales en conjunto y 16/16 mediciones del contador. En `3a33e9b` fallaron los seis casos y las 16 mediciones.
+
+| Suite de regresión | Chromium base → rama | WebKit base → rama | Observaciones |
+|---|---|---|---|
+| `check-interface-main.mjs` con `PLAYLIST_DETAIL=1` | 16/21 → 16/21 | 16/21 → 16/21 | Los mismos cinco fallos por motor, incluido el minirreproductor al 200 %. Los otros cuatro están en la batería optativa de detalle de playlist. |
+| `check-album-library-main.mjs`, grupos 60–66 de Biblioteca | 6/7 → 7/7 | 7/7 → 7/7 | El 62 de Chromium expiró en la espera de la casilla de retirada en la base y pasó en la rama. |
+| `check-download-feedback.mjs` | 5/5 → 5/5 | 5/5 → 5/5 | Arrastre, posición restaurada, controles y autoocultado. |
+
+Evidencia local resumida en `.local/test-evidence/artwork-rows-regresiones/matriz.json`. Las pruebas usaron vistas de navegador y un proveedor loopback con datos sintéticos. Quedan la revisión independiente y el iPhone físico.
+
+### Segunda ronda tras la revisión independiente de `10bc31c`
+
+`catalogArtwork` devuelve primero un Blob con vigencia en RAM. Si falta, comprueba la conexión antes de encolar y al despachar, incluso si entre medias tiene que resolver el relay. La búsqueda de imágenes por lote usa la misma guarda de transporte. `CatalogArtwork` delega esa decisión al módulo común para que lista, mini y acciones recuperen los aciertos de caché sin conexión. Pulso crea una instancia de `PlayerArtworkProvider` por cuenta activa y la reemplaza al cambiar el ámbito de cuenta. Se conserva la prioridad local/manual y la cadencia del proveedor. A01 compara también el inventario de Cache API antes y después del fallback.
+
+| Requisito | Criterio y prueba en `check-artwork-rows-dock.mjs` | Nivel | `10bc31c` | Rama |
+|---|---|---|---|---|
+| A02a | Desde un documento con `navigator.onLine=false`, abrir Favoritos y reproducir una pista con portada de catálogo fría. Observar tráfico de configuración, catálogo y proveedor. | B | FAIL en ambos motores. Salieron `/catalog-config.json` y `/catalog/artwork`. | PASS en ambos motores. Cero peticiones de carátula y se muestra el estado sin portada. |
+| A02b | Calentar la carátula de catálogo en RAM, salir de Favoritos, desconectar y volver en el mismo documento. Verificar píxeles del reproductor, fila, mini y acciones más el contador HTTP. | B | FAIL en ambos motores. Sólo el reproductor recuperó la imagen. | PASS en ambos motores. Las cuatro vistas recuperaron la portada sin petición nueva. |
+| A02c | Cambiar de la cuenta sintética A a B en el mismo documento por la notificación de sesión. Las pistas tienen metadatos iguales y copias distintas. El proveedor de prueba cambia el píxel de la respuesta. | B | FAIL en ambos motores. B mostró el píxel de A con una sola búsqueda. | PASS en ambos motores. Se revocó la URL de A y B mostró el píxel nuevo tras su propia búsqueda. |
+
+`check-artwork-rows-dock.mjs` pasó 12/12 casos en Chromium 154.0.8037.57 y WebKit 27.2. Se mantuvieron A01, A02 y A03, con las 16 mediciones del contador conformes. Pasaron 1.029/1.029 unitarias, `typecheck`, `typecheck:tests`, `lint` y `build`.
+
+| Regresión desde `3a33e9b` | Chromium base → rama | WebKit base → rama |
+|---|---|---|
+| Interfaz, con `PLAYLIST_DETAIL=1` | 16/21 → 16/21 | 16/21 → 16/21 |
+| Biblioteca, grupos 60–66 | 7/7 → 7/7 | 7/7 → 7/7 |
+| Dock | 5/5 → 5/5 | 5/5 → 5/5 |
+
+Interfaz repitió los mismos cinco fallos por motor, incluido el minirreproductor al 200 %. Los 7 casos de Biblioteca en Chromium base pasaron, pero venció el plazo de su auditoría de Engram al cierre. Se comprobó después que los 19 archivos seguían idénticos al recibo inicial y que fuentes y builds habían coincidido. Ambas auditorías de Biblioteca en la rama pasaron. La matriz local resumida queda en `.local/test-evidence/artwork-rows-r2/matriz-r2.json`.
+
+Los menores pendientes son el espacio de 44 px con «♪» cuando una pista con URL de catálogo tiene ocultación manual y compartir la portada del proveedor con Inicio y las cubiertas de colección. Queda incorporar al runner propio la expulsión visual de la novena entrada y la carrera de edición manual que ya observó la revisión independiente, además de la idempotencia de `set`. El arrastre por puntero se verifica en la suite del dock. La prueba de intervalo de letras pasó en esta corrida y su jitter previo queda fuera de esta tarea. La aceptación en iPhone físico sigue pendiente.
+
+
+## 2026-11-25 · Publicación v61
+
+Cloudflare Workers Free (USD 0) sirve [v61](https://pulso-web.pruebassoftware.workers.dev/releases/60735cae6f867d6e.html) desde el commit `9b84d6e` de `fix/artwork-rows-dock`. El MCP oficial confirmó la versión `3e48afcc-c7f9-47bb-bd3f-8af90288d078` al 100 % en el despliegue `c5011460-a839-47c6-b763-bf290c216ba0`, activo desde `2026-11-25T12:03:55.867Z`. El Worker coincide con el bundle de 330.474 bytes y SHA-256 `0e19eceae5ed70bec91e41e36ac05f70b5e1a0590d5c79d439443a6b13bfcb5a`. Conserva los 13 bindings, los nombres de los secretos, Turnstile, los límites, la configuración de ejecución y las 14 reglas de `run_worker_first`. El PUT omitió `serve_directly`.
+
+La matriz A01–A03 y A02a–A02c cubre la carátula compartida, la prioridad y el aislamiento de caché, y el contador del dock. En la revisión final pasaron los 12 casos en Chromium y WebKit, incluidas las comprobaciones del contador con texto ampliado.
+
+Pasaron el build, las 73 pruebas de Cloudflare, la preparación y la simulación de Wrangler 4.161.0. El freeze conservó las 14 publicaciones anteriores y el inventario heredado, con 309 archivos y cero retiradas. HTTPS confirmó `latest.json`, el 307 a la ruta canónica, el 200 de esa ruta y el meta `pulso-release`. Coincidieron bytes y SHA-256 de las 306 rutas estáticas públicas, incluido `sw.js`. Las 55 entradas históricas y la actual sirvieron el shell vigente con Fetch Metadata y Accept, y también con Accept solo. La CSP conserva Turnstile en scripts y marcos, la clave pública coincide y el perfil y la biblioteca anónimos devuelven 401.
+
+La revisión independiente final de `df3575f` frente a v60 dio «Seguro publicar», sin hallazgos bloqueantes ni altos. Quedan dos medios. Un fallo permanente de audio carece de indicador visual aunque conserva el anuncio accesible. El orden de `audio.load()` en `Player.select()` permite que un error síncrono de un medio sintético se sobrescriba con `loading`. Los menores son el margen vacío de la vista previa de letra, el reintento tras un rechazo de `audio.play()` sin evento de error, el marcador del mini con ocultación manual, la portada compartida pendiente en Inicio y cubiertas de colección, la prueba unitaria de idempotencia de la caché de carátulas y la sensibilidad de algunas pruebas a la contención de CPU en la VM.
+
+Los recibos y el manifiesto publicado están en `.local/test-evidence/publish-v61/`. `site-manifest.json` contiene 309 archivos, ocupa 75.383 bytes y tiene SHA-256 `9ad4e2b31fdd0a928d01cddcb2325caa402aa08d422373fd293f40fb5197248c`.
+
+Las 16 pruebas de aceptación en iPhone físico siguen **NO EJECUTADAS**. P0-W sigue abierto.

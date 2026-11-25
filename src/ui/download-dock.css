@@ -46,7 +46,6 @@
  border: 0;
  background: transparent;
  text-align: start;
- font-variant-numeric: tabular-nums;
  cursor: grab;
  touch-action: none;
  user-select: none;
@@ -56,6 +55,7 @@
 .download-dock__handle:active { cursor: grabbing; background: var(--pulso-soft); }
 .download-dock__handle svg,.collection-download svg { inline-size: 1.25rem; block-size: 1.25rem; max-inline-size: 24px; flex: none; }
 .download-dock__handle svg { color: var(--pulso-accent); }
+.download-dock__count { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .download-dock__chevron { margin-inline-start: auto; color: var(--pulso-muted); }
 .download-dock__handle progress {
  position: absolute;

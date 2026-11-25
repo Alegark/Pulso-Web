@@ -4,11 +4,11 @@ interface PlayerSurfaceProps {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
-  notice?: ReactNode;
+  announcement?: string;
 }
 
 /** Presentation only: keeps the existing player tree mounted during expansion. */
-export function PlayerSurface({open,onClose,children,notice}:PlayerSurfaceProps) {
+export function PlayerSurface({open,onClose,children,announcement}:PlayerSurfaceProps) {
   const surface=useRef<HTMLElement>(null);
   const close=useRef(onClose);
   close.current=onClose;
@@ -64,7 +64,8 @@ export function PlayerSurface({open,onClose,children,notice}:PlayerSurfaceProps)
 
   return <section ref={surface} id="player" className="player-surface" hidden={!open} data-open={open?'true':undefined}
     role={open?'dialog':undefined} aria-modal={open?true:undefined} aria-label="Reproductor" tabIndex={-1}>
-    {open&&<div className="player-surface__toolbar"><span>Ahora suena</span><button type="button" onClick={onClose} aria-label="Cerrar reproductor">Volver</button>{notice}</div>}
+    {open&&<div className="player-surface__toolbar"><span>Ahora suena</span><button type="button" onClick={onClose} aria-label="Cerrar reproductor">Volver</button></div>}
+    <p className="pulso-visually-hidden" role="status" aria-atomic="true">{open?announcement:null}</p>
     {children}
   </section>;
 }
