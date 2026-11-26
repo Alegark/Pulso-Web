@@ -1,7 +1,7 @@
 # T29 · Rediseño UX/UI estilo Apple Music + sincronización entre dispositivos (v65)
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** Implementada, batería completa 100 % PASS en Chromium y WebKit, revisión independiente favorable (`Seguro publicar v65`, 0 hallazgos); lista para publicación y verificación en vivo en Cloudflare Workers Free (USD 0). Aceptación física en iPhone (`D`): NO EJECUTADA.
+- **Estado:** Publicada y verificada en vivo en Cloudflare Workers Free (USD 0) como **v65** (`/releases/5a7eef31d22eabf1.html`, despliegue `18c58796-f9f8-4e53-8572-9148055fec89`, versión 68). Aceptación física en iPhone (`D`): NO EJECUTADA.
 - **Fecha:** 2026-11-26
 - **Línea base:** v64 publicada (`/releases/9acd333be5ff334d.html`, commit `a056588`, rama `release/v64`). Worktree de UI/UX: `v65-ux-apple`. Worktree paralelo de sincronización: `v65-neon-sync`.
 - **Requisitos SPEC vinculados:** W04, W05, W06, W07, W08, W10, W13, W17, W18 · **Invariantes SPEC:** V2, V3, V5, V6, V7, V8, V11, V13, V14, V15, V16, V19, V21, V22, V23, V27, V28, V29, V30
@@ -348,6 +348,15 @@ Ejecutar con validación proporcional (`doc/SPEC.md` §V.2) tras cada incremento
 - Primera revisión (`release/v64..2352881`): 1 hallazgo Alto (`trackMenuHost` usando `actWork` en vez de `viewAct`), 1 Medio (`error-bubble.css:40` contraste `:focus-visible`) y 4 Bajos → todos corregidos en `a4de1ae`.
 - Revisión delta (`2352881..a4de1ae`): **0 Bloqueantes, 0 Altos, 0 Medios, 0 Bajos** → veredicto explícito **`Seguro publicar v65`**.
 
-### 4. Pendientes abiertos
-- Publicación y verificación en vivo en Cloudflare Workers (`v65`) — en curso.
+### 4. Publicación y verificación en vivo en Cloudflare Workers (`v65`)
+- **Publicación (`86458bb` / código `a4de1ae`):** entrada `/releases/5a7eef31d22eabf1.html` (canónica `/releases/5a7eef31d22eabf1` HTTP `200`, redirección estándar `307` de Cloudflare Static Assets), despliegue `18c58796-f9f8-4e53-8572-9148055fec89`, versión `ebf4cb24-c183-4ea0-a27a-ac789f32f0d6` (**versionNumber 68**, 100 %).
+- **Integridad del despliegue:** Worker `330.980` bytes (SHA-256 `841456dfb8b09ef6970d9375a70e7c420cfa13fe6a6e13a91fc6490f06978152`), manifiesto `86.546` bytes (SHA-256 `f0390526b616da6b44397a1a053ea364eb91ab153b2417bef5f1fd1ff87adf41`), Service Worker `54.921` bytes (`f28e6b68956769938b4fca17a529c0427901961ed797ed6fe3e9716a54adb3b8`), **346** rutas estáticas, **236** entradas históricas HTTPS conservadas, **13** bindings, **14** reglas `run_worker_first`, `observability` desactivado, sin `X-Pulso-Diag`, Turnstile CSP + `siteKey` conformes, `/api/account-profile` y `/api/account-library` anónimos `401`. Recibos en `.local/test-evidence/publish-v65/`.
+- **Verificación en vivo con perfil autorizado (Chromium móvil `390×844`, sin borrar datos ni cerrar sesiones; `.local/test-evidence/publish-v65/live-verification.json`):**
+  - `U-THEME-01` PASS: fondo OLED `#000000` (`rgb(0, 0, 0)`), `--pulso-accent: #8c1630`, `--pulso-accent-text: #d84a67`.
+  - `U-SYNC-01` PASS: `GET /api/account-library` HTTP `200` (antes y después de pulsar «Sincronizar biblioteca»), 0 errores, estado sincronizado.
+  - `U-UX-08` PASS: Inicio sin «Continuar escuchando» (`.home-continue: 0`), con «Tus álbumes» y «Tus playlists» visibles.
+  - `U-UX-01`–`U-UX-05` PASS: álbum guardado con `0` ocurrencias de `1 discos`, cabecera con ▶ / ⇄ / `⋯`, reproducción de pista descargada con `<PlaybackIndicator>` en el número de pista y `0` tarjetas `.selected-song-actions`, menú `⋯` abre y cierra limpio, `.mini-player` móvil con `overflow: hidden`, barra de progreso contenida y backing `::after` activo (`position: fixed`, `zIndex: 18`); reproducción pausada y Chromium cerrado.
+
+### 5. Pendientes abiertos
+- Confirmación del propietario en un segundo dispositivo físico con la misma cuenta tras recargar **v65** (para validar en dispositivo real que las playlists ya aparecen sin bloqueos de arranque/reintento).
 - Aceptación física en iPhone (`docs/IPHONE-ACEPTACION.md`, 16 pruebas): **NO EJECUTADA** (exclusiva del propietario).
