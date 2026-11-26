@@ -32,7 +32,7 @@ export interface SongPlaybackAttempt {
  reconcileDownload?(operationId:string,trackId:string,signal:AbortSignal,repair?:boolean):Promise<{state:'saved'|'missing'|'uncertain';trackId:string|null}>;
  reconcileSongDownload?(operationId:string,choice:SongChoice,signal:AbortSignal):Promise<{state:'saved'|'missing'|'uncertain';trackId:string|null}>;
  parkDownload?(operationId:string,signal:AbortSignal):Promise<void>;
- play(trackId:string,current:()=>boolean,signal:AbortSignal):Promise<'playing'|'gesture-required'|'failed'>;
+ play(trackId:string,current:()=>boolean,signal:AbortSignal,queueTrackIds?:readonly string[]):Promise<'playing'|'gesture-required'|'failed'>;
 }
 export {musicIdentityText,matchingSongRows} from '../telegram/bot-search-protocol';
 export function songChoiceKey(choice:SongChoice):string|null {

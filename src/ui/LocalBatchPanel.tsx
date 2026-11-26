@@ -50,8 +50,9 @@ export function LocalBatchPanel({activity, playlist, canStart, captureWriteCurre
   const active = useRef<{id: string; attempt: number; controller: AbortController} | null>(null);
   const busy = useRef(false);
   const loadSequence = useRef(0);
+  const [panelStatus, setPanelStatus] = useState('');
   const status = useRef(onStatus);
-  status.current = onStatus;
+  status.current = message => { setPanelStatus(message); onStatus(message); };
   const allowed=useRef(canStart);allowed.current=canStart;
   let writeGuard:()=>boolean;
   try{writeGuard=captureWriteCurrent?.()??(()=>true);}catch{writeGuard=()=>false;}
@@ -174,6 +175,7 @@ export function LocalBatchPanel({activity, playlist, canStart, captureWriteCurre
     {running && <button type="button" disabled={cancelling} onClick={() => { if (active.current) { setCancelling(true); active.current.controller.abort(); } }}>Cancelar verificación</button>}
     {cancelling && <p role="status">Solicitando cancelación; esperando el resultado guardado.</p>}
     {error && <p role="alert">{error}</p>}
+    {panelStatus && panelStatus !== error && <p role="status">{panelStatus}</p>}
     <h3>Últimas verificaciones</h3>
     <button type="button" disabled={loading || !!activeId} onClick={() => void refresh()}>Actualizar historial</button>
     <p>Los resultados reflejan la última comprobación; el almacenamiento del navegador puede sufrir purgas. Volver a verificar reinicia la comprobación desde cero.</p>

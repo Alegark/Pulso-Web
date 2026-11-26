@@ -8,7 +8,6 @@ import {elapsedMs} from './diagnostics/download-timing';
 import {songTiming} from './diagnostics/song-timing';
 import {RateLimited,rateLimitedMessage} from './http/rate-limit.mjs';
 import {queuePositionKey,queuePositionRecord,withQueuePosition,type QueuePosition} from './ui/queue-position';
-import {ShellNotice} from './ui/ShellNotice';
 import {readSavedArtistsFrom,setSavedArtist} from './library/saved-artists';
 import {SavedArtistDetail} from './ui/SavedArtistDetail';
 import type {CatalogArtist} from './library/album-catalog';
@@ -473,7 +472,7 @@ function captureBotAudioImport(libraryMode?:'cache',parked?:ReadonlySet<string>)
    try{await refresh(false,false,diagnostic,'refresh',false,true);refreshed=true;}
    catch{control.activity.block('import-state',true);return {state:'uncertain',trackId:null};}
    finally{if(timing?.current())timing.values.refreshMs+=elapsedMs(refreshing);}
-   status=confirmed?(libraryMode==='cache'?'':'Canción descargada, verificada y guardada en este navegador.'):outcome.recoveryRequired?'La copia requiere revisión antes de volver a descargar.':'No se pudo guardar la canción.';emit();
+   if(libraryMode!=='cache'){status=confirmed?'Canción descargada, verificada y guardada en este navegador.':outcome.recoveryRequired?'La copia requiere revisión antes de volver a descargar.':'No se pudo guardar la canción.';emit();}
    return {state:confirmed?'saved':outcome.recoveryRequired?'uncertain':'failed',
     trackId:confirmed&&settled.response?.type==='complete'?settled.response.result.track.id:null,
     ...(outcome.primary?.code==='metadata-duration-mismatch'?{rejection:'import-duration-mismatch' as const}:
@@ -605,7 +604,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
    try{await rememberCurrentSongAlias(choice,trackId,audio.sha256,audio.bytes,()=>current()&&!signal.aborted&&token.current());return {state:'saved' as const,trackId};}
    catch{return {state:'uncertain' as const,trackId};}finally{token.end();}
   },
-  async play(trackId:string,caller:()=>boolean,signal:AbortSignal){
+  async play(trackId:string,caller:()=>boolean,signal:AbortSignal,queueTrackIds?:readonly string[]){
    if(purpose!=='playback'||playUsed||signal.aborted||!current()||!caller()||busy||copyRemovalBlocked()||queueForeignBlocked())return 'failed' as const;playUsed=true;
    const guardedPlay=async()=>{
     const entry=player.current,epoch=player.queueEpoch;
@@ -617,11 +616,14 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
      return player.state==='playing'?'playing' as const:player.lastFailure==='autoplay-denied'?'gesture-required' as const:'failed' as const;
     }finally{signal.removeEventListener('abort',stop);}
    };
-   if(player.current?.trackId===trackId)return guardedPlay();
+   const orderedIds=queueTrackIds&&queueTrackIds.length>1&&queueTrackIds.includes(trackId)?[...queueTrackIds]:[trackId];
+   const startIndex=orderedIds.indexOf(trackId);
+   if(orderedIds.length>1&&player.entries.length===orderedIds.length&&player.entries.every((entry,index)=>entry.trackId===orderedIds[index])){if(player.index!==startIndex)player.select(startIndex,false);return guardedPlay();}
+   if(orderedIds.length===1&&player.current?.trackId===trackId)return guardedPlay();
    queueing=true;
    const live=()=>current()&&caller();
    try{
-    const before=player.queueEpoch;await queue([trackId],undefined,[],live);
+    const before=player.queueEpoch;await queue(orderedIds,undefined,[],live,startIndex);
     if(!live()||busy||copyRemovalBlocked()||player.queueEpoch===before||player.current?.trackId!==trackId)return 'failed' as const;
     return await guardedPlay();
    }finally{queueing=false;}
@@ -891,7 +893,9 @@ async function queueWork(ids:string[],saved?:Snapshot,restoreWarnings:string[]=[
  // A saved null selection unloads the old element before setQueue. Other
  // replacements select a new occurrence before releasing the old bundle.
  if(restored?.currentEntryId!==null)player.select(index>=0?index:0,false,index>=0?restored?.position??0:0);
- announce('Cola lista y pausada. Pulsa Reproducir.'+(missing?` ${missing} entradas sin audio se omitieron. Podrás volver a descargarlas cuando esté disponible la conexión a Telegram.`:'')+(restoreWarnings.length?' '+restoreWarnings.join(' '):'')+(transportNotice?' '+transportNotice:''));
+ if(!saved){status='';startupStatus='';}
+ const queueReady='Cola lista y pausada. Pulsa Reproducir.'+(missing?` ${missing} entradas sin audio se omitieron. Podrás volver a descargarlas cuando esté disponible la conexión a Telegram.`:'')+(restoreWarnings.length?' '+restoreWarnings.join(' '):'')+(transportNotice?' '+transportNotice:'');
+ startupStatus=queueReady;
  }catch(error){if(!current())return;const failure=known??localFailure(error,phase);diagnostics.complete(diagnostic,failure);announce((saved?'No se pudo recuperar toda la cola. Se conserva la cola guardada y tu organización. ':'')+failureText(failure)+' Vuelve a comprobar el almacenamiento o prepara otra selección.');}
  finally{
   // Record the primary error above before best-effort resource settlement.
@@ -994,7 +998,7 @@ function syncMediaSession(){
  const state=player.state==='playing'?'playing':'paused';if(navigator.mediaSession.playbackState!==state)navigator.mediaSession.playbackState=state;
 }
 player.subscribe(change=>{
- if(change==='state'){sourceProtection.observePlayer();syncMediaSession();}
+ if(change==='state'){if(player.state==='playing'&&startupStatus.startsWith('Cola lista y pausada.'))startupStatus='Cola preparada.';sourceProtection.observePlayer();syncMediaSession();}
  schedulePositionSave(change);
  if(change==='state')emit();
 });
@@ -1588,7 +1592,7 @@ function App(){
  };
  const notice=<>
   <p className="pulso-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{startupStatus}</p>
-  <ShellNotice message={status} onDismiss={()=>{status='';emit();}}/>
+  <p className="pulso-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{status}</p>
  </>;
  if(!account.user)return <AccountRequired/>;
  return <PlayerArtworkCacheContext.Provider value={artworkCache}><TrackCatalogArtwork.Provider value={catalogCovers}><TrackArtworkIdentity.Provider value={artworkIdentity}><main className="pulso-app" inert={setupReadyFor!==account.user.id} aria-hidden={setupReadyFor!==account.user.id?true:undefined} data-setup-pending={setupReadyFor!==account.user.id?'true':undefined} data-player-open={playerOpen?'true':undefined}><MobileInstallNotice/><header className="pulso-header"><p className="pulso-wordmark" aria-label="Pulso Web">pulso</p><h1 className="pulso-visually-hidden">Tu música, en este navegador</h1><nav className="shell-nav" aria-label="Principal">{(['inicio','buscar','biblioteca']as const).map(p=><button key={p} aria-current={page===p?'page':undefined} onClick={()=>{if(p==='biblioteca')showLibrary(null);navigate(p);}}><svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{p==='inicio'?<path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/>:p==='buscar'?<><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>:<><path d="M4 4v16M9 4v16M14 5l5-1 2 15-5 1z"/></>}</svg><span>{p==='inicio'?'Inicio':p==='buscar'?'Buscar':'Biblioteca'}</span></button>)}</nav><button className="desktop-search-link" type="button" onClick={()=>{const current=navigate('buscar');requestAnimationFrame(()=>{if(current())musicSearchTarget?.querySelector<HTMLInputElement>('input[type=search]')?.focus();});}}><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span>¿Qué quieres escuchar?</span></button><AccountAccess/><button ref={settingsOpener} type="button" aria-expanded={settingsOpen} onClick={()=>{setSettingsSection('general');setSettingsOpen(true);requestAnimationFrame(()=>{settingsHeading.current?.focus();settingsHeading.current?.scrollIntoView({block:'start'});});}}>Configuración</button></header><aside className="desktop-library" aria-label="Accesos a tu biblioteca"><p>Tu biblioteca</p><button type="button" onClick={()=>{setLibraryAlbumSelection(null);showLibrary({favorites:true});navigate('biblioteca');}}><span className="desktop-library__cover"><CollectionCover favorite trackIds={[]}/></span><span><strong>Favoritos</strong><small>Playlist automática</small></span></button>{homeLists.map(list=><button type="button" key={list.id} onClick={()=>{setLibraryAlbumSelection(null);showLibrary({listId:list.id});navigate('biblioteca');}}><span className="desktop-library__cover"><CollectionCover trackIds={list.entries.map(entry=>entry.trackId)} enabled={!settingsOpen}/></span><span><strong>{list.name}</strong><small>{list.entries.length} canciones</small></span></button>)}</aside>{updateReady&&<p role="status">Hay una versión nueva preparada. Se actualizará automáticamente al terminar de escuchar y guardar los cambios.</p>}

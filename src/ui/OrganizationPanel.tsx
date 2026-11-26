@@ -58,6 +58,7 @@ export function OrganizationPanel({activity, canWrite, captureWriteCurrent, onSt
   const [cancelling, setCancelling] = useState(false);
   const [download, setDownload] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [panelStatus, setPanelStatus] = useState('');
   const [operation, setOperation] = useState<string | null>(storedOperation);
   const [history, setHistory] = useState<string[]>(storedHistory);
   const [canRecover, setCanRecover] = useState(false);
@@ -95,6 +96,7 @@ export function OrganizationPanel({activity, canWrite, captureWriteCurrent, onSt
     storeOperation(null);
     if (!current()) return;
     setOperation(null); setPreview(null); setPhase('draft');
+    setPanelStatus('Organización restaurada.');
     callbacks.current.onStatus('Organización restaurada.');
     // The parent records refresh failures on this same attempt. Do not emit a
     // duplicate failure here or reinterpret a confirmed commit as uncertain.
@@ -231,6 +233,7 @@ export function OrganizationPanel({activity, canWrite, captureWriteCurrent, onSt
     </div>}
     {history.length > 0 && <div><p>Restauraciones anteriores con resultado desconocido:</p><ul>{history.map(id => <li key={id}>Resultado desconocido · Operación {id}</li>)}</ul></div>}
     {error && <p role="alert">{error}</p>}
+    {panelStatus && <p role="status">{panelStatus}</p>}
     {preview && (phase === 'preview' || phase === 'confirm') && <div>
       <p>Resultado total: {preview.counts.tracks} canciones, {preview.counts.playlists} listas, {preview.counts.favorites} favoritos y {preview.counts.entries} entradas. Nuevas: {preview.counts.newTracks} canciones y {preview.counts.newPlaylists} listas.</p>
       {fingerprintWarnings > 0 && <p>{fingerprintWarnings} canciones tienen archivos incompatibles; no se puede aplicar esta vista previa.</p>}

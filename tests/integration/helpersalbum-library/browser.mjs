@@ -319,7 +319,10 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   const missing=detail().locator('[data-album-pending]');
   assert.equal(await missing.count(),1);
   await missing.getByText('Error',{exact:true}).waitFor();
-  assert.equal(await missing.locator('button').isDisabled(),true);
+  assert.equal(await missing.locator(':scope > button').isDisabled(),false);
+  await missing.locator(':scope > button').click();
+  await missing.getByText(/Conecta Telegram|Añade un bot|conexión/i).first().waitFor();
+  assert.equal(report.rpc.length,requests);
   assert.equal(await saved().locator('.collection-cover__tile').count(),1);
   assert.equal(await saved().locator('[data-mosaic]').count(),0);
   assert.equal(report.itunes.length,lookups);

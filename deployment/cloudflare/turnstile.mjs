@@ -15,7 +15,7 @@ export async function verifyTurnstile(request,env,action,fetcher,timeoutMs) {
  try {
   // Siteverify consumes tokens. A failed or ambiguous attempt needs a new one.
   const response=await fetcher(turnstileOrigin+'/turnstile/v0/siteverify',{
-   method:'POST',headers:{'Content-Type':'application/json'},body,signal,redirect:'error',
+   method:'POST',headers:{'Content-Type':'application/json'},body,signal,redirect:'manual',
   });
   if(!response.ok)return 'TURNSTILE_UNAVAILABLE';
   const result=await readBoundedJson(response,8192,signal);

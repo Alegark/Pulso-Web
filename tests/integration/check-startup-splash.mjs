@@ -203,12 +203,25 @@ try{
     await page.getByRole('button',{name:'Cerrar opciones de canción',exact:true}).click();
     const added=announcement(mini(page),'1 entradas añadidas a continuación.');
     await added.waitFor({state:'attached'});
-    assert.equal(await added.evaluate(isPainted),true,'La acción explícita conserva su confirmación visible');
-    await mini(page).getByRole('button',{name:'Cerrar aviso',exact:true}).click();
+    assert.equal(await added.evaluate(isPainted),false,'El aviso no ocupa espacio visible');
+    assert.equal(await mini(page).locator('.shell-notice').count(),0);
+    assert.equal(await mini(page).getByRole('button',{name:'Cerrar aviso',exact:true}).count(),0);
     assert.ok(startup.some(entry=>entry.text===preparing),JSON.stringify(startup));
     assert.deepEqual(startup.filter(entry=>entry.painted),[],'Aparecieron avisos al iniciar con una cola');
     assert.equal(dismissAtStartup,0);
-    return {startup,manualNoticeVisible:true};
+    return {startup,manualNoticeVisible:false};
+   });
+   await check('L02',async page=>{
+    await seedQueue(page,origin);
+    await page.goto(origin);
+    await waitRestored(page);
+    await openFavorites(page);
+    await page.getByRole('button',{name:'Escuchar Sintética 2',exact:true}).click();
+    await page.waitForFunction(()=>!window.startupAudio.paused&&window.startupAudio.currentTime>.1);
+    const trace=await page.evaluate(()=>window.startupNotices);
+    assert.equal(trace.some(entry=>entry.painted&&entry.text.includes('Cola lista y pausada')),false);
+    assert.equal((await mini(page).textContent()).includes('Cola lista y pausada'),false);
+    return {manualPlaybackAdvanced:true,noVisibleQueueNotice:true};
    });
    await check('E03',async page=>{
     await seedQueue(page,origin,true);

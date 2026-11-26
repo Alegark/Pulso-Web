@@ -311,7 +311,7 @@ try{
     assert.ok((await color(page,'dialog[open] .track-actions-art img'))[0]>220);
     await page.getByRole('button',{name:'Cerrar opciones de canción'}).click();
     await page.locator('.shell-nav').getByRole('button',{name:'Inicio',exact:true}).click();
-    assert.ok((await color(page,'.home-recent button[aria-label="Preparar Descarga uno en pausa"] img'))[0]>220);
+    assert.ok((await color(page,'.home-continue img'))[0]>220);
     assert.equal(requests.length,0);
     assert.ok((await inspect(page)).catalog.some(x=>x.kind==='track-artwork-link'));
    });

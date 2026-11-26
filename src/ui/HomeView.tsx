@@ -45,7 +45,7 @@ export interface HomeViewProps {
 }
 
 export function HomeView(props: HomeViewProps) {
-  const { continueSelection, recent, playlists } = props;
+  const { continueSelection, playlists } = props;
   const enabled=props.visible??true;
   return <div className="home-view">
     <h2 id="home-heading" tabIndex={-1}>Tu música</h2>
@@ -57,9 +57,7 @@ export function HomeView(props: HomeViewProps) {
       {!playlists.length&&<button onClick={props.onOpenSearch}><span aria-hidden="true"><MusicIcon name="search"/></span><strong>Buscar música</strong></button>}
     </div>
     {continueSelection&&<section aria-labelledby="home-continue-heading"><h3 id="home-continue-heading">Continuar escuchando</h3><div className="home-continue"><CatalogArtwork className="home-continue-art" trackId={continueSelection.trackId} enabled={enabled}/><div><strong>{continueSelection.title}</strong><p>{continueSelection.artist??'Artista desconocido'}</p><button className="home-player-link" onClick={event=>props.onOpenPlayer(event.currentTarget)}>Abrir reproductor →</button></div>{!continueSelection.playing&&<button className="home-resume" disabled={!continueSelection.canPlay} onClick={props.onPlay}>Continuar</button>}</div></section>}
-    <section aria-labelledby="home-recent-heading"><h3 id="home-recent-heading">Añadidas recientemente</h3>
-      {recent.length?<ul className="home-recent">{recent.map(track=><li key={track.id}><button aria-label={`Preparar ${track.title} en pausa`} disabled={!track.canPrepare} onClick={()=>props.onPrepareTrack(track.id)}><CatalogArtwork className="home-art" trackId={track.id} enabled={enabled}/><strong>{track.title}</strong><small>{track.artist??'Artista desconocido'}</small></button></li>)}</ul>:<div className="home-empty"><MusicIcon name="library"/><h3>Haz espacio para tu música</h3><p>Tu música aparecerá aquí cuando la añadas a tu biblioteca.</p><button onClick={props.onOpenSearch}>Buscar música</button></div>}
-    </section>
+    {props.empty&&<div className="home-empty"><MusicIcon name="library"/><h3>Haz espacio para tu música</h3><p>Tu música aparecerá aquí cuando la añadas a tu biblioteca.</p><button onClick={props.onOpenSearch}>Buscar música</button></div>}
     <section aria-labelledby="home-playlists-heading"><div className="home-section-heading"><h3 id="home-playlists-heading">Tus playlists</h3><button disabled={!props.canCreate} onClick={props.onCreatePlaylist}><MusicIcon name="plus"/>Crear playlist</button></div>{playlists.length?<div className="home-playlists">{playlists.map(list=><button key={list.id} onClick={()=>props.onOpenPlaylist(list.id)}><span className="home-art"><CollectionCover trackIds={list.trackIds??[]} enabled={enabled}/></span><strong>{list.name}</strong><small>{list.count} canciones</small></button>)}</div>:<p>Crea una playlist para reunir tus canciones.</p>}</section>
   </div>;
 }

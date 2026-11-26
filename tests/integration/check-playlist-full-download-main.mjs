@@ -29,7 +29,7 @@ const reviewModes=[...reconnectModes,'queue-dispatch-relaunch-cap','queue-dispat
  'queue-album-refresh','queue-album-external-removal','queue-single-edition','queue-inspection',
  'queue-review-admission','queue-version-busy','queue-before-library-refresh','queue-album-expired-update','queue-album-clear-retry',
  'queue-cancel-exception','queue-unmount-update','queue-resumed-album-pagehide','queue-missing-paused-track',
- 'queue-album-library-update',...botFailureModes];
+ 'queue-album-library-update','queue-v64-album-playback',...botFailureModes];
 const modes=['full','resume','missing','stale-checkpoint','benchmark','first-sound','first-sound-direct','turnaround','queue','queue-cancel','queue-reload','queue-admission','queue-song-save','queue-song-order','queue-cancel-empty','queue-removal-storage','tap-baseline','tap-active',...reviewModes];
 const selectedMode=process.env.PLAYLIST_FULL_MODE;
 const speedModes=['benchmark','first-sound','first-sound-direct'];
@@ -317,7 +317,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
  const writeTitle=tracks.find(row=>row.scenario==='write')?.track.title;
  const queued=isQueueMode(mode);
  const albumTitle='Pulso Luz B',artistName='Pulso Luz Artista',playlistC='Pulso Luz C';
- const album={wrapperType:'collection',collectionType:'Album',collectionId:421,collectionName:albumTitle,artistId:424,artistName,trackCount:mode.startsWith('queue-album-bot-')?3:2};
+ const album={wrapperType:'collection',collectionType:'Album',collectionId:421,collectionName:albumTitle,artistId:424,artistName,trackCount:mode.startsWith('queue-album-bot-')||mode==='queue-v64-album-playback'?3:2};
  const artist={wrapperType:'artist',artistId:424,artistName};
  const single={...album,collectionId:422,collectionName:'Brillo singular',trackCount:1};
  const albumKeys=[701,702,704];
@@ -496,7 +496,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   }
   await context.addInitScript(({startLabel,resumeLabel,reviewButtons,fastQueueReconnect})=>{
    window.testFastQueueReconnect=fastQueueReconnect;
-   const data=window.__playlistFull={activations:[],review:[],dialogs:[],imports:[],finishedAt:null,closedAt:null,audio:null};
+   const data=window.__playlistFull={activations:[],review:[],dialogs:[],imports:[],saveFailureNotices:0,finishedAt:null,closedAt:null,audio:null};
    addEventListener('click',event=>{
     const button=event.target.closest?.('button'),label=button?.getAttribute('aria-label')??button?.textContent;
     if(event.isTrusted&&[startLabel,resumeLabel].includes(label))data.activations.push(label);
@@ -518,6 +518,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    };
    new MutationObserver(()=>{
     const dock=document.querySelector('[role="region"][aria-label="Descargas"], section[aria-label="Descargas"]');
+    if(data.activations.length&&Array.from(document.querySelectorAll('[role="status"]')).some(node=>node.textContent?.includes('No se pudo guardar la canción')))data.saveFailureNotices++;
     data.started||=!!dock?.querySelector('progress');
     if(!data.activations.length&&!data.started||data.closedAt!==null)return;
     for(const element of document.querySelectorAll(reviewButtons)){
@@ -552,12 +553,12 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   // Inspect the final rows after completion with an untrusted DOM click.
   const openDetails=()=>handle.evaluate(button=>{if(button.getAttribute('aria-expanded')==='false')button.click();});
   if(queued){
-   const input=page.locator('.music-search input[type=search]');
+   const input=page.locator('[aria-label="Buscador musical"] .music-search input[type=search]');
    const search=async(query)=>{
     await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).tap();
     await input.fill(query);
    };
-   const searchAlbum=page.locator('[data-catalog-kind=album]').filter({hasText:albumTitle});
+   const searchAlbum=page.locator('[aria-label="Buscador musical"] [data-catalog-kind=album]').filter({hasText:albumTitle});
    const searchArtist=page.locator('[data-catalog-kind=artist]').filter({hasText:artistName});
    const searchSong=page.locator('[data-catalog-kind=track]').filter({hasText:cTrack.title});
    const byHeading=name=>page.getByRole('heading',{name,exact:true});
@@ -841,6 +842,56 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await online(true);
      await page.waitForFunction(key=>!localStorage.getItem(key),queueKey);
      await verifyAlbum();
+    }else if(mode==='queue-v64-album-playback'){
+     await saveAlbum();await openSavedAlbum();
+     const rows=page.locator('.library-detail .album-page .album-tracks > li');
+     await rows.nth(0).locator(':scope > button:enabled').waitFor();
+     await online(false);const offlineCalls=trace.length;
+     await rows.nth(0).locator(':scope > button').tap();
+     await rows.nth(0).getByText(/Sin conexión/).waitFor();
+     assert.equal(trace.length,offlineCalls,'offline no Telegram RPC');
+     await online(true);await rows.nth(0).locator(':scope > button').tap();
+     await page.locator('.mini-player__title').filter({hasText:albumSongs[0].trackName}).waitFor();
+     assert.equal(trace.filter(event=>event.kind==='search'&&String(event.trackId).startsWith('album-')).length,1,'only selected song acquired');
+     await rows.nth(1).locator(':scope > button').tap();
+     await page.locator('.mini-player__title').filter({hasText:albumSongs[1].trackName}).waitFor();
+     await page.locator('.mini-player').getByRole('button',{name:'Abrir reproductor desde minirreproductor'}).tap();
+     const player=page.locator('#player');
+     await player.getByRole('button',{name:'Canción anterior',exact:true}).tap();
+     await page.locator('.mini-player__title').filter({hasText:albumSongs[0].trackName}).waitFor({state:'attached'});
+     const beforeNext=trace.length;
+     await player.getByRole('button',{name:'Siguiente canción',exact:true}).tap();
+     await page.locator('.mini-player__title').filter({hasText:albumSongs[1].trackName}).waitFor({state:'attached'});
+     assert.equal(trace.length,beforeNext,'partial queue next causes no RPC');
+     await player.getByRole('button',{name:'Cerrar reproductor',exact:true}).tap();
+     await enqueueAlbum();
+     await page.waitForFunction(key=>!localStorage.getItem(key),queueKey);
+     await verifyAlbum();
+     await rows.nth(0).locator(':scope > button').tap();
+     await page.locator('.mini-player__title').filter({hasText:albumSongs[0].trackName}).waitFor();
+     await page.locator('.mini-player').getByRole('button',{name:'Abrir reproductor desde minirreproductor'}).tap();
+     assert.equal(await player.getByRole('button',{name:'Siguiente canción',exact:true}).isDisabled(),false);
+     await player.getByRole('button',{name:'Siguiente canción',exact:true}).tap();
+     await page.locator('.mini-player__title').filter({hasText:albumSongs[1].trackName}).waitFor({state:'attached'});
+     await player.getByRole('button',{name:'Canción anterior',exact:true}).tap();
+     await page.locator('.mini-player__title').filter({hasText:albumSongs[0].trackName}).waitFor({state:'attached'});
+     await player.getByRole('button',{name:'Siguiente canción',exact:true}).tap();
+     await page.locator('.mini-player__title').filter({hasText:albumSongs[1].trackName}).waitFor({state:'attached'});
+     const beforeEnded=trace.length;
+     await page.evaluate(()=>window.__playlistFull.audio.dispatchEvent(new Event('ended')));
+     await page.locator('.mini-player__title').filter({hasText:albumSongs[2].trackName}).waitFor({state:'attached'});
+     assert.equal(trace.length,beforeEnded,'ended causes no RPC');
+     await player.getByRole('button',{name:'Cerrar reproductor',exact:true}).tap();
+     await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).tap();
+     await back('Volver a búsqueda');await search('Pulso Luz');await searchAlbum.tap();await albumHeading();
+     await page.locator('[aria-label="Buscador musical"] .album-tracks > li').first().locator(':scope > button').tap();
+     await page.locator('.mini-player__title').filter({hasText:albumSongs[0].trackName}).waitFor();
+     await page.locator('.mini-player').getByRole('button',{name:'Abrir reproductor desde minirreproductor'}).tap();
+     assert.equal(await player.getByRole('button',{name:'Siguiente canción',exact:true}).isDisabled(),false);
+     const beforeSearchNext=trace.length;
+     await player.getByRole('button',{name:'Siguiente canción',exact:true}).tap();
+     await page.locator('.mini-player__title').filter({hasText:albumSongs[1].trackName}).waitFor({state:'attached'});
+     assert.equal(trace.length,beforeSearchNext,'search album next causes no RPC');
     }else if(mode==='queue-album-library-update'){
      await saveAlbum();await openSavedAlbum();
      await online(false);await enqueueAlbum();
@@ -1510,6 +1561,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
   const outcomes=await page.evaluate(()=>window.__playlistFull.imports);
   if(writeTitle&&!queued){
    assert.equal(sawWriteFailure,true);
+   assert.equal(await page.evaluate(()=>window.__playlistFull.saveFailureNotices),0,'A transient write failure must not appear as a final failure');
    assert.equal(outcomes.filter(outcome=>outcome.code==='storage-unavailable'&&outcome.phase==='write'&&outcome.writeState==='not-published').length,1,JSON.stringify(outcomes));
   }
   const expected=index=>{
@@ -1720,7 +1772,7 @@ async function checkSpeed(browser,engine,origin,bundle,mode,delayMs,backend,coun
   await page.locator('.bot-providers-list li').nth(2).waitFor({state:'attached'});
   if(trackMode){
    await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).tap();
-   const input=page.locator('.music-search input[type=search]');
+   const input=page.locator('[aria-label="Buscador musical"] .music-search input[type=search]');
    const track=page.locator('[data-catalog-kind=track]').filter({hasText:song.trackName});
    await input.fill(song.trackName);
    if(feed){
