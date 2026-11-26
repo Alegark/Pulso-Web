@@ -1,7 +1,7 @@
 # T28 · Estabilización en vivo y mejoras de experiencia v64
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** Implementación integrada; regresiones A01/A02b y L02 corregidas y verificadas en ambos motores. Validación final y publicación pendientes; Telegram real e iPhone físico no ejecutados.
+- **Estado:** Publicada en Cloudflare como **v64** (`/releases/9acd333be5ff334d.html`, commit `a056588`, despliegue `b080ae15-65bc-47e6-b7f2-dc17f9c506b0`, versión 67) y verificada en vivo. Quedan `V64-08` en vivo y las 16 pruebas físicas en iPhone (`docs/IPHONE-ACEPTACION.md`) **NO EJECUTADAS**.
 - **Fecha:** 2026-11-26
 - **Línea base:** v63 publicada (`87a4e7d0`, rama `release/v63`), rama de integración `fix/v64-live` (worktree `v64-live`) + rama paralela `fix-sync-503`.
 - **Requisitos SPEC vinculados:** W02, W04, W05, W06, W07, W08, W10, W11, W13, W17, W18 · **Invariantes SPEC:** V2, V3, V5, V6, V7, V8, V10, V11, V13, V14, V15, V16, V17, V19, V21, V22, V23, V27, V28, V29, V30, V31
@@ -208,3 +208,25 @@ Ejecutar en incrementos ordenados y con validación proporcional (`doc/SPEC.md` 
 - Integrar el fix de `deployment/cloudflare/account-data.mjs` / `accounts.mjs`.
 - Ejecutar batería completa una sola vez antes de publicar (`npm run typecheck`, `npm run typecheck:tests`, `npm run lint`, `npm run test:unit`, `npm run test:cloudflare`, `npm run build` y matrices de navegador en Chromium y WebKit), más revisión independiente.
 - Tras publicar en Cloudflare, verificar en vivo `/api/account-library` (200) y los escenarios de v64. Las 16 pruebas físicas en iPhone (`docs/IPHONE-ACEPTACION.md`) permanecen **NO EJECUTADAS** hasta ejecución del propietario.
+
+---
+
+## 2026-11-26 · Revisión independiente, publicación v64 y verificación en vivo
+
+- **Revisión independiente (`gemini-4-neon` medio):** revisión completa sobre `release/v63..3df2407` y revisión delta sobre `3df2407..a056588`, ambas con veredicto **«Seguro publicar v64»** (0 bloqueantes, 0 altos, 0 medios; 2 menores resueltos en `a056588`, 2 menores documentados: tolerancia combinada `Album Version`+`feat.` y `ShellNotice.tsx` sin uso).
+- **Batería completa (`3df2407` + revalidación de áreas tocadas en `a056588`):** `typecheck`, `typecheck:tests`, `lint`, `build`, unitarias 1.058/1.058, Cloudflare 74/74 (con runtime Miniflare para `account-data.mjs` y `turnstile.mjs`), Python 10/10 PASS. En Chromium y WebKit: `artwork-rows-dock` 6/6 × 2, `persistent-cache-main` 13/13 × 2 (C03, C04, C07), `startup-splash` 10/10 × 2, `player-notice` 5/5 × 2, `download-feedback` 5/5 × 2, `playlist-resume` 46/46 × 2, `playlist-full-download` (`regression` + `queue-v64-album-playback`) 62/62 × 2, T27 integridad 14/14 × 2 y playlist 2/2 × 2 PASS.
+- **Publicación Cloudflare Workers Free (USD 0):**
+  - Entry: `https://pulso-web.pruebassoftware.workers.dev/releases/9acd333be5ff334d.html` (`a056588`)
+  - Deployment: `b080ae15-65bc-47e6-b7f2-dc17f9c506b0` · Versión `9be0d9c8-6a84-4892-93e2-828a4e183a98` (número 67, `2026-11-26T12:56:18.941746Z`, 100 %)
+  - Worker limpio: 330.980 bytes, SHA-256 `841456dfb8b09ef6970d9375a70e7c420cfa13fe6a6e13a91fc6490f06978152` (sin `X-Pulso-Diag`), 13 bindings, 14 reglas `run_worker_first`, `observability` desactivada.
+  - HTTPS readback: 337/337 rutas estáticas por bytes/SHA-256, 232 comprobaciones históricas, Turnstile y 401 anónimo.
+  - Manifiesto promovido: `.local/test-evidence/publish-v64/site-manifest.json` (83.927 bytes, SHA-256 `9a5880f42be3050074b7457c3a1959c6b0463f86a7c4555840ed7416b433531f`).
+- **Verificación real en vivo (Chromium móvil 430×880, perfil autorizado conservado, recibo `.local/test-evidence/publish-v64/live-verification.json`):**
+  - `V64-01`: **PASS** (`GET /api/account-profile` y `/api/account-library` HTTP 200, mensaje de sincronización exitosa, 0 errores 503).
+  - `V64-02`: **PASS** («Get Lucky» reprodujo con Telegram real sin `[D01]`).
+  - `V64-04`: **PASS** (reproducción activa sin recuadro visual de cola ni botón «Cerrar aviso» sobre `.mini-player`).
+  - `V64-09`: **PASS** (Siguiente y Anterior recorrieron un álbum de 9 canciones descargadas).
+  - `V64-10`: **PASS** (Inicio sin «Añadidas recientemente» ni `.home-recent`).
+  - `V64-08`: **NO EJECUTADA en vivo** (no había álbum guardado sin descargar en el perfil; cubierto en nivel B Chromium y WebKit).
+  - Portadas en Buscar («Get Lucky»): 69 con imagen, 8 `♪` (exclusivos LRCLIB sin par iTunes en el mismo lote).
+  - **Aceptación física en iPhone (`D`, 16 pruebas de `docs/IPHONE-ACEPTACION.md`):** **NO EJECUTADA**.
