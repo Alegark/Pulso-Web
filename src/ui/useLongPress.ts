@@ -12,7 +12,7 @@ export function useLongPress({onLongPress,disabled=false,delayMs=450,moveToleran
   onPointerMove:(event:PointerEvent<HTMLElement>)=>{const point=start.current;if(point&&point.id===event.pointerId&&Math.hypot(event.clientX-point.x,event.clientY-point.y)>moveTolerancePx)clear();},
   onPointerUp:()=>{clear();if(triggered.current){if(reset.current!==null)clearTimeout(reset.current);reset.current=setTimeout(()=>{triggered.current=false;},500);}},
   onPointerCancel:()=>{clear();triggered.current=false;},
-  onClickCapture:(event:MouseEvent<HTMLElement>)=>{if(triggered.current){event.preventDefault();event.stopPropagation();triggered.current=false;if(reset.current!==null)clearTimeout(reset.current);}},
+  onClickCapture:(event:MouseEvent<HTMLElement>)=>{if(event.target instanceof Element&&event.target.closest('dialog,.track-actions-trigger'))return;if(triggered.current){event.preventDefault();event.stopPropagation();triggered.current=false;if(reset.current!==null)clearTimeout(reset.current);}},
   onContextMenu:(event:MouseEvent<HTMLElement>)=>{if(triggered.current||start.current?.touch)event.preventDefault();},
  };
 }

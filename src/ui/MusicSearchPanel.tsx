@@ -4,6 +4,9 @@ import React from 'react';
 import './music-search.css';
 import {CatalogArtwork} from './CatalogArtwork';
 import {PlaybackIndicator} from './PlaybackIndicator';
+import {TrackActionsMenu,TrackPlaylistAction} from './TrackActionsMenu';
+import {useLongPress} from './useLongPress';
+import type {TrackMenuHost} from './track-menu-host';
 
 export interface MusicSearchSuggestionRow {
  id:string;kind:'track'|'album'|'artist';title:string;subtitle:string|null;source:'local'|'lrclib'|'itunes'|'musicbrainz';artworkUrl?:string|null;trackId?:string;
@@ -14,6 +17,7 @@ export interface MusicSearchResultRow {
  correlation:'reply'|'recent'|'unknown';match:'compatible'|'conflict'|'unknown';
 }
 export interface MusicSearchPanelProps {
+ trackMenuHost?:TrackMenuHost;localAvailableTrackIds?:ReadonlySet<string>;
  query:string;onQueryChange:(query:string)=>void;
  onQueryFocus?:()=>void;
  suggestions:readonly MusicSearchSuggestionRow[];suggestionsPending:boolean;
@@ -37,6 +41,28 @@ export interface MusicSearchPanelProps {
 const kindLabels={track:'Canción',album:'Álbum',artist:'Artista'} as const;
 const correlationLabels={reply:'Respuesta a la consulta; identidad musical sin confirmar.',recent:'Mensaje reciente; la proximidad temporal no confirma su identidad ni que responda a la consulta.',unknown:'Relación con la consulta desconocida.'};
 const matchLabels={compatible:'Metadatos compatibles; identidad musical sin confirmar.',conflict:'Conflicto: los metadatos no coinciden con la consulta.',unknown:'Coincidencia musical desconocida.'};
+
+function SearchTrackRow({row,props,choose}:{row:MusicSearchSuggestionRow;props:MusicSearchPanelProps;choose:(row:MusicSearchSuggestionRow,opener:HTMLButtonElement)=>void}){
+ const [menuSignal,openMenu]=React.useReducer(n=>n+1,0);
+ const longPress=useLongPress({onLongPress:openMenu});
+ const host=props.trackMenuHost,trackId=row.trackId,inLibrary=!!trackId&&!!host?.libraryTrackIds.has(trackId);
+ const playing=!!trackId&&!!props.playingTrackIds?.has(trackId),localAvailable=!!trackId&&!!props.localAvailableTrackIds?.has(trackId);
+ return <li className="catalog-track-row" {...longPress}>
+  <button type="button" className="collection-track-main" data-suggestion-id={row.id} data-catalog-kind="track" aria-pressed={(props.suggestionFeedback?.id??props.selectedSuggestionId)===row.id} onClick={event=>choose(row,event.currentTarget)}>
+   <span className="catalog-art-wrap"><CatalogArtwork className="catalog-art catalog-art--track" url={row.artworkUrl} trackId={trackId} fallback="♪"/>{playing&&<PlaybackIndicator variant="overlay"/>}</span>
+   <span className="catalog-row-copy"><strong title={row.title} className={playing?'catalog-track-playing':undefined}><bdi dir="auto">{row.title}</bdi></strong><span className="catalog-row-meta">Canción{row.subtitle&&<> · <bdi dir="auto">{row.subtitle}</bdi></>}</span></span>
+  </button>
+  <TrackActionsMenu title={row.title} artist={row.subtitle??undefined} active={props.current()} openSignal={menuSignal}>
+   <button disabled={!trackId||!host?.canOrganize} onClick={event=>{event.currentTarget.focus();if(trackId)host?.onToggleFavorite(trackId);}}>{trackId&&host?.tracksById.get(trackId)?.favorite?'Quitar favorito':'Favorito'}</button>
+   <button disabled={!trackId||!host?.canOrganize||inLibrary} onClick={()=>{if(trackId)host?.onAddToLibrary(trackId);}}>{inLibrary?'En Biblioteca':'Añadir a Biblioteca'}</button>
+   {trackId&&host&&<TrackPlaylistAction playlists={host.playlists} trackId={trackId} enabled={host.canOrganize} onAdd={list=>host.onAddToPlaylist(list.id,trackId)}/>}
+   <button disabled={!trackId||!host?.canAppend||!localAvailable} onClick={()=>{if(trackId)host?.onQueueNext(trackId);}}>Reproducir a continuación</button>
+   <button disabled={!trackId||!host?.canAppend||!localAvailable} onClick={()=>{if(trackId)host?.onQueueLater(trackId);}}>Añadir al final de la cola</button>
+   <details><summary>Información</summary>{row.subtitle&&<p>{row.subtitle}</p>}<p>{trackId?'Canción identificada localmente.':'Resultado de catálogo sin descarga local.'}</p></details>
+  </TrackActionsMenu>
+  {row.id===props.suggestionFeedback?.id&&<p role="status">{props.suggestionFeedback.message}</p>}{row.id===props.selectedSuggestionId&&props.songActions}
+ </li>;
+}
 
 /** Controlled product state; only the local category filter lives here. */
 export function MusicSearchPanel(props:MusicSearchPanelProps){
@@ -98,7 +124,7 @@ export function MusicSearchPanel(props:MusicSearchPanelProps){
    <div className="music-search-actions" role="group" aria-label="Tipo de resultado">
     {([['all','Todo'],['track','Canciones'],['album','Álbumes'],['artist','Artistas']] as const).map(([kind,label])=><button type="button" key={kind} aria-pressed={filter===kind} onClick={()=>setFilter(kind)}>{label}</button>)}
    </div>
-   {rows.length?<ul className="catalog-mixed-list">{rows.map(row=><li key={row.id}>{card(row)}{row.id===props.suggestionFeedback?.id&&<p role="status">{props.suggestionFeedback.message}</p>}{row.id===props.selectedSuggestionId&&props.songActions}</li>)}</ul>:!props.suggestionsPending&&!props.suggestionsError&&(props.suggestions.length>0||!props.suggestionsNotice)&&<div className="catalog-empty">
+   {rows.length?<ul className="catalog-mixed-list">{rows.map(row=>row.kind==='track'?<SearchTrackRow key={row.id} row={row} props={props} choose={choose}/>:<li key={row.id}>{card(row)}{row.id===props.suggestionFeedback?.id&&<p role="status">{props.suggestionFeedback.message}</p>}{row.id===props.selectedSuggestionId&&props.songActions}</li>)}</ul>:!props.suggestionsPending&&!props.suggestionsError&&(props.suggestions.length>0||!props.suggestionsNotice)&&<div className="catalog-empty">
     <p>{props.suggestions.length?'No hay resultados con este filtro.':'No encontramos coincidencias. Prueba con otro título o artista.'}</p>
     {props.suggestions.length>0&&filter!=='all'&&<button type="button" onClick={()=>setFilter('all')}>Ver todos los resultados</button>}
    </div>}

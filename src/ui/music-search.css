@@ -98,3 +98,7 @@
 }
 
 .catalog-art img,.album-art img,.artist-album-art img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.music-search .catalog-mixed-list>li.catalog-track-row { display:grid; grid-template-columns:minmax(0,1fr) 44px; align-items:center; column-gap:.35rem; }
+.catalog-track-row > :not(button):not(dialog) { grid-column:1 / -1; }
+.catalog-art-wrap { position:relative; width:48px; height:48px; flex:none; }
+.pulso-app .music-search .catalog-row-copy strong.catalog-track-playing { color:var(--pulso-accent-text); }
