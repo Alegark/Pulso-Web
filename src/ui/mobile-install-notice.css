@@ -1,6 +1,6 @@
 :is(.pulso-app,.account-required) .mobile-install-banner { position:sticky;top:env(safe-area-inset-top,0px);z-index:30;margin:0 0 .75rem;grid-column:1/-1; }
 :is(.pulso-app,.account-required) .mobile-install-banner>button { display:flex;align-items:center;gap:.75rem;width:100%;padding:.65rem .85rem;background:var(--pulso-soft);border:1px solid var(--pulso-border);text-align:start;min-height:56px; }
-.mobile-install-banner__icon { font-size:1.4rem;color:var(--pulso-accent); }
+.mobile-install-banner__icon { font-size:1.4rem;color:var(--pulso-accent-text); }
 .mobile-install-banner button>span:nth-child(2) { display:grid;gap:.15rem;flex:1;min-width:0; }
 .mobile-install-banner strong { font-size:.9rem; }.mobile-install-banner small { font-size:.75rem;color:var(--pulso-muted); }
 :is(.pulso-app,.account-required) .mobile-install-sheet { position:fixed;inset:auto 0 0;margin:0;inline-size:100%;max-inline-size:none;max-block-size:90dvh;padding:1.25rem 1rem calc(1.25rem + env(safe-area-inset-bottom,0px));border:1px solid var(--pulso-border);border-radius:1.25rem 1.25rem 0 0;background:var(--pulso-surface);color:var(--pulso-foreground);overflow:auto;overscroll-behavior:contain; }

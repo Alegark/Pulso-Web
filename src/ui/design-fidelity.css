@@ -2,7 +2,7 @@
 .pulso-app { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .pulso-app .pulso-header { min-block-size: 60px; margin-block-end: 1.75rem; border-block-end: 1px solid var(--pulso-border); padding-block-end: .75rem; }
 .pulso-app .pulso-wordmark { color: var(--pulso-foreground); font-size: 2rem; font-weight: 800; letter-spacing: -.09em; }
-.pulso-wordmark::after { content: ""; display: inline-block; inline-size: .4em; block-size: .4em; margin-inline-start: .15em; border-radius: 50%; background: var(--pulso-accent); }
+.pulso-wordmark::after { content: ""; display: inline-block; inline-size: .4em; block-size: .4em; margin-inline-start: .15em; border-radius: 50%; background: var(--pulso-accent-text); }
 .pulso-app .pulso-header > button { border-color: transparent; background: transparent; font-size: .85rem; }
 .pulso-app .home-view > h2,.pulso-app .library-view > h2 { font-size: clamp(1.65rem,3.8vw,2.25rem); line-height: 1.15; letter-spacing: -.055em; margin: .5rem 0 .75rem; }
 .pulso-app .home-view__intro { font-size: .85rem; margin-block-end: 1.5rem; }
@@ -11,14 +11,14 @@
 .pulso-app .home-quick { grid-template-columns: repeat(auto-fit,minmax(min(100%,9rem),1fr)); gap: .5rem; }
 .pulso-app .home-quick button { min-block-size: 64px; padding: 3px; gap: .6rem; border-radius: .6rem; font-size: .8rem; line-height: 1.35; }
 .pulso-app .home-quick button > span { inline-size: 56px; min-inline-size: 56px; block-size: 56px; border-radius: .35rem; }
-.pulso-app .home-quick button:first-child > span { background: linear-gradient(135deg,#2444bc,#5099ad); color: #fff; }
-.pulso-app .home-continue { background: var(--pulso-soft); border: 0; padding: 1.25rem; }
-.pulso-app .home-continue > .home-art { border-radius: .6rem; }
-.pulso-app .home-playlists { gap: 1.5rem 1rem; }
-.pulso-app .home-playlists button,.pulso-app .collection-card { background: transparent; border: 0; padding: 0; border-radius: .5rem; gap: .2rem; }
+.pulso-app .home-quick button:first-child > span { background: linear-gradient(135deg,#4a0817,#9e1b38); color: #fff; }
+
+
+.pulso-app :is(.home-playlists, .home-albums) { gap: 1.5rem 1rem; }
+.pulso-app :is(.home-playlists, .home-albums) button,.pulso-app .collection-card { background: transparent; border: 0; padding: 0; border-radius: .5rem; gap: .2rem; }
 .pulso-app .home-art,.pulso-app .collection-card__art { border-radius: .5rem; }
-.pulso-app .home-playlists strong { font-size: .95rem; font-weight: 600; line-height: 1.4; margin-block-start: .55rem; }
-.pulso-app .home-playlists small { font-size: .8rem; }
+.pulso-app :is(.home-playlists, .home-albums) strong { font-size: .95rem; font-weight: 600; line-height: 1.4; margin-block-start: .55rem; }
+.pulso-app :is(.home-playlists, .home-albums) small { font-size: .8rem; }
 .pulso-app .library-tabs { margin-block: 1.25rem; gap: .5rem; }
 .pulso-app .library-tabs button { border-radius: 2rem; padding-inline: .85rem; font-size: .85rem; }
 .pulso-app .library-grid { grid-template-columns: repeat(auto-fill,minmax(min(100%,9rem),1fr)); gap: 1.5rem 1rem; }
@@ -27,7 +27,7 @@
 .pulso-app .create-playlist { border-block-start: 1px solid var(--pulso-border); padding-block-start: 1rem; }
 .pulso-app .mini-player { border-radius: .8rem; box-shadow: 0 .2rem 1rem #10244c0a; }
 .pulso-app .shell-nav { border: 0; background: var(--pulso-canvas); }
-.pulso-app .shell-nav button[aria-current="page"] { background: transparent; color: var(--pulso-accent); }
+.pulso-app .shell-nav button[aria-current="page"] { background: transparent; color: var(--pulso-accent-text); }
 /* Current route is conveyed by text weight and color; outlines remain for keyboard focus. */
 .pulso-app .shell-nav button[aria-current="page"]:not(:focus-visible) { outline: none; }
 .pulso-app .player-surface[data-open="true"] { background: var(--pulso-canvas); border: 0; }

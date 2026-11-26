@@ -51,7 +51,7 @@ export async function readAccountLibrary(accountId:string,current:()=>boolean):P
 }
 /** Never changes assets/chunks/leases/queue or claims that a cloud row is downloaded.
  * Merge edits committed during the HTTP request before updating the checkpoint. */
-export async function applyAccountLibrary(accountId:string,sent:AccountLibraryDocument,cloud:AccountLibraryDocument,current:()=>boolean):Promise<boolean>{
+export async function applyAccountLibrary(accountId:string,sent:AccountLibraryDocument,cloud:AccountLibraryDocument,current:()=>boolean):Promise<{changed:boolean;needsSync:boolean}>{
  cloud=validateAccountLibrary(cloud);
  return write(current,async tx=>{
   let changed=false;
@@ -77,7 +77,7 @@ export async function applyAccountLibrary(accountId:string,sent:AccountLibraryDo
   for(const p of merged.playlists){const old=listById.get(p.id);if(old&&old.accountId!==accountId)throw Error('identity-collision');if(!old||old.name!==p.name||JSON.stringify(old.entries)!==JSON.stringify(p.entries)){tx.objectStore('playlists').put({...p,accountId,revision:(old?.revision??0)+1},p.id);changed=true;}}
   for(const old of lists)if(old.accountId===accountId&&!listIds.has(old.id)){tx.objectStore('playlists').delete(old.id);changed=true;}
   tx.objectStore('settings').put(cloud,baseKey(accountId));
-  return changed;
+  return {changed,needsSync:JSON.stringify(merged)!==JSON.stringify(cloud)};
  });
 }
 /** The user requested this exact restored row. Parsed tags/duration have already

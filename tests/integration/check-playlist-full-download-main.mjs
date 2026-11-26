@@ -616,8 +616,8 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      const previousAlbum=page.getByRole('button',{name:'Volver a búsqueda',exact:true});
      if(await previousAlbum.isVisible())await previousAlbum.tap();
      await input.fill('Pulso Luz');await searchAlbum.tap();await albumHeading();
-     await page.getByRole('button',{name:'Guardar álbum',exact:true}).tap();
-     await page.locator('.album-saved').waitFor();
+     await page.getByRole('button',{name:'Opciones del álbum',exact:true}).tap();await page.getByRole('button',{name:'Guardar álbum',exact:true}).tap();
+     await page.getByRole('button',{name:'Opciones del álbum',exact:true}).waitFor();
     };
     const enqueueAlbum=()=>page.getByRole('button',{name:'Descargar faltantes',exact:true}).tap();
     const reconnect=async()=>{
@@ -845,15 +845,15 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     }else if(mode==='queue-v64-album-playback'){
      await saveAlbum();await openSavedAlbum();
      const rows=page.locator('.library-detail .album-page .album-tracks > li');
-     await rows.nth(0).locator(':scope > button:enabled').waitFor();
+     await rows.nth(0).locator(':scope > .album-track-main:enabled').waitFor();
      await online(false);const offlineCalls=trace.length;
-     await rows.nth(0).locator(':scope > button').tap();
+     await rows.nth(0).locator(':scope > .album-track-main').tap();
      await rows.nth(0).getByText(/Sin conexión/).waitFor();
      assert.equal(trace.length,offlineCalls,'offline no Telegram RPC');
-     await online(true);await rows.nth(0).locator(':scope > button').tap();
+     await online(true);await rows.nth(0).locator(':scope > .album-track-main').tap();
      await page.locator('.mini-player__title').filter({hasText:albumSongs[0].trackName}).waitFor();
      assert.equal(trace.filter(event=>event.kind==='search'&&String(event.trackId).startsWith('album-')).length,1,'only selected song acquired');
-     await rows.nth(1).locator(':scope > button').tap();
+     await rows.nth(1).locator(':scope > .album-track-main').tap();
      await page.locator('.mini-player__title').filter({hasText:albumSongs[1].trackName}).waitFor();
      await page.locator('.mini-player').getByRole('button',{name:'Abrir reproductor desde minirreproductor'}).tap();
      const player=page.locator('#player');
@@ -867,7 +867,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await enqueueAlbum();
      await page.waitForFunction(key=>!localStorage.getItem(key),queueKey);
      await verifyAlbum();
-     await rows.nth(0).locator(':scope > button').tap();
+     await rows.nth(0).locator(':scope > .album-track-main').tap();
      await page.locator('.mini-player__title').filter({hasText:albumSongs[0].trackName}).waitFor();
      await page.locator('.mini-player').getByRole('button',{name:'Abrir reproductor desde minirreproductor'}).tap();
      assert.equal(await player.getByRole('button',{name:'Siguiente canción',exact:true}).isDisabled(),false);
@@ -884,7 +884,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await player.getByRole('button',{name:'Cerrar reproductor',exact:true}).tap();
      await page.locator('.shell-nav').getByRole('button',{name:'Buscar',exact:true}).tap();
      await back('Volver a búsqueda');await search('Pulso Luz');await searchAlbum.tap();await albumHeading();
-     await page.locator('[aria-label="Buscador musical"] .album-tracks > li').first().locator(':scope > button').tap();
+     await page.locator('[aria-label="Buscador musical"] .album-tracks > li').first().locator(':scope > .album-track-main').tap();
      await page.locator('.mini-player__title').filter({hasText:albumSongs[0].trackName}).waitFor();
      await page.locator('.mini-player').getByRole('button',{name:'Abrir reproductor desde minirreproductor'}).tap();
      assert.equal(await player.getByRole('button',{name:'Siguiente canción',exact:true}).isDisabled(),false);
@@ -1059,7 +1059,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
       await handle.tap();
       if(mode==='queue-album-refresh'){
        const before=await queueIds();
-       await page.getByRole('button',{name:'Retirar álbum',exact:true}).tap();
+       await page.getByRole('button',{name:'Opciones del álbum',exact:true}).tap();await page.getByRole('button',{name:'Retirar álbum',exact:true}).tap();
        const dialog=page.getByRole('dialog',{name:'Eliminar álbum',exact:true});
        await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Eliminar álbum',exact:true}).tap();
        await dialog.getByRole('button',{name:'Cerrar',exact:true}).tap();
@@ -1189,16 +1189,16 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await openSavedAlbum();
      await page.waitForFunction(()=>window.testSkippedInspection);
      const libraryAlbum=page.locator('.album-page').filter({has:page.getByRole('button',{name:'Descargar faltantes',exact:true})});
-     const badges=libraryAlbum.locator('.album-track-badges');
-     assert.deepEqual(await badges.allTextContents(),['Copia sin comprobar','Copia sin comprobar']);
+     const badges=libraryAlbum.locator('.album-tracks > li');
+     assert.deepEqual(await badges.evaluateAll(rows=>rows.map(row=>row.dataset.trackState)),['unknown','unknown']);
      const captures=await page.evaluate(()=>{
       window.testBlockInspection=false;window.testSetDispatch(true);return window.testInspectionCaptures;
      });
      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
      assert.equal(await page.evaluate(()=>window.testInspectionCaptures),captures);
      await page.evaluate(()=>window.testSetDispatch(false));
-     await libraryAlbum.getByText('No descargada',{exact:true}).nth(1).waitFor();
-     assert.deepEqual(await badges.allTextContents(),['No descargada','No descargada']);
+     await libraryAlbum.locator('.album-tracks > li[data-track-state=missing]').nth(1).waitFor();
+     assert.deepEqual(await badges.evaluateAll(rows=>rows.map(row=>row.dataset.trackState)),['missing','missing']);
     }else if(mode==='queue-single-edition'){
      await search(single.collectionName);
      const row=page.locator('[data-suggestion-id="single-edition:422"]');
@@ -1227,8 +1227,8 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
    }
    if(mode==='queue-removal-storage'){
     await search('Pulso Luz');await searchAlbum.tap();await albumHeading();
-    await page.getByRole('button',{name:'Guardar álbum',exact:true}).tap();
-    await page.locator('.album-saved').waitFor();
+    await page.getByRole('button',{name:'Opciones del álbum',exact:true}).tap();await page.getByRole('button',{name:'Guardar álbum',exact:true}).tap();
+    await page.getByRole('button',{name:'Opciones del álbum',exact:true}).waitFor();
     await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).tap();
     await page.getByRole('button',{name:'Álbumes',exact:true}).tap();
     await page.locator('.library-grid button').filter({hasText:albumTitle}).tap();await albumHeading();
@@ -1250,7 +1250,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await dialog.getByText('La colección se eliminó.',{exact:true}).waitFor();
      await dialog.getByRole('button',{name:'Cerrar',exact:true}).tap();
     };
-    await page.getByRole('button',{name:'Retirar álbum',exact:true}).tap();
+    await page.getByRole('button',{name:'Opciones del álbum',exact:true}).tap();await page.getByRole('button',{name:'Retirar álbum',exact:true}).tap();
     await confirmRemoval('álbum');
     assert.deepEqual(await queuedTitles(),[]);
     await enqueueNext();
@@ -1277,7 +1277,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     await search('Luz');
     await searchAlbum.waitFor();await searchArtist.waitFor();
     const song=page.locator('[data-catalog-kind=track]').filter({hasText:tracks[0].track.title});
-    const saveAlbum=()=>page.getByRole('button',{name:'Guardar álbum',exact:true}).tap();
+    const saveAlbum=async()=>{await page.getByRole('button',{name:'Opciones del álbum',exact:true}).tap();await page.getByRole('button',{name:'Guardar álbum',exact:true}).tap();};
     if(mode==='queue-song-save'){
      // Pause a transaction after the owner's activity token is taken, without
      // holding the actual writer lock or blocking the Telegram worker.
@@ -1300,15 +1300,15 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await back('Volver a búsqueda');
      await page.waitForFunction(()=>window.testSongSaving===true);
      await page.evaluate(()=>window.testReleaseWriter());
-     await page.getByText(/Reproduciendo la canción desde la copia|Canción disponible/).first().waitFor();
+     await page.locator('.mini-player__title').filter({hasText:tracks[0].track.title}).waitFor();
     }else{
      await page.evaluate(()=>{
       window.testSongGap=()=>new Promise(resolve=>{window.testReleaseSong=resolve;});
      });
      await song.tap();await page.waitForFunction(()=>!!window.testReleaseSong);
      await searchAlbum.tap();await albumHeading();
-     await saveAlbum();await page.locator('.album-saved').waitFor();
-     const otherSong=page.getByRole('button',{name:/Pulso Luz Uno/});
+     await saveAlbum();await page.getByRole('button',{name:'Opciones del álbum',exact:true}).waitFor();
+     const otherSong=page.locator('.album-track-main').filter({hasText:'Pulso Luz Uno'});
      const otherSongEnabled=await otherSong.isEnabled();
      await page.getByRole('button',{name:'Añadir álbum',exact:true}).tap();
      await back('Volver a búsqueda');await searchArtist.tap();await artistHeading();
@@ -1341,7 +1341,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await search(title);
      const cached=page.locator('[data-catalog-kind=track]').filter({hasText:title});
      await sweep(cached,()=>cached.and(page.locator('[aria-pressed=true]')).waitFor());
-     await page.getByText(/Reproduciendo la canción desde la copia|Esta canción ya se está reproduciendo|Canción disponible/).first().waitFor({state:'attached'});
+     await page.locator('.mini-player__title').filter({hasText:title}).waitFor();
     }else{
      await tapAt(searchAlbum,.12,.5);await albumHeading();await back('Volver a búsqueda');
     }
@@ -1363,7 +1363,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await sweep(searchSong,()=>page.locator('[data-suggestion-id][aria-pressed=true]').filter({hasText:cTrack.title}).waitFor());
      await discography();await back('Volver a búsqueda');
      gateOn=false;unblockRead();
-     await page.getByText(/Reproduciendo la canción desde la copia|Canción disponible/).first().waitFor({state:'attached'});
+     await page.locator('.mini-player__title').filter({hasText:tracks[0].track.title}).waitFor();
      const playing=await inspect(page,[tracks[0].track.id]);
      assert.equal(playing.copies[0].sha256,tracks[0].expected.sha256);
      assert.equal(trace.filter(event=>event.kind==='read').length,1);
@@ -1396,8 +1396,8 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
     await back('Volver a búsqueda');
    }
    await searchAlbum.tap();await albumHeading();
-   const save=page.getByRole('button',{name:'Guardar álbum',exact:true});
-   await save.tap();await page.locator('.album-saved').getByText('En Biblioteca').waitFor();
+   await page.getByRole('button',{name:'Opciones del álbum',exact:true}).tap();
+   await page.getByRole('button',{name:'Guardar álbum',exact:true}).tap();
    assert.equal(trace.some(event=>String(event.trackId).startsWith('album-')),false);
    assert.equal(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).cursor,checkpointKey),mode==='queue-cancel'?2:0);
    await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).tap();

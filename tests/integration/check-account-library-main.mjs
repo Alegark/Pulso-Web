@@ -33,16 +33,41 @@ try{
      tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);
     });}finally{db.close();}
    },user);
-   await p.goto(origin);await p.locator('.shell-nav').waitFor();await p.getByText('Nube propia 2',{exact:true}).first().waitFor();pages.push(p);
+   await p.goto(origin);await p.locator('.shell-nav').waitFor();pages.push(p);
   }
   const [a,b]=pages;for(const p of pages){await p.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();await p.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).waitFor();}
   report.cases.push({engine,test:'two actual app instances restore the same account library from metadata',status:'PASS'});
   await a.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).click();await a.getByRole('heading',{name:'Playlist de mi cuenta',exact:true}).waitFor();assert.equal(await a.locator('.library-detail .collection-track-main').count(),2);
-  await a.getByRole('button',{name:'Descargar playlist completa',exact:true}).click();await a.locator('.download-dock__message').getByText('Conecta Telegram y configura un bot para descargar en este dispositivo.',{exact:true}).waitFor();assert.equal(await a.locator('.library-detail .download-dock').count(),0);
   for(const p of pages){const data=await p.evaluate(async()=>{const db=await new Promise((res,rej)=>{const r=indexedDB.open('pulso-web-local-v1');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(Error('open'));});try{const tx=db.transaction(['tracks','assets'],'readonly');const read=n=>new Promise(res=>{const r=tx.objectStore(n).getAll();r.onsuccess=()=>res(r.result);});const [tracks,assets]=await Promise.all([read('tracks'),read('assets')]);return {tracks:tracks.length,assets:assets.length,allMissing:tracks.every(t=>t.assetId===null),commands:window.__libraryCommands};}finally{db.close();}});assert.equal(data.assets,0);assert.equal(data.tracks,2);assert.equal(data.allMissing,true);assert.deepEqual(data.commands,{search:0,download:0});commands=data.commands;}
-  report.cases.push({engine,test:'restoration has zero audio assets or bot commands; explicit download has visible connection guidance',status:'PASS',commands});
+  report.cases.push({engine,test:'restoration has zero audio assets or bot commands',status:'PASS',commands});
   await a.getByRole('button',{name:/Volver a Biblioteca/}).click();await a.getByText('Crear una playlist',{exact:true}).click();await a.getByLabel('Nueva playlist',{exact:true}).fill('Creada en dispositivo A');await a.locator('.create-playlist').getByRole('button',{name:'Crear playlist',exact:true}).click();
-  await a.waitForFunction(()=>document.querySelector('.library-grid')?.textContent.includes('Creada en dispositivo A'));await a.getByRole('button',{name:'Configuración',exact:true}).click();await a.getByRole('button',{name:'Sincronizar biblioteca',exact:true}).click();await a.getByText('Biblioteca sincronizada con tu cuenta.',{exact:true}).waitFor();assert.ok(cloud.document.playlists.some(p=>p.name==='Creada en dispositivo A'));
+  await a.waitForFunction(()=>document.querySelector('.library-grid')?.textContent.includes('Creada en dispositivo A'));
+  await a.locator('.library-grid button').filter({hasText:'Playlist de mi cuenta'}).click();
+  const row=a.locator('.library-detail .tracks>li').first();await row.locator('.track-actions-trigger').click();await row.locator('.track-actions-playlist>summary').click();await row.getByLabel('Playlist de destino').selectOption({label:'Creada en dispositivo A'});await row.getByRole('button',{name:'Añadir a playlist',exact:true}).click();
+  await a.waitForFunction(()=>document.querySelector('.library-detail .track-actions-playlist button')?.disabled);
+  await a.keyboard.press('Escape');
+  await a.getByRole('button',{name:'Volver a Biblioteca',exact:true}).click();
+  await a.getByRole('button',{name:'Configuración',exact:true}).click();await a.getByRole('button',{name:'Sincronizar biblioteca',exact:true}).click();
+  await a.waitForFunction(()=>document.querySelector('section[aria-label="Sincronización de biblioteca"] [role=status]')?.textContent==='Biblioteca sincronizada con tu cuenta.');
+  await new Promise(resolve=>setTimeout(resolve,1000));assert.ok(cloud.revision>=2);assert.equal(cloud.document.playlists.find(p=>p.name==='Creada en dispositivo A')?.entries.length,1);
+  // A third, clean browser context represents a device signing in after A's write.
+  const fresh=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});contexts.push(fresh);fresh.setDefaultTimeout(12000);
+  await fresh.route('**/*',r=>{const u=new URL(r.request().url());return u.origin===origin||u.protocol==='blob:'?r.fallback():r.abort();});
+  await installRequiredAccountFixture(fresh,origin);
+  await fresh.route(origin+'/api/account-library',r=>{if(r.request().method()==='PUT'){const v=r.request().postDataJSON();if(v.revision!==cloud.revision)return r.fulfill({status:409,json:{code:'LIBRARY_CHANGED'}});cloud={accountId:user,revision:cloud.revision+1,document:v.document};}return r.fulfill({json:cloud});});
+  await fresh.route(origin+'/telegram-config.json',r=>r.fulfill({json:{}}));
+  await fresh.route(origin+'/testonly-seed',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><title>TESTONLY setup seed</title>'}));
+  const clean=await fresh.newPage();await clean.goto(origin+'/testonly-seed');
+  await clean.evaluate(async account=>{localStorage.setItem('pulso:setup:v1:'+account,'complete');const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('pulso-web-telegram-session-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('authorization');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});try{await new Promise((resolve,reject)=>{const tx=db.transaction('authorization','readwrite');tx.objectStore('authorization').put('TESTONLY_OFFLINE_SETUP','session');tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);});}finally{db.close();}},user);
+  const cleanApp=await fresh.newPage();await cleanApp.goto(origin);
+  await cleanApp.locator('.home-view .home-playlists button').filter({hasText:'Creada en dispositivo A'}).waitFor();
+  await cleanApp.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();await cleanApp.locator('.library-grid button').filter({hasText:'Creada en dispositivo A'}).click();assert.equal(await cleanApp.locator('.library-detail .collection-track-main').count(),1);
+  await cleanApp.getByRole('button',{name:'Volver a Biblioteca',exact:true}).click();await cleanApp.getByText('Crear una playlist',{exact:true}).click();await cleanApp.getByLabel('Nueva playlist',{exact:true}).fill('Creada en dispositivo B');await cleanApp.locator('.create-playlist').getByRole('button',{name:'Crear playlist',exact:true}).click();
+  await cleanApp.waitForFunction(()=>document.querySelector('.library-grid')?.textContent.includes('Creada en dispositivo B'));await cleanApp.getByRole('button',{name:'Configuración',exact:true}).click();await cleanApp.getByRole('button',{name:'Sincronizar biblioteca',exact:true}).click();
+  await cleanApp.waitForFunction(()=>document.querySelector('section[aria-label="Sincronización de biblioteca"] [role=status]')?.textContent==='Biblioteca sincronizada con tu cuenta.');
+  await new Promise(resolve=>setTimeout(resolve,1000));assert.ok(cloud.document.playlists.some(p=>p.name==='Creada en dispositivo B'));
+  await a.evaluate(()=>window.dispatchEvent(new Event('focus')));await a.waitForFunction(()=>document.querySelector('.library-grid')?.textContent.includes('Creada en dispositivo B'));
+  report.cases.push({engine,test:'clean device restores playlist with track in Home and Library and syncs changes back',status:'PASS'});
   await b.evaluate(()=>window.dispatchEvent(new Event('focus')));await b.locator('.library-grid button').filter({hasText:'Creada en dispositivo A'}).waitFor();await b.reload();await b.locator('.shell-nav').waitFor();await b.locator('.shell-nav').getByRole('button',{name:'Biblioteca',exact:true}).click();await b.locator('.library-grid button').filter({hasText:'Creada en dispositivo A'}).waitFor();
   report.cases.push({engine,test:'playlist created through UI reaches another device and survives reload',status:'PASS'});
   await a.setViewportSize({width:320,height:568});
@@ -61,7 +86,6 @@ try{
   await continueButton.waitFor();
   assert.equal(await continueButton.count(),1);
   assert.equal(await discardButton.count(),0);
-  assert.equal(await a.getByRole('button',{name:'Descargar playlist completa',exact:true}).count(),0);
   await a.getByRole('button',{name:'Volver a Biblioteca',exact:true}).click();
   await a.getByRole('button',{name:'Configuración',exact:true}).click();
   await a.getByRole('button',{name:'Gestionar descargas',exact:true}).click();

@@ -4,7 +4,7 @@ import {LibraryDocumentError,validateAccountLibrary,mergeAccountLibraries,type A
 export interface AccountLibraryRemote {accountId:string;revision:number|null;document:AccountLibraryDocument}
 export interface LibrarySyncHost {
  read(id:string,current:()=>boolean):Promise<{document:AccountLibraryDocument;base:AccountLibraryDocument}>;
- apply(id:string,sent:AccountLibraryDocument,cloud:AccountLibraryDocument,current:()=>boolean):Promise<boolean|void>;
+ apply(id:string,sent:AccountLibraryDocument,cloud:AccountLibraryDocument,current:()=>boolean):Promise<boolean|void|{changed:boolean;needsSync:boolean}>;
  remote(id:string,signal:AbortSignal):Promise<AccountLibraryRemote>;
  save(id:string,revision:number|null,document:AccountLibraryDocument,signal:AbortSignal):Promise<AccountLibraryRemote>;
  ready():boolean;changed():void;
@@ -48,8 +48,8 @@ export function createLibrarySync(host:LibrarySyncHost){
    const merged=mergeAccountLibraries(base,local,remote.document);
    const next=JSON.stringify(merged)===JSON.stringify(remote.document)?remote:await host.save(id,remote.revision,merged,signal);
    if(!current())return;if(next.accountId!==id||JSON.stringify(next.document)!==JSON.stringify(merged))throw Error('response');
-   const changed=await host.apply(id,local,next.document,current);if(!current())return;
-   failures=0;retryAt=0;publish('saved');if(changed!==false)host.changed();
+   const result=await host.apply(id,local,next.document,current);if(!current())return;
+   failures=0;retryAt=0;publish('saved');if(typeof result==='object'&&result.needsSync)queued=true;if(typeof result==='object'?result.changed:result!==false)host.changed();
   }catch(error){
    if(!sameAccount())return;
    if(error instanceof UnrecognizedLibrary){
@@ -79,6 +79,7 @@ export function createLibrarySync(host:LibrarySyncHost){
    account=id;epoch++;abort?.abort();failures=0;retryAt=0;queued=id!==null;publish('idle');schedule();
   },
   changed(){if(!account)return;queued=true;if(rejected())publish('idle');schedule();},
+  retry(){if(status==='conflict'||status==='unavailable')retryAt=0;return sync();},
   startPolling(){if(poll===null)poll=setInterval(()=>{if(visible())void sync();},pollMs);},
   sync,
   dispose(){account=null;epoch++;abort?.abort();clearTimer();if(poll!==null)clearInterval(poll);poll=null;listeners.clear();},

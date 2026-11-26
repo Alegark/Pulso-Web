@@ -166,7 +166,9 @@ try{
       const sheet=[...document.styleSheets].find(sheet=>sheet.href?.startsWith(location.origin));
       sheet.insertRule('html { font-size: 200% !important; }',sheet.cssRules.length);
      });
+     assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'dark');
      for(const colorScheme of ['light','dark']){
+      await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},colorScheme);
       await page.emulateMedia({colorScheme,reducedMotion:'reduce'});
       const geometry=await logo.evaluate(el=>{
        const {x,y,width,height}=el.getBoundingClientRect();
@@ -180,7 +182,7 @@ try{
       assert.equal(geometry.scroll,width);
       assert.equal(geometry.font,'32px');
       assert.equal(geometry.animation,'none');
-      assert.equal(geometry.background,colorScheme==='dark'?'rgb(17, 22, 32)':'rgb(244, 246, 250)');
+      assert.equal(geometry.background,colorScheme==='dark'?'rgb(0, 0, 0)':'rgb(250, 247, 248)');
      }
     }finally{firstResponse.resolve();}
     const retry=page.getByRole('button',{name:'Reintentar conexión de cuenta'});
@@ -197,7 +199,11 @@ try{
     await waitRestored(page);
     assert.equal(await page.getByText('Añadidas recientemente',{exact:true}).count(),0);
     assert.equal(await page.locator('.home-recent').count(),0);
-    return {recentAbsent:true};
+    assert.equal(await page.getByText('Continuar escuchando',{exact:true}).count(),0);
+    await page.setViewportSize({width:320,height:800});
+    const geometry=await page.evaluate(()=>{const app=document.querySelector('.pulso-app'),mini=app.querySelector('.mini-player'),progress=mini.querySelector('.mini-player__mobile-progress'),m=mini.getBoundingClientRect(),p=progress.getBoundingClientRect();return {backing:getComputedStyle(app,'::after').content,backingZ:getComputedStyle(app,'::after').zIndex,overflow:getComputedStyle(mini).overflow,navZ:getComputedStyle(app.querySelector('.shell-nav')).zIndex,miniZ:getComputedStyle(mini).zIndex,left:p.left,right:p.right,bottom:p.bottom,mleft:m.left,mright:m.right,mbottom:m.bottom};});
+    assert.notEqual(geometry.backing,'none');assert.equal(geometry.backingZ,'18');assert.equal(geometry.navZ,'20');assert.equal(geometry.miniZ,'25');assert.equal(geometry.overflow,'hidden');assert.ok(geometry.left>=geometry.mleft-1&&geometry.right<=geometry.mright+1&&geometry.bottom<=geometry.mbottom+1,JSON.stringify(geometry));
+    return {recentAbsent:true,sealed:true};
    });
    await check('H02 · Inicio vacío',async page=>{
     await seedQueue(page,origin);

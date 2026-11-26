@@ -2,17 +2,19 @@
 // product baseline plus the current CSS, not VoiceOver or OS file-picker testing.
 import assert from 'node:assert/strict';
 import {preview} from 'vite';
-import {chromium} from 'playwright-core';
+import {chromium,webkit} from 'playwright-core';
+import {installRequiredAccountFixture} from './required-account-fixture.mjs';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 const product=process.env.PULSO_QUALITY_PRODUCT==='1';
-const report={passed:false,iphoneVerified:false,cases:[],environment:'Chromium Linux sandbox, temporary loopback, own context, frozen baseline + current CSS',limits:['Targeted controls are focused explicitly before keyboard activation; not a complete Tab-order audit','Files supplied through the automation file input; OS picker not tested','No VoiceOver, real zoom or physical iPhone evidence']};
+const report={passed:false,iphoneVerified:false,cases:[],environment:`${process.env.PULSO_TEST_ENGINE==='webkit'?'WebKit':'Chromium'} Linux sandbox, temporary loopback, own context, frozen baseline + current CSS`,limits:['Targeted controls are focused explicitly before keyboard activation; not a complete Tab-order audit','Files supplied through the automation file input; OS picker not tested','No VoiceOver, real zoom or physical iPhone evidence']};
 let server,browser;
 try{
- if(product)report.environment='Chromium Linux sandbox, temporary loopback, own context, current production build';
+ if(product)report.environment=`${process.env.PULSO_TEST_ENGINE==='webkit'?'WebKit':'Chromium'} Linux sandbox, temporary loopback, own context, current production build`;
  server=await preview({configFile:false,build:{outDir:product?'dist':'.local/releases/quality-before'},preview:{host:'127.0.0.1',port:0,strictPort:true}});
- browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true});report.browserVersion=browser.version();
+ browser=await (process.env.PULSO_TEST_ENGINE==='webkit'?webkit:chromium).launch(process.env.PULSO_TEST_ENGINE==='webkit'?{headless:true}:{executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true});report.browserVersion=browser.version();
  const ctx=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'}),page=await ctx.newPage(),errors=[],external=[];
  const origin=`http://127.0.0.1:${server.httpServer.address().port}`,css=await readFile('src/style.css','utf8');
+ if(product)await installRequiredAccountFixture(ctx,origin);
  await ctx.route(origin+'/keyboard-test.css',route=>route.fulfill({contentType:'text/css',body:css}));
  await ctx.addInitScript(()=>{
   window.keyboardAudio=[];const NativeAudio=Audio;window.Audio=class extends NativeAudio{constructor(...args){super(...args);window.keyboardAudio.push(this);}};

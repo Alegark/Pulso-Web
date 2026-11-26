@@ -15,7 +15,7 @@ export async function runPlaylistDetail({browser,origin,engine,check,report,run,
   const page=await context.newPage();page.on('pageerror',error=>report.errors.push({engine,error:String(error)}));
   await page.goto(origin+'/tests/integration/collection-removal-final-main-fixture.html');await page.waitForFunction(()=>!!window.setupPlaylistDesignFixture);await page.evaluate(()=>window.setupPlaylistDesignFixture());await page.goto(origin);await page.locator('.shell-nav').waitFor();
   const nav=name=>page.locator('.shell-nav').getByRole('button',{name,exact:true}).click();
-  const detail=page.locator('.library-detail');const back=()=>detail.getByRole('button',{name:/Volver a Biblioteca/}).click();
+  const detail=page.locator('.library-detail:visible');const back=()=>detail.getByRole('button',{name:/Volver a Biblioteca/}).click();
   const openList=async(name='Cuando baja el ruido')=>{await nav('Biblioteca');await page.locator('.library-grid button').filter({hasText:name}).click();await detail.getByRole('heading',{name,exact:true}).waitFor();};
   await check(`${engine}: playlist cover, actual duration, compact rows and secondary options`,async()=>{
    await openList();await page.waitForFunction(()=>[...document.querySelectorAll('.collection-header__art img')].filter(i=>i.naturalWidth>0).length===4);
@@ -81,7 +81,15 @@ export async function runPlaylistDetail({browser,origin,engine,check,report,run,
    await page.waitForFunction(()=>navigator.mediaSession?.metadata?.artwork.length===1);
    const first=await page.evaluate(()=>({title:navigator.mediaSession.metadata.title,src:navigator.mediaSession.metadata.artwork[0].src}));
    assert.equal(await rows.nth(0).evaluate(e=>getComputedStyle(e).outlineStyle),'none');
-   assert.equal(await rows.nth(0).locator('strong').evaluate(e=>getComputedStyle(e).color),await rows.nth(0).locator('.playback-indicator').evaluate(e=>getComputedStyle(e).color));
+   assert.equal(await rows.nth(0).locator('strong').evaluate(e=>{const probe=document.createElement('span');probe.style.color='var(--pulso-accent-text)';e.append(probe);const color=getComputedStyle(probe).color;probe.remove();return getComputedStyle(e).color===color;}),true);
+   assert.equal(await rows.nth(0).locator('..').locator('.collection-track-art-wrap > .playback-indicator--overlay').count(),1);
+   await rows.nth(0).dispatchEvent('pointerdown',{pointerId:19,pointerType:'touch',isPrimary:true,clientX:10,clientY:10,button:0});
+   await page.locator('dialog.track-actions-menu[open]').waitFor();
+   await rows.nth(0).dispatchEvent('pointerup',{pointerId:19,pointerType:'touch',isPrimary:true});
+   await rows.nth(0).dispatchEvent('click');
+   await page.locator('dialog.track-actions-menu[open]').getByRole('button',{name:'Cerrar opciones de canción'}).click();
+   assert.equal(await rows.nth(0).locator('..').locator('.track-actions-trigger').evaluate(e=>document.activeElement===e),true);
+
    assert.ok(await page.evaluate(async src=>{const img=new Image();img.src=src;await img.decode();return img.naturalWidth>0;},first.src));
    await page.locator('.mini-player__expand').click();await page.getByRole('button',{name:'Cerrar reproductor',exact:true}).click();
    assert.equal(await page.evaluate(()=>navigator.mediaSession.metadata.artwork[0].src),first.src);
@@ -94,7 +102,7 @@ export async function runPlaylistDetail({browser,origin,engine,check,report,run,
    await back();await openList('Para después');
   });
   await check(`${engine}: playlist rename persists and empty/favorites covers are honest`,async()=>{
-   await detail.getByRole('button',{name:'Opciones de playlist',exact:true}).click();await detail.getByText('Editar nombre',{exact:true}).click();await detail.getByLabel('Nombre de playlist').fill('Para otro momento');await detail.getByRole('button',{name:'Renombrar',exact:true}).click();await detail.locator('.collection-header').getByRole('heading',{name:'Para otro momento',exact:true}).waitFor();await page.reload();await openList('Para otro momento');await back();
+   await detail.getByRole('button',{name:'Opciones de playlist',exact:true}).click();await detail.getByText('Editar nombre',{exact:true}).click();await detail.getByLabel('Nombre de playlist').fill('Para otro momento');await detail.getByRole('button',{name:'Renombrar',exact:true}).click();await detail.locator('.collection-header h3').filter({hasText:'Para otro momento'}).waitFor();await page.reload();await openList('Para otro momento');await back();
    await page.locator('.create-playlist>summary').click();await page.getByLabel('Nueva playlist').fill('Vacía');await page.getByRole('button',{name:'Crear playlist',exact:true}).click();await page.locator('.library-grid button').filter({hasText:'Vacía'}).click();assert.equal(await detail.getByRole('button',{name:'Reproducir playlist'}).isDisabled(),true);await detail.getByText('Esta colección todavía no tiene canciones.',{exact:true}).waitFor();assert.equal(await detail.locator('.collection-header__art img').count(),0);
    await back();await page.locator('.library-grid button').filter({hasText:'Favoritos'}).click();assert.equal(await detail.locator('.collection-cover--favorites').count(),1);assert.equal(await detail.locator('.collection-cover--favorites img').count(),0);assert.equal(await detail.getByText('Editar nombre',{exact:true}).count(),0);
   });

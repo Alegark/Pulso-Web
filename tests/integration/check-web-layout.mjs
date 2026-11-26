@@ -2,20 +2,22 @@
 // current source stylesheet injected only into this own test context.
 import assert from 'node:assert/strict';
 import {preview} from 'vite';
-import {chromium} from 'playwright-core';
+import {chromium,webkit} from 'playwright-core';
+import {installRequiredAccountFixture} from './required-account-fixture.mjs';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 const product=process.env.PULSO_QUALITY_PRODUCT==='1';
-const report={passed:false,environment:'Chromium Linux sandbox, temporary loopback, frozen baseline plus current source CSS',iphoneVerified:false,cases:[],limits:['200% font-size approximates text enlargement, not Safari zoom','No VoiceOver, contrast acceptance or physical iPhone test','Current stylesheet is injected into the frozen baseline; final product integration is separate']};
+const report={passed:false,environment:`${process.env.PULSO_TEST_ENGINE==='webkit'?'WebKit':'Chromium'} Linux sandbox, temporary loopback, frozen baseline plus current source CSS`,iphoneVerified:false,cases:[],limits:['200% font-size approximates text enlargement, not Safari zoom','No VoiceOver, contrast acceptance or physical iPhone test','Current stylesheet is injected into the frozen baseline; final product integration is separate']};
 let server,browser;
 try{
  const css=await readFile('src/style.css','utf8');report.stylesheetSHA256=createHash('sha256').update(css).digest('hex');
- report.environment=product?'Chromium Linux sandbox, temporary loopback, current production build':report.environment;
+ report.environment=product?`${process.env.PULSO_TEST_ENGINE==='webkit'?'WebKit':'Chromium'} Linux sandbox, temporary loopback, current production build`:report.environment;
  if(product)report.limits=report.limits.filter(x=>!x.startsWith('Current stylesheet'));
  server=await preview({configFile:false,build:{outDir:product?'dist':'.local/releases/quality-before'},preview:{host:'127.0.0.1',port:0,strictPort:true}});
- browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true});report.browserVersion=browser.version();
+ browser=await (process.env.PULSO_TEST_ENGINE==='webkit'?webkit:chromium).launch(process.env.PULSO_TEST_ENGINE==='webkit'?{headless:true}:{executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true});report.browserVersion=browser.version();
  const ctx=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'}),page=await ctx.newPage(),errors=[],external=[];
  const origin=`http://127.0.0.1:${server.httpServer.address().port}`;
+ if(product)await installRequiredAccountFixture(ctx,origin);
  page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(!r.url().startsWith(origin))external.push(r.url());});
  await page.goto(origin);await page.getByLabel('Importar audios',{exact:true}).waitFor();
  const title='Tema propio '+'L'.repeat(260);

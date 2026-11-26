@@ -10,6 +10,7 @@ interface TrackActionsMenuProps {
  artwork?:ReactNode;
  children:ReactNode;
  active:boolean;
+ openSignal?:number;
 }
 
 /** Transfer panels must return to the visible row control, not a hidden menu action. */
@@ -20,7 +21,7 @@ export function trackActionOpener(button:HTMLButtonElement):HTMLButtonElement {
 }
 
 /** Presentation only. Actions and their admission checks remain with the caller. */
-export function TrackActionsMenu({title,artist,label=`Opciones de ${title}`,closeLabel='Cerrar opciones de canción',artwork,children,active}:TrackActionsMenuProps){
+export function TrackActionsMenu({title,artist,label=`Opciones de ${title}`,closeLabel='Cerrar opciones de canción',artwork,children,active,openSignal}:TrackActionsMenuProps){
  const id=useId(),dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null);
  const releaseScroll=useRef<(()=>void)|null>(null);
  const [open,setOpen]=useState(false),[subpage,setSubpage]=useState(false);
@@ -54,6 +55,7 @@ export function TrackActionsMenu({title,artist,label=`Opciones de ${title}`,clos
   node.close();node.showModal();
   if(focused?.isConnected&&focused.getClientRects().length)focused.focus({preventScroll:true});
  });
+ useEffect(()=>{if(openSignal)show();},[openSignal]);
  useEffect(()=>{if(!active&&open)close();},[active,open]);
  useEffect(()=>{
   const node=dialog.current,opener=trigger.current;

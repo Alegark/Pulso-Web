@@ -1,16 +1,5 @@
-import {CatalogArtwork} from './CatalogArtwork';
 import {CollectionCover} from './CollectionCover';
 import {MusicIcon} from './MusicIcon';
-
-export interface ContinueSelection {
-  trackId?: string;
-  title: string;
-  artist: string | null;
-  stateText: string;
-  positionSeconds: number;
-  canPlay: boolean;
-  playing: boolean;
-}
 
 export interface HomeTrack {
   id: string;
@@ -27,15 +16,16 @@ export interface HomePlaylist {
   count: number;
 }
 
+export interface HomeAlbum { key: string; title: string; artist: string | null; count: number; artworkUrl?: string; trackIds: readonly string[]; saved: boolean; }
+
 export interface HomeViewProps {
   visible?: boolean;
-  continueSelection: ContinueSelection | null;
+  albums?: readonly HomeAlbum[];
+  onOpenAlbum?: (key: string, opener: HTMLButtonElement) => void;
   recent: readonly HomeTrack[];
   playlists: readonly HomePlaylist[];
   empty: boolean;
   canCreate: boolean;
-  onOpenPlayer: (opener: HTMLButtonElement) => void;
-  onPlay: () => void;
   onOpenLibrary: () => void;
   onOpenFavorites?: () => void;
   onOpenPlaylist: (id: string) => void;
@@ -45,7 +35,7 @@ export interface HomeViewProps {
 }
 
 export function HomeView(props: HomeViewProps) {
-  const { continueSelection, playlists } = props;
+  const { playlists } = props;
   const enabled=props.visible??true;
   return <div className="home-view">
     <h2 id="home-heading" tabIndex={-1}>Tu música</h2>
@@ -56,8 +46,8 @@ export function HomeView(props: HomeViewProps) {
       <button onClick={props.onOpenLibrary}><span aria-hidden="true"><MusicIcon name="library"/></span><strong>Tu biblioteca</strong></button>
       {!playlists.length&&<button onClick={props.onOpenSearch}><span aria-hidden="true"><MusicIcon name="search"/></span><strong>Buscar música</strong></button>}
     </div>
-    {continueSelection&&<section aria-labelledby="home-continue-heading"><h3 id="home-continue-heading">Continuar escuchando</h3><div className="home-continue"><CatalogArtwork className="home-continue-art" trackId={continueSelection.trackId} enabled={enabled}/><div><strong>{continueSelection.title}</strong><p>{continueSelection.artist??'Artista desconocido'}</p><button className="home-player-link" onClick={event=>props.onOpenPlayer(event.currentTarget)}>Abrir reproductor →</button></div>{!continueSelection.playing&&<button className="home-resume" disabled={!continueSelection.canPlay} onClick={props.onPlay}>Continuar</button>}</div></section>}
     {props.empty&&<div className="home-empty"><MusicIcon name="library"/><h3>Haz espacio para tu música</h3><p>Tu música aparecerá aquí cuando la añadas a tu biblioteca.</p><button onClick={props.onOpenSearch}>Buscar música</button></div>}
+    {!!props.albums?.length&&<section aria-labelledby="home-albums-heading"><div className="home-section-heading"><h3 id="home-albums-heading">Tus álbumes</h3></div><div className="home-albums">{props.albums.map(album=><button key={album.key} onClick={event=>props.onOpenAlbum?.(album.key,event.currentTarget)}><span className="home-art"><CollectionCover variant="album" trackIds={album.trackIds} artworkUrl={album.artworkUrl} enabled={enabled}/></span><strong>{album.title}</strong><small>{album.artist??`${album.count} canciones`}</small></button>)}</div></section>}
     <section aria-labelledby="home-playlists-heading"><div className="home-section-heading"><h3 id="home-playlists-heading">Tus playlists</h3><button disabled={!props.canCreate} onClick={props.onCreatePlaylist}><MusicIcon name="plus"/>Crear playlist</button></div>{playlists.length?<div className="home-playlists">{playlists.map(list=><button key={list.id} onClick={()=>props.onOpenPlaylist(list.id)}><span className="home-art"><CollectionCover trackIds={list.trackIds??[]} enabled={enabled}/></span><strong>{list.name}</strong><small>{list.count} canciones</small></button>)}</div>:<p>Crea una playlist para reunir tus canciones.</p>}</section>
   </div>;
 }

@@ -1,6 +1,6 @@
 # Pendientes abiertos · 2026-11-26
 
-Pulso sirve [v64](https://pulso-web.pruebassoftware.workers.dev/releases/9acd333be5ff334d.html) desde `release/v64`. El registro de publicación está en [P0-W](../odd/tasks/P0-W.md#2026-11-26--publicación-de-v64) y [T28](../odd/tasks/T28-v64-live-y-ux.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
+Pulso sirve [v65](https://pulso-web.pruebassoftware.workers.dev/releases/5a7eef31d22eabf1.html) desde `release/v65`. El registro de publicación está en [P0-W](../odd/tasks/P0-W.md#2026-11-26--publicación-de-v65) y [T29](../odd/tasks/T29-v65-ux-apple-y-sync.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
 
 ## Pendientes de v64 / v63
 
@@ -54,15 +54,19 @@ Al registrar v61 se sincronizó la base local compartida `.local/engram` con los
 
 WebKit WPE emite `style-src-attr` con `blockedURI: inline` para el selector de Apariencia de [src/main.tsx:1547](../src/main.tsx#L1547). El mapa de fuentes sitúa el evento en `node_modules/react-dom/cjs/react-dom-client.production.js:8514`, en la llamada que crea el elemento `select`. La política aplicada procede de [index.html:1](../index.html#L1). La reproducción se confirmó en v60 (`086aaac`) y v61 (`d718b9d`). El arnés de velocidad registra esa infracción y la compara con la ejecución de referencia del mismo perfil.
 
-## 8. Estado actualizado tras v64 · 2026-11-26
+## 8. Estado actualizado tras v65 · 2026-11-26
 
-La publicación vigente es **v64** (`/releases/9acd333be5ff334d.html`), rama `release/v64`, despliegue `b080ae15-65bc-47e6-b7f2-dc17f9c506b0` (versión 67).
+La publicación vigente es **v65** (`/releases/5a7eef31d22eabf1.html`), rama `release/v65`, despliegue `18c58796-f9f8-4e53-8572-9148055fec89` (versión 68).
 
-### 8.1 Resuelto en v64
+### 8.1 Resuelto en v65
+- **Paleta negro puro OLED (`#000000`) + rojo vino oscuro (`#8c1630` / `#d84a67`):** tema oscuro por defecto en app, `index.html`, `manifest.webmanifest` y splash, modo claro manual (`#faf7f8` / `#7a1228`) conservado, Favoritos/letras/almacenamiento armonizados (`U-THEME-01`).
+- **Rediseño UX/UI estilo Apple Music (`T29`, `U-UX-01`–`U-UX-08`):** eliminación de la tarjeta azul inline en álbumes y búsqueda; filas compactas de 2 líneas con icono discreto de descarga, `⋯` (`TrackActionsMenu`) y pulsación larga (`useLongPress`); `PlaybackIndicator` sustituyendo al número de pista en álbumes y superpuesto sobre carátula `48×48` en playlists y búsqueda; cabecera de álbum unificada sin `1 discos` con **▶ / ⇄ / ↓ / `⋯`**; sellado opaco inferior del `.mini-player` móvil (`::after` + `overflow: hidden` + progreso limpio); cola compacta con iconos SVG (`↑`, `↓`, `×`) a `320 px` 200 %; Inicio sin «Continuar escuchando» y con «Tus álbumes».
+- **Sincronización Neon entre dispositivos (`U-SYNC-01`):** corregida la carrera de arranque antes de `prepareAccountLibrary()` (`preparedLibraryAccount === activeAccount`), el reencolado de cambios concurrentes durante una sincronización (`needsSync`) y el reintento manual `librarySync.retry()` bloqueado por backoff. Validado en prueba real de 3 contextos con dispositivo B limpio (`5/5` Chromium y WebKit) y verificado en vivo (`GET /api/account-library` HTTP `200`). Pendiente solo confirmación del propietario en un segundo dispositivo físico tras recargar v65.
+
+### 8.2 Resuelto en v64
 - **Sincronización 503 en producción (bloqueante anterior):** Cloudflare Workers rechazaba `redirect: 'error'` en `fetch()` con `TypeError`. Corregido con `redirect: 'manual'` en `deployment/cloudflare/account-data.mjs` y `deployment/cloudflare/turnstile.mjs` (con prueba de runtime Miniflare). Verificado en vivo con `GET /api/account-profile` y `/api/account-library` devolviendo **HTTP 200** y sincronización exitosa.
 - **v64 en vivo y mejoras UX (`T28`):** resueltos D01 («Get Lucky» reprodujo en vivo sin `[D01]`), aviso transitorio «No se pudo guardar la canción», retirada del recuadro visual de cola sobre `MiniPlayer`, caché de portada compartida por álbum con precarga en lote y fixes WebKit T26 C03/C04, reproducción individual en álbum guardado en Biblioteca (`V64-08` nivel B), Siguiente/Anterior en álbumes (`V64-09` verificado en vivo) y retirada de «Añadidas recientemente» en Inicio (`V64-10` verificado en vivo).
-- **Limpieza de worktrees:** retirados `startup-splash`, `t25-inc1`, `fix-sync-503` y `v64-live` (ya integrados).
 
-### 8.2 Sesiones de prueba que siguen abiertas hasta tu aviso
-- `.local/tmp/live-browser/profile` conserva tu sesión de Pulso **y la de Telegram** (utilizada con tu autorización para verificar v64 en vivo). Cuando lo indiques: cerramos la sesión de Telegram desde la app o desde Telegram → Ajustes → Dispositivos y borramos el perfil. No compartir ese perfil.
+### 8.3 Sesiones de prueba que siguen abiertas hasta tu aviso
+- `.local/tmp/live-browser/profile` conserva tu sesión de Pulso **y la de Telegram** (utilizada con tu autorización para verificar v64 y v65 en vivo). Cuando lo indiques: cerramos la sesión de Telegram desde la app o desde Telegram → Ajustes → Dispositivos y borramos el perfil. No compartir ese perfil.
 - El MCP de Neon sigue conectado en Codex en solo lectura.
