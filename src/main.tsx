@@ -1607,9 +1607,9 @@ function App(){
  const telegramBlocked=telegramBlockReason({supported:control.supported,owner,acquiring:control.state==='adquiriendo',storageReady:databaseState==='ready',busy,reserved:sourceReview.hasReservation(),queuePending:queueForeignBlocked()});
  const canAppend=insertionBaseReady()&&deferredQueueRestore===null&&sourceReview.canPrepare()&&control.activity.count===queueInsertions.pendingCount+queueSaveTokens&&(queueInsertions.pendingCount>0||!sourceProtection.getReadonlySnapshot().unknown);
  const trackMenuHost:TrackMenuHost={canOrganize,canAppend,playlists,libraryTrackIds:addedTrackIds,tracksById:trackIndex,removalEligibleTracks,
-  onToggleFavorite:id=>{const track=trackIndex.get(id),source=document.activeElement;if(track&&source instanceof HTMLButtonElement)void toggleFavorite(track,id,source);},
-  onAddToLibrary:id=>{if(canOrganize)void actWork(c=>addTrackToLibrary(id,c));},
-  onAddToPlaylist:(pid,id)=>{const list=playlists.find(p=>p.id===pid);if(canOrganize&&list)void actWork(c=>changePlaylist(pid,list.revision,{type:'add',trackId:id},c));},
+  onToggleFavorite:id=>{const track=trackIndex.get(id),source=document.activeElement;if(canOrganize&&track&&source instanceof HTMLButtonElement)void toggleFavorite(track,id,source);},
+  onAddToLibrary:id=>{if(canOrganize)void viewAct(c=>addTrackToLibrary(id,c));},
+  onAddToPlaylist:(pid,id)=>{const list=playlists.find(p=>p.id===pid);if(canOrganize&&list)void viewAct(c=>changePlaylist(pid,list.revision,{type:'add',trackId:id},c));},
   onQueueNext:id=>{const track=trackIndex.get(id);if(canAppend&&track)addSelection([{key:id,track}],'next');},
   onQueueLater:id=>{const track=trackIndex.get(id);if(canAppend&&track)addSelection([{key:id,track}],'end');},
   onOpenRemoval:(id,opener)=>{const track=trackIndex.get(id);if(track)openRemoval(track,opener);},

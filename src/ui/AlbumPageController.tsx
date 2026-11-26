@@ -265,7 +265,7 @@ export function AlbumPageController(props:Props){
   {detail&&!props.metadataOnly&&<>
    <div className="album-actions">
     <button className="album-play-btn" type="button" disabled={!albumPlaying&&(inspecting||running||!!props.songPending||!detail.tracks.length)} onClick={()=>{if(albumPlaying){props.trackMenuHost?.onTogglePlayPause();return;}const index=Math.max(0,queueSlots.findIndex(Boolean));props.onChoose(albumTrackChoice(detail.tracks[index],detail.edition.title),queueSlots,index);}}>{albumPlaying?'❚❚ Pausar':'▶ Reproducir'}</button>
-    <button className="album-shuffle-btn" type="button" disabled={!availableTrackIds.length||!props.trackMenuHost} onClick={()=>props.trackMenuHost?.onPlayTracks(availableTrackIds,true)}>⇄ Aleatorio</button>
+    <button className="album-shuffle-btn" type="button" disabled={!availableTrackIds.length||!props.trackMenuHost||inspecting||props.coordinator.running||!!props.songPending} onClick={()=>{if(!active()||inspecting||props.coordinator.running||props.songPending)return;props.trackMenuHost?.onPlayTracks(availableTrackIds,true);}}>⇄ Aleatorio</button>
     <CollectionDownloadButton coordinator={props.coordinator} accountId={props.accountId} label={albumAction} collectionKey={albumDownloadKey(detail.edition.id)} showLabel={props.libraryView} disabled={saving||inspecting} onStart={()=>void addAlbum()}/>
     <TrackActionsMenu title={detail.edition.title} artist={detail.edition.artist} label="Opciones del álbum" closeLabel="Cerrar opciones del álbum" active={props.visible&&!props.metadataOnly}>
      {!savedAlbum&&props.saveAlbum&&<button type="button" disabled={saving} data-menu-dismiss-after="true" onClick={()=>void addAlbum(false)}>Guardar álbum</button>}

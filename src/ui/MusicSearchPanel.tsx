@@ -52,7 +52,7 @@ function SearchTrackRow({row,props,choose}:{row:MusicSearchSuggestionRow;props:M
    <span className="catalog-art-wrap"><CatalogArtwork className="catalog-art catalog-art--track" url={row.artworkUrl} trackId={trackId} fallback="♪"/>{playing&&<PlaybackIndicator variant="overlay"/>}</span>
    <span className="catalog-row-copy"><strong title={row.title} className={playing?'catalog-track-playing':undefined}><bdi dir="auto">{row.title}</bdi></strong><span className="catalog-row-meta">Canción{row.subtitle&&<> · <bdi dir="auto">{row.subtitle}</bdi></>}</span></span>
   </button>
-  <TrackActionsMenu title={row.title} artist={row.subtitle??undefined} active={props.current()} openSignal={menuSignal}>
+  <TrackActionsMenu title={row.title} artist={row.subtitle??undefined} active={props.resultsVisible&&props.current()} openSignal={menuSignal}>
    <button disabled={!trackId||!host?.canOrganize} onClick={event=>{event.currentTarget.focus();if(trackId)host?.onToggleFavorite(trackId);}}>{trackId&&host?.tracksById.get(trackId)?.favorite?'Quitar favorito':'Favorito'}</button>
    <button disabled={!trackId||!host?.canOrganize||inLibrary} onClick={()=>{if(trackId)host?.onAddToLibrary(trackId);}}>{inLibrary?'En Biblioteca':'Añadir a Biblioteca'}</button>
    {trackId&&host&&<TrackPlaylistAction playlists={host.playlists} trackId={trackId} enabled={host.canOrganize} onAdd={list=>host.onAddToPlaylist(list.id,trackId)}/>}

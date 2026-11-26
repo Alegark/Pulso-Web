@@ -35,8 +35,8 @@
 .pulso-app .mini-player__range > * { grid-area: 1 / 1; margin: 0; inline-size: 100%; min-inline-size: 0; }
 .pulso-app .mini-player__range progress { appearance: none; display: block; block-size: 3px; border: 0; border-radius: 2px; overflow: hidden; background: var(--pulso-border); color: var(--pulso-accent-text); }
 .mini-player__range progress::-webkit-progress-bar { background: var(--pulso-border); }
-.mini-player__range progress::-webkit-progress-value { background: var(--pulso-accent); }
-.mini-player__range progress::-moz-progress-bar { background: var(--pulso-accent); }
+.mini-player__range progress::-webkit-progress-value { background: var(--pulso-accent-text); }
+.mini-player__range progress::-moz-progress-bar { background: var(--pulso-accent-text); }
 .pulso-app .mini-player__range input[type="range"] { appearance: none; display: block; block-size: 28px; min-block-size: 28px; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: pointer; }
 .mini-player__range input::-webkit-slider-runnable-track { block-size: 3px; background: transparent; border: 0; }
 .mini-player__range input::-webkit-slider-thumb { appearance: none; inline-size: 10px; block-size: 10px; margin-block-start: -3.5px; border: 0; border-radius: 50%; background: var(--pulso-foreground); }
@@ -48,8 +48,8 @@
 /* A quiet mobile timeline conveys playback without adding another small target. */
 .pulso-app .mini-player__mobile-progress { position:absolute; inset-inline:0; inset-block-end:0; inline-size:100%; block-size:2.5px; margin:0; appearance:none; border:0; border-radius:0; overflow:hidden; background:var(--pulso-border); color:var(--pulso-accent-text); pointer-events:none; }
 .mini-player__mobile-progress::-webkit-progress-bar { background:var(--pulso-border); }
-.mini-player__mobile-progress::-webkit-progress-value { background:var(--pulso-accent); }
-.mini-player__mobile-progress::-moz-progress-bar { background:var(--pulso-accent); }
+.mini-player__mobile-progress::-webkit-progress-value { background:var(--pulso-accent-text); }
+.mini-player__mobile-progress::-moz-progress-bar { background:var(--pulso-accent-text); }
 @media (min-width: 1024px) {
   .pulso-app .mini-player__mobile-progress { display:none; }
   .pulso-app .mini-player {
