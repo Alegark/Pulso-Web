@@ -1,26 +1,5 @@
-.selected-song-actions { min-width: 0; max-width: 100%; overflow-wrap: anywhere; margin-block: 1.25rem; padding: 1rem; background: var(--pulso-surface); border: 1px solid var(--pulso-border); border-radius: 1rem; }
-.selected-song-actions h3, .selected-song-actions p { margin: .3em 0; }.selected-song-actions h3 { font-size: 1.2rem; }
-.selected-song-actions progress { max-width: 100%; width: 100%; accent-color: var(--pulso-accent-text); }
-.selected-song-feedback:not(:empty) { margin-block: .5rem; }
-.selected-song-buttons, .selected-song-playlist form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-.selected-song-actions button, .selected-song-actions select { min-height: 44px; max-width: 100%; font: inherit; padding: .6rem .8rem; border: 1px solid var(--pulso-border); border-radius: .7rem; color: inherit; background: var(--pulso-surface); }
-.selected-song-buttons button:first-child:not(:disabled) { background: var(--pulso-accent); color: var(--pulso-on-accent); border-color: transparent; font-weight: 700; }
-.selected-song-actions button:disabled { opacity: .6; }
-.selected-song-playlist { margin-top: .75rem; }.selected-song-playlist select { min-width: 0; }
-.selected-song-actions :focus-visible { outline: 3px solid var(--pulso-accent-text); outline-offset: 2px; }
-.selected-song-actions select { border-color: var(--pulso-control-border); }
-.selected-song-playlist fieldset { min-width: 0; width: 100%; max-height: 16rem; overflow-y: auto; border: 1px solid var(--pulso-border); border-radius: .75rem; }
-.selected-song-playlist label { display: flex; gap: .5rem; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
-/* Feedback belongs to the selected row; secondary actions stay folded. */
-.pulso-app .catalog-mixed-list .selected-song-actions,.pulso-app .album-tracks .selected-song-actions { margin:.25rem 0 .65rem;padding:.6rem .75rem;border:0;border-radius:.65rem;background:var(--pulso-soft); }
-.catalog-mixed-list .selected-song-actions>h3,.catalog-mixed-list .selected-song-actions>p:not([role=alert]),.album-tracks .selected-song-actions>h3,.album-tracks .selected-song-actions>p:not([role=alert]) { position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip-path:inset(50%); }
-.selected-song-feedback { font-size:.85rem;line-height:1.4; }.selected-song-more { margin:.25rem 0 0; }.selected-song-more>summary { display:flex;align-items:center;min-block-size:44px;font-size:.85rem;cursor:pointer; }
-.selected-song-actions .song-load-cancel { min-block-size:44px;padding:.3rem .6rem;font-size:.85rem;background:transparent; }
-.album-tracks .music-search-selection { grid-column:1/-1;min-inline-size:0; }
-.song-load-lookup { margin:.25rem 0 .65rem;padding:.6rem .75rem;background:var(--pulso-soft);border-radius:.65rem;font-size:.85rem; }
-.song-load-lookup progress { display:block;inline-size:100%;block-size:4px;accent-color:var(--pulso-accent-text); }.song-load-lookup button { min-block-size:44px; }
-.pulso-app :is(.catalog-mixed-list,.album-tracks) .selected-song-actions { display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:.5rem; }
-:is(.catalog-mixed-list,.album-tracks) .selected-song-actions>:is(.selected-song-feedback,progress,[role=alert]) { grid-column:1/-1; }
-:is(.catalog-mixed-list,.album-tracks) .selected-song-actions>.song-load-cancel { grid-column:2;grid-row:3; }
-:is(.catalog-mixed-list,.album-tracks) .selected-song-actions>.selected-song-more { grid-column:1;grid-row:3; }
-:is(.catalog-mixed-list,.album-tracks) .selected-song-actions>.selected-song-more[open] { grid-column:1/-1;grid-row:4; }
+.selected-song-actions,.song-load-lookup { min-width:0; margin:.25rem 0 .65rem; padding:.6rem .75rem; border:1px solid var(--pulso-border); border-radius:.65rem; background:var(--pulso-surface); font-size:.85rem; }
+.selected-song-actions p { margin:.2rem 0; }.selected-song-actions [role=alert] { color:var(--pulso-danger); }
+.selected-song-actions progress,.song-load-lookup progress { display:block; inline-size:100%; block-size:4px; accent-color:var(--pulso-accent-text); }
+.selected-song-actions button,.song-load-lookup button { min-width:44px; min-height:44px; color:inherit; background:transparent; border:1px solid var(--pulso-border); border-radius:.5rem; }
+.album-tracks .music-search-selection { grid-column:1/-1; min-inline-size:0; }

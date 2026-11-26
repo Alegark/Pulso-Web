@@ -1,3 +1,4 @@
+import type {TrackMenuHost} from './ui/track-menu-host';
 import {albumCoordinator} from './library/album-download';
 import {albumDownloadKey,libraryDownloadKey} from './library/collection-download-queue';
 import {libraryAlbumCards,resolvedAlbumTracks,readSavedAlbumsFrom,saveAlbumRecord,savedAlbumGroupKey,SavedAlbumLimitError,type SaveAlbumResult,type SavedAlbum,type SavedAlbumFailures} from './library/saved-albums';
@@ -1176,9 +1177,9 @@ function App(){
  const viewQueue=(...args:Parameters<typeof queue>)=>replacementCurrent()?queue(...args):Promise.resolve();
  const viewRecover=(...args:Parameters<typeof recover>)=>mutationCurrent()?recover(...args):Promise.resolve();
  const viewRetain=(...args:Parameters<typeof retainProblem>)=>mutationCurrent()?retainProblem(...args):Promise.resolve();
- function addSelection(rows:readonly {key:string;track:Track}[],placement:Placement,event:React.MouseEvent<HTMLButtonElement>){
+ function addSelection(rows:readonly {key:string;track:Track}[],placement:Placement,event?:React.MouseEvent<HTMLButtonElement>){
   if(!insertionCurrent())return;
-  const gesture=event.nativeEvent??event;let intent=insertionGestures.get(gesture);
+  const gesture=event?.nativeEvent??event??{};let intent=insertionGestures.get(gesture);
   if(!intent){const selection:SelectedOccurrence[]=rows.map(({key,track})=>Object.freeze({selectionKey:key,trackId:track.id,entryId:crypto.randomUUID()}));intent=Object.freeze({intentId:crypto.randomUUID(),placement,selection:Object.freeze(selection)});insertionGestures.set(gesture,intent);}
   if(!insertionPresentations.has(intent.intentId))insertionPresentations.set(intent.intentId,captureRemovalRaw());
   const accepted=queueInsertions.enqueue(intent,{current:insertionCurrent});
@@ -1577,8 +1578,8 @@ function App(){
  }
  const albumPage=selectedAlbum&&(!selectedAlbum.saved||selectedSavedAlbum)?{
   ...selectedAlbum.album,fixedDetail:selectedAlbum.saved?selectedSavedAlbum:undefined,onBack:closeAlbumPage,
-  options:selectedSavedAlbum&&<button type="button" disabled={!owner||busy||copyRemovalBlocked()||queueForeignBlocked()}
-   onClick={event=>openCollection({kind:'album',scope:'global-library',key:savedAlbumGroupKey(selectedSavedAlbum.edition.id)},selectedSavedAlbum.edition.title,event.currentTarget)}>Retirar álbum</button>,
+  options:selectedSavedAlbum&&<button type="button" className="collection-menu-danger" data-menu-dismiss-after="true" disabled={!owner||busy||copyRemovalBlocked()||queueForeignBlocked()}
+   onClick={event=>openCollection({kind:'album',scope:'global-library',key:savedAlbumGroupKey(selectedSavedAlbum.edition.id)},selectedSavedAlbum.edition.title,trackActionOpener(event.currentTarget))}>Retirar álbum</button>,
  }:undefined;
  React.useEffect(()=>{if(selectedAlbum?.saved&&!selectedSavedAlbum)closeLibraryDetail();},[selectedAlbum,selectedSavedAlbum]);
  const collectionDownloadVisible=page==='biblioteca'&&libraryDetail&&!albumPage&&!settingsOpen&&!playerOpen;
@@ -1605,6 +1606,16 @@ function App(){
  const telegramLibraryPending=importRecoveryPending()||metadataRescanBlocked||copyRemovalPending;
  const telegramBlocked=telegramBlockReason({supported:control.supported,owner,acquiring:control.state==='adquiriendo',storageReady:databaseState==='ready',busy,reserved:sourceReview.hasReservation(),queuePending:queueForeignBlocked()});
  const canAppend=insertionBaseReady()&&deferredQueueRestore===null&&sourceReview.canPrepare()&&control.activity.count===queueInsertions.pendingCount+queueSaveTokens&&(queueInsertions.pendingCount>0||!sourceProtection.getReadonlySnapshot().unknown);
+ const trackMenuHost:TrackMenuHost={canOrganize,canAppend,playlists,libraryTrackIds:addedTrackIds,tracksById:trackIndex,removalEligibleTracks,
+  onToggleFavorite:id=>{const track=trackIndex.get(id),source=document.activeElement;if(track&&source instanceof HTMLButtonElement)void toggleFavorite(track,id,source);},
+  onAddToLibrary:id=>{if(canOrganize)void actWork(c=>addTrackToLibrary(id,c));},
+  onAddToPlaylist:(pid,id)=>{const list=playlists.find(p=>p.id===pid);if(canOrganize&&list)void actWork(c=>changePlaylist(pid,list.revision,{type:'add',trackId:id},c));},
+  onQueueNext:id=>{const track=trackIndex.get(id);if(canAppend&&track)addSelection([{key:id,track}],'next');},
+  onQueueLater:id=>{const track=trackIndex.get(id);if(canAppend&&track)addSelection([{key:id,track}],'end');},
+  onOpenRemoval:(id,opener)=>{const track=trackIndex.get(id);if(track)openRemoval(track,opener);},
+  onPlayTracks:(ids,shuffle=false)=>{if(!replacementCurrent())return;const revision=player.queueRevision;void viewQueue([...ids]).then(()=>{if(!replacementCurrent()||player.queueRevision===revision)return;if(shuffle!==!!player.shuffleOrder)player.setShuffle(shuffle);play();});},
+  onTogglePlayPause:()=>{if(player.state==='playing')pause();else play();},
+ };
  const canUseThisTab=control.supported&&control.state==='sin-control'&&databaseState==='ready'&&!['pending','acquiring'].includes(control.transferState);
  const canPlayHere=owner?!busy&&!collectionBlocked()&&!!player.entries.length:canUseThisTab;
  const transferText={idle:'',acquiring:'Preparando el control en esta pestaña…',pending:'Esperando a que la otra pestaña guarde la cola y ceda el control.',acquired:'El control está en esta pestaña.',refused:'La otra pestaña tiene una operación pendiente. Termínala y vuelve a pulsar Usar en esta pestaña.',cancelled:'Solicitud cancelada. No se iniciará música aquí.',unsupported:'No se pudo avisar a la otra pestaña. Cede allí el control y comprueba aquí.',failed:'No se pudo transferir el control. Reintenta sin cerrar las operaciones pendientes.'}[control.transferState];
@@ -1657,7 +1668,7 @@ function App(){
  }} onOpen={openSpotifyPlaylist}/>}
 <section className="settings-group settings-appearance"><h3>Apariencia</h3><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label></section><DownloadNotificationSettings/><section className="settings-group settings-app-update" aria-labelledby="app-update-heading"><h3 id="app-update-heading">Actualización de la app</h3><div className="settings-group__body"><p>Versión en ejecución: {runningVersion}</p><p role="status">{manualReloadPending?'Esperando a que terminen las operaciones para recargar…':updateState==='checking'?'Comprobando versión…':updateState==='current'?'Actualizada':updateState==='available'?'Nueva versión disponible':'No se pudo comprobar si hay actualizaciones.'}</p><button type="button" disabled={manualReloadPending||updateNavigationLocked} onClick={()=>{player.pause();automaticUpdates?.reload();}}>Recargar app</button><p>Recarga Pulso y conserva tus datos. Si hay música sonando, se pausará.</p></div></section><section className="settings-group" aria-label="Sincronización de biblioteca"><h3>Biblioteca de tu cuenta</h3><div className="settings-group__body"><p role="status">{librarySyncMessage[librarySyncState]}</p><p>Las playlists, los favoritos y los datos de las canciones se conservan con tu cuenta. Los álbumes y artistas guardados, y las descargas, se conservan en este dispositivo.</p><button type="button" disabled={!owner||busy||librarySyncState==='syncing'} onClick={()=>void librarySync.retry()}>Sincronizar biblioteca</button></div></section></div><div className="settings-groups">
 <section hidden={settingsSection!=='connections'} className="settings-group"><h3>Cuenta y fuentes</h3><div className="settings-group__body"><section aria-label="Música de Telegram"><details className="settings-help"><summary>Cómo buscar y escuchar</summary><p>En Buscar puedes consultar sugerencias musicales y las opciones del bot que elijas. Conecta tu cuenta de Telegram y configura tus bots para consultarlos. Al elegir una canción se comprueba tu copia local; si falta, se obtiene del bot para descargarla y escucharla. Límite por canción: {formatStorageMB(AUDIO_FILE_MAX_BYTES)}.</p></details></section>
- <TelegramPanel requiredSetup songAliases={songAliases} localAvailability={availability} savedAlbums={savedAlbums} saveAlbum={saveCatalogAlbum} albumSaveBlockedReason={albumSaveBlockedReason}
+ <TelegramPanel trackMenuHost={trackMenuHost} requiredSetup songAliases={songAliases} localAvailability={availability} savedAlbums={savedAlbums} saveAlbum={saveCatalogAlbum} albumSaveBlockedReason={albumSaveBlockedReason}
   connectionWorkPending={()=>sourceProtection.hasPendingPreparation()||!!botImportActive}
   libraryAlbum={albumPage&&libraryAlbumTarget?{page:albumPage,target:libraryAlbumTarget,visible:page==='biblioteca'&&!settingsOpen&&!playerOpen}:undefined} captureDownloadOwner={captureDownloadOwner} downloadStorageReady={downloadStorageReady} downloadUpdateWait={downloadUpdateWait} onStopDownloadUpdate={stopDownloadUpdate} downloadCollection={downloadCollection} downloadStorageTarget={storageOpen&&!playerOpen?storageDownloadTarget:null} onSetupReady={onSetupReady} accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} libraryLoaded={libraryLoadedFor!==null&&libraryLoadedFor===account.user?.id} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureAlbumDownload={captureAlbumDownload} captureBatchDownload={captureBatchDownload} onReviewedDownload={operationId=>{if(operationId)verifiedResponse(operationId);void refresh(false,false,null).catch(()=>{});}} onReviewDownloadStorage={()=>{
   const target=document.getElementById('download-copy-recovery')??document.getElementById('download-response-recovery');

@@ -37,9 +37,9 @@
 .album-hero p,.artist-hero p { font-size:.9rem; }
 .album-track-copy strong { font-size:1rem;line-height:1.4;font-weight:500; }
 .album-track-copy>span { font-size:.8rem;line-height:1.4; }
-.album-page .album-tracks li { display:grid;grid-template-columns:minmax(0,1fr);row-gap:.2rem;align-items:center;border:0;padding:.45rem 0; }
+.album-page .album-tracks li { display:grid;grid-template-columns:minmax(0,1fr) 44px;column-gap:.5rem;row-gap:.2rem;align-items:center;border:0;padding:.45rem 0; }
 .album-page .album-tracks li>button { inline-size:100%;padding:.35rem 0; }
-.album-page .album-track-number { flex:0 0 24px;inline-size:24px;font-size:.8rem; }
+.album-page .album-track-number { flex:0 0 2rem;inline-size:2rem;font-size:.8rem; }
 .album-page .album-track-badges { padding:0 0 0 2.25rem;background:transparent;color:var(--pulso-muted);font-size:.7rem;line-height:1.4; }
 .artist-album-grid { grid-template-columns:repeat(auto-fill,minmax(min(100%,9rem),1fr)); }
 .artist-album-grid li { padding:0; }
@@ -117,3 +117,5 @@
 }
 @media(max-width:359px) { .pulso-app .home-quick { grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr)); } }
 @media(min-width:1024px) and (max-height:600px) { .desktop-library { display:none; } }
+
+@media(max-width:600px) { .pulso-app .album-hero { align-items:center;text-align:center; } .pulso-app .album-art { border-radius:.75rem;box-shadow:0 1rem 2.5rem rgba(0,0,0,.55); } }

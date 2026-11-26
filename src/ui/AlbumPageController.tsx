@@ -1,3 +1,7 @@
+import type {TrackMenuHost} from './track-menu-host';
+import {TrackActionsMenu,TrackPlaylistAction,trackActionOpener} from './TrackActionsMenu';
+import {useLongPress} from './useLongPress';
+import type {AlbumTrack} from '../library/album-catalog';
 import {formatAlbumHeaderMeta} from '../library/album-header-meta';
 import {announceDownloadMessage,CollectionDownloadButton} from './DownloadDock';
 import {BackButton} from './BackButton';
@@ -25,6 +29,7 @@ import type {AvailabilityRecord} from '../library/shell-selectors';
 import {PlaybackIndicator} from './PlaybackIndicator';
 const catalog=new AlbumCatalog((...args)=>fetch(...args));
 interface Props {
+ trackMenuHost?:TrackMenuHost; playerPlaying?:boolean;
  savedAlbums?:readonly SavedAlbum[]; fixedDetail?:SavedAlbum; libraryView?:boolean; albumOptions?:React.ReactNode;
  localTracks?:readonly Track[]; songAliases?:SongAliases|null; localAvailability?:ReadonlyMap<string,AvailabilityRecord>; albumSaveBlockedReason?:string;
  saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures)=>Promise<SaveAlbumResult>;
@@ -37,6 +42,27 @@ const catalogError=(reason:AlbumFailure,detail:boolean,stage?:AlbumStage,httpSta
  const diagnostic=[detail?'album-detail':stage??'album-search',backup?'musicbrainz-relay':catalogTransportMode(),reason,...(Number.isInteger(httpStatus)&&httpStatus!>=400&&httpStatus!<=599?[String(httpStatus)]:[]),entry].join(' · ');
  return `${prefix} ${message} Diagnóstico: ${diagnostic}.`;
 };
+function DownloadedIcon(){return <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 12h10"/></svg>;}
+function AlbumTrackRow({track,trackId,present,inLibrary,failed,copyState,saved,host,playing,visible,disabled,onChoose,songActions,albumTitle,local}:{track:AlbumTrack;trackId:string|null|undefined;present:boolean;inLibrary:boolean;failed:boolean;copyState:string|undefined;saved:boolean;host?:TrackMenuHost;playing:boolean;visible:boolean;disabled:boolean;onChoose:()=>void;songActions:React.ReactNode;albumTitle:string;local?:Track}){
+ const [menuSignal,openMenu]=React.useReducer(n=>n+1,0);
+ const longPress=useLongPress({onLongPress:openMenu});
+ const displayTitle=local?.manualOverrides?.title??track.title,displayArtist=local?.manualOverrides?.artist??track.artist;
+ const state=present?(saved&&!inLibrary?'cached':'downloaded'):failed?'error':copyState==='missing'?'missing':'unknown';
+ const duration=track.durationMs?`${Math.floor(track.durationMs/60000)}:${String(Math.floor(track.durationMs/1000)%60).padStart(2,'0')}`:'Duración desconocida';
+ return <li {...longPress} data-track-state={state} data-album-pending={!present||undefined}>
+  <button type="button" className="album-track-main" disabled={disabled} onClick={onChoose}><span className="album-track-number" aria-label={`Disco ${track.disc}, pista ${track.position}`}>{playing?<PlaybackIndicator variant="inline"/>:track.position}</span><span className="album-track-copy"><strong><bdi dir="auto">{displayTitle}</bdi></strong><span className="album-track-sub">{present&&<DownloadedIcon/>}<bdi dir="auto">{displayArtist}</bdi></span></span></button>
+  <TrackActionsMenu title={displayTitle} artist={displayArtist} active={visible} openSignal={menuSignal}>
+   <button disabled={!host?.canOrganize||!trackId} onClick={event=>{event.currentTarget.focus();if(trackId)host?.onToggleFavorite(trackId);}}>{trackId&&host?.tracksById.get(trackId)?.favorite?'Quitar favorito':'Favorito'}</button>
+   <button disabled={!host?.canOrganize||!trackId||inLibrary} onClick={()=>{if(trackId)host?.onAddToLibrary(trackId);}}>{inLibrary?'En Biblioteca':'Añadir a Biblioteca'}</button>
+   {trackId&&host&&<TrackPlaylistAction playlists={host.playlists} trackId={trackId} enabled={host.canOrganize} onAdd={list=>host.onAddToPlaylist(list.id,trackId)}/>}
+   <button disabled={!host?.canAppend||!present||!trackId} onClick={()=>{if(trackId)host?.onQueueNext(trackId);}}>Reproducir a continuación</button>
+   <button disabled={!host?.canAppend||!present||!trackId} onClick={()=>{if(trackId)host?.onQueueLater(trackId);}}>Añadir al final de la cola</button>
+   <button data-menu-dismiss="true" disabled={!host?.canOrganize||!trackId||!host.removalEligibleTracks.has(trackId)} onClick={event=>{if(trackId)host?.onOpenRemoval(trackId,trackActionOpener(event.currentTarget));}}>Gestionar copia local</button>
+   <details><summary>Información</summary><p>{albumTitle} · Disco {track.disc}, pista {track.position} · {duration}</p><p>{present?(saved&&!inLibrary?'En caché de escucha':'Descargada'):copyState==='missing'?'No descargada':'Copia sin comprobar'}{inLibrary?' · En Biblioteca':''}</p></details>
+  </TrackActionsMenu>
+  {failed&&<span className="album-track-error" role="status">Error al descargar</span>}{songActions}
+ </li>;
+}
 export function AlbumPageController(props:Props){
  const fixedDetail=props.fixedDetail;
  const relevantBatch=props.editionId?undefined:props.searchBatch;
@@ -224,6 +250,9 @@ export function AlbumPageController(props:Props){
  const albumAction=props.libraryView?'Descargar faltantes':progress?'Continuar álbum':'Añadir álbum';
  const firstCopy=detail?.tracks.map(track=>copies[albumTrackChoice(track,detail.edition.title).id])
   .find(copy=>copy?.state==='available'&&copy.trackId)?.trackId;
+ const queueSlots=detail?.tracks.map((track,index)=>{const id=albumTrackChoice(track,detail.edition.title).id;return available(id,index)?copies[id]?.trackId??visibleRows?.[index]?.trackId??null:null;})??[];
+ const availableTrackIds=queueSlots.filter((id):id is string=>!!id);
+ const albumPlaying=!!props.playerPlaying&&!!props.playerTrackId&&availableTrackIds.includes(props.playerTrackId);
  const albumImage=detail?.edition.artworkUrl??props.artworkUrl??(editions.length===1?editions[0].artworkUrl:undefined);
  return <section className="album-page" aria-labelledby={headingId}>
   <BackButton onClick={()=>{if(active())props.onBack();}}>{props.backLabel??(props.libraryView?'Volver a Biblioteca':'Volver a búsqueda')}</BackButton>
@@ -235,33 +264,29 @@ export function AlbumPageController(props:Props){
   {detail&&props.metadataOnly&&<><h3 className="album-tracks-heading">Canciones</h3><ol className="album-tracks">{detail.tracks.map(track=><li key={`${track.disc}:${track.position}`}><span className="album-track-copy"><strong><bdi dir="auto">{track.title}</bdi></strong><span><bdi dir="auto">{track.artist}</bdi></span></span></li>)}</ol></>}
   {detail&&!props.metadataOnly&&<>
    <div className="album-actions">
-    {props.saveAlbum&&(savedAlbum?<span className="album-saved" role="status">En Biblioteca</span>:<button type="button" disabled={saving} onClick={()=>void addAlbum(false)}>Guardar álbum</button>)}
-    {(!props.libraryView||!savedAlbum||downloaded<detail.tracks.length||props.coordinator.running)&&
-     <CollectionDownloadButton coordinator={props.coordinator} accountId={props.accountId} label={albumAction} collectionKey={albumDownloadKey(detail.edition.id)} showLabel={props.libraryView} disabled={saving||inspecting} onStart={()=>void addAlbum()}/>}
-    {!props.coordinator.running&&!saving&&props.albumOptions}
+    <button className="album-play-btn" type="button" disabled={!albumPlaying&&(inspecting||running||!!props.songPending||!detail.tracks.length)} onClick={()=>{if(albumPlaying){props.trackMenuHost?.onTogglePlayPause();return;}const index=Math.max(0,queueSlots.findIndex(Boolean));props.onChoose(albumTrackChoice(detail.tracks[index],detail.edition.title),queueSlots,index);}}>{albumPlaying?'❚❚ Pausar':'▶ Reproducir'}</button>
+    <button className="album-shuffle-btn" type="button" disabled={!availableTrackIds.length||!props.trackMenuHost} onClick={()=>props.trackMenuHost?.onPlayTracks(availableTrackIds,true)}>⇄ Aleatorio</button>
+    <CollectionDownloadButton coordinator={props.coordinator} accountId={props.accountId} label={albumAction} collectionKey={albumDownloadKey(detail.edition.id)} showLabel={props.libraryView} disabled={saving||inspecting} onStart={()=>void addAlbum()}/>
+    <TrackActionsMenu title={detail.edition.title} artist={detail.edition.artist} label="Opciones del álbum" closeLabel="Cerrar opciones del álbum" active={props.visible&&!props.metadataOnly}>
+     {!savedAlbum&&props.saveAlbum&&<button type="button" disabled={saving} data-menu-dismiss-after="true" onClick={()=>void addAlbum(false)}>Guardar álbum</button>}
+     <details className="catalog-sources"><summary>Fuente de los metadatos</summary><p>Catálogo {musicBrainzId(detail.edition.id)?<a href={'https://musicbrainz.org/release/'+detail.edition.id.slice(12)} target="_blank" rel="noopener noreferrer">MusicBrainz · respaldo</a>:<a href="https://www.apple.com/itunes/" target="_blank" rel="noopener noreferrer">iTunes US</a>}.</p></details>
+     {savedAlbum&&!props.coordinator.running&&!saving&&props.albumOptions}
+    </TrackActionsMenu>
    </div>
    {saveNotice&&<p role="status">{saveNotice}</p>}
    {inspecting&&<p role="status">Comprobando copias locales…</p>}
    <h3 className="album-tracks-heading">Canciones</h3>
    <ol className="album-tracks">{detail.tracks.map((track,index)=>{
     const choice=albumTrackChoice(track,detail.edition.title),copy=copies[choice.id],row=visibleRows?.[index];
-    const present=available(choice.id,index),pending=props.libraryView&&!!savedAlbum&&!present;
-    const failed=row?.state==='failed'||savedAlbum?.failedTracks.includes(choice.id);
+    const present=available(choice.id,index);
+    const failed=!!(row?.state==='failed'||savedAlbum?.failedTracks.includes(choice.id));
     const trackId=copy?.trackId??row?.trackId;
-    const local=props.libraryView&&present&&trackId?localTrackIndex.get(trackId):undefined;
-    const inLibrary=member(choice.id,index);
-    const badge=present?(savedAlbum&&!inLibrary?'En caché de escucha':'Descargada'):pending&&failed?'Error':copy?.state==='missing'?(pending?'No descargada':'Sin descarga'):'Copia sin comprobar';
-    return <li key={`${track.disc}:${track.position}`} data-album-pending={pending||undefined}>
-     <button type="button" disabled={inspecting||props.coordinator.running||props.songPending} onClick={()=>{if(active()&&!props.coordinator.running&&!inspecting)props.onChoose(choice,detail.tracks.map((t,i)=>{const id=albumTrackChoice(t,detail.edition.title).id;return available(id,i)?copies[id]?.trackId??visibleRows?.[i]?.trackId??null:null;}),index);}}>
-      <span className="album-track-number" aria-label={`Disco ${track.disc}, pista ${track.position}`}>{track.position}</span>
-      <span className="album-track-copy"><strong><bdi dir="auto">{local?.manualOverrides?.title??track.title}</bdi></strong><span><bdi dir="auto">{local?.manualOverrides?.artist??track.artist}</bdi></span></span>
-     </button>
-     <span className="album-track-badges">{trackId&&props.playerTrackId===trackId&&<PlaybackIndicator/>}{badge}{inLibrary?' · En Biblioteca':''}</span>
-     {(props.actionKey??props.selectedKey)===choice.id&&props.songActions}
-    </li>;
+    const local=trackId?localTrackIndex.get(trackId):undefined;
+    const inLibrary=!!member(choice.id,index);
+    return <AlbumTrackRow key={`${track.disc}:${track.position}`} track={track} trackId={trackId} present={present} inLibrary={inLibrary} failed={failed} copyState={copy?.state} saved={!!savedAlbum} host={props.trackMenuHost} playing={!!trackId&&props.playerTrackId===trackId&&!!props.playerPlaying} visible={props.visible&&!props.metadataOnly} disabled={inspecting||props.coordinator.running||!!props.songPending} local={local} albumTitle={detail.edition.title} onChoose={()=>{if(active()&&!props.coordinator.running&&!inspecting)props.onChoose(choice,queueSlots,index);}} songActions={(props.actionKey??props.selectedKey)===choice.id&&props.songActions}/>;
    })}</ol>
   </> }
 
-   <details className="catalog-sources"><summary>Fuente de los metadatos</summary><p>Catálogo {detail&&musicBrainzId(detail.edition.id)||!detail&&editions.some(e=>musicBrainzId(e.id))?<a href={detail&&musicBrainzId(detail.edition.id)?'https://musicbrainz.org/release/'+detail.edition.id.slice(12):'https://musicbrainz.org'} target="_blank" rel="noopener noreferrer">MusicBrainz · respaldo</a>:<a href="https://www.apple.com/itunes/" target="_blank" rel="noopener noreferrer">iTunes US</a>}.</p></details>
+
  </section>;
 }
