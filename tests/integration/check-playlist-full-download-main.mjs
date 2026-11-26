@@ -1308,7 +1308,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await song.tap();await page.waitForFunction(()=>!!window.testReleaseSong);
      await searchAlbum.tap();await albumHeading();
      await saveAlbum();await page.getByRole('button',{name:'Opciones del álbum',exact:true}).waitFor();
-     const otherSong=page.getByRole('button',{name:/Pulso Luz Uno/});
+     const otherSong=page.locator('.album-track-main').filter({hasText:'Pulso Luz Uno'});
      const otherSongEnabled=await otherSong.isEnabled();
      await page.getByRole('button',{name:'Añadir álbum',exact:true}).tap();
      await back('Volver a búsqueda');await searchArtist.tap();await artistHeading();
@@ -1341,7 +1341,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await search(title);
      const cached=page.locator('[data-catalog-kind=track]').filter({hasText:title});
      await sweep(cached,()=>cached.and(page.locator('[aria-pressed=true]')).waitFor());
-     await page.locator('.mini-player__title').waitFor({state:'attached'});
+     await page.locator('.mini-player__title').filter({hasText:title}).waitFor();
     }else{
      await tapAt(searchAlbum,.12,.5);await albumHeading();await back('Volver a búsqueda');
     }
@@ -1363,7 +1363,7 @@ async function checkCase(browser,engine,mode,repetition,origin,bundle){
      await sweep(searchSong,()=>page.locator('[data-suggestion-id][aria-pressed=true]').filter({hasText:cTrack.title}).waitFor());
      await discography();await back('Volver a búsqueda');
      gateOn=false;unblockRead();
-     await page.locator('.mini-player__title').waitFor({state:'attached'});
+     await page.locator('.mini-player__title').filter({hasText:tracks[0].track.title}).waitFor();
      const playing=await inspect(page,[tracks[0].track.id]);
      assert.equal(playing.copies[0].sha256,tracks[0].expected.sha256);
      assert.equal(trace.filter(event=>event.kind==='read').length,1);

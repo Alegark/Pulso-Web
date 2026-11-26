@@ -535,7 +535,7 @@ try{
        assert.equal(await page.evaluate(account=>localStorage.getItem('pulso:library-download:v1:'+account),user),null);
        report.cases.push({engine,mode,status:'PASS'});continue;
       }
-      if(mode==='update-priority-album')await page.locator('.album-tracks li').filter({hasText:'Pista 4'}).getByText('Descargada',{exact:false}).waitFor();
+      if(mode==='update-priority-album')await page.locator('.album-tracks li[data-track-state="downloaded"]').filter({hasText:'Pista 4'}).waitFor();
       else await page.getByText('Copia guardada. Pulsa Reproducir para escucharla.',{exact:false}).first().waitFor();
       assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('testonly-plays'))),0);
       assert.equal(await page.evaluate(account=>JSON.parse(localStorage.getItem('pulso:library-download:v1:'+account)).id,user),previousId);
