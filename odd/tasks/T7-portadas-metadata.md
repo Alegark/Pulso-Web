@@ -1,5 +1,7 @@
 # T7 · Metadatos y portadas locales · EN CURSO
 
+**Decisión del propietario del 2026-11-25.** Se autoriza guardar en el teléfono una caché permanente y acotada de miniaturas externas e información de canciones. [T26](T26-cache-portadas-info.md#cambio-de-criterio-sobre-t7-decisión-expresa-del-propietario) sustituye el criterio histórico de mantener estas imágenes exclusivamente en RAM. La caché usa un almacén separado y respeta las portadas locales y la ocultación manual.
+
 Objetivo: completar las partes pendientes de W12/T7 y base de W06/T10, conforme I.import/I.model/I.security, V7/V21/V22/V23/V27. ODD + Engram Pulso-Web propios; USD 0. No fuentes externas, letras comerciales, cuentas ni cambios a otros proyectos. iPhone pendiente, no gate de esta fase web.
 
 Base real: importación MP3/M4A/WAV en worker, copia OPFS/IDB con verificación/recovery y metadata título/artista/álbum; portadas omitidas mediante skipCovers. El parser y la duración no prueban compatibilidad exhaustiva ni truncación de todos los formatos.

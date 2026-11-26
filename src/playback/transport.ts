@@ -7,15 +7,27 @@ import {copySourceAsset,copySourceAssets,copySourceReply,sameSourceAsset,copySou
 export type {PreparedLocalSources,PreparedLocalSource,SourcePreparationControl,LocalSourcePreparation,SourcePreparationResult,NewSourceBundle} from './local-source-protocol';
 export let transportNotice='';
 let workerUnavailable=false;
-const capabilityChecks=new WeakMap<ServiceWorker,Promise<boolean>>();
-function supportsLocalAssets(controller:ServiceWorker):Promise<boolean>{
+type LocalCapabilities={physical:boolean;verifyOnRead:boolean};
+const capabilityChecks=new WeakMap<ServiceWorker,Promise<LocalCapabilities|null>>();
+function localCapabilities(controller:ServiceWorker):Promise<LocalCapabilities|null>{
  let check=capabilityChecks.get(controller);if(check)return check;
  check=new Promise(resolve=>{
- const channel=new MessageChannel();const finish=(supported:boolean)=>{clearTimeout(timer);channel.port1.close();resolve(supported);};
- const timer=window.setTimeout(()=>finish(false),1500);
- channel.port1.onmessage=event=>{const m=event.data;finish(m?.version===1&&m.type==='transport-capabilities'&&m.readerProtocol==='local-assets-v1'&&Array.isArray(m.backends)&&['idb','opfs'].every(backend=>m.backends.includes(backend)));};
- try{controller.postMessage({version:1,type:'transport-capabilities'},[channel.port2]);}catch{finish(false);}
+ const channel=new MessageChannel();
+ const finish=(supported:LocalCapabilities|null)=>{clearTimeout(timer);channel.port1.close();channel.port2.close();resolve(supported);};
+ const timer=window.setTimeout(()=>finish(null),1500);
+ channel.port1.onmessage=event=>{
+  const m=event.data;
+  const valid=m?.version===1&&m.type==='transport-capabilities'&&m.readerProtocol==='local-assets-v1'&&Array.isArray(m.backends)&&['idb','opfs'].every(backend=>m.backends.includes(backend));
+  finish(valid?{physical:m.physicalSources===1,verifyOnRead:m.verifyOnRead===1}:null);
+ };
+ try{controller.postMessage({version:1,type:'transport-capabilities'},[channel.port2]);}catch{finish(null);}
  });capabilityChecks.set(controller,check);return check;
+}
+export async function controllerVerifiesLocalPlayback():Promise<boolean>{
+ const container=navigator.serviceWorker,controller=container?.controller;
+ if(!controller)return false;
+ const capabilities=await localCapabilities(controller);
+ return controller===container.controller&&capabilities?.physical===true&&capabilities.verifyOnRead;
 }
 type TicketReply={tokens:string[]}|{status:403|503;notice:unknown};
 function copyTicketReply(value:unknown,count:number):TicketReply|null {
@@ -56,7 +68,7 @@ async function localController(check:()=>void,strict=false,signal?:AbortSignal):
  check();
  const controller=await waitForController(container,signal);check();
  if(!controller){transportNotice=compatibleNotice;return null;}
- const supported=await supportsLocalAssets(controller);check();
+ const supported=await localCapabilities(controller);check();
  if(controller!==navigator.serviceWorker.controller)throw new Error('El transporte local cambió.');
  if(!supported){
  // An old/temporarily unavailable controller cannot attest to the new storage contract.
@@ -116,14 +128,9 @@ export async function prepareLocalSources(assetIds:string[],ownerProof:string,cu
  if(!controller)return await prepareBoundedBlobSources(assetIds,ownerProof,()=>{check();return true;});
  // Initial claim is allowed. ANY subsequent event invalidates even A -> B -> A.
 
- const supported=await new Promise<boolean>((resolve,reject)=>{
- const channel=new MessageChannel();let settled=false;
- const finish=(result:boolean,error?:unknown)=>{if(settled)return;settled=true;clearTimeout(timer);channel.port1.close();channel.port2.close();error?reject(error):resolve(result);};
- const timer=window.setTimeout(()=>finish(false),1500);
- channel.port1.onmessage=event=>{try{check();if(controller!==container.controller)throw new Error('El transporte local cambió.');const m=event.data;finish(m?.version===1&&m.type==='transport-capabilities'&&m.physicalSources===1);}catch(error){finish(false,error);}};
- try{controller.postMessage({version:1,type:'transport-capabilities'},[channel.port2]);}catch(error){finish(false,error);}
- });check();if(controller!==container.controller)throw new Error('El transporte local cambió.');
- if(!supported)return await prepareBoundedBlobSources(assetIds,ownerProof,()=>{check();return true;});
+ const capabilities=await localCapabilities(controller);check();
+ if(controller!==container.controller)throw new Error('El transporte local cambió.');
+ if(!capabilities?.physical)return await prepareBoundedBlobSources(assetIds,ownerProof,()=>{check();return true;});
  const expected:NonNullable<ReturnType<typeof copySourceAsset>>[]=[];
  for(const id of assetIds){check();const record=await readRecord<unknown>('assets',id);check();const asset=copySourceAsset(record);if(!asset||asset.id!==id)throw AppFailure.create(makeFailure('read','integrity',record===undefined?'asset-missing':'local-corrupt','idb'));expected.push(asset);}
  const requestId=crypto.randomUUID(),tokens=assetIds.map(()=>crypto.randomUUID());
@@ -194,27 +201,18 @@ export function startLocalSourcePreparation(values:readonly Readonly<import('../
   try{
    if(!expected||!expected.length||!sourceProof(ownerProof))throw AppFailure.create(makeFailure('validate','internal','input-invalid','none'));
    check();const controller=await localController(check,true,abort.signal);check();
-   let supported=false;
-   if(controller){
-    supported=await new Promise<boolean>((resolve,reject)=>{
-     const channel=new MessageChannel();let done=false;
-     const finish=(value:boolean,error?:unknown)=>{if(done)return;done=true;clearTimeout(timeout);channel.port1.close();channel.port2.close();error?reject(error):resolve(value);};
-     const timeout=setTimeout(()=>finish(false),1500);
-     channel.port1.onmessage=event=>{try{check();if(controller!==container.controller)throw new Error('controller changed');const m=event.data;finish(m?.version===1&&m.type==='transport-capabilities'&&m.physicalSources===1);}catch(error){finish(false,error);}};
-     try{controller.postMessage({version:1,type:'transport-capabilities'},[channel.port2]);}catch(error){finish(false,error);}
-    });check();
-   }
-   if(!controller||!supported){
+   const capabilities=controller?await localCapabilities(controller):null;check();
+   if(controller&&controller!==container.controller)throw new Error('controller changed');
+   if(!controller||!capabilities?.physical){
     // No legacy fixture tickets: they can revoke previous legacy sources.
     const credit=control.reserveBlob(expected);if(!credit)throw AppFailure.create(makeFailure('admit','internal','limit-exceeded','none'));
     bundle=await prepareBoundedBlobSources(expected.map(a=>a.id),ownerProof,()=>{check();return true;},{expected,signal:abort.signal,deadlineAt:control.deadlineAt,credit});
    }else{
-    // Tickets attest a physical manifest, not its bytes. Verify each unique
-    // source once before publishing any ticket, keeping its shared generation
-    // lock through the native pin reply. Blob already hashes while composing.
+    // Replacement queues can pin metadata now and verify each selection in the
+    // worker. Insertion admission and older controllers retain the eager check.
     const readers:AssetReader[]=[],verifiedSnapshots=new Set<string>();
     try{
-    for(const asset of expected){
+    if(!control.verifyOnRead||!capabilities.verifyOnRead)for(const asset of expected){
      const key=JSON.stringify(asset);if(verifiedSnapshots.has(key))continue;
      check();const reader=await openAssetReader(asset,true,{signal:abort.signal});readers.push(reader);check();
      const verified=await reader.verifyDetailed(true,{check});

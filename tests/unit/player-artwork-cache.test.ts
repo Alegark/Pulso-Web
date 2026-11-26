@@ -9,15 +9,15 @@ test('la caché comparte un Blob y avisa también al retirar una entrada',()=>{
  const observed:(Blob|undefined)[]=[];
  const unsubscribe=cache.subscribe(()=>observed.push(cache.get('primera')?.blob));
  cache.set('primera',first);
- for(let i=0;i<8;i++)cache.set(String(i),cover(1));
+ for(let i=0;i<64;i++)cache.set(String(i),cover(1));
  assert.equal(observed.at(0),first.blob);
  assert.equal(observed.at(-1),undefined);
  assert.equal(cache.get('primera'),undefined);
  assert.ok(cache.get('0'));
- assert.ok(cache.get('7'));
+ assert.ok(cache.get('63'));
  unsubscribe();
  cache.set('fin',cover(1));
- assert.equal(observed.length,9);
+ assert.equal(observed.length,65);
 });
 
 test('el presupuesto de bytes se aplica también al reemplazar una carátula',()=>{

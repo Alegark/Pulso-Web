@@ -584,3 +584,27 @@ La revisión independiente final de `df3575f` frente a v60 dio «Seguro publicar
 Los recibos y el manifiesto publicado están en `.local/test-evidence/publish-v61/`. `site-manifest.json` contiene 309 archivos, ocupa 75.383 bytes y tiene SHA-256 `9ad4e2b31fdd0a928d01cddcb2325caa402aa08d422373fd293f40fb5197248c`.
 
 Las 16 pruebas de aceptación en iPhone físico siguen **NO EJECUTADAS**. P0-W sigue abierto.
+
+## 2026-11-25 · Entrada con logo y minirreproductor sin avisos
+
+Base v62 (`f97ebb5`). Durante la comprobación inicial de la cuenta se muestra el icono de 192 px del manifiesto, centrado sobre el fondo del tema, sin animación. «Comprobando tu sesión…» queda en un elemento con `role="status"` recortado fuera del flujo. La pantalla de error conserva su aviso y su botón de reintento.
+
+La apertura de la biblioteca y la restauración de la cola anuncian su estado en una región accesible del minirreproductor. Los avisos que confirman acciones, como añadir entradas a continuación o al final, preparar otra cola, vaciarla o pedir control desde esta pestaña, siguen visibles y se pueden cerrar. Así se confirma el efecto de la acción en el momento en que se solicita.
+
+- **E01.** Con la comprobación de cuenta retenida, se carga el icono de Pulso centrado en ambos ejes. El texto de sesión aparece en el árbol accesible y su caja queda recortada. A 320, 390 y 430 px con texto al 200 %, el diálogo cabe en ambos temas y respeta el movimiento reducido. Un fallo de conexión conserva el error y permite reintentar.
+- **E02.** Desde el arranque con cola guardada hasta que queda lista y pausada, ningún aviso ocupa espacio sobre el minirreproductor. Añadir una entrada a continuación mediante su menú conserva una confirmación visible y descartable.
+- **E03.** Si la cola contiene una entrada sin audio y un orden aleatorio inválido, la entrada disponible se restaura en pausa. Los dos avisos se leen en la región `aria-live="polite"` de una caja de 1 px, fuera del flujo.
+- **E04.** Si sólo falla la lectura del registro de posición más reciente, se restaura la cola con la posición de su instantánea en pausa y el fallo queda anunciado en la región accesible.
+- **E05.** Si no se puede leer la instantánea de la cola, el fallo se anuncia sin ocupar espacio. Se puede seleccionar otra canción local y reproducirla desde la biblioteca.
+
+| Requisito | Prueba en `check-startup-splash.mjs` | Nivel | `f97ebb5` | Rama |
+|---|---|---|---|---|
+| E01 | Retiene la configuración de cuenta, abre en los tres anchos y mide el estado y el icono en ambos temas con texto al 200 %. Devuelve HTTP 503 y reintenta. | B | FAIL en ambos motores. El texto de comprobación ocupa espacio visible. | PASS en ambos motores, 3 anchos por motor. |
+| E02 | Observa los estados de arranque, comprueba que la cola sigue en pausa y añade una entrada desde Favoritos. | B | FAIL en ambos motores. Se pintan avisos durante el arranque. | PASS en ambos motores. La adición conserva su confirmación visible. |
+| E03 | Siembra una cola parcial con orden aleatorio inválido y comprueba la región viva, su caja y el árbol accesible. | B | FAIL en ambos motores. Los avisos se muestran en el aviso visible del shell. | PASS en ambos motores. Los avisos se leen en la región recortada. |
+| E04 | Inyecta un fallo al leer `library-playback-position` y verifica que se recuperan los 2 s de la cola guardada. | B | FAIL en ambos motores. Se informa un fallo de apertura de almacenamiento y se abandona la restauración. | PASS en ambos motores. Recupera la cola en pausa a los 2 s. |
+| E05 | Inyecta un fallo al leer `library-playback` y reproduce desde Favoritos tras comprobar el anuncio. | B | FAIL en ambos motores. El error se trata como fallo de apertura y la selección nueva no empieza a reproducirse. | PASS en ambos motores. Se puede reproducir una selección nueva. |
+
+Pruebas locales con audio WAV, cuentas y biblioteca sintéticos. Pasaron `test:unit` (1.041 casos), `typecheck`, `typecheck:tests`, `lint` y `build`. `check-player-notice.mjs` pasó 10/10 en `f97ebb5` y 10/10 en la rama. Los navegadores fueron Chromium 154.0.8037.57 y WebKit 27.2. La aceptación en iPhone físico sigue pendiente.
+
+Publicación y verificaciones de v63 en [P0-W](P0-W.md#2026-11-25--publicación-de-v63).

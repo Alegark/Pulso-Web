@@ -2469,6 +2469,7 @@ Las 16 pruebas de aceptación en iPhone físico siguen **NO EJECUTADAS**. P0-W s
 ## 2026-11-25 · Velocidad de adquisición y primer sonido
 
 - [T25](T25-velocidad-bots.md) fija las métricas y pruebas de los incrementos de velocidad de bots.
+- [T27](T27-inicio-local-rapido.md) cubre el primer sonido, el avance y la integridad del audio ya descargado.
 
 ## 2026-11-25 · T25 incremento 1 publicado en v62
 
@@ -2479,3 +2480,29 @@ Pasaron el build, las 73 pruebas de Cloudflare, la preparación y la simulación
 La revisión independiente aprobó v62 con cero bloqueantes y cero altos. En el control sintético la ganancia determinista es de unos 200 ms menos por pista con menú (S02, un `getMessages` menos) y 200 ms menos de sondeo con bots lentos (S01). La serie concurrente de WebKit carece de comparabilidad por contención de CPU.
 
 Quedan M1 (conexión de Telegram durante toda la sesión), M2 (límites de la medición), M3 (cableado del SDK sin prueba unitaria directa) y los menores sobre `getState` al reconectar, la clasificación de `messageEmpty` en audio directo, el comentario sobre lecturas del callback y la verificación real. Telegram real y las 16 pruebas físicas de iPhone siguen **NO EJECUTADOS**. P0-W sigue abierto. [Matriz y recibos de T25](T25-velocidad-bots.md#2026-11-25--publicación-de-v62).
+
+## 2026-11-25 · Caché de portadas e información
+
+La decisión del propietario del 2026-11-25 autoriza la caché persistente y acotada en el teléfono. [T26](T26-cache-portadas-info.md) define los incrementos. El primero parte de `f803135` y cubre el almacén dedicado, portadas de catálogo y proveedor, reapertura offline y purga de cuenta.
+
+## 2026-11-25 · Integración v63
+
+Se integraron sobre v62 `perf/t25-m1`, `fix/startup-splash-notice`, `perf/t26-inc1` y `perf/t27-local-start`, sin conflictos; se aplicaron limpiamente las actas pendientes de T25 y T27. En local: unitarias 1053/1053, servidor 73/73, Python 10/10, tipos, tipos de pruebas, lint y build PASS. En Chromium y WebKit: matriz funcional 122/122, reanudación 92/92, carátulas/dock 12/12, avisos 10/10, splash 14/14, T27 integridad 28/28 y playlist 4/4. M1 verificó sus condiciones en ambos motores; WebKit señaló la CSP heredada también en la repetición.
+
+Caché: 17/22 inicialmente; C03 WebKit (dos casos) pasó al repetir. C04 portada incrustada WebKit se repitió y falló igual en v62. C06 cierre de sesión falló dos veces en ambos motores al buscar «Mi cuenta»; en v62 el mismo caso falla antes por no existir la caché, por lo que su causa y clasificación siguen pendientes, sin afirmar regresión ni aceptación.
+
+Corrección C06: la prueba móvil estaba en detalle de biblioteca, que oculta la cabecera; volver a Inicio permite cerrar sesión. C06 pasa en ambos motores con purga por cuenta y comparación de biblioteca/OPFS/Cache API; la comparación de IndexedDB local no cubre todos sus almacenes. En la batería de caché, C02 WebKit falló en el recuento de desalojo (21/22).
+
+Corrección C02: la prueba esperaba menos de 670 entradas aunque 31 escrituras nuevas dejan 670 tras el desalojo; WebKit midió 669/670/670 y finalmente 639 antiguas + 31 nuevas. Ahora espera las 30 portadas persistidas y comprueba 639 antiguas y el tope: C02 PASS en ambos motores; batería Chromium 11/11, WebKit 9/11 (fallos C03 reapertura y C04 incrustada, ya observados); tipos y lint PASS.
+
+Mediciones sintéticas Chromium, cinco corridas por versión: primer sonido de una pista v62→v63, IDB 550→495 ms y OPFS 1114→574 ms; playlist de 30 pistas IDB 6467→718 ms y OPFS 13796→627 ms. T27 P01 no alcanzó la reducción exigida del 50 % para una pista (10,0 % IDB y 48,5 % OPFS); P02 y P05 pasaron en estas mediciones. Tras volver de segundo plano M1: 2633→2642 ms. Revisión independiente y aceptación física en iPhone pendientes; esta integración no constituye publicación.
+
+## 2026-11-25 · Publicación de v63
+
+Cloudflare Workers Free (USD 0) sirve [v63](https://pulso-web.pruebassoftware.workers.dev/releases/87a4e7d0841ad483.html) desde `79d091b20b71ca4bb97b5f1e520f9269002d747c` de `release/v63`. Incluye M1 de T25, el logo de entrada y el minirreproductor sin avisos de T8, T26 incremento 1 y el arranque rápido de audio descargado de T27. El MCP oficial confirmó la versión `da7eba83-9005-4e17-8d9c-deaecd73671b` al 100 % en el despliegue `ae742a9c-5814-4237-8e48-854d35cee8e1`, creado a las `23:16:56.956722Z`. El PUT usó las 14 reglas de `run_worker_first` y omitió `serve_directly`. La lectura posterior confirmó los 13 bindings, secretos por nombre, cuatro límites de tasa, subdominio, configuración de ejecución y reglas de v62. El módulo publicado conserva los bytes de v62 (330.474, SHA-256 `0e19eceae5ed70bec91e41e36ac05f70b5e1a0590d5c79d439443a6b13bfcb5a`) porque la simulación solo difirió en comentarios generados de rutas de dependencias.
+
+El build, las 73 pruebas de servidor, la preparación de Cloudflare y la simulación de Wrangler 4.161.0 pasaron. El freeze retuvo 16 publicaciones anteriores y los 203 archivos del inventario heredado, con cero retiradas. La sesión pidió 19 assets en tres buckets. La verificación HTTPS confirmó `latest.json`, el 307 de la entrada al 200 de su ruta canónica y el meta `pulso-release` con valor `87a4e7d0841ad483`. Coincidieron bytes y SHA-256 en 323/323 rutas estáticas públicas, incluido `sw.js`. La entrada actual y 57 entradas históricas abrieron la app vigente con cabeceras de navegación (228/228 comprobaciones históricas con y sin extensión, usando Accept o Fetch Metadata). Turnstile conservó la clave pública y las directivas CSP de script y marco. Perfil y biblioteca anónimos devolvieron 401.
+
+La revisión independiente dio «Seguro publicar v63 completa», sin bloqueantes ni altos. La batería integrada y las mediciones están registradas arriba y en la matriz de T25. En Chromium sintético el primer sonido de una playlist de 30 pistas pasó de 6.467 a 718 ms en IDB y de 13.796 a 627 ms en OPFS. Quedan los menores de la revisión de v63, el arnés C03 y el fixture C04 de WebKit, y el ciclo de vida de la URL de objeto en `CatalogArtwork.tsx`. En T27 P01, la pista suelta IDB mejoró un 10,0 % y OPFS un 48,5 % en Chromium, frente a la meta del 50 %. Telegram real y las 16 pruebas físicas de iPhone siguen **NO EJECUTADAS**. P0-W sigue abierto.
+
+Los recibos compactos están en `.local/test-evidence/publish-v63/`. El manifiesto promovido `site-manifest.json` contiene 326 archivos, mide 80.488 bytes y tiene SHA-256 `92b33299831a3157c41376a0c504410e82d5f250b700dbba78e9047080d2116b`. La [receta versionada](../../docs/CLOUDFLARE.md#procedimiento-de-publicación-paso-a-paso) se usó en esta publicación. Se completó la lectura posterior con el comando de verificación tras corregir la interpretación del identificador del PUT y el manejo de las cabeceras y la redirección de índice.

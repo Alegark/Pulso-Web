@@ -54,6 +54,8 @@ Relación con las aceptaciones pendientes:
 - **D4:** offline.
 - **C4 a C7:** suspensión, red y reanudación de lotes en el dispositivo real.
 
+Al probar una versión que incluya T25 M1, en **A2** vuelve del segundo plano después de dejar la app en reposo y comprueba que la primera canción remota se puede iniciar sin pedir el código. En **C4** y **C5**, comprueba también que la descarga activa conserva el progreso cuando la app vuelve al primer plano.
+
 Ninguna queda aceptada por estar en esta lista.
 
 ## Historial

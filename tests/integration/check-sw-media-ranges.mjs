@@ -13,7 +13,7 @@ try{
  await build({configFile:false,logLevel:'error',publicDir:false,define:{SHELL_FILES:JSON.stringify(['/','/index.html'])},build:{outDir:out,lib:{entry:'src/service-worker/sw.ts',formats:['es'],fileName:()=> 'sw.js'}},plugins:[{
   name:'testonly-sw-media-counters',enforce:'pre',transform(code,id){
    if(id.endsWith('/storage/database.ts'))return code.replace('req = indexedDB.open(DATABASE, 2);','req = indexedDB.open(DATABASE, 2); Reflect.set(globalThis,"testOpens",(Reflect.get(globalThis,"testOpens")??0)+1);');
-   if(id.endsWith('/storage/asset-reader.ts'))return code.replace('const hash=integrity?sha256.create():null;', 'const hash=integrity?sha256.create():null; if(hash)Reflect.set(globalThis,"testHashes",(Reflect.get(globalThis,"testHashes")??0)+1);');
+   if(id.endsWith('/storage/asset-reader.ts'))return code.replace('const hash=integrity===true?sha256.create():null;', 'const hash=integrity===true?sha256.create():null; if(hash)Reflect.set(globalThis,"testHashes",(Reflect.get(globalThis,"testHashes")??0)+1);');
    if(id.endsWith('/service-worker/sw.ts'))return code+`
 self.addEventListener('message',event=>{
  if(event.data==='test-close-database')event.waitUntil((async()=>{
@@ -86,9 +86,9 @@ self.addEventListener('message',event=>{
      navigator.serviceWorker.controller.postMessage(message,[channel.port2]);
     });
     const mint=async()=>{const tokens=[crypto.randomUUID()];const reply=await rpc({version:1,type:'pinned-local-sources',requestId:crypto.randomUUID(),ownerProof,expected:[asset],tokens});if(reply.status)throw Error(JSON.stringify(reply));return tokens[0];};
-    const get=async(token,range)=>{const r=await fetch('/_pulso/media/'+token,{headers:{Range:range}});const body=new Uint8Array(await r.arrayBuffer());return {status:r.status,length:body.length,first:body[0],last:body.at(-1),contentRange:r.headers.get('content-range')};};
-    const corruptRevision=async()=>{
-     const bad=data.slice();bad[65536]^=255;asset.revision++;
+    const get=async(token,range,selection='')=>{const r=await fetch('/_pulso/media/'+token+selection,{headers:{Range:range}});const body=new Uint8Array(await r.arrayBuffer());return {status:r.status,length:body.length,first:body[0],last:body.at(-1),contentRange:r.headers.get('content-range')};};
+    const corruptRevision=async(newRevision=true)=>{
+     const bad=data.slice();bad[65536]^=255;if(newRevision)asset.revision++;
      if(file)await writeFile(bad);
      await write(['assets','chunks'],tx=>{
       tx.objectStore('assets').put(asset,id);
@@ -128,14 +128,17 @@ self.addEventListener('message',event=>{
     await rpc('test-close-database');
     const revoked=await get(token,'bytes=0-1'),retry=await revalidate(),beforeRetry=await rpc('test-counters');
     const recovered=await get(token,'bytes=0-1'),afterRetry=await rpc('test-counters');
+    await corruptRevision(false);
+    const badReselection=await get(token,'bytes=0-1','?selection='+crypto.randomUUID());
     await corruptRevision();
     const oldTicket=await get(token,'bytes=0-1'),bad=await get(await mint(),'bytes=0-1');
-    return {before,first,afterFirst,second,cross,afterRanges,revoked,retry,beforeRetry,recovered,afterRetry,oldTicket,bad,keys:await window.pulsoTest.ticketKeys()};
+    return {before,first,afterFirst,second,cross,afterRanges,revoked,retry,beforeRetry,recovered,afterRetry,oldTicket,badReselection,bad,keys:await window.pulsoTest.ticketKeys()};
    });
    assert.deepEqual(result.first,{status:206,length:2,first:0,last:1,contentRange:'bytes 0-1/131083'});
    assert.equal(result.second.length,131083);
    assert.deepEqual(result.cross,{status:206,length:16,first:65530%251,last:65545%251,contentRange:'bytes 65530-65545/131083'});
    assert.equal(result.oldTicket.status,409);
+   if(result.badReselection.status!==409)process.exitCode=1;
    assert.equal(result.bad.status,409,'the first read of a new revision verifies bytes outside the requested range');
    assert.deepEqual(result.afterFirst,{opens:result.before.opens+1,hashes:result.before.hashes+1});
    assert.deepEqual(result.afterRanges,{opens:result.afterFirst.opens+2,hashes:result.afterFirst.hashes});
@@ -149,7 +152,8 @@ self.addEventListener('message',event=>{
    const offline=await page.goto(origin+notification.opened);
    assert.ok(offline?.ok()&&offline.fromServiceWorker());
    assert.equal(await page.title(),'Local SW media test');
-   console.log(JSON.stringify({backend,passed:true,reads:3,hashes:1,opens:3,foreignStatus,oldTicket:409,firstReadOfCorruptRevision:409,orphanV2Pruned:true,obsoleteShellPruned:true,newHashAfterReadmission:true,notification,offlineRoot:true}));
+   console.log(JSON.stringify({backend,passed:result.badReselection.status===409,reads:3,hashes:1,opens:3,foreignStatus,oldTicket:409,firstReadOfCorruptRevision:409,
+    sameRevisionReselection:result.badReselection.status,orphanV2Pruned:true,obsoleteShellPruned:true,newHashAfterReadmission:true,notification,offlineRoot:true}));
   }finally{await context.close();}
  }
 }finally{

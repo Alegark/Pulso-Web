@@ -1,7 +1,7 @@
 import type {NetworkTiming} from '../diagnostics/download-timing';
 /// <reference lib="webworker" />
 import {hasSavedTelegramSession,clearSavedTelegramSession} from './saved-session';
-import {parseSessionCommand,sessionFailure,type SessionCommand,type SessionReply,type Delivery} from './session-protocol';
+import {parseConnectionCommand,parseSessionCommand,sessionFailure,type SessionCommand,type SessionReply,type Delivery} from './session-protocol';
 import {decodeTelegramApiIdentity,API_IDENTITY_INPUT_BYTES} from './api-identity';
 import {parseAccountBinding,parseSourcesCommand,type SourcesCommand} from './sources-protocol';
 import type {SourcesDriver} from './sources-driver';
@@ -115,6 +115,13 @@ function reply(command:SessionCommand,error:SessionReply['error']=null,waitUntil
  self.postMessage({version:2,session,request:command.request,phase,error,retryAt:waitUntil,delivery,binding:phase==='connected'?parseAccountBinding(client!.getAccountBinding()):null,saved:phase==='connected'?parseSaved(sources!.getSaved()):null,...(vaultGeneration?{vaultGeneration}:{}),...(phase==='code'?{codeResend}:{}),...(phase==='qr'&&qrChallenge?{qr:qrChallenge}:{}),...(phase==='connected'&&bots?{bots:bots.getSnapshot()!.providers}:{})} satisfies SessionReply);
 }
 self.onmessage=event=>{
+ if(event.data?.protocol==='pulso-telegram-connection'){
+  const connection=parseConnectionCommand(event.data);
+  if(!connection||connection.session!==session||!client||phase!=='connected'){closeLocal();return;}
+  if(connection.type==='warm')client.warmConnection?.();
+  else if(!active&&!searchFlight&&!searchControl&&!botFlight&&!botControl&&!page&&!control)void client.suspendConnection?.().catch(closeLocal);
+  return;
+ }
  if(event.data?.protocol==='pulso-bot-search'){const command=parseBotSearchCommand(event.data);if(!command){closeLocal();return;}void searchCommand(command);return;}
  if(event.data?.protocol==='pulso-bot-providers'){const bot=parseBotProvidersCommand(event.data);if(!bot){closeLocal();return;}void botCommand(bot);return;}
  if(event.data?.protocol==='pulso-sources'){const source=parseSourcesCommand(event.data);if(!source){closeLocal();return;}void sourceCommand(source);return;}
@@ -132,7 +139,8 @@ self.onmessage=event=>{
     if(!await ready.restore(abort.signal)){phase='disconnected';reply(command);closeLocal();return;}
    }else if(command.type==='logout'){
     // Forget this authorization even if remote quiescence cannot be confirmed.
-    await client!.forgetSavedAuthorization?.(abort.signal);
+    try{await client!.connectForLogout?.();}
+    finally{await client!.forgetSavedAuthorization?.(abort.signal);}
     if(search){const settled=await search.quiesce();if(searchFlight)await searchFlight;if(searchControl)await searchControl;if(abort.signal.aborted)return;if(!settled||!client?.getAccountBinding()){phase='error';reply(command,'logout-unconfirmed');closeLocal();return;}}
     if(bots){const settled=await bots.quiesce();if(botFlight)await botFlight;if(botControl)await botControl;if(!settled||!client?.getAccountBinding()){phase='error';reply(command,'logout-unconfirmed');closeLocal();return;}}
     if(page){const settled=await sources!.quiesce();await page;if(!settled||!client?.getAccountBinding()){phase='error';reply(command,'logout-unconfirmed');closeLocal();return;}}

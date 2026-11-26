@@ -21,6 +21,35 @@ test('el progreso no cambia la cola y callbacks de otra selección no actualizan
 test('cola conserva ocurrencias A/B/A y seleccionar no reproduce por defecto', () => {
  const {audio,player} = setup(); player.select(0); assert.equal(audio.plays,0); assert.notEqual(player.entries[0].id,player.entries[2].id);
 });
+test('salta audio local inválido sin revivir avisos de una selección anterior',()=>{
+ const audio=new Fake();
+ let selection=0;
+ const player=new Player(audio,()=>true,undefined,src=>src+'?selection='+ ++selection);
+ player.setQueue(entries);
+ player.select(0,true);
+ const rejected=audio.src;
+ assert.equal(player.sourceForProtection,entries[0].src);
+ player.rejectLocalSource(rejected);
+ assert.equal(player.current.id,'q1');
+ assert.equal(audio.plays,2);
+ player.next();
+ assert.equal(player.current.id,'q2');
+ player.rejectLocalSource(rejected);
+ assert.equal(player.current.id,'q2');
+ assert.equal(audio.plays,3);
+});
+test('descarta una pasada de pistas inválidas con repetición y mantiene pausada la restauración',()=>{
+ const {audio,player}=setup();
+ player.select(0);
+ player.setRepeat('all');
+ for(const id of ['q0','q1','q2']){
+  assert.equal(player.current.id,id);
+  player.rejectLocalSource(audio.src);
+ }
+ assert.equal(player.state,'error');
+ assert.equal(player.following(),-1);
+ assert.equal(audio.plays,0);
+});
 test('ended duplicado avanza una vez y callback de generación antigua no avanza', () => {
  const {audio,player} = setup();
  const captured: EventListener[] = []; const original = audio.addEventListener.bind(audio);

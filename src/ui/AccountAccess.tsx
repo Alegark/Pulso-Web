@@ -14,6 +14,7 @@ export function AccountAccess({required=false}:{required?:boolean}={}){
  const [open,setOpen]=useState(false),[view,setView]=useState<AccountView>('sign-in'),[message,setMessage]=useState(''),[resetToken,setResetToken]=useState(''),[busy,setBusy]=useState(false);
  const [client,setClient]=useState<Awaited<ReturnType<typeof getAccountAuthClient>>|null>(null);
  const locked=state.pending||state.status==='checking'||busy;
+ const startup=required&&state.status==='checking';
  const onBusy=useCallback((next:boolean)=>{busyRef.current=next;setBusy(next);},[]);
  const onSession=useCallback(()=>{setResetToken('');void accountController.load().finally(()=>{busyRef.current=false;setBusy(false);});},[]);
  function close(){if(state.pending||busyRef.current||required&&!state.user)return;dialog.current?.close();setOpen(false);setMessage('');setResetToken('');setClient(null);const target=opener.current;opener.current=null;requestAnimationFrame(()=>{if(target?.isConnected)target.focus();});}
@@ -44,11 +45,12 @@ export function AccountAccess({required=false}:{required?:boolean}={}){
  },[open,state.status]);
  return <>
   <button type="button" className="account-access-button" onClick={event=>show(event.currentTarget)} aria-haspopup="dialog">{state.user?'Mi cuenta':'Iniciar sesión'}</button>
-  <dialog ref={dialog} className="account-dialog" aria-labelledby="account-access-heading" onCancel={event=>{event.preventDefault();close();}}>
+  <dialog ref={dialog} className={startup?'account-dialog account-dialog--startup':'account-dialog'} aria-labelledby="account-access-heading" onCancel={event=>{event.preventDefault();close();}}>
    <div className="account-dialog__toolbar"><span className="account-dialog__brand">pulso<span aria-hidden="true">●</span></span>{(!required||state.user)&&<button type="button" aria-label="Cerrar cuenta de Pulso" disabled={locked} onClick={close}>Cerrar</button>}</div>
    <h2 id="account-access-heading" className={state.user?'':'account-dialog__sr-heading'} ref={heading} tabIndex={-1}>{state.user?'Tu cuenta de Pulso':'Tu acceso a Pulso'}</h2>
    {open&&<>
-    {state.status==='checking'&&<p role="status">Comprobando tu sesión…</p>}
+    <p className="pulso-visually-hidden" role="status">{state.status==='checking'?'Comprobando tu sesión…':null}</p>
+    {state.status==='checking'&&<img className="account-dialog__loading-logo" src="/icons/pulso-192.png" alt="" width="96" height="96"/>}
     {state.status==='disabled'&&<p role="status">El acceso a cuentas todavía no está habilitado. Inténtalo más tarde.</p>}
     {state.status==='unavailable'&&<><p role="alert">{state.error}</p><button type="button" onClick={()=>void accountController.load()}>Reintentar conexión de cuenta</button></>}
     {state.user?<div className="account-dialog__profile"><p><strong>{state.user.name}</strong><br/>{state.user.email}</p><p>{state.user.verified?'Correo verificado':'Correo pendiente de verificar'}</p>{state.status==='offline'&&<p>Sin conexión. Puedes escuchar las copias de este navegador; los cambios de cuenta esperan a que vuelvas a conectarte.</p>}<button type="button" disabled={locked||state.status==='offline'} onClick={()=>void accountController.signOut()}>Cerrar sesión de Pulso</button></div>:client&&state.status!=='disabled'&&state.status!=='unavailable'&&<Suspense fallback={<p role="status">Preparando el acceso…</p>}><AccountKit client={client} view={view} resetToken={resetToken} google={state.google} turnstileSiteKey={state.turnstileSiteKey} onBusy={onBusy} onSession={onSession} onView={setView}/></Suspense>}

@@ -18,6 +18,7 @@ import {createQrLoginDriver} from './qr-login-driver';
 import {prepareDefaultBotSelection} from './default-bot-selection';
 import type {QrLoginChallenge} from './qr-login-protocol';
 import {openCrypto} from './crypto-provider';
+import {TelegramConnection} from './connection-lifecycle';
 import {sessionLease,saveTelegramSession,loadTelegramSession,telegramSessionLeaseCurrent,clearTelegramSessionLease,loadTelegramBotSelection,saveTelegramBots,type SavedBot} from './saved-session';
 let nextAccountEpoch=0;
 /** Worker-private account wait: no account identity, peers or raw SDK errors. */
@@ -34,6 +35,9 @@ export interface TemporaryTelegramDriver {
  password(password:string,signal:AbortSignal):Promise<void>;
  logout(signal:AbortSignal):Promise<void>;
  close():Promise<void>;
+ suspendConnection?():Promise<void>;
+ warmConnection?():void;
+ connectForLogout?():Promise<void>;
  getAccountBinding():AccountBinding|null;
  getVaultGeneration?():string|null;
  getAccountCooldown?():TelegramAccountCooldown|null;
@@ -48,17 +52,24 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  const module=await WebAssembly.compile(await wasm.arrayBuffer());if(signal.aborted)throw Error('cancelled');
  const crypto=await openCrypto(module);if(signal.aborted)throw Error('cancelled');
  const platform=new WebPlatform();platform.log=()=>{};platform.getDefaultLogLevel=()=>LogManager.OFF;platform.getDeviceModel=()=> 'Pulso Web';
- const client=new BaseTelegramClient({apiId:identity.apiId,apiHash:identity.apiHash,storage:new MemoryStorage(),platform,crypto,transport:new WebSocketTransport(),updates:false,disableUpdates:false,storageOptions:{peers:{updatesWriteInterval:0}},logLevel:LogManager.OFF,initConnectionOptions:{appVersion:'Pulso Web 0.1',deviceModel:'Pulso Web',systemVersion:'Web',langCode:'es',systemLangCode:'es'}});
+ const storage=new MemoryStorage();
+ const createClient=()=>new BaseTelegramClient({apiId:identity.apiId,apiHash:identity.apiHash,storage,platform,crypto,transport:new WebSocketTransport(),updates:false,disableUpdates:false,storageOptions:{peers:{updatesWriteInterval:0}},logLevel:LogManager.OFF,initConnectionOptions:{appVersion:'Pulso Web 0.1',deviceModel:'Pulso Web',systemVersion:'Web',langCode:'es',systemLangCode:'es'}});
+ let client=createClient(),call=client.call.bind(client);
  // Disable automatic RPC retries/flood sleeps. DC migration remains SDK-managed.
- const call=client.call.bind(client);client.call=async(message,params)=>{
+ const accountRead:typeof client.call=async(message,params)=>{
   if(!message._.startsWith('auth.')&&message._!=='account.getPassword')admitAccountRead();
-  try{return await call(message,{floodSleepThreshold:0,maxRetryCount:0,timeout:30000,...params});}
+  try{
+   if(!connection.available)await connection.ensureAvailable();
+   if(params?.abortSignal?.aborted)throw Error('cancelled');
+   return await call(message,{floodSleepThreshold:0,maxRetryCount:0,timeout:30000,...params});
+  }
   catch(error){
    const failure=classifyTelegramFailure(error);observeAccountWait(failure);
    if(failure.error==='session-expired'&&persisted&&lease){await clearTelegramSessionLease(lease);persisted=false;}
    throw error;
   }
  };
+ client.call=accountRead;
  let closed=false,phone='',challenge='',closing:Promise<void>|undefined,lease='',persisted=false;
  let codeResend:CodeResend|null=null,resending=false;
  const rememberCode=(value:{type:string;phoneCodeHash:string;nextType:string;timeout:number})=>{
@@ -91,13 +102,39 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
   // SDK-like data only; drivers retain their original first cause independently.
   throw {text:'FLOOD_WAIT',seconds:Math.ceil((wait.retryAt!-Date.now())/1000)};
  };
- const accountRead:typeof client.call=(message,params)=>client.call(message,params);
+ const connectionAbort=new AbortController();
+ const connection=new TelegramConnection(connectionAbort.signal,()=>client.destroy(),async()=>{
+  const saved=await loadTelegramSession();
+  current(connectionAbort.signal);
+  const expired=():never=>{
+   persisted=false;
+   throw Error('session-expired');
+  };
+  if(!saved||saved.lease!==lease)return expired();
+  // Disconnect tears down the SDK's DC-config subscriptions. Use a fresh
+  // transport and keep the worker's WASM, drivers and auxiliary DC keys.
+  const next=createClient();
+  try{
+   await next.importSession(saved.value);
+   current(connectionAbort.signal);
+   if(!await telegramSessionLeaseCurrent(lease))expired();
+   current(connectionAbort.signal);
+   await next.connect();
+   current(connectionAbort.signal);
+   call=next.call.bind(next);
+   next.call=accountRead;
+   client=next;
+  }catch(error){
+   await next.destroy();
+   throw error;
+  }
+ },()=>getAccountCooldown()?.retryAt??null);
  const sourceLifetimeAbort=()=>{void close().catch(()=>{});};
- const close=()=>{if(closing)return closing;closed=true;phone=challenge='';codeResend=null;qr.close();signal.removeEventListener('abort',sourceLifetimeAbort);
+ const close=()=>{if(closing)return closing;closed=true;connectionAbort.abort();phone=challenge='';codeResend=null;qr.close();signal.removeEventListener('abort',sourceLifetimeAbort);
   // Invalidate publication first; keep original settlement before destroying its client.
   const pendingSearch=botSearch,pendingProviders=botProviders;pendingSearch?.close();sources?.close();pendingProviders?.close();
   binding=null;accountKey='';
-  closing=Promise.resolve().then(async()=>{if(pendingSearch)await pendingSearch.quiesce();if(pendingProviders)await pendingProviders.quiesce();await client.destroy();}).finally(()=>{botSearch=undefined;botSearchSession='';sources=undefined;sourcesSession='';botProviders=undefined;botProvidersSession='';accountCooldown=null;});
+  closing=Promise.resolve().then(async()=>{if(pendingSearch)await pendingSearch.quiesce();if(pendingProviders)await pendingProviders.quiesce();await connection.suspend();}).finally(()=>{botSearch=undefined;botSearchSession='';sources=undefined;sourcesSession='';botProviders=undefined;botProvidersSession='';accountCooldown=null;});
   void closing.catch(()=>{});return closing;
  };
  const current=(abort:AbortSignal)=>{if(closed||signal.aborted||abort.aborted)throw Error('cancelled');};
@@ -121,6 +158,9 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
  });
  try{await client.prepare();current(signal);}catch(error){await close().catch(()=>{});throw error;}
  return Object.freeze({
+  suspendConnection:()=>connection.suspend(),
+  warmConnection:()=>connection.warm(),
+  connectForLogout:()=>connection.ensureAvailable(),
   async forgetSavedAuthorization(abort:AbortSignal){current(abort);await clearTelegramSessionLease(lease);persisted=false;current(abort);},
   async restore(abort:AbortSignal){current(abort);const saved=await loadTelegramSession();current(abort);if(!saved)return false;lease=saved.lease;persisted=true;try{await client.importSession(saved.value);current(abort);const user=await getMe(client);current(abort);if(!await telegramSessionLeaseCurrent(saved.lease))throw Error('session-expired');current(abort);const selection=await loadTelegramBotSelection(saved.lease);savedBots=selection.bots;confirmedBotRevision=selection.revision;current(abort);authorized(user,true);return true;}catch(error){if(classifyTelegramFailure(error).error==='session-expired'){if(persisted){await clearTelegramSessionLease(saved.lease);persisted=false;}throw Error('session-expired');}throw error;}},
   async begin(number:string,abort:AbortSignal){current(abort);lease=await sessionLease();current(abort);phone=number;const value=await sendCode(client,{phone,abortSignal:abort});current(abort);if(value.type==='user'){await persist(abort);authorized(value);return null;}return rememberCode(value);},
@@ -188,15 +228,15 @@ export async function openTemporaryTelegram(identity:TelegramApiIdentity,signal:
    current(signal);if(!binding||!isUuid(sessionId)||!botProviders||botProvidersSession!==sessionId||sourcesSession&&sourcesSession!==sessionId)throw Error('unsupported');
    if(botSearch){if(botSearchSession!==sessionId)throw Error('unsupported');return botSearch;}
    botSearchSession=sessionId;signal.addEventListener('abort',sourceLifetimeAbort,{once:true});
-   let primaryDc:number|undefined;void client.getPrimaryDcId().then(id=>{primaryDc=id;}).catch(()=>{});
    botSearch=createBotSearchSdkDriver(binding,sessionId,{
     call:accountRead,providers:botProviders,current,getAccountCooldown,
     subscribeBotWakeup(botId,hint){
-     const onUpdate=(update:tl.TypeUpdates)=>{if(isBotWakeupUpdate(update,botId))hint();};
-     client.onServerUpdate.add(onUpdate);
-     return ()=>client.onServerUpdate.remove(onUpdate);
+     const source=client;
+     const onUpdate=(update:tl.TypeUpdates)=>{if(connection.available&&isBotWakeupUpdate(update,botId))hint();};
+     source.onServerUpdate.add(onUpdate);
+     return ()=>source.onServerUpdate.remove(onUpdate);
     },
-    isOtherDc:dcId=>primaryDc===undefined?null:primaryDc!==dcId,
+    isOtherDc(dcId){try{return client.mt.network.getPrimaryDcId()!==dcId;}catch{return null;}},
     invalidateSession(){void close().catch(()=>{});},
    });return botSearch;
   },

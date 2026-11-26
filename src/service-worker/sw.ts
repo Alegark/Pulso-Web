@@ -20,14 +20,13 @@ let lifecycle:DatabaseLifecycleState|null=null;
 let schemaNotReady=false;
 let revalidating=false;
 let epoch=0;
-// Published physical generations are immutable under the generation lock.
-// Keep successful hashes only, bounded to this worker and database epoch.
-const verifiedAssets=new Set<string>();
-const verificationKey=(asset:LocalAsset)=>JSON.stringify([asset.backend,asset.storageKey,asset.revision,asset.sha256,asset.bytes]);
-function rememberVerified(key:string){
+// Proofs belong to a specific media selection. Subsequent range requests may
+// reuse the completed scan, but must still serve the exact bytes it verified.
+const verifiedAssets=new Map<string,Uint8Array>();
+function rememberVerified(key:string,proof:Uint8Array){
  if(verifiedAssets.has(key))return;
- if(verifiedAssets.size>=256)verifiedAssets.delete(verifiedAssets.values().next().value!);
- verifiedAssets.add(key);
+ if(verifiedAssets.size>=16)verifiedAssets.delete(verifiedAssets.keys().next().value!);
+ verifiedAssets.set(key,proof);
 }
 type ActiveRead={client:Client;invalidate:()=>void};
 // Only events currently owned by this worker; no subscription/history survives restart.
@@ -74,7 +73,7 @@ self.addEventListener('message',event=>{
  const source=event.source as Client|null;const port=event.ports[0];const m=event.data;
  if(!source||!port||new URL(source.url).origin!==self.location.origin||m?.version!==1)return;
  if(m.type==='transport-capabilities'){
- port.postMessage({version:1,type:'transport-capabilities',readerProtocol:'local-assets-v1',backends:['idb','opfs'],idbLifecycle:1,physicalSources:1});port.close();return;
+ port.postMessage({version:1,type:'transport-capabilities',readerProtocol:'local-assets-v1',backends:['idb','opfs'],idbLifecycle:1,physicalSources:1,verifyOnRead:1});port.close();return;
  }
  if(m.type==='pinned-local-sources'||m.type==='release-local-sources'){event.waitUntil(physicalSources(source,port,m));return;}
  if(m.type!=='fixture-tickets'&&!(m.protocol===PROTOCOL&&m.type==='revalidate'))return;
@@ -207,7 +206,14 @@ async function media(event: FetchEvent): Promise<Response> {
   if (req.mode === 'navigate' || !['GET','HEAD'].includes(req.method)) return fail(403);
   const token = url.pathname.slice('/_pulso/media/'.length);
   if (!/^[a-f0-9-]{36}$/.test(token)) return fail(403);
+  const selection=url.searchParams.get('selection');
+  const selectionId=sourceUUID(selection)?selection:null;
   const client=await actualClient(event.clientId);if(!client)return fail(403);
+  const notifyInvalid=()=>{
+   if(req.signal.aborted||req.method!=='GET'||selectionId===null)return;
+   try{client.postMessage({version:1,type:'local-media-invalid',url:url.href});}catch{/* Client may have closed. */}
+  };
+  const invalid=()=>{notifyInvalid();return fail(409);};
   let db:IDBDatabase|undefined;let streamOwns=false;let released=false;let readerRelease=()=>{};
   let streamController:ReadableStreamDefaultController<Uint8Array>|null=null;
   const readerAbort=new AbortController();
@@ -232,7 +238,7 @@ async function media(event: FetchEvent): Promise<Response> {
   const pinned=ticket.version===2?copySourceAsset(ticket.asset):null;
   if(ticket.version===2&&(!pinned||pinned.id!==ticket.assetId||!sourceUUID(ticket.generation)||!sourceProof(ticket.ownerProof)))return fail(403);
   current();const asset = await readRecordFrom<Manifest>(db,'assets',ticket.assetId);current();
-  if(pinned){const actual=copySourceAsset(asset);if(!actual||!sameSourceAsset(actual,pinned))return fail(409);}
+  if(pinned){const actual=copySourceAsset(asset);if(!actual||!sameSourceAsset(actual,pinned))return invalid();}
   const fixture = fixtures.find(f => f.id === ticket.assetId);
   if (!fixture) {
     if (!validAsset(asset)) return fail(409);
@@ -242,26 +248,42 @@ async function media(event: FetchEvent): Promise<Response> {
     if(range.partial)headers.set('Content-Range',`bytes ${range.start}-${range.end-1}/${asset.bytes}`);
     if(req.method==='HEAD')return new Response(null,{status:200,headers});
     let reader:Awaited<ReturnType<typeof openAssetReader>>;
-    try{reader=await openAssetReader(asset,true,{signal:readerAbort.signal,database:db});}catch(error){const verification=verificationFailure(error,asset.backend);return fail(verification.state==='missing'||verification.state==='corrupt'?409:503);}
+    try{reader=await openAssetReader(asset,!pinned,{signal:readerAbort.signal,database:db});}catch(error){const verification=verificationFailure(error,asset.backend);return verification.state==='unknown'?fail(503):invalid();}
     readerRelease=()=>reader.release();
-    try{current();if(pinned){const actual=copySourceAsset(await readRecordFrom<unknown>(db,'assets',pinned.id));current();if(!actual||!sameSourceAsset(actual,pinned))return fail(409);}}catch(error){reader.release();throw error;}
-    const key=verificationKey(asset),verified=verifiedAssets.has(key);
-    if(!verified||asset.backend==='opfs'){
-      const verification=await reader.verifyDetailed(!verified,{check:current});current();
-      if(verification.state!=='valid'){verifiedAssets.delete(key);return fail(verification.state==='unknown'?503:409);}
+    current();
+    const key=JSON.stringify([token,selectionId,asset.backend,asset.storageKey,asset.revision,asset.sha256,asset.bytes]);
+    let proof=verifiedAssets.get(key);
+    if(!proof){
+      const hashes=new Uint8Array(asset.chunks*32);
+      let offset=0;
+      const verification=await reader.verifyDetailed(true,{check:current,onChunk:chunk=>{hashes.set(sha256(chunk),offset);offset+=32;}});
+      current();
+      if(verification.state!=='valid')return verification.state==='unknown'?fail(503):invalid();
+      proof=hashes;
     }
-    if(pinned&&!verified){const actual=copySourceAsset(await readRecordFrom<unknown>(db,'assets',pinned.id));current();if(!actual||!sameSourceAsset(actual,pinned))return fail(409);}
-    rememberVerified(key);
+    if(pinned){const actual=copySourceAsset(await readRecordFrom<unknown>(db,'assets',pinned.id));current();if(!actual||!sameSourceAsset(actual,pinned))return invalid();}
+    rememberVerified(key,proof);
+    const verifiedChunks=proof;
     let position=range.start;
     const stream=new ReadableStream<Uint8Array>({start(controller){streamController=controller;},async pull(controller){
       try{
         current();
         if(position>=range.end){release();controller.close();return;}
-        const end=Math.min(position+65536,range.end);
-        const bytes=await reader.readRange(position,end);current();
-        controller.enqueue(bytes);position=end;
+        const index=Math.floor(position/65536),start=index*65536;
+        const bytes=await reader.readRange(start,Math.min(start+65536,asset.bytes));current();
+        if(!sha256(bytes).every((byte,i)=>byte===verifiedChunks[index*32+i])){
+          notifyInvalid();throw new Error('local-corrupt');
+        }
+        const end=Math.min(start+bytes.length,range.end);
+        controller.enqueue(bytes.subarray(position-start,end-start));position=end;
         if(position>=range.end){release();controller.close();}
-      }catch(error){if(!released&&!req.signal.aborted)verifiedAssets.delete(key);release();controller.error(error);}
+      }catch(error){
+        if(!released&&!req.signal.aborted){
+          verifiedAssets.delete(key);
+          if(verificationFailure(error,asset.backend).state!=='unknown')notifyInvalid();
+        }
+        release();controller.error(error);
+      }
     },cancel(){release();}});
     streamOwns=true;return new Response(stream,{status:range.partial?206:200,headers});
   }

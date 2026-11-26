@@ -210,3 +210,82 @@ Publicado por MCP oficial en Workers Free / USD 0 desde `2e4186b2e2758ef50829c7e
 El readback de MCP confirmó los siete bindings, el mismo namespace de `CATALOG`, workers.dev habilitado y previews desactivadas. Se añadió `/api/account-library` a `run_worker_first` sin aplicar migraciones. HTTPS verificó 223 rutas estáticas por bytes y SHA-256. Raíz, latest, entrada y SW responden 200 por GET y HEAD con CSP. La entrada anterior responde 200. La configuración de cuenta responde 200 con `enabled:true`, `google:true` y `no-store`. Perfil y biblioteca anónimos responden 401, y el PUT de biblioteca desde otro origen responde 403.
 
 La staging `.local/cloudflare-setup` del checkout principal está desfasada. El manifiesto autoritativo de esta entrega está en `.local/test-evidence/code-review-delivery/site-manifest.json` y reúne 226 archivos, incluidos los 176 inmutables verificados de la entrega anterior. [Evidencia de publicación](evidence-code-review-web.json).
+
+## Procedimiento de publicación paso a paso
+
+Para publicar un commit validado en Workers Free (USD 0), usa el manifiesto promovido y el recibo MCP de la publicación activa. Toma el SHA-256 del manifiesto del acta ODD de esa publicación. Usa la conexión OAuth existente del MCP oficial y el cliente local del proyecto `.local/cloudflare-mcp/client.mjs`, que expone `createClient().tool(name, args)`.
+
+1. Desde el checkout del candidato, fija las rutas y los datos del acta vigente. Los directorios privados se mantienen fuera de Git. El checkout debe tener instaladas las dependencias del lockfile.
+
+   ```bash
+   set -euo pipefail
+   umask 077
+   root=$(pwd -P)
+   mkdir -p "$root/.local/tmp"
+   work=$(mktemp -d "$root/.local/tmp/publish-cloudflare-XXXXXXXX")
+   df -B1 --output=avail /data > "$work/free-before.txt"
+   source_commit=$(git rev-parse HEAD)
+   shared_local=/ruta/al/proyecto/compartido/.local
+   previous=/ruta/al/directorio/de/recibos/de/la/publicacion-activa
+   previous_sha=SHA256_REGISTRADO_EN_ODD
+   origin=https://pulso-web.pruebassoftware.workers.dev
+   mkdir "$work/source"
+   git archive "$source_commit" | tar -x -C "$work/source"
+   ln -s "$root/node_modules" "$work/source/node_modules"
+   args=(
+     --work "$work" --source "$work/source" --origin "$origin"
+     --previous-manifest "$previous/site-manifest.json" --previous-sha256 "$previous_sha"
+     --previous-receipt "$previous/mcp-readback.json"
+     --deployment "$(jq -er .deployment "$previous/mcp-readback.json")"
+     --version "$(jq -er .version "$previous/mcp-readback.json")"
+     --mcp-client "$shared_local/cloudflare-mcp/client.mjs"
+     --worker-module "$work/worker/worker.js"
+   )
+   node scripts/publish-cloudflare.mjs preflight "${args[@]}"
+   ```
+
+   `preflight` comprueba por HTTPS el puntero y por MCP el despliegue al 100 %, la versión, los 13 bindings de la publicación anterior, las reglas y el módulo activo. Si difieren del acta vigente, se detiene.
+
+2. Prepara el sitio y el módulo en el checkout aislado. Wrangler se ejecuta en simulación local.
+
+   ```bash
+   (
+     cd "$work/source"
+     npm run build > "$work/build.log" 2>&1
+     npm run test:cloudflare > "$work/server.log" 2>&1
+     npm run build:cloudflare > "$work/build-cloudflare.log" 2>&1
+     npx --no-install wrangler deploy --config wrangler.jsonc --dry-run --outdir "$work/worker" > "$work/wrangler.log" 2>&1
+   )
+   node scripts/publish-cloudflare.mjs freeze "${args[@]}"
+   jq '{currentEntry,retainedPublications,legacyRetained,totalFiles,retiredFiles,retiredBytes}' "$work/retention-freeze.json"
+   ```
+
+   `freeze` ejecuta localmente `prepare-cloudflare.mjs --dry-run` y `--freeze` con la misma fecha. Verifica por HTTPS los bytes de los inmutables retenidos que copia y conserva el inventario heredado según la ventana de retención. Antes de publicar, coteja las retiradas con las reglas de retención. Si hay que repetir el freeze, vuelve a partir de un sitio limpio.
+
+3. Con la validación de la entrega aprobada, ejecuta la publicación.
+
+   ```bash
+   node scripts/publish-cloudflare.mjs publish "${args[@]}"
+   ```
+
+   - Localmente verifica rutas, bytes y SHA-256 del sitio congelado. Usa el módulo activo cuando la simulación solo difiere en los comentarios generados de rutas de dependencias.
+   - El MCP oficial comprueba el estado activo y abre la sesión con `POST /accounts/{account_id}/workers/scripts/{script_name}/assets-upload-session`. El proceso local sube los buckets directamente a `POST https://api.cloudflare.com/client/v4/accounts/{account_id}/workers/assets/upload?base64=true`. Los JWT de sesión y finalización permanecen en memoria durante la ejecución.
+   - El MCP repite la lectura de despliegue y configuración, y envía `PUT /accounts/{account_id}/workers/scripts/{script_name}` multipart con `metadata` y `worker.js`. En `assets.config` incluye `run_worker_first` con las reglas de Wrangler y omite `serve_directly`. El PUT crea automáticamente el despliegue al 100 %. El código conserva desde la lectura previa los bindings, los secretos existentes por tipo, los límites y la configuración de ejecución.
+   - El MCP lee el despliegue, su versión, configuración y módulo para comparar bytes, SHA-256, bindings, secretos por nombre y reglas. Por HTTPS comprueba el puntero, 307/200, meta `pulso-release`, bytes y SHA-256 de las rutas estáticas, navegación histórica, Turnstile y 401 de perfil y biblioteca. `account-config.json` tiene respuesta dinámica y se contrasta con el binding de Turnstile. Si el PUT o la comprobación fallan, examina el despliegue y el puntero activos antes de reintentar y reporta el estado. Cuando el PUT tuvo éxito, repite solo las lecturas con el comando siguiente. Un fallo posterior al PUT requiere revisión antes de cualquier rollback.
+
+   ```bash
+   node scripts/publish-cloudflare.mjs verify "${args[@]}"
+   ```
+
+4. Con ambas verificaciones completas, promueve el manifiesto y conserva recibos compactos en el directorio privado de evidencia de la nueva publicación.
+
+   ```bash
+   published_at=$(node -p 'new Date(process.argv[1]).toISOString()' "$(jq -er .createdAt "$work/mcp-readback.json")")
+   node scripts/prepare-cloudflare.mjs --mark-published \
+     --candidate-manifest "$work/frozen-site-manifest.json" \
+     --published-at "$published_at" --output "$work/site-manifest.json"
+   sha256sum "$work/site-manifest.json"
+   wc -c "$work/site-manifest.json"
+   ```
+
+   Registra en ODD el commit, la entrada, versión y despliegue, los resultados y el SHA-256 del manifiesto promovido. Conserva ese manifiesto y los JSON de freeze, transferencia, PUT y lecturas, y limpia el checkout temporal, el sitio congelado, el módulo y los registros regenerables tras guardar los totales.
