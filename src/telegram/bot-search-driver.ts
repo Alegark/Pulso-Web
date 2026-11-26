@@ -1,7 +1,7 @@
 import {elapsedMs,emptyNetworkTiming,measure,type NetworkTiming} from '../diagnostics/download-timing';
 import {classifyTelegramFailure,cooldownDeadline,invalidatesBotIdentity} from './rpc-failure';
 import {assembleBotDownloadBytes,botDownloadTransferMs,BotDownloadBytesFailure} from './bot-download-bytes';
-import {recordingTitleCandidate} from '../library/recording-title';
+import {recordingTitleCandidate,collaboratorRecordingMatch} from '../library/recording-title';
 import Long from 'long';
 import type {tl} from '@mtcute/core';
 import type {BaseTelegramClient} from '@mtcute/core/client.js';
@@ -240,7 +240,8 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       }
       const row=selected.row;if(row?.kind!=='audio')throw fail('unsupported');
       const fold=(v:string)=>v.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
-      if(!row.title||!recordingTitleCandidate(row.title,c.target.title,c.target.album,c.target.durationSeconds)||c.target.artist&&(!row.performer||fold(row.performer)!==fold(c.target.artist)))throw fail('conflict');
+      const collaborators=!!row.title&&!!row.performer&&!!c.target.artist&&collaboratorRecordingMatch(row.title,row.performer,c.target.title,c.target.artist,c.target.album,c.target.durationSeconds);
+      if(!row.title||!collaborators&&(!recordingTitleCandidate(row.title,c.target.title,c.target.album,c.target.durationSeconds)||!!c.target.artist&&(!row.performer||fold(row.performer)!==fold(c.target.artist))))throw fail('conflict');
       const document=botSearchDocument(message);if(!document)throw fail('unsupported');
       const documentId=botSearchDocumentIdentity(message)!;
       if(reuseMenu&&downloadedDocuments.has(documentId))throw fail('file-invalid');
@@ -272,7 +273,7 @@ export function createBotSearchDriver(bindingInput:AccountBinding,sessionId:stri
       await known(selected,selection.row.kind==='option');check();
       if(reuseMenu)downloadedDocuments.add(documentId);
       else{retained=new Map();retainedSearch=null;}
-      return {...e,type:'bot-search.downloaded',audio:{...result,target:c.target,...(fold(row.title)!==fold(c.target.title)?{recordingTitle:row.title}:{})}};
+      return {...e,type:'bot-search.downloaded',audio:{...result,target:c.target,...(!collaborators&&fold(row.title)!==fold(c.target.title)?{recordingTitle:row.title}:{})}};
      }
      const baseline=botSearchBaseline(await rpc(ms=>dependency.readHistory(approved.peer,0,1,abort.signal,ms)),approved.botId);check();
      const randomId=randomLong();check();

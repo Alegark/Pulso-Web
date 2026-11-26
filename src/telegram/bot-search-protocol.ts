@@ -2,7 +2,7 @@ import {parseNetworkTiming,type NetworkTiming} from '../diagnostics/download-tim
 import {isBotDownloadMime} from './bot-download-bytes';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {dataArray,dataRecord,isUuid,parseAccountBinding,utf8Bytes,type AccountBinding} from './sources-protocol';
-import {recordingTitleCandidate} from '../library/recording-title';
+import {recordingTitleCandidate,collaboratorRecordingMatch} from '../library/recording-title';
 export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:19,downloadReads:63,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadResolveMs:120000,callbackBudgetMs:65000});
 // Compared with immediate + 1 s polling, the warm-up adds at most three
 // history reads. The 15 s command deadline and ~59 s callback window remain.
@@ -149,20 +149,23 @@ export type BotAudioMismatchField='title-version'|'artist'|'duration';
  * Title/version stay combined because the catalogue supplies one title string. */
 export function botAudioMismatchFields(row:Extract<BotSearchRow,{kind:'audio'}>,target:BotSearchTarget):readonly BotAudioMismatchField[] {
  const fields:BotAudioMismatchField[]=[];
- if(!row.title||!recordingTitleCandidate(row.title,target.title,target.album,target.durationSeconds))fields.push('title-version');
- if(!target.artist||!row.performer||musicIdentityText(row.performer)!==musicIdentityText(target.artist))fields.push('artist');
- const tolerance=row.title&&musicIdentityText(row.title)===musicIdentityText(target.title)?BOT_SEARCH_DURATION_TOLERANCE_SECONDS:1;
+ const collaborators=!!row.title&&!!row.performer&&!!target.artist&&collaboratorRecordingMatch(row.title,row.performer,target.title,target.artist,target.album,target.durationSeconds);
+ if(!collaborators&&(!row.title||!recordingTitleCandidate(row.title,target.title,target.album,target.durationSeconds)))fields.push('title-version');
+ if(!collaborators&&(!target.artist||!row.performer||musicIdentityText(row.performer)!==musicIdentityText(target.artist)))fields.push('artist');
+ const tolerance=collaborators||row.title&&musicIdentityText(row.title)===musicIdentityText(target.title)?BOT_SEARCH_DURATION_TOLERANCE_SECONDS:1;
  if(target.durationSeconds!==null&&!canCheckBotDurationFromFile(row,target)&&Math.abs(target.durationSeconds-row.durationSeconds)>tolerance)fields.push('duration');
  return fields;
 }
 
 const optionNumber=/^\s*(?:#\d{1,3}\s+|\d{1,3}\s*[.)]\s*)/u;
+const leadingDuration=/^\s*•\s*(\d{1,2}):([0-5]\d)\s*•\s*/u;
 const optionDuration=/\s*(?:\((\d{1,2}):([0-5]\d)\)|\[(\d{1,2}):([0-5]\d)\])\s*$/u;
-const matchesOptionLabel=(label:string,target:BotSearchTarget,artist:string)=>label.split(/\s+[–—−-]\s+/u).some((_,i,parts)=>{
+const matchesOptionLabel=(label:string,target:BotSearchTarget,artist:string,allowCollaborators=true)=>label.split(/\s+[–—−-]\s+/u).some((_,i,parts)=>{
  if(i>=parts.length-1)return false;
  const left=parts.slice(0,i+1).join(' - '),right=parts.slice(i+1).join(' - ');
  return recordingTitleCandidate(left,target.title,target.album,target.durationSeconds)&&musicIdentityText(right)===artist||
-  musicIdentityText(left)===artist&&recordingTitleCandidate(right,target.title,target.album,target.durationSeconds);
+  musicIdentityText(left)===artist&&recordingTitleCandidate(right,target.title,target.album,target.durationSeconds)||
+  allowCollaborators&&!!target.artist&&(collaboratorRecordingMatch(left,right,target.title,target.artist,target.album,target.durationSeconds)||collaboratorRecordingMatch(right,left,target.title,target.artist,target.album,target.durationSeconds));
  });
 
 /** Rank compatible recordings, then keep the bot's order for an equal score.
@@ -174,18 +177,22 @@ export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTa
  const score=(row:BotSearchRow):number=>{
   const correlation=row.correlation==='reply'?1:0;
   if(row.kind==='audio'){
-   if(row.bytes>AUDIO_FILE_MAX_BYTES||!isBotDownloadMime(row.mimeType)||!row.title||!row.performer||!recordingTitleCandidate(row.title,target.title,target.album,target.durationSeconds)||musicIdentityText(row.performer)!==artist)return 0;
+   if(row.bytes>AUDIO_FILE_MAX_BYTES||!isBotDownloadMime(row.mimeType)||!row.title||!row.performer)return 0;
+   const exact=recordingTitleCandidate(row.title,target.title,target.album,target.durationSeconds)&&musicIdentityText(row.performer)===artist;
+   const collaborators=collaboratorRecordingMatch(row.title,row.performer,target.title,target.artist!,target.album,target.durationSeconds);
+   if(!exact&&!collaborators)return 0;
    const fileCheck=canCheckBotDurationFromFile(row,target);
    const delta=target.durationSeconds===null||fileCheck?0:Math.abs(target.durationSeconds-row.durationSeconds);
-   const tolerance=musicIdentityText(row.title)===title?BOT_SEARCH_DURATION_TOLERANCE_SECONDS:1;
-   return delta<=tolerance?(fileCheck?3000:4000)-Math.round(delta*100)+correlation:0;
+   const tolerance=collaborators||musicIdentityText(row.title)===title?BOT_SEARCH_DURATION_TOLERANCE_SECONDS:1;
+   return delta<=tolerance?(fileCheck?3000:exact?4000:2800)-Math.round(delta*100)+correlation:0;
   }
   if(row.kind!=='option')return 0;
-  if(matchesOptionLabel(row.label,target,artist))return 2000+correlation;
+  if(matchesOptionLabel(row.label,target,artist,false))return 2000+correlation;
+  if(matchesOptionLabel(row.label,target,artist))return 1800+correlation;
   // Numbered results and an optional displayed duration are formatting only.
   // Do not strip live/remix/cover/version text or words from the performer.
-  const clean=row.label.replace(optionNumber,'').replace(/\s*[[(]\d{1,2}:[0-5]\d[)\]]\s*$/u,'');
-  return matchesOptionLabel(clean,target,artist)?1900+correlation:0;
+  const clean=row.label.replace(leadingDuration,'').replace(optionNumber,'').replace(/\s*[[(]\d{1,2}:[0-5]\d[)\]]\s*$/u,'');
+  return matchesOptionLabel(clean,target,artist,false)?1900+correlation:matchesOptionLabel(clean,target,artist)?1700+correlation:0;
  };
  return rows.map((row,index)=>({row,index,score:score(row)})).filter(v=>v.score>0)
   .sort((a,b)=>b.score-a.score||a.index-b.index).map(v=>v.row);
@@ -194,6 +201,8 @@ export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTa
 /** A displayed duration can disqualify a button. Audio identity is checked independently. */
 export function botOptionDurationMismatch(row:BotSearchRow,target:BotSearchTarget):boolean {
  if(row.kind!=='option'||!target.durationSeconds||!target.artist)return false;
+ const leading=leadingDuration.exec(row.label);
+ if(leading&&Math.abs(60*Number(leading[1])+Number(leading[2])-target.durationSeconds)>7)return matchesOptionLabel(row.label.replace(leadingDuration,'').replace(optionNumber,''),target,musicIdentityText(target.artist));
  const duration=optionDuration.exec(row.label);
  if(!duration||Math.abs(60*Number(duration[1]??duration[3])+Number(duration[2]??duration[4])-target.durationSeconds)<=7)return false;
  const artist=musicIdentityText(target.artist),label=row.label.replace(optionNumber,'');

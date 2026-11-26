@@ -17,3 +17,18 @@ export function recordingTitlesEquivalent(actual:string,expected:string,context:
  if(musicIdentityText(actual)===musicIdentityText(expected))return true;
  return recordingTitleCandidate(actual,expected,context.expectedAlbum,context.expectedDurationSeconds)&&validAlbum(context.actualAlbum)&&validAlbum(context.expectedAlbum)&&fullText(context.actualAlbum)===fullText(context.expectedAlbum)&&validDuration(context.actualDurationSeconds)&&validDuration(context.expectedDurationSeconds)&&Math.abs(context.actualDurationSeconds-context.expectedDurationSeconds)<=1;
 }
+
+/** Match only pure collaborator credits; preserve every recording-version word. */
+export function collaboratorRecordingMatch(actualTitle:string,actualArtist:string,expectedTitle:string,expectedArtist:string,album:string|null|undefined,duration:number|null|undefined):boolean {
+ const extract=(title:string):[string,string]=>{
+  const match=title.match(/^(.*?)\s*(?:\((?:feat\.?|ft\.?|featuring)\s+([^()]*)\)|\[(?:feat\.?|ft\.?|featuring)\s+([^\[\]]*)\]|\s+(?:feat\.?|ft\.?|featuring)\s+(.+))\s*$/iu);
+  return match?[match[1].trim(),match[2]??match[3]??match[4]]:[title,""];
+ };
+ const [left,lc]=extract(actualTitle),[right,rc]=extract(expectedTitle);
+ if(!lc&&!rc||!recordingTitleCandidate(left,right,album,duration))return false;
+ const credits=(artist:string,extra:string)=>[artist,extra].flatMap(value=>value.split(/\s*(?:,|&|\band\b)\s*/iu)).map(musicIdentityText).filter(Boolean);
+ const a=credits(actualArtist,lc),b=credits(expectedArtist,rc);
+ if(!a.length||!b.length||a[0]!==b[0])return false;
+ const aa=new Set(a),bb=new Set(b);
+ return aa.size===bb.size&&[...aa].every(value=>bb.has(value));
+}

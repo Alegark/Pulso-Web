@@ -1,5 +1,5 @@
 import {musicIdentityText} from '../telegram/bot-search-protocol';
-import {recordingTitleCandidate,recordingTitlesEquivalent} from '../library/recording-title';
+import {recordingTitleCandidate,recordingTitlesEquivalent,collaboratorRecordingMatch} from '../library/recording-title';
 /** Compatibility of declared file tags, never acoustic identity. */
 export interface ExpectedAudioMetadata {sha256:string;title:string;artist:string|null;recordingTitle?:string;album?:string;durationSeconds?:number}
 const normalized=musicIdentityText;
@@ -24,6 +24,7 @@ export function verifiedCompoundAudioTitle(title:string|undefined,expected:Omit<
  });
 }
 export function expectedAudioTagMismatch(tags:{title?:string;artist?:string;artists?:readonly string[];album?:string},expected:{title:string;artist:string|null;recordingTitle?:string;album?:string;durationSeconds?:number},durationSeconds?:number):'title'|'artist'|null {
+ if((expected.recordingTitle===undefined||recordingTitleCandidate(expected.recordingTitle,expected.title,expected.album,expected.durationSeconds))&&tags.title&&tags.artist&&expected.artist&&expected.durationSeconds!==undefined&&!expectedAudioDurationMismatch(expected,durationSeconds)&&collaboratorRecordingMatch(tags.title,tags.artist,expected.title,expected.artist,expected.album,expected.durationSeconds))return null;
  const contextual=expected.recordingTitle!==undefined&&expected.album!==undefined&&expected.durationSeconds!==undefined;
  if(!contextual&&(expected.recordingTitle!==undefined||expected.album!==undefined))return 'title';
  if(verifiedCompoundAudioTitle(tags.title,expected,durationSeconds))return null;
