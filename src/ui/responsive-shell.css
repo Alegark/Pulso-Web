@@ -122,9 +122,9 @@ html {
 .home-view section { margin-block:2rem; }
 .home-continue { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; padding:1rem; background:var(--pulso-surface); border-radius:1rem; }
 .home-continue div { flex:1; min-width:8rem; }.home-continue p { margin:.15rem 0; color:var(--pulso-muted); }
-.home-recent,.home-playlists { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:1rem; padding:0; list-style:none; }
-.home-recent button,.home-playlists button { display:grid; text-align:left; gap:.3rem; width:100%; padding:.65rem; }
-.home-recent .home-art,.home-playlists .home-art { width:100%; border-radius:.6rem; font-size:3rem; }.home-recent small,.home-playlists small { color:var(--pulso-muted); }
+.home-playlists { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:1rem; padding:0; list-style:none; }
+.home-playlists button { display:grid; text-align:left; gap:.3rem; width:100%; padding:.65rem; }
+.home-playlists .home-art { width:100%; border-radius:.6rem; font-size:3rem; }.home-playlists small { color:var(--pulso-muted); }
 .home-empty { background:var(--pulso-surface); padding:1.3rem; border-radius:1rem; }
 .library-tabs { display:flex; flex-wrap:wrap; gap:.5rem; margin:1.5rem 0; }.library-tabs button { padding:.55rem 1rem; border-radius:2rem; }
 .library-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:1rem; }
@@ -145,7 +145,7 @@ html {
  .pulso-app .mini-player__actions { margin-inline:auto; }
  .home-quick { grid-template-columns:repeat(4,minmax(0,1fr)); }
 }
-@media(max-width:600px) { .pulso-header { margin-bottom:1.2rem; }.pulso-app .mini-player { left:.75rem; right:.75rem; }.home-recent,.home-playlists { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:600px) { .pulso-header { margin-bottom:1.2rem; }.pulso-app .mini-player { left:.75rem; right:.75rem; }.home-playlists { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 .desktop-transport,.desktop-seek,.desktop-volume { display:none; }
 @media(min-width:1024px) {
  .pulso-app .mini-player { display:grid; grid-template-columns:minmax(12rem,1fr) minmax(14rem,1.2fr) minmax(8rem,.7fr); grid-template-rows:auto auto; column-gap:2rem; }
@@ -169,23 +169,17 @@ html {
 
 /* Cards grow with the reader's text size; their contents may shrink within a grid. */
 .pulso-app .home-quick,
-.pulso-app .home-recent,
 .pulso-app .home-playlists,
 .pulso-app .library-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
 }
 .pulso-app .home-quick { max-inline-size: 64rem; }
-.pulso-app .home-recent > li,
-.pulso-app .home-recent button,
 .pulso-app .home-playlists button,
 .pulso-app .collection-card { min-inline-size: 0; }
-.pulso-app .home-recent button,
 .pulso-app .home-playlists button,
 .pulso-app .collection-card { grid-template-columns: minmax(0, 1fr); }
 .pulso-app .home-art,
 .pulso-app .collection-card__art { min-inline-size: 0; max-inline-size: 100%; }
-.pulso-app .home-recent strong,
-.pulso-app .home-recent small,
 .pulso-app .home-playlists strong,
 .pulso-app .home-playlists small { min-inline-size: 0; overflow-wrap: anywhere; }
 .pulso-app .home-continue > div {
@@ -193,7 +187,6 @@ html {
   min-inline-size: 0;
   max-inline-size: 100%;
 }
-.pulso-app .home-recent,
 .pulso-app .home-playlists,
 .pulso-app .library-grid {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 9rem), 1fr));

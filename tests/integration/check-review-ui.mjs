@@ -95,8 +95,8 @@ try{
      const nav=page.locator('.shell-nav'),settings=page.locator('.settings-view');
      await page.waitForFunction(()=>document.querySelector('.pulso-app')?.inert===false);
      stage='una copia desconocida no vacía la biblioteca';
-     const globalStatus=page.locator('.mini-player .shell-notice');
-     await globalStatus.getByText(/No se pudo comprobar la copia local de una canción/).waitFor();
+     const globalStatus=page.locator('.mini-player [role=status]');
+     await globalStatus.filter({hasText:/No se pudo comprobar la copia local de una canción/}).waitFor({state:'attached'});
      assert.ok(await page.getByText('Audio de prueba 3',{exact:true}).first().isVisible());
      await page.evaluate(()=>sessionStorage.removeItem('TESTONLY_UNVERIFIED'));
      await button(page,'Configuración').click();
@@ -109,7 +109,7 @@ try{
      const open=title=>page.locator('.library-grid button').filter({hasText:title}).click();
      const tools=page.locator('.collection-tools');
      const prepare=button(tools,'Preparar cola de esta selección');
-     const notice=page.locator('.mini-player .shell-notice');
+     const notice=page.locator('.mini-player [role=status]');
      if(viewport.width===1366){
       stage='la paginación sobrevive a un refresco de metadatos';
       await open('Selección paginada');
@@ -149,15 +149,11 @@ try{
      await tools.getByText('1 sin copia se omitirán.',{exact:false}).waitFor();
      assert.equal(await button(tools,'Añadir selección a continuación (3)').isVisible(),true);
      assert.equal(await button(tools,'Añadir selección al final (3)').isVisible(),true);
-     await prepare.click();await notice.getByText(/Cola lista y pausada/).waitFor();
+     await prepare.click();await notice.filter({hasText:/Cola lista y pausada/}).waitFor({state:'attached'});
      assert.equal(await settings.isVisible(),false);
-     const noticeBox=await notice.boundingBox();
      const expand=button(page,'Abrir reproductor desde minirreproductor');
-     const expandBox=await expand.boundingBox();
-     assert.ok(noticeBox.y>=0&&noticeBox.y+noticeBox.height<=viewport.height);
-     assert.ok(noticeBox.y+noticeBox.height<=expandBox.y||expandBox.y+expandBox.height<=noticeBox.y);
-     await button(notice,'Cerrar aviso').click();
-     assert.equal(await notice.getByText(/Cola lista y pausada/).count(),0);
+     assert.equal(await page.locator('.mini-player .shell-notice').count(),0);
+     assert.equal(await page.locator('.mini-player').getByRole('button',{name:'Cerrar aviso'}).count(),0);
      stage='menús por fila';
      assert.equal(await page.locator('.track-actions-menu select').count(),0);
      await button(page,'Opciones de Audio de prueba 1').click();
@@ -171,7 +167,7 @@ try{
      await button(menu,'Cerrar opciones de canción').click();
      stage='inserción masiva';
      await button(tools,'Añadir selección al final (3)').click();
-     await notice.getByText(/3 entradas añadidas al final/).waitFor();
+     await notice.filter({hasText:/3 entradas añadidas al final/}).waitFor({state:'attached'});
      stage='cola efectiva y selección por ocurrencia';
      const player=page.locator('#player');
      assert.equal(await page.locator('.player-queue ol li').count(),0);
@@ -225,7 +221,7 @@ try{
      await button(page,'Configuración').click();await settings.waitFor();
      await back();await settings.waitFor({state:'hidden'});assert.equal(await page.locator('.library-overview').isVisible(),true);
      stage='posición restaurada y apertura tras interrumpir el vaciado';
-     await page.reload();await notice.getByText(/Cola lista y pausada/).waitFor();
+     await page.reload();await notice.filter({hasText:/Cola lista y pausada/}).waitFor({state:'attached'});
      await page.waitForFunction(()=>window.reviewAudio.paused&&window.reviewAudio.currentTime>=0.7);
      await page.locator('.mini-player__title').getByText('Audio de prueba 3',{exact:true}).waitFor();
      await expand.click();await button(player,'Cola').click();

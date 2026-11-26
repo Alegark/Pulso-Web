@@ -1,6 +1,14 @@
 import {ARTWORK_TOUCH_INTERVAL,artworkFreshness} from '../cache/artwork-policy';
 import {PersistentArtwork,type StoredArtwork} from '../cache/persistent-artwork';
+import {musicCatalogKey} from './music-search-catalog';
 import {artworkThumbnail,type ValidatedArtwork} from '../cache/thumbnail';
+
+export function albumArtworkKey(metadata:{editionId?:string|number|null;album?:string|null;artist?:string|null;albumArtist?:string|null}):string|undefined{
+ if(metadata.editionId!==undefined&&metadata.editionId!==null&&String(metadata.editionId).trim())return `edition:${String(metadata.editionId)}`;
+ const artist=musicCatalogKey(metadata.albumArtist?.trim()||metadata.artist?.trim()||'');
+ const album=musicCatalogKey(metadata.album?.trim()||'');
+ return artist&&album?`album:${artist}:${album}`:undefined;
+}
 
 export interface CachedPlayerArtwork {
  readonly blob:Blob;
@@ -43,6 +51,15 @@ export class PlayerArtworkCache {
   this.entries.clear();this.bytes=0;this.reads.clear();this.flights.clear();
   for(const listener of this.listeners)listener();
   this.listeners.clear();
+ }
+
+ async preload(keys:readonly string[]):Promise<void>{
+  if(this.signal.aborted||!this.storage)return;
+  const missing=[...new Set(keys)].filter(key=>!this.entries.has(key)).slice(0,maxEntries);
+  if(!missing.length)return;
+  const stored=await this.storage.getMany(missing);
+  if(this.signal.aborted)return;
+  for(const [key,entry] of stored)if(!this.entries.has(key))this.remember(key,entry,false);
  }
 
  async readProvider(key:string):Promise<ProviderEntry|undefined>{
@@ -122,7 +139,7 @@ export class PlayerArtworkCache {
   void this.storage?.touch(key,now);
  }
 
- private remember(key:string,artwork:StoredArtwork){
+ private remember(key:string,artwork:StoredArtwork,notify=true){
   const entry={...artwork,stamp:Symbol()};
   if(this.signal.aborted||artwork.blob.size>maxBytes)return entry;
   const previous=this.entries.get(key);
@@ -143,7 +160,7 @@ export class PlayerArtworkCache {
    this.bytes-=old.blob.size;
    changed||=!!old.album;
   }
-  if(changed)for(const listener of this.listeners)listener();
+  if(changed&&notify)for(const listener of this.listeners)listener();
   return entry;
  }
 }

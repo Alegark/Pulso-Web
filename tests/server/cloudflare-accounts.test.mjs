@@ -80,7 +80,7 @@ test('Siteverify sends the Cloudflare IP and checks success, action, hostname, a
     siteCalls++;
     assert.equal(url,'https://challenges.cloudflare.com/turnstile/v0/siteverify');
     assert.equal(options.method,'POST');
-    assert.equal(options.redirect,'error');
+    assert.equal(options.redirect,'manual');
     const input=JSON.parse(options.body);
     assert.deepEqual(input,{secret:input.secret,response:dummyToken,remoteip:'2001:db8::1'});
     if(input.secret===failingSecret)return Response.json({success:false,'error-codes':['invalid-input-response']});

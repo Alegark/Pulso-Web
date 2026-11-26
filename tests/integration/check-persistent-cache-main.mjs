@@ -311,7 +311,7 @@ try{
     assert.ok((await color(page,'dialog[open] .track-actions-art img'))[0]>220);
     await page.getByRole('button',{name:'Cerrar opciones de canción'}).click();
     await page.locator('.shell-nav').getByRole('button',{name:'Inicio',exact:true}).click();
-    assert.ok((await color(page,'.home-recent button[aria-label="Preparar Descarga uno en pausa"] img'))[0]>220);
+    assert.ok((await color(page,'.home-continue img'))[0]>220);
     assert.equal(requests.length,0);
     assert.ok((await inspect(page)).catalog.some(x=>x.kind==='track-artwork-link'));
    });
@@ -336,6 +336,27 @@ try{
      assert.equal(requests.length,from);
     }finally{await cover.close();}
    });
+   await check('V64-07 · precarga en una transacción',async()=>{
+    const keys=(await inspect(page)).artwork.slice(0,3).map(row=>row.artworkKey);
+    assert.equal(keys.length,3);
+    const fixturePage=await newPage();
+    try{await fixturePage.goto(origin+'/'+fixture);assert.equal(await fixturePage.evaluate(keys=>window.testPreload(keys),keys),1);}
+    finally{await fixturePage.close();}
+   });
+   await check('C07 · shared album artwork',async()=>{
+    page=await closeAndReopen(page);requests.length=0;
+    await navigate(page,origin);await library(page,'Álbum compartido prueba');
+    for(let i=1;i<=3;i++)await page.locator(rowFor(`Álbum compartido ${i}`)).waitFor();
+    assert.ok(requests.filter(x=>x.path==='/catalog/artwork').length<=1);
+    const rows=(await inspect(page)).artwork.filter(x=>x.artworkKey.includes('/shared/9999/'));
+    assert.equal(rows.length,1);assert.equal(rows[0].binary,true);
+    const fixturePage=await newPage();
+    try{await fixturePage.goto(origin+'/'+fixture);await fixturePage.evaluate(id=>window.hideAlbumTrack(id),ids['Álbum compartido 2']);}finally{await fixturePage.close();}
+    page=await closeAndReopen(page);await navigate(page,origin);await library(page,'Álbum compartido prueba');
+    await page.locator(rowFor('Álbum compartido 1')).waitFor();await page.locator(rowFor('Álbum compartido 3')).waitFor();
+    assert.equal(await page.locator(rowFor('Álbum compartido 2')).count(),0);
+   });
+   await library(page,'Favoritos');
    await check('C06 · cambio de cuenta y cierre de sesión purgan persistencia',async()=>{
     const localBefore=await inspect(page,{opfs:true});
     assert.ok((await inspect(page))?.artwork.some(x=>x.accountId===accountA));
@@ -351,7 +372,8 @@ try{
     assert.notEqual(await page.locator(rowFor('Portada de la otra cuenta')).getAttribute('src'),previous);
     await start();await page.locator(playerImg).waitFor();
     assert.ok((await inspect(page)).artwork.some(x=>x.accountId===accountB));
-    if(await closePlayer.isVisible())await closePlayer.click();
+    const activeClosePlayer=page.getByRole('button',{name:'Cerrar reproductor',exact:true});
+    if(await activeClosePlayer.isVisible())await activeClosePlayer.click();
     await page.locator('.shell-nav').getByRole('button',{name:'Inicio',exact:true}).click();
     await page.getByRole('button',{name:'Mi cuenta',exact:true}).click();
     await page.getByRole('button',{name:'Cerrar sesión de Pulso'}).click();

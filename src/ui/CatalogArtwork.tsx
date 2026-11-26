@@ -21,15 +21,20 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
  const observeProvider=enabled&&identity;
  const shared=React.useSyncExternalStore(observeProvider&&cache?cache.subscribe:noSubscription,
   ()=>observeProvider?cache?.get(observeProvider):undefined,emptySnapshot);
+ const objectUrls=React.useRef(new Set<string>());
+ const revokeAll=React.useCallback(()=>{for(const url of objectUrls.current)URL.revokeObjectURL(url);objectUrls.current.clear();},[]);
+ React.useEffect(()=>{
+  cache?.signal.addEventListener('abort',revokeAll,{once:true});
+  return()=>{cache?.signal.removeEventListener('abort',revokeAll);revokeAll();};
+ },[cache,revokeAll]);
  const [view,setView]=React.useState<{key:string;url:string;cache:PlayerArtworkCache|null}|null>(null);
  const key=JSON.stringify([imageUrl,trackId,enabled,identity,refreshToken??revision]);
  React.useEffect(()=>{
-  let alive=true,objectUrl:string|null=null;
+  let alive=true;
   const active=()=>alive&&!cache?.signal.aborted;
-  const revoke=()=>{if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl=null;}};
   const publish=(blob:Blob)=>{
    if(!active())return;
-   revoke();objectUrl=URL.createObjectURL(blob);setView({key,url:objectUrl,cache});
+   const objectUrl=URL.createObjectURL(blob);objectUrls.current.add(objectUrl);setView({key,url:objectUrl,cache});
   };
   const localWins=async()=>{
    if(!trackId)return false;
@@ -37,14 +42,14 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
    if(!active())return true;
    const priority=artworkPriority(local);
    if(local.state==='ready')publish(local.blob);
-   if(priority==='hidden'){revoke();setView(null);}
+   if(priority==='hidden'){revokeAll();setView(null);}
    return priority!=='remote';
   };
   const publishRemote=async(blob:Blob)=>{
    if(active()&&!await localWins())publish(blob);
   };
-  cache?.signal.addEventListener('abort',revoke,{once:true});
-  if(enabled)void (async()=>{try{
+  if(!enabled||cache?.signal.aborted){revokeAll();setView(null);return;}
+  void (async()=>{try{
    if(await localWins()||!active())return;
    if(imageUrl){
     const blob=await catalogArtwork(imageUrl,cache??undefined,blob=>{
@@ -57,9 +62,14 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
     if(provider)await publishRemote(provider.blob);
    }
   }catch{/* Artwork is optional. */}})();
-  return()=>{alive=false;cache?.signal.removeEventListener('abort',revoke);revoke();};
- },[key,shared,cache]);
+  return()=>{alive=false;};
+ },[key,shared,cache,revokeAll]);
  const shown=enabled&&!cache?.signal.aborted&&view?.key===key&&view.cache===cache?view:null;
+ const shownUrl=React.useRef<string|null>(null);shownUrl.current=shown?.url??null;
  if(!shown&&fallback===null)return null;
- return <span className={className} aria-hidden="true">{shown?<img src={shown.url} alt="" onError={()=>setView(null)}/>:fallback}</span>;
+ return <span className={className} aria-hidden="true">{shown?<img src={shown.url} alt="" onLoad={event=>{
+  const image=event.currentTarget,url=shown.url;
+  const release=()=>{if(shownUrl.current!==url)return;for(const old of objectUrls.current)if(old!==url){URL.revokeObjectURL(old);objectUrls.current.delete(old);}};
+  if(typeof image.decode==='function')void image.decode().then(release,release);else release();
+ }} onError={()=>setView(null)}/>:fallback}</span>;
 }

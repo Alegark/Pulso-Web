@@ -23,7 +23,7 @@ function tokenSubject(token){
 function dataRequest(target,columns,subject,token,input,values,signal){
  target.searchParams.set('select','user_id,'+columns+',revision');
  const headers={Authorization:'Bearer '+token,Accept:'application/json'};
- const init={method:'GET',headers,redirect:'error',signal};
+ const init={method:'GET',headers,redirect:'manual',signal};
  if(!input||input.revision!==null)target.searchParams.set('user_id','eq.'+subject);
  if(!input)return init;
  headers['Content-Type']='application/json';

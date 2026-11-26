@@ -27,7 +27,7 @@ interface Props {
  savedAlbums?:readonly SavedAlbum[]; fixedDetail?:SavedAlbum; libraryView?:boolean; albumOptions?:React.ReactNode;
  localTracks?:readonly Track[]; songAliases?:SongAliases|null; localAvailability?:ReadonlyMap<string,AvailabilityRecord>; albumSaveBlockedReason?:string;
  saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures)=>Promise<SaveAlbumResult>;
- songPending?:boolean;accountId?:string;resumeDownload?:()=>void;metadataOnly?:boolean;coordinator:AlbumCoordinator;captureInspection?:()=>SongCopyInspection|null;selectedKey:string|null;actionKey?:string|null;libraryTrackIds?:ReadonlySet<string>;playerTrackId?:string|null;title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;searchBatch?:{data:unknown;pending:boolean};backLabel?:string;scope:string;visible:boolean;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;providers:readonly OrderedProvider[];capture:()=>SongPlaybackAttempt|null;management:(id:string)=>SongManagement|null;onBack:()=>void;onChoose:(choice:SongChoice)=>void;songActions:React.ReactNode}
+ songPending?:boolean;accountId?:string;resumeDownload?:()=>void;metadataOnly?:boolean;coordinator:AlbumCoordinator;captureInspection?:()=>SongCopyInspection|null;selectedKey:string|null;actionKey?:string|null;libraryTrackIds?:ReadonlySet<string>;playerTrackId?:string|null;title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;searchBatch?:{data:unknown;pending:boolean};backLabel?:string;scope:string;visible:boolean;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;providers:readonly OrderedProvider[];capture:()=>SongPlaybackAttempt|null;management:(id:string)=>SongManagement|null;onBack:()=>void;onChoose:(choice:SongChoice,queueSlots?:readonly (string|null)[],chosenIndex?:number)=>void;songActions:React.ReactNode}
 const metadataIdentity=(props:Props)=>JSON.stringify([props.title,props.artist,props.editionId??null,props.scope]);
 const catalogError=(reason:AlbumFailure,detail:boolean,stage?:AlbumStage,httpStatus?:number,backup=false)=>{
  const prefix=detail?'No se pudo verificar la lista completa de pistas.':'No se pudo consultar el catálogo de álbumes.';
@@ -251,7 +251,7 @@ export function AlbumPageController(props:Props){
     const inLibrary=member(choice.id,index);
     const badge=present?(savedAlbum&&!inLibrary?'En caché de escucha':'Descargada'):pending&&failed?'Error':copy?.state==='missing'?(pending?'No descargada':'Sin descarga'):'Copia sin comprobar';
     return <li key={`${track.disc}:${track.position}`} data-album-pending={pending||undefined}>
-     <button type="button" disabled={pending||inspecting||props.coordinator.running||props.songPending} onClick={()=>{if(active()&&!props.coordinator.running&&!inspecting)props.onChoose(choice);}}>
+     <button type="button" disabled={inspecting||props.coordinator.running||props.songPending} onClick={()=>{if(active()&&!props.coordinator.running&&!inspecting)props.onChoose(choice,detail.tracks.map((t,i)=>{const id=albumTrackChoice(t,detail.edition.title).id;return available(id,i)?copies[id]?.trackId??visibleRows?.[i]?.trackId??null:null;}),index);}}>
       <span className="album-track-number" aria-label={`Disco ${track.disc}, pista ${track.position}`}>{track.position}</span>
       <span className="album-track-copy"><strong><bdi dir="auto">{local?.manualOverrides?.title??track.title}</bdi></strong><span><bdi dir="auto">{local?.manualOverrides?.artist??track.artist}</bdi></span></span>
      </button>

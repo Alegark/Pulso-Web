@@ -36,7 +36,7 @@ export function selectPlayerArtwork(data:unknown,q:PlayerArtworkQuery,limit=50):
  if(q.musicbrainzReleaseId!==undefined||!validIdentity(q)||!validText(q.title)||!validText(q.artist)||!Number.isFinite(q.durationSeconds)||q.durationSeconds<=0||q.durationSeconds>86400||q.album!==null&&!validText(q.album))return null;
  if(!data||typeof data!=='object'||Array.isArray(data))return null;
  const d=data as Record<string,unknown>;
- if(!Array.isArray(d.results)||d.results.length>=limit||d.resultCount!==d.results.length)return null;
+ if(!Array.isArray(d.results)||(d.results.length>limit||limit!==200&&d.results.length===limit)||d.resultCount!==d.results.length)return null;
  const matches: {id:number;album:string;url:string}[]=[];
  for(const item of d.results){
   if(!item||typeof item!=='object'||Array.isArray(item))return null;
@@ -53,7 +53,7 @@ export function selectPlayerArtwork(data:unknown,q:PlayerArtworkQuery,limit=50):
  }
  if(!matches.length)return null;
  const first=matches[0];
- if(matches.some(m=>m.id!==first.id||clean(m.album)!==clean(first.album)||m.url!==first.url))return null;
+ if(matches.some(m=>(q.album===null&&m.id!==first.id)||clean(m.album)!==clean(first.album)||m.url!==first.url))return null;
  return {album:first.album,url:first.url};
 }
 let nextRequest=0;

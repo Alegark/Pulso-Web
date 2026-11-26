@@ -135,6 +135,21 @@ export function musicSearchCatalog(query:string,local:readonly Track[],remote:re
   return !remote.some(other=>other!==t&&musicCatalogKey(other.artistName)===musicCatalogKey(label[1])&&musicCatalogKey(displayTrackTitle(other.trackName,other.artistName))===musicCatalogKey(displayTrackTitle(t.trackName,label[1]))&&Math.abs(other.duration-t.duration)<=5);
  });
  for(const {t} of reliableRemote.map((t,index)=>({t,index,score:score(q,t.trackName,t.artistName,t.albumName||null)})).filter(item=>item.score>0).sort((a,b)=>b.score-a.score||a.index-b.index))add('lrclib:'+t.id,t.trackName,t.artistName,['null','undefined'].includes(musicCatalogKey(t.albumName))?null:t.albumName||null,t.duration,'lrclib');
+ const covers=new Map<string,Set<string>>();
+ for(const choice of songs.values()){
+  if(!choice.artist||!choice.album||!choice.artworkUrl)continue;
+  const artist=musicCatalogKey(choice.artist),album=musicCatalogKey(choice.album);
+  if(!artist||!album)continue;
+  const key=JSON.stringify([artist,album]),urls=covers.get(key)??new Set<string>();
+  urls.add(choice.artworkUrl);covers.set(key,urls);
+ }
+ for(const [key,choice] of songs){
+  if(choice.artworkUrl||!choice.artist||!choice.album)continue;
+  const artist=musicCatalogKey(choice.artist),album=musicCatalogKey(choice.album);
+  if(!artist||!album)continue;
+  const urls=covers.get(JSON.stringify([artist,album]));
+  if(urls?.size===1)songs.set(key,Object.freeze({...choice,artworkUrl:[...urls][0]}));
+ }
  const ranked=[...songs.values()].map((choice,index)=>({choice,index,score:score(q,choice.title,choice.artist,choice.album)}))
   .sort((a,b)=>b.score-a.score||a.index-b.index).map(item=>item.choice);
  const editionChoices:MusicCatalogChoice[]=editions.filter(e=>e.trackCount!==1&&albumMatches(q,e.title,e.artist)).slice().sort((a,b)=>score(q,b.title,b.artist,null)-score(q,a.title,a.artist,null)).map(e=>Object.freeze({id:(typeof e.id==='string'?'musicbrainz:album:':'itunes:album:')+e.id,kind:'album',editionId:e.id,title:e.title,artist:e.artist,album:e.title,duration:null,source:typeof e.id==='string'?'musicbrainz':'itunes',artworkUrl:e.artworkUrl}));
