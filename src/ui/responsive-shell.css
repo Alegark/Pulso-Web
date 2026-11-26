@@ -120,11 +120,11 @@ html {
 .pulso-app .home-quick button { display:flex; align-items:center; text-align:left; gap:.8rem; padding:0 .8rem 0 0; overflow:hidden; font-weight:650; min-height:64px; }
 .home-quick button>span,.home-art { display:grid; place-items:center; background:var(--pulso-soft); color:var(--pulso-accent-text); font-size:1.6rem; flex:none; aspect-ratio:1; width:64px; }
 .home-view section { margin-block:2rem; }
-.home-continue { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; padding:1rem; background:var(--pulso-surface); border-radius:1rem; }
-.home-continue div { flex:1; min-width:8rem; }.home-continue p { margin:.15rem 0; color:var(--pulso-muted); }
-.home-playlists { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:1rem; padding:0; list-style:none; }
-.home-playlists button { display:grid; text-align:left; gap:.3rem; width:100%; padding:.65rem; }
-.home-playlists .home-art { width:100%; border-radius:.6rem; font-size:3rem; }.home-playlists small { color:var(--pulso-muted); }
+
+
+:is(.home-playlists, .home-albums) { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:1rem; padding:0; list-style:none; }
+:is(.home-playlists, .home-albums) button { display:grid; text-align:left; gap:.3rem; width:100%; padding:.65rem; }
+:is(.home-playlists, .home-albums) .home-art { width:100%; border-radius:.6rem; font-size:3rem; }:is(.home-playlists, .home-albums) small { color:var(--pulso-muted); }
 .home-empty { background:var(--pulso-surface); padding:1.3rem; border-radius:1rem; }
 .library-tabs { display:flex; flex-wrap:wrap; gap:.5rem; margin:1.5rem 0; }.library-tabs button { padding:.55rem 1rem; border-radius:2rem; }
 .library-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:1rem; }
@@ -145,7 +145,7 @@ html {
  .pulso-app .mini-player__actions { margin-inline:auto; }
  .home-quick { grid-template-columns:repeat(4,minmax(0,1fr)); }
 }
-@media(max-width:600px) { .pulso-header { margin-bottom:1.2rem; }.pulso-app .mini-player { left:.75rem; right:.75rem; }.home-playlists { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:600px) { .pulso-header { margin-bottom:1.2rem; }.pulso-app .mini-player { left:.75rem; right:.75rem; }:is(.home-playlists, .home-albums) { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 .desktop-transport,.desktop-seek,.desktop-volume { display:none; }
 @media(min-width:1024px) {
  .pulso-app .mini-player { display:grid; grid-template-columns:minmax(12rem,1fr) minmax(14rem,1.2fr) minmax(8rem,.7fr); grid-template-rows:auto auto; column-gap:2rem; }
@@ -169,25 +169,21 @@ html {
 
 /* Cards grow with the reader's text size; their contents may shrink within a grid. */
 .pulso-app .home-quick,
-.pulso-app .home-playlists,
+.pulso-app :is(.home-playlists, .home-albums),
 .pulso-app .library-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
 }
 .pulso-app .home-quick { max-inline-size: 64rem; }
-.pulso-app .home-playlists button,
+.pulso-app :is(.home-playlists, .home-albums) button,
 .pulso-app .collection-card { min-inline-size: 0; }
-.pulso-app .home-playlists button,
+.pulso-app :is(.home-playlists, .home-albums) button,
 .pulso-app .collection-card { grid-template-columns: minmax(0, 1fr); }
 .pulso-app .home-art,
 .pulso-app .collection-card__art { min-inline-size: 0; max-inline-size: 100%; }
-.pulso-app .home-playlists strong,
-.pulso-app .home-playlists small { min-inline-size: 0; overflow-wrap: anywhere; }
-.pulso-app .home-continue > div {
-  flex: 1 1 8rem;
-  min-inline-size: 0;
-  max-inline-size: 100%;
-}
-.pulso-app .home-playlists,
+.pulso-app :is(.home-playlists, .home-albums) strong,
+.pulso-app :is(.home-playlists, .home-albums) small { min-inline-size: 0; overflow-wrap: anywhere; }
+
+.pulso-app :is(.home-playlists, .home-albums),
 .pulso-app .library-grid {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 9rem), 1fr));
 }
@@ -207,4 +203,11 @@ html {
     gap: 0;
     overflow-wrap: normal;
   }
+}
+
+@media (max-width: 1023px) {
+  .pulso-app:not([data-player-open="true"])::after { content: ""; position: fixed; inset-inline: 0; inset-block-end: 0; block-size: calc(var(--nav-height, 0px) + var(--mini-height, 0px) + .85rem); z-index: 18; pointer-events: none; background: linear-gradient(to bottom, transparent 0%, var(--pulso-canvas) 22%, var(--pulso-canvas) 100%); }
+  .pulso-app .shell-nav { z-index: 20; }
+  .pulso-app .mini-player { z-index: 25; }
+  .pulso-app .mini-player :is(.mini-player__details, .mini-player__toggle, .mini-player__expand):focus-visible { outline-offset: -3px; }
 }

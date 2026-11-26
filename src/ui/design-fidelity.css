@@ -12,13 +12,13 @@
 .pulso-app .home-quick button { min-block-size: 64px; padding: 3px; gap: .6rem; border-radius: .6rem; font-size: .8rem; line-height: 1.35; }
 .pulso-app .home-quick button > span { inline-size: 56px; min-inline-size: 56px; block-size: 56px; border-radius: .35rem; }
 .pulso-app .home-quick button:first-child > span { background: linear-gradient(135deg,#4a0817,#9e1b38); color: #fff; }
-.pulso-app .home-continue { background: var(--pulso-soft); border: 0; padding: 1.25rem; }
-.pulso-app .home-continue > .home-art { border-radius: .6rem; }
-.pulso-app .home-playlists { gap: 1.5rem 1rem; }
-.pulso-app .home-playlists button,.pulso-app .collection-card { background: transparent; border: 0; padding: 0; border-radius: .5rem; gap: .2rem; }
+
+
+.pulso-app :is(.home-playlists, .home-albums) { gap: 1.5rem 1rem; }
+.pulso-app :is(.home-playlists, .home-albums) button,.pulso-app .collection-card { background: transparent; border: 0; padding: 0; border-radius: .5rem; gap: .2rem; }
 .pulso-app .home-art,.pulso-app .collection-card__art { border-radius: .5rem; }
-.pulso-app .home-playlists strong { font-size: .95rem; font-weight: 600; line-height: 1.4; margin-block-start: .55rem; }
-.pulso-app .home-playlists small { font-size: .8rem; }
+.pulso-app :is(.home-playlists, .home-albums) strong { font-size: .95rem; font-weight: 600; line-height: 1.4; margin-block-start: .55rem; }
+.pulso-app :is(.home-playlists, .home-albums) small { font-size: .8rem; }
 .pulso-app .library-tabs { margin-block: 1.25rem; gap: .5rem; }
 .pulso-app .library-tabs button { border-radius: 2rem; padding-inline: .85rem; font-size: .85rem; }
 .pulso-app .library-grid { grid-template-columns: repeat(auto-fill,minmax(min(100%,9rem),1fr)); gap: 1.5rem 1rem; }
