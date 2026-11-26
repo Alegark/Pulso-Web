@@ -608,6 +608,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
   async play(trackId:string,caller:()=>boolean,signal:AbortSignal,queueTrackIds?:readonly string[]){
    if(purpose!=='playback'||playUsed||signal.aborted||!current()||!caller()||busy||copyRemovalBlocked()||queueForeignBlocked())return 'failed' as const;playUsed=true;
    const guardedPlay=async()=>{
+    if(startupStatus.startsWith('Cola lista y pausada.')){startupStatus='Cola preparada.';emit();}
     const entry=player.current,epoch=player.queueEpoch;
     const stop=()=>{if(control.owner&&player.current===entry&&player.queueEpoch===epoch)player.pause();};
     signal.addEventListener('abort',stop,{once:true});
@@ -1474,19 +1475,20 @@ function App(){
   const preparing={view:key,trackId:ids[startIndex??0]};setCollectionPreparing(preparing);
   try{await viewQueue(ids,undefined,[],live,startIndex??0);
   if(!live()||document.visibilityState==='hidden'||busy||copyRemovalBlocked()||queueForeignBlocked()||!sourceReview.canPrepare()||player.queueEpoch!==epoch+1||!player.current)return;
-  transferPlayIntent=null;void player.play();
+  transferPlayIntent=null;if(startupStatus.startsWith('Cola lista y pausada.')){startupStatus='Cola preparada.';emit();}void player.play();
   }finally{setCollectionPreparing(value=>value===preparing?null:value);}
  }
  const pageRows=visible.slice(pagination.start,pagination.end);
+ const preloadIds=libraryDetail?pageRows.map(({track})=>track.id):libraryAlbums.flatMap(group=>group.trackIds.slice(0,1));
+ const preloadKeys=[...new Set(preloadIds.flatMap(id=>{
+  const shared=artworkKeys.get(id),url=catalogCovers.get(id),catalog=url?catalogArtworkKey(url):null;
+  return [...(catalog?[catalog]:[]),...(shared?['provider:'+shared]:[])];
+ }))];
+ const preloadSignature=JSON.stringify(preloadKeys);
  React.useEffect(()=>{
-  if(page!=='biblioteca'||settingsOpen||!account.user)return;
-  const ids=libraryDetail?pageRows.map(({track})=>track.id):libraryAlbums.flatMap(group=>group.trackIds.slice(0,1));
-  const keys=ids.flatMap(id=>{
-   const shared=artworkKeys.get(id),url=catalogCovers.get(id),catalog=url?catalogArtworkKey(url):null;
-   return [...(catalog?[catalog]:[]),...(shared?['provider:'+shared]:[])];
-  });
-  void artworkCache.preload([...new Set(keys)]);
- },[page,settingsOpen,account.user,libraryDetail,pageRows,libraryAlbums,artworkKeys,catalogCovers]);
+  if(page!=='biblioteca'||settingsOpen||!account.user?.id)return;
+  void artworkCache.preload(JSON.parse(preloadSignature) as string[]);
+ },[page,settingsOpen,account.user?.id,preloadSignature,artworkCache]);
  const filteredPlaylist=!!query||!!groupKey||favorites||present||groupMode!=='tracks';
  type MoveFocus={viewScope:string;page:number;scope:number;proof:string;source:HTMLButtonElement;entryId:string;delta:-1|1;listId:string;revision:number;entries:Playlist['entries'];verified:boolean};
  const moveFocus=React.useRef<MoveFocus|null>(null);

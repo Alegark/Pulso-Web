@@ -1,7 +1,7 @@
 # T28 · Estabilización en vivo y mejoras de experiencia v64
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** Requisitos, diseño y matriz de trazabilidad definidos. Pendiente de implementación y verificación.
+- **Estado:** Implementación integrada; regresiones A01/A02b y L02 corregidas y verificadas en ambos motores. Validación final y publicación pendientes; Telegram real e iPhone físico no ejecutados.
 - **Fecha:** 2026-11-26
 - **Línea base:** v63 publicada (`87a4e7d0`, rama `release/v63`), rama de integración `fix/v64-live` (worktree `v64-live`) + rama paralela `fix-sync-503`.
 - **Requisitos SPEC vinculados:** W02, W04, W05, W06, W07, W08, W10, W11, W13, W17, W18 · **Invariantes SPEC:** V2, V3, V5, V6, V7, V8, V10, V11, V13, V14, V15, V16, V17, V19, V21, V22, V23, V27, V28, V29, V30, V31
@@ -169,6 +169,10 @@ Niveles conforme a `doc/SPEC.md` §V.2: **U** (unitaria), **B** (navegador real 
 - **V64-07:** precarga de claves deduplicadas en una transacción readonly, con repetición sin nueva transacción; C03, C04 y C07 pasan en ambos motores, sin IntersectionObserver.
 - **V64-10:** evidencia previa de ronda C: Inicio poblado y vacío, 10/10 casos por motor; aceptación física no ejecutada.
 - **Validación:** typecheck, typecheck:tests y lint PASS; unitarias 1058/1058; `check-persistent-cache-main.mjs` 13/13 Chromium y 13/13 WebKit. Evidencia mínima: `.local/test-evidence/t26-inc1-cache-0EvOnS/report.json`. iPhone físico y pruebas reales de Telegram siguen pendientes.
+
+### Corrección de regresiones de la batería completa (2026-11-26)
+
+La batería sobre `3df2407` detectó A01/A02b y L02; no se acredita aquí una nueva batería completa. Tras corregir la retirada de URLs al ocultar Biblioteca y el aviso antes de reproducir, las suites afectadas pasan sin fallos en Chromium y WebKit, respectivamente: portadas 6/6 y 6/6 (A01/A02b), caché persistente 13/13 y 13/13 (C03/C04/C07), arranque 10/10 y 10/10 (L02/H01/H02), avisos 5/5 y 5/5, y descargas 5/5 y 5/5. Typecheck, typecheck de pruebas, lint y build PASS; unitarias 1058/1058. La precarga usa una firma estable de claves para evitar ejecuciones por renders sin cambios. La evidencia de navegador cubre la transición visible → oculta; el archivo unitario existente prueba funciones de catálogo y no monta componentes React. La validación final, la revisión independiente y los niveles Telegram real e iPhone físico siguen pendientes.
 
 ## Plan de implementación acotado para Codex (`gpt-6.1-terra`)
 

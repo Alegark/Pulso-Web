@@ -48,7 +48,8 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
   const publishRemote=async(blob:Blob)=>{
    if(active()&&!await localWins())publish(blob);
   };
-  if(enabled)void (async()=>{try{
+  if(!enabled||cache?.signal.aborted){revokeAll();setView(null);return;}
+  void (async()=>{try{
    if(await localWins()||!active())return;
    if(imageUrl){
     const blob=await catalogArtwork(imageUrl,cache??undefined,blob=>{
