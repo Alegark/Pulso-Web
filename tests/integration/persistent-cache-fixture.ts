@@ -32,8 +32,9 @@ async function seed(twoAccounts=false){
  return ids;
 }
 async function showEmbedded(visibleId:string,hiddenId:string){
- const key='artwork:v1:'+visibleId,manual=await readRecord<object>('settings',key);
- await writeRecord('settings',key,{...manual,manual:false,provenance:'embedded-riff-id3'});
+ const key='artwork:v1:'+visibleId,manual=await readRecord<{blob?:Blob}>('settings',key);
+ const blob=manual?.blob?new Blob([await manual.blob.arrayBuffer()],{type:manual.blob.type}):undefined;
+ await writeRecord('settings',key,{...manual,...(blob?{blob}:{}),manual:false,provenance:'embedded-riff-id3'});
  createRoot(document.getElementById('artwork')!).render(createElement('div',null,
   createElement(CatalogArtwork,{trackId:visibleId,url:artworkUrl(0),preferUrl:true,className:'embedded'}),
   createElement(CatalogArtwork,{trackId:hiddenId,url:artworkUrl(0),preferUrl:true,className:'hidden'})));

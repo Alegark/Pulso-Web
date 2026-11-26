@@ -191,6 +191,26 @@ try{
     assert.equal(checks,2);
     return {schemes:['light','dark'],font:'200%',reducedMotion:true,retry:true};
    },{width});
+   await check('H01 · Inicio con biblioteca',async page=>{
+    await seedQueue(page,origin);
+    await page.goto(origin);
+    await waitRestored(page);
+    assert.equal(await page.getByText('Añadidas recientemente',{exact:true}).count(),0);
+    assert.equal(await page.locator('.home-recent').count(),0);
+    return {recentAbsent:true};
+   });
+   await check('H02 · Inicio vacío',async page=>{
+    await seedQueue(page,origin);
+    await page.evaluate(async()=>{
+     const db=await new Promise((resolve,reject)=>{const request=indexedDB.open('pulso-web-local-v1');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+     await new Promise((resolve,reject)=>{const tx=db.transaction(['tracks','settings'],'readwrite');tx.objectStore('tracks').clear();tx.objectStore('settings').delete('library-playback');tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);});db.close();
+    });
+    await page.goto(origin);
+    await page.locator('.home-empty').waitFor();
+    assert.match(await page.locator('.home-empty').textContent(),/Haz espacio para tu música/);
+    assert.equal(await page.locator('.home-recent').count(),0);
+    return {emptyVisible:true};
+   });
    await check('E02',async page=>{
     await seedQueue(page,origin);
     await page.goto(origin);
@@ -268,7 +288,7 @@ finally{
  report.cleanup=await workspace.cleanup();
  await writeFile(resolve(workspace.evidence,'report.json'),JSON.stringify(report,null,2));
  console.log(workspace.evidence);
- if(report.fatal||report.errors.length||report.cases.length!==14||report.cases.some(item=>item.status==='FAIL')){
+ if(report.fatal||report.errors.length||report.cases.length!==20||report.cases.some(item=>item.status==='FAIL')){
   console.error(report.fatal??JSON.stringify(report.errors));process.exitCode=1;
  }
 }

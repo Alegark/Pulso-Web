@@ -153,6 +153,14 @@ Niveles conforme a `doc/SPEC.md` §V.2: **U** (unitaria), **B** (navegador real 
 - **V64-10:** Implementación y pruebas actualizadas; `check-functional-shell.mjs` FAIL antes del primer caso: su fixture anterior no completa la preparación de cuenta y la navegación Principal no aparece. No se acredita PASS de navegador para Inicio.
 - Comprobaciones locales: typecheck, typecheck:tests y lint PASS; unitarias 1053/1053; sin publicación ni pruebas físicas.
 
+### Evidencia parcial de la ronda C (2026-11-26)
+
+- **V64-02:** implementación previa en `5e6448f`; la verificación real de Telegram y su evidencia corresponden a la integración, no se declara aquí PASS.
+- **V64-06:** selección de portada en lote de 200 y ediciones de portada idéntica, más herencia entre resultados por artista y álbum normalizados; unitarias 1055/1055 y tipos/lint PASS. Se mantiene el `ObjectURL` anterior hasta la carga/decodificación o retirada de caché; T26 C03 pasa en la batería de caché Chromium y WebKit.
+- **V64-07:** fixture C04 reconstruye el Blob; batería de caché existente 11/11 en Chromium y 11/11 en WebKit. La precarga en lote y el diferimiento de red siguen pendientes, por lo que V64-07 no está completo.
+- **V64-05:** identidad compartida y deduplicación por álbum pendientes; no se acredita PASS.
+- **V64-10:** prueba explícita de Inicio poblado y vacío: 10/10 casos por motor en Chromium y WebKit; la primera ejecución completa pasó los 20 casos pero el contador del runner causó salida 1; tras corregirlo, la repetición pasó 20/20 con salida 0. La aceptación física de iPhone permanece NO EJECUTADA.
+
 ## Plan de implementación acotado para Codex (`gpt-6.1-terra`)
 
 Ejecutar en incrementos ordenados y con validación proporcional (`doc/SPEC.md` §V.2) por área antes de la batería completa final:

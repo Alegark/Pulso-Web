@@ -283,3 +283,15 @@ test('downloaded collaboration credits use canonical display grouping without ex
  const foreign=[{...albums[0],id:5,artist:'Unrelated'}];
  assert.ok(musicSearchCatalog('record',[local],[],[],[],foreign,songs).some(r=>r.kind==='album'&&r.artist==='Main, Guest'));
 });
+
+test('search artwork is inherited only for the same nonempty artist and album',()=>{
+ const cover='https://is1-ssl.mzstatic.com/example.jpg';
+ const hints=[{releaseId:7,trackId:8,disc:1,position:1,title:'First',artist:'Artist',album:'Album',durationMs:200000,artworkUrl:cover}];
+ const remote=[row(1,'Second',' ARTIST ','album'),row(2,'Third','Other','Album'),row(3,'Fourth','Artist','Other'),row(4,'Fifth','Artist','')];
+ const choices=musicSearchCatalog('artist',[],remote,[],[],[],hints);
+ assert.equal(choices.find(c=>c.id==='lrclib:1')?.artworkUrl,cover);
+ assert.equal(choices.find(c=>c.id==='lrclib:3')?.artworkUrl,undefined);
+ assert.equal(choices.find(c=>c.id==='lrclib:4')?.artworkUrl,undefined);
+ const other=musicSearchCatalog('other',[],[remote[1]],[],[],[],hints);
+ assert.equal(other.find(c=>c.id==='lrclib:2')?.artworkUrl,undefined);
+});
