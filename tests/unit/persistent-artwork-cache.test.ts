@@ -57,3 +57,13 @@ test('C05 · an offline catalog call does not probe the relay or dispatch a requ
   else Reflect.deleteProperty(globalThis,'navigator');
  }
 });
+
+test('V64-05 · album identity requires an edition or both local credits',async()=>{
+ const {albumArtworkKey}=await import('../../src/library/player-artwork-cache');
+ assert.equal(albumArtworkKey({editionId:42}),'edition:42');
+ assert.equal(albumArtworkKey({editionId:'musicbrainz:abc'}),'edition:musicbrainz:abc');
+ assert.equal(albumArtworkKey({artist:' Artist ',album:' Album '}),'album:artist:album');
+ assert.notEqual(albumArtworkKey({artist:'Another',album:'Album'}),albumArtworkKey({artist:'Artist',album:'Album'}));
+ assert.equal(albumArtworkKey({album:'Album'}),undefined);
+ assert.equal(albumArtworkKey({artist:'Artist'}),undefined);
+});

@@ -86,16 +86,16 @@ Cerrar los defectos detectados en la prueba real en producción de v63 e incorpo
 - **Causa actual de duplicación:** `sharedArtworkKey(track)` (`src/main.tsx:1118-1120`) incluye `track.id`, `assetId`, `audioFingerprint.sha256` y `title`, por lo que cada canción de un mismo álbum crea una entrada `provider:<trackKey>` distinta en `pulso-web-cache-v1`. Además, `catalogCovers` (`src/main.tsx:1368-1375`) solo asigna URL si cada pista individual tiene `catalogRelease.artworkUrl`, sin propagar `savedAlbum.edition.artworkUrl` a las pistas del álbum guardado.
 - **Diseño elegido:**
   1. **Clave de álbum compartida (`albumArtworkKey`):**
-     - Prioridad 1 (edición inequívoca): `edition:itunes:<editionId>` o `edition:mb:<releaseId>` (procedente de `savedAlbum`, `track.catalogChoice.id` o `trackCatalogRelease(track)`). Separa automáticamente ediciones estándar, deluxe y remasters.
+     - Prioridad 1 (edición inequívoca): `edition:<editionId>` (incluido `musicbrainz:*`) (procedente de `savedAlbum`, `track.catalogChoice.id` o `trackCatalogRelease(track)`). Separa automáticamente ediciones estándar, deluxe y remasters.
      - Prioridad 2 (álbum local con artista fiable): si no hay `editionId`, y existen tanto `album` como `albumArtist || artist` no vacíos (vía `resolveLocalAlbumMetadata(track)`), usar `album:${musicCatalogKey(albumArtist || artist)}:${musicCatalogKey(album)}`. Si falta artista o álbum, no compartir (evita colisiones entre álbumes homónimos como *Greatest Hits*).
   2. **Deduplicación en `pulso-web-cache-v1` (`src/cache/persistent-artwork.ts` + `src/library/player-artwork-cache.ts`):**
      - Guardar el binario `ArrayBuffer` **una sola vez** por `artworkKey` (URL normalizada o `albumArtworkKey`).
-     - En `catalog` store, enlazar tanto `albumArtworkKey` como `providerKey` al mismo `artworkKey`, y al resolver una portada de proveedor para cualquier pista del álbum, indexarla bajo `albumArtworkKey` para que el resto de pistas del álbum la lean instantáneamente de L1/L2 sin red ni duplicación de bytes.
+     - Usar `provider:<albumArtworkKey>` para proveedor y la URL normalizada para catálogo; cada identidad compartida conserva una fila binaria en L1/L2.
      - En `src/main.tsx`, propagar `savedAlbum.edition.artworkUrl` (y la URL de catálogo compartida del grupo de álbum) a `catalogCovers` para todas las pistas resueltas del mismo álbum guardado (respetando siempre `K01` en `CatalogArtwork`/`PlayerArtwork`, donde `readArtwork(trackId)` manual/local se evalúa antes que `imageUrl`).
   3. **Corrección de `CatalogArtwork.tsx` (carrera WebKit T26 C03):**
      - Suscribirse en `useSyncExternalStore` solo al snapshot concreto de `identity`/`albumKey` (no re-disparar el efecto entero cuando cambian otras claves) y mantener el `ObjectURL` previo vivo hasta que la nueva `<img>` haya decodificado (`img.decode()`/`onLoad`) antes de revocar el anterior.
   4. **Precarga por lote (`V64-07`):**
-     - Añadir `PlayerArtworkCache.preload(keys: readonly string[])` que abra **una única** transacción `readonly` en `pulso-web-cache-v1` al abrir Biblioteca/playlist/álbum e hidrate L1 RAM, más `IntersectionObserver` en `CatalogArtwork` para diferir la red fuera del viewport.
+     - Añadir `PlayerArtworkCache.preload(keys: readonly string[])` que abra **una única** transacción `readonly` en `pulso-web-cache-v1` al abrir Biblioteca/playlist/álbum e hidrate L1 RAM, sin diferir las imágenes fuera del viewport: el arnés existente exige las 30 portadas.
 
 ### Punto 6 · Canciones individuales en álbum guardado en Biblioteca
 - **Causa exacta:** `src/ui/AlbumPageController.tsx:247,254`:
@@ -157,9 +157,18 @@ Niveles conforme a `doc/SPEC.md` §V.2: **U** (unitaria), **B** (navegador real 
 
 - **V64-02:** implementación previa en `5e6448f`; la verificación real de Telegram y su evidencia corresponden a la integración, no se declara aquí PASS.
 - **V64-06:** selección de portada en lote de 200 y ediciones de portada idéntica, más herencia entre resultados por artista y álbum normalizados; unitarias 1055/1055 y tipos/lint PASS. Se mantiene el `ObjectURL` anterior hasta la carga/decodificación o retirada de caché; T26 C03 pasa en la batería de caché Chromium y WebKit.
-- **V64-07:** fixture C04 reconstruye el Blob; batería de caché existente 11/11 en Chromium y 11/11 en WebKit. La precarga en lote y el diferimiento de red siguen pendientes, por lo que V64-07 no está completo.
+- **V64-07:** fixture C04 reconstruye el Blob; batería de caché existente 11/11 en Chromium y 11/11 en WebKit. La precarga en lote seguía pendiente en esta ronda; no se introducirá diferimiento de red.
 - **V64-05:** identidad compartida y deduplicación por álbum pendientes; no se acredita PASS.
 - **V64-10:** prueba explícita de Inicio poblado y vacío: 10/10 casos por motor en Chromium y WebKit; la primera ejecución completa pasó los 20 casos pero el contador del runner causó salida 1; tras corregirlo, la repetición pasó 20/20 con salida 0. La aceptación física de iPhone permanece NO EJECUTADA.
+
+### Evidencia de la parte D (2026-11-26)
+
+- **V64-02:** implementación en `5e6448f`; la verificación con Telegram real permanece pendiente, sin atribuir PASS de ese nivel.
+- **V64-05:** identidad compartida por edición o artista y álbum locales; C07 comprueba tres pistas, una fila binaria, como máximo una petición y ocultación manual de la segunda pista en Chromium y WebKit.
+- **V64-06:** C03 pasa en ambos motores; selección en lote y ediciones cubiertas por la evidencia de ronda C.
+- **V64-07:** precarga de claves deduplicadas en una transacción readonly, con repetición sin nueva transacción; C03, C04 y C07 pasan en ambos motores, sin IntersectionObserver.
+- **V64-10:** evidencia previa de ronda C: Inicio poblado y vacío, 10/10 casos por motor; aceptación física no ejecutada.
+- **Validación:** typecheck, typecheck:tests y lint PASS; unitarias 1058/1058; `check-persistent-cache-main.mjs` 13/13 Chromium y 13/13 WebKit. Evidencia mínima: `.local/test-evidence/t26-inc1-cache-0EvOnS/report.json`. iPhone físico y pruebas reales de Telegram siguen pendientes.
 
 ## Plan de implementación acotado para Codex (`gpt-6.1-terra`)
 
@@ -183,7 +192,7 @@ Ejecutar en incrementos ordenados y con validación proporcional (`doc/SPEC.md` 
 ### 4. Caché compartida por álbum, `♪` en Buscar e hidratación rápida (`V64-05`, `V64-06`, `V64-07`)
 - `src/cache/persistent-artwork.ts`, `src/library/player-artwork-cache.ts`: añadir soporte de `albumArtworkKey` (una sola entrada binaria por álbum + enlaces múltiples en `catalog`) y método `preload(keys)` en una sola transacción `readonly`.
 - `src/main.tsx`: calcular `albumArtworkKey` por pista (`edition:*` o `album:<artista>:<álbum>`), propagar `savedAlbum.edition.artworkUrl` a pistas resueltas del álbum y lanzar `preload` al abrir Biblioteca/colecciones.
-- `src/ui/CatalogArtwork.tsx`, `src/ui/PlayerArtwork.tsx`: resolver la carrera `decode()` vs `revokeObjectURL` (T26 C03 WebKit), suscripción específica por clave/álbum e `IntersectionObserver` para red diferida.
+- `src/ui/CatalogArtwork.tsx`, `src/ui/PlayerArtwork.tsx`: resolver la carrera `decode()` vs `revokeObjectURL` (T26 C03 WebKit), suscripción específica por clave/álbum sin `IntersectionObserver`, incompatible con el caso existente de 30 portadas.
 - `src/library/player-artwork-provider.ts`, `src/library/music-search-catalog.ts`, `src/library/catalog-artwork.ts`: corregir descarte de lote completo al llegar a `limit === 200` y permitir portada compartida de ediciones consistentes en Buscar.
 - Tests: ampliar `tests/unit/persistent-artwork-cache.test.ts`, `tests/unit/player-artwork-provider.test.ts`, `tests/unit/music-search-catalog.test.ts`, y corregir/ampliar `tests/integration/check-persistent-cache-main.mjs` (incluyendo fixture T26 C04 en WebKit).
 

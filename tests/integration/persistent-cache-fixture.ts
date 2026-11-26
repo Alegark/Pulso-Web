@@ -2,6 +2,8 @@ import {createElement} from 'react';
 import {createRoot} from 'react-dom/client';
 import {closeDatabase,openDatabase,readRecord,writeRecord} from '../../src/storage/database';
 import {prepareAccountLibrary} from '../../src/accounts/library-local';
+import {PlayerArtworkCache} from '../../src/library/player-artwork-cache';
+import {readArtwork,setManualArtwork} from '../../src/library/artwork';
 import {CatalogArtwork} from '../../src/ui/CatalogArtwork';
 import './artwork-rows-dock-fixture';
 import type {Track,Playlist} from '../../src/library/library';
@@ -21,6 +23,16 @@ async function seed(twoAccounts=false){
   await writeRecord('tracks',id,track);
   entries.push({id:crypto.randomUUID(),trackId:id});
  }
+ const albumEntries=[];
+ const albumAsset=(await readRecord<Track>('tracks',ids['Descarga uno']))!.assetId;
+ for(let i=0;i<3;i++){
+  const id=crypto.randomUUID(),title=`Álbum compartido ${i+1}`;
+  const track:Track={id,accountId:owner,assetId:albumAsset,title,artist:'Artista compartido',album:'Álbum compartido',duration:45,favorite:false,revision:1,createdAt:new Date(0).toISOString(),manualOverrides:{},
+   catalogRelease:{source:'itunes' as const,releaseId:9999,trackId:99991+i,disc:1,position:i+1,title:'Álbum compartido',artist:'Artista compartido',...(i===0?{artworkUrl:'https://is1-ssl.mzstatic.com/image/thumb/Music/shared/9999/100x100bb.png'}:{})}};
+  await writeRecord('tracks',id,track);ids[title]=id;albumEntries.push({id:crypto.randomUUID(),trackId:id});
+ }
+ const albumPlaylist:Playlist={id:crypto.randomUUID(),accountId:owner,name:'Álbum compartido prueba',revision:1,entries:albumEntries};
+ await writeRecord('playlists',albumPlaylist.id,albumPlaylist);
  const playlist:Playlist={id:crypto.randomUUID(),accountId:owner,name:'Treinta portadas',revision:1,entries};
  await writeRecord('playlists',playlist.id,playlist);
  if(twoAccounts){
@@ -39,4 +51,15 @@ async function showEmbedded(visibleId:string,hiddenId:string){
   createElement(CatalogArtwork,{trackId:visibleId,url:artworkUrl(0),preferUrl:true,className:'embedded'}),
   createElement(CatalogArtwork,{trackId:hiddenId,url:artworkUrl(0),preferUrl:true,className:'hidden'})));
 }
-Object.assign(window,{seedPersistentCache:seed,showEmbedded});
+async function hideAlbumTrack(id:string){await setManualArtwork(id,null,(await readArtwork(id)).revision);}
+async function testPreload(keys:string[]){
+ const native=IDBDatabase.prototype.transaction;let count=0;
+ IDBDatabase.prototype.transaction=function(...args:Parameters<IDBDatabase['transaction']>){
+  if(this.name==='pulso-web-cache-v1'&&args[1]==='readonly')count++;
+  return native.apply(this,args);
+ };
+ const cache=new PlayerArtworkCache(owner);
+ try{await cache.preload(keys);await cache.preload(keys);return count;}
+ finally{cache.retire();IDBDatabase.prototype.transaction=native;}
+}
+Object.assign(window,{seedPersistentCache:seed,showEmbedded,hideAlbumTrack,testPreload});

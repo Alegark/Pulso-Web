@@ -108,6 +108,21 @@ export class PersistentArtwork {
   }catch{return null;}
  }
 
+ async getMany(artworkKeys:readonly string[]):Promise<Map<string,StoredArtwork>>{
+  const keys=[...new Set(artworkKeys)].slice(0,64);
+  if(!keys.length)return new Map();
+  try{
+   const rows=await transact(['artwork'],'readonly',async tx=>{
+    const store=tx.objectStore('artwork');
+    return Promise.all(keys.map(key=>read<ArtworkRow|undefined>(store.get([this.accountId,key]))));
+   },this.signal);
+   if(this.signal.aborted)return new Map();
+   const result=new Map<string,StoredArtwork>();
+   rows.forEach((row,i)=>{if(validRow(row))result.set(keys[i],{blob:new Blob([row.bytes],{type:row.mime}),album:row.album,sha256:row.sha256,fetchedAt:row.fetchedAt,lastAccessedAt:row.lastAccessedAt});});
+   return result;
+  }catch{return new Map();}
+ }
+
  async touch(artworkKey:string,now:number){
   try{
    await transact(['artwork'],'readwrite',async tx=>{

@@ -54,9 +54,12 @@ let running=0;const queue:(()=>void)[]=[];
 async function acquire(){if(running>=4){await new Promise<void>(resolve=>queue.push(resolve));return;}running++;}
 function release(){const next=queue.shift();if(next)next();else running--;}
 /** Shared, bounded, anonymous image transport. Only decoded validated blobs leave it. */
-export async function catalogArtwork(url:string,cache=transientArtwork,onRefresh?:(blob:Blob)=>void):Promise<Blob|null>{
+export function catalogArtworkKey(url:string):string|null{
  const spotify=spotifyArtworkUrl(url);
- const safe=spotify?new URL('/catalog/artwork?'+new URLSearchParams({u:spotify}),location.origin).href:musicBrainzArtworkUrl(url)??artworkImageUrl(url,300);if(!safe)return null;
+ return spotify?new URL('/catalog/artwork?'+new URLSearchParams({u:spotify}),location.origin).href:musicBrainzArtworkUrl(url)??artworkImageUrl(url,300);
+}
+export async function catalogArtwork(url:string,cache=transientArtwork,onRefresh?:(blob:Blob)=>void):Promise<Blob|null>{
+ const safe=catalogArtworkKey(url);if(!safe)return null;
  return cache.loadCatalog(safe,async():Promise<ValidatedArtwork|null>=>{
   await acquire();
   const controller=new AbortController(),abort=()=>controller.abort();

@@ -1,6 +1,6 @@
 import {albumCoordinator} from './library/album-download';
 import {albumDownloadKey,libraryDownloadKey} from './library/collection-download-queue';
-import {libraryAlbumCards,readSavedAlbumsFrom,saveAlbumRecord,savedAlbumGroupKey,SavedAlbumLimitError,type SaveAlbumResult,type SavedAlbum,type SavedAlbumFailures} from './library/saved-albums';
+import {libraryAlbumCards,resolvedAlbumTracks,readSavedAlbumsFrom,saveAlbumRecord,savedAlbumGroupKey,SavedAlbumLimitError,type SaveAlbumResult,type SavedAlbum,type SavedAlbumFailures} from './library/saved-albums';
 import type {AlbumDetail} from './library/album-catalog';
 import type {LibraryAlbumPage} from './ui/MusicSearchController';
 import type {SongImportRejection} from './library/selected-song';
@@ -15,7 +15,7 @@ import {createDownloadRemovalController} from './ui/download-removal-state';
 import {DownloadRemovalDialog} from './ui/DownloadRemovalDialog';
 import {SpotifyPlaylistImport} from './ui/SpotifyPlaylistImport';
 import {enrichSpotifyPlaylist,tracksWithSpotifyReleases,type SpotifyCatalogProgress} from './playlists/spotify-catalog';
-import {catalogRecordingId,displayTrackAlbum,trackCatalogRelease} from './library/catalog-release';
+import {albumEditionId,catalogRecordingId,displayTrackAlbum,trackCatalogRelease} from './library/catalog-release';
 import {importSpotifyPlaylist} from './playlists/spotify-import';
 import {groupStorageDownloads} from './library/storage-groups';
 import {StorageSettings} from './ui/StorageSettings';
@@ -44,7 +44,7 @@ import {waitForSongAdmission} from './library/song-admission';
 import {readSongCopyStatus,type SongCopyInspection} from './library/song-copy-status';
 import {readLibraryTrackIds,addTrackToLibrary} from './library/library-membership';
 import type {BotDownloadedAudio} from './telegram/bot-search-protocol';
-import {readSongAlias,readSongAliasesFrom,readSongDisplayArtist,rememberSongAlias,type SongAliases,type SongPlaybackAttempt,type SongChoice,type SongManagement} from './library/selected-song';
+import {createSongResolver,readSongAlias,readSongAliasesFrom,readSongDisplayArtist,rememberSongAlias,type SongAliases,type SongPlaybackAttempt,type SongChoice,type SongManagement} from './library/selected-song';
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {Ownership} from './playback/ownership';
@@ -88,7 +88,8 @@ import {useShellHistory} from './ui/useShellHistory';
 import {NowPlayingView,type PlayerView} from './ui/NowPlayingView';
 import {usePlayerLyrics,PlayerLyricsPreview,PlayerLyricsReader} from './ui/PlayerLyrics';
 import {PlayerArtwork} from './ui/PlayerArtwork';
-import {PlayerArtworkCache} from './library/player-artwork-cache';
+import {PlayerArtworkCache,albumArtworkKey} from './library/player-artwork-cache';
+import {catalogArtworkKey} from './library/catalog-artwork';
 import {purgeArtworkAccount,retainArtworkAccount} from './cache/persistent-artwork';
 import {PlayerArtworkProvider} from './library/player-artwork-provider';
 import {emptyShellView,matchesShellTrack,recentTracks,homePlaylists,trackAvailability,availabilityText,type ShellView} from './library/shell-selectors';
@@ -1117,8 +1118,9 @@ function accountBoundary(){
  emit();
 }
 accountController.subscribe(accountBoundary);accountBoundary();void accountController.load();reuseInstalledWindow(window);
-function sharedArtworkKey(track:Track){
- return JSON.stringify([track.id,track.assetId,track.audioFingerprint?.sha256,track.title,track.artist,track.album,track.duration,track.catalogChoice?.id]);
+function sharedArtworkKey(track:Track,editionId?:string|number){
+ const local=resolveLocalAlbumMetadata(track).albumArtist;
+ return albumArtworkKey({editionId:albumEditionId(track)??editionId,album:track.album,artist:track.artist,albumArtist:local.state==='known'?local.value:undefined})??JSON.stringify([track.id,track.assetId,track.audioFingerprint?.sha256,track.title,track.artist,track.album,track.duration,track.catalogChoice?.id]);
 }
 
 function App(){
@@ -1367,20 +1369,32 @@ function App(){
   return id?[id]:[];
  };
  const recent=React.useMemo(()=>recentTracks(libraryTracks),[libraryTracks]);const homeLists=React.useMemo(()=>homePlaylists(playlists),[playlists]);
- const catalogCovers=React.useMemo(()=>{
-  const covers=new Map<string,string>();
-  for(const track of tracks){
-   const url=trackCatalogRelease(track)?.artworkUrl;
-   if(url)covers.set(track.id,url);
+ const albumArtwork=React.useMemo(()=>{
+  const covers=new Map<string,string>(),editions=new Map<string,string|number>();
+  for(const track of tracks){const url=trackCatalogRelease(track)?.artworkUrl;if(url)covers.set(track.id,url);}
+  const resolve=createSongResolver(tracks,songAliases);
+  for(const album of savedAlbums){
+   for(const {trackId} of resolvedAlbumTracks(album,resolve))if(trackId){
+    if(!covers.has(trackId)&&album.edition.artworkUrl)covers.set(trackId,album.edition.artworkUrl);
+    if(!editions.has(trackId))editions.set(trackId,album.edition.id);
+   }
   }
-  return covers;
- },[tracks]);
- const artworkKeys=React.useMemo(()=>new Map(tracks.map(track=>[track.id,sharedArtworkKey(track)])),[tracks]);
+  for(const group of libraryAlbums){
+   const url=(group.saved?group.artworkUrl:undefined)??group.trackIds.map(id=>covers.get(id)).find(Boolean);
+   for(const id of group.trackIds){
+    if(url&&!covers.has(id))covers.set(id,url);
+    if(group.editionId!==undefined&&group.editionId!==null&&!editions.has(id))editions.set(id,group.editionId);
+   }
+  }
+  return {covers,editions};
+ },[tracks,savedAlbums,songAliases,libraryAlbums]);
+ const catalogCovers=albumArtwork.covers;
+ const artworkKeys=React.useMemo(()=>new Map(tracks.map(track=>[track.id,sharedArtworkKey(track,albumArtwork.editions.get(track.id))])),[tracks,albumArtwork]);
  const artworkIdentity=React.useMemo(()=>({keys:artworkKeys,revision:artworkRefreshToken}),[artworkKeys,artworkRefreshToken]);
  const artworkProvider=React.useMemo(()=>new PlayerArtworkProvider((...args)=>fetch(...args)),[accountEpoch,account.user?.id]);
  const trackIndex=React.useMemo(()=>new Map(tracks.map(t=>[t.id,t])),[tracks]);
  const currentEntryId=player.current?.id,currentTrack=player.current?trackIndex.get(player.current.trackId):undefined;
- const currentArtworkKey=currentTrack?sharedArtworkKey(currentTrack):undefined;
+ const currentArtworkKey=currentTrack?artworkKeys.get(currentTrack.id):undefined;
  React.useEffect(syncMediaSession,[currentEntryId,currentTrack,owner,player.state]);
  const [playerOrganization,setPlayerOrganization]=React.useState<{entryId:string;pending:boolean;message:string}|null>(null);
  const playerOrganizationFlight=React.useRef(false);
@@ -1464,6 +1478,15 @@ function App(){
   }finally{setCollectionPreparing(value=>value===preparing?null:value);}
  }
  const pageRows=visible.slice(pagination.start,pagination.end);
+ React.useEffect(()=>{
+  if(page!=='biblioteca'||settingsOpen||!account.user)return;
+  const ids=libraryDetail?pageRows.map(({track})=>track.id):libraryAlbums.flatMap(group=>group.trackIds.slice(0,1));
+  const keys=ids.flatMap(id=>{
+   const shared=artworkKeys.get(id),url=catalogCovers.get(id),catalog=url?catalogArtworkKey(url):null;
+   return [...(catalog?[catalog]:[]),...(shared?['provider:'+shared]:[])];
+  });
+  void artworkCache.preload([...new Set(keys)]);
+ },[page,settingsOpen,account.user,libraryDetail,pageRows,libraryAlbums,artworkKeys,catalogCovers]);
  const filteredPlaylist=!!query||!!groupKey||favorites||present||groupMode!=='tracks';
  type MoveFocus={viewScope:string;page:number;scope:number;proof:string;source:HTMLButtonElement;entryId:string;delta:-1|1;listId:string;revision:number;entries:Playlist['entries'];verified:boolean};
  const moveFocus=React.useRef<MoveFocus|null>(null);
@@ -1697,7 +1720,7 @@ function App(){
   })}>Ver álbum completo</button>;
  })()}
  {!visible.length&&<div className="collection-empty"><p>Esta colección todavía no tiene canciones.</p><button type="button" onClick={()=>navigate('buscar')}>Buscar canciones</button></div>}
- {pagination.pages>1&&<LibraryPagination {...pagination}/>}<ol className="tracks" start={pagination.start+1}>{pageRows.map(({track,key,playlistIndex})=>{const info=albumMetadata.get(track.id)!,artworkKey=sharedArtworkKey(track);return <li key={key}><CatalogArtwork key={control.proof+track.id} trackId={track.id} sharedArtworkKey={artworkKey} refreshToken={artworkRefreshToken} className="collection-track-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/><button className="collection-track-main" aria-label={`Escuchar ${track.title}`} aria-current={player.current?.trackId===track.id?'true':undefined} disabled={!owner||busy||databaseState!=='ready'||copyRemovalBlocked()||!sourceReview.canPrepare()} onClick={()=>{if(trackAvailability(track,availability)==='available')void playCollection(key);else requestLibraryDownload([track.id],track.title,true);}}><strong>{track.title}</strong><span>{track.artist??'Artista desconocido'}{displayTrackAlbum(track)&&` · ${displayTrackAlbum(track)}`}</span>{owner&&player.state==='playing'&&player.current?.trackId===track.id&&<PlaybackIndicator/>}</button>{((collectionPreparing?.view===collectionPlaybackViewKey&&collectionPreparing.trackId===track.id)||(player.current?.trackId===track.id&&(player.state==='loading'||player.state==='buffering')))&&<span className="collection-track-loading" role="status"><span>Preparando canción…</span><progress aria-label={`Carga de ${track.title}`}/></span>}<TrackActionsMenu title={track.title} artist={track.artist??'Artista desconocido'} active={page==='biblioteca'&&!settingsOpen&&libraryDetail&&!playerOpen} artwork={<CatalogArtwork trackId={track.id} sharedArtworkKey={artworkKey} refreshToken={artworkRefreshToken} className="track-actions-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>}>
+ {pagination.pages>1&&<LibraryPagination {...pagination}/>}<ol className="tracks" start={pagination.start+1}>{pageRows.map(({track,key,playlistIndex})=>{const info=albumMetadata.get(track.id)!,artworkKey=artworkKeys.get(track.id);return <li key={key}><CatalogArtwork key={control.proof+track.id} trackId={track.id} sharedArtworkKey={artworkKey} refreshToken={artworkRefreshToken} className="collection-track-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/><button className="collection-track-main" aria-label={`Escuchar ${track.title}`} aria-current={player.current?.trackId===track.id?'true':undefined} disabled={!owner||busy||databaseState!=='ready'||copyRemovalBlocked()||!sourceReview.canPrepare()} onClick={()=>{if(trackAvailability(track,availability)==='available')void playCollection(key);else requestLibraryDownload([track.id],track.title,true);}}><strong>{track.title}</strong><span>{track.artist??'Artista desconocido'}{displayTrackAlbum(track)&&` · ${displayTrackAlbum(track)}`}</span>{owner&&player.state==='playing'&&player.current?.trackId===track.id&&<PlaybackIndicator/>}</button>{((collectionPreparing?.view===collectionPlaybackViewKey&&collectionPreparing.trackId===track.id)||(player.current?.trackId===track.id&&(player.state==='loading'||player.state==='buffering')))&&<span className="collection-track-loading" role="status"><span>Preparando canción…</span><progress aria-label={`Carga de ${track.title}`}/></span>}<TrackActionsMenu title={track.title} artist={track.artist??'Artista desconocido'} active={page==='biblioteca'&&!settingsOpen&&libraryDetail&&!playerOpen} artwork={<CatalogArtwork trackId={track.id} sharedArtworkKey={artworkKey} refreshToken={artworkRefreshToken} className="track-actions-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>}>
  <button disabled={!canOrganize} aria-pressed={track.favorite} ref={button=>{if(button)favoriteButtons.current.set(key,button);else favoriteButtons.current.delete(key);}} onClick={event=>void toggleFavorite(track,key,event.currentTarget)}>{track.favorite?'Quitar favorito':'Favorito'}</button>
  <button disabled={!canAppend||trackAvailability(track,availability)!=='available'} aria-label={`Añadir a continuación ${track.title}`} onClick={event=>addSelection([{key,track}],'next',event)}>Reproducir a continuación</button>
  <button disabled={!canAppend||trackAvailability(track,availability)!=='available'} aria-label={`Añadir al final ${track.title}`} onClick={event=>addSelection([{key,track}],'end',event)}>Añadir al final de la cola</button>
