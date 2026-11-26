@@ -15,17 +15,17 @@
 .pulso-app .home-playlists small { line-height:1.4; }
 .home-section-heading { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-block-end:1rem; }
 .pulso-app .home-section-heading h3 { margin:0; }
-.pulso-app .home-section-heading button { display:flex;align-items:center;gap:.35rem;padding:.25rem 0;border:0;background:transparent;color:var(--pulso-accent);font-size:.8rem; }
+.pulso-app .home-section-heading button { display:flex;align-items:center;gap:.35rem;padding:.25rem 0;border:0;background:transparent;color:var(--pulso-accent-text);font-size:.8rem; }
 .pulso-app .home-section-heading .music-icon { inline-size:18px;block-size:18px; }
 .pulso-app .home-continue { display:grid;grid-template-columns:80px minmax(0,1fr) auto;gap:1rem;align-items:center; }
-.home-continue-art { display:grid;place-items:center;inline-size:80px;block-size:80px;border-radius:.5rem;overflow:hidden;color:var(--pulso-accent);background:var(--pulso-surface); }
+.home-continue-art { display:grid;place-items:center;inline-size:80px;block-size:80px;border-radius:.5rem;overflow:hidden;color:var(--pulso-accent-text);background:var(--pulso-surface); }
 .home-continue>div { min-inline-size:0; }
 .home-continue strong { display:block;font-size:1rem;line-height:1.4;overflow-wrap:anywhere; }
 .pulso-app .home-continue p { font-size:.85rem;line-height:1.4; }
-.pulso-app .home-player-link { padding:0;border:0;background:transparent;color:var(--pulso-accent);font-size:.8rem;text-align:start; }
+.pulso-app .home-player-link { padding:0;border:0;background:transparent;color:var(--pulso-accent-text);font-size:.8rem;text-align:start; }
 .pulso-app .home-resume { border:0;border-radius:2rem;padding-inline:1rem;background:var(--pulso-accent);color:var(--pulso-on-accent);font-size:.8rem; }
 .pulso-app .home-empty { padding:1.5rem;max-inline-size:38rem; }
-.pulso-app .home-empty>.music-icon { margin-block-end:1rem;inline-size:28px;block-size:28px;color:var(--pulso-accent); }
+.pulso-app .home-empty>.music-icon { margin-block-end:1rem;inline-size:28px;block-size:28px;color:var(--pulso-accent-text); }
 .pulso-app .home-empty h3 { font-size:1.1rem;margin-block-end:.5rem; }
 .home-empty p { color:var(--pulso-muted);font-size:.9rem; }
 .pulso-app .collection-card__art--artist { border-radius:50%; }
@@ -74,13 +74,13 @@
 .settings-group__body input,.settings-group__body select { font-size:max(1rem,16px); }
 .storage-summary,.storage-estimate { min-inline-size:0;max-inline-size:100%;margin-block:1rem;padding:1rem;border:1px solid var(--pulso-border,rgba(127,127,127,.25));border-radius:1rem; }
 .storage-summary__segments { display:flex;inline-size:100%;block-size:1rem;overflow:hidden;border-radius:999px;background:color-mix(in srgb,currentColor 10%,transparent); }
-.storage-summary__saved { background:#6558d3;fill:#6558d3; }
-.storage-summary__cache { background:#d88c32;fill:#d88c32; }
+.storage-summary__saved { background:#9e1b38;fill:#9e1b38; }
+.storage-summary__cache { background:#c98a4b;fill:#c98a4b; }
 .storage-summary__legend { display:grid;gap:.5rem;margin:.75rem 0 0;padding:0;list-style:none; }
 .storage-summary__legend li { display:grid;grid-template-columns:.7rem minmax(0,1fr);align-items:center;gap:.5rem;min-inline-size:0;overflow-wrap:anywhere; }
 .storage-summary__legend strong { grid-column:2;min-inline-size:0;white-space:normal;overflow-wrap:anywhere; }
 .storage-summary__swatch { inline-size:.7rem;block-size:.7rem;flex:none;border-radius:50%; }
-.storage-estimate progress { display:block;inline-size:100%;max-inline-size:100%;block-size:.8rem;accent-color:#6558d3; }
+.storage-estimate progress { display:block;inline-size:100%;max-inline-size:100%;block-size:.8rem;accent-color:#9e1b38; }
 @media (max-width:480px) {
  .settings-group__body:has(>section[aria-label="Almacenamiento"]) { padding-inline:min(1.25rem,4vw); }
  .storage-summary,.storage-estimate { padding:clamp(.5rem,3vw,1rem); }

@@ -37,7 +37,7 @@
   background: var(--pulso-surface,#fff);
   touch-action: manipulation;
 }
-.error-bubble__actions button:focus-visible { outline: 3px solid var(--pulso-accent,#235ad7); outline-offset: 3px; }
+.error-bubble__actions button:focus-visible { outline: 3px solid var(--pulso-accent,#d84a67); outline-offset: 3px; }
 .error-bubble__actions button:disabled { opacity: .65; cursor: wait; }
 html[data-theme="dark"] .error-bubble-host { --error-ink: #ffb8c0; --error-line: #865963; }
 @media (prefers-color-scheme: dark) {

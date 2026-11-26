@@ -8,8 +8,8 @@
   "scope": "/",
   "display": "standalone",
   "launch_handler": {"client_mode":"focus-existing"},
-  "background_color": "#111620",
-  "theme_color": "#111620",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "prefer_related_applications": false,
   "related_applications": [{"platform":"webapp","url":"/manifest.webmanifest","id":"https://pulso-web.pruebassoftware.workers.dev/"}],
   "icons": [

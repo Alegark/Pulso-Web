@@ -34,7 +34,7 @@
 .download-dock[data-pending="true"] .download-dock__footer button { border-radius: 1.4rem; }
 .download-dock[data-expanded="true"] { inline-size: min(21rem, 100%); border-radius: var(--pulso-radius); }
 .download-dock button { min-block-size: 44px; min-inline-size: 44px; font: inherit; color: inherit; }
-.download-dock button:focus-visible { outline: 2px solid var(--pulso-accent); outline-offset: -3px; }
+.download-dock button:focus-visible { outline: 2px solid var(--pulso-accent-text); outline-offset: -3px; }
 .download-dock__handle {
  position: relative;
  display: flex;
@@ -54,7 +54,7 @@
 }
 .download-dock__handle:active { cursor: grabbing; background: var(--pulso-soft); }
 .download-dock__handle svg,.collection-download svg { inline-size: 1.25rem; block-size: 1.25rem; max-inline-size: 24px; flex: none; }
-.download-dock__handle svg { color: var(--pulso-accent); }
+.download-dock__handle svg { color: var(--pulso-accent-text); }
 .download-dock__count { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .download-dock__chevron { margin-inline-start: auto; color: var(--pulso-muted); }
 .download-dock__handle progress {
@@ -62,7 +62,7 @@
  inset: auto .85rem 4px;
  inline-size: calc(100% - 1.7rem);
  block-size: 3px;
- accent-color: var(--pulso-accent);
+ accent-color: var(--pulso-accent-text);
 }
 .download-dock__panel { overflow: auto; overscroll-behavior: contain; padding: .65rem .85rem; border-block-start: 1px solid var(--pulso-border); }
 .download-dock__panel p { margin: .25rem 0; color: var(--pulso-muted); }

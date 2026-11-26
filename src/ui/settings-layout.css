@@ -1,7 +1,7 @@
 .pulso-app .settings-view,.pulso-app .settings-secondary { max-inline-size:62rem; }
 .pulso-app .settings-navigation { display:flex;gap:.35rem;flex-wrap:wrap;margin:0 0 1.25rem;padding:.3rem;border-radius:1rem;background:var(--pulso-soft); }
 .pulso-app .settings-navigation button { flex:1;min-inline-size:0;min-block-size:44px;border:0;background:transparent;font-size:.9rem; }
-.pulso-app .settings-navigation button[aria-current=page] { background:var(--pulso-surface);color:var(--pulso-accent);box-shadow:0 1px 4px #0001; }
+.pulso-app .settings-navigation button[aria-current=page] { background:var(--pulso-surface);color:var(--pulso-accent-text);box-shadow:0 1px 4px #0001; }
 .pulso-app .settings-general { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1rem; }
 .pulso-app .settings-general[hidden],.pulso-app .settings-secondary[hidden],.pulso-app .settings-group[hidden] { display:none; }
 .pulso-app .settings-general>.settings-group { margin:0;padding:1.25rem; }
@@ -56,5 +56,5 @@
 .pulso-app .storage-group-label>span,.pulso-app .storage-group-label small {font-size:.8rem;color:var(--pulso-muted);}
 .pulso-app .storage-selection {display:flex;gap:.5rem;flex-wrap:wrap;margin-block:1rem;}
 .pulso-app .storage-selection button {min-height:44px;font-size:.8rem;}
-.pulso-app .storage-downloads input[type=checkbox] {width:22px;height:22px;flex:none;accent-color:var(--pulso-accent);}
+.pulso-app .storage-downloads input[type=checkbox] {width:22px;height:22px;flex:none;accent-color:var(--pulso-accent-text);}
 .pulso-app .storage-downloads>li>div {flex:1;}

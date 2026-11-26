@@ -2,9 +2,9 @@
 .album-page *, .album-page *::before, .album-page *::after { box-sizing: border-box; }
 .album-page button { min-height: 44px; max-width: 100%; padding: .65rem .9rem; font: inherit; text-align: start; color: inherit; background: var(--pulso-surface); border: 1px solid var(--pulso-border); border-radius: .75rem; cursor: pointer; overflow-wrap: anywhere; }
 .album-page button:disabled { opacity: .6; cursor: default; }
-.album-page :is(button,a,summary):focus-visible { outline: 3px solid var(--pulso-accent); outline-offset: 3px; }
+.album-page :is(button,a,summary):focus-visible { outline: 3px solid var(--pulso-accent-text); outline-offset: 3px; }
 .album-hero,.artist-hero { display: flex; align-items: end; gap: clamp(1rem,3vw,2rem); margin-block: 1.5rem; }
-.album-art,.artist-art,.artist-album-art { display: grid; place-items: center; flex: 0 0 clamp(8rem,20vw,14rem); aspect-ratio: 1; border-radius: 1rem; background: var(--pulso-soft); color: var(--pulso-accent); font-size: clamp(3rem,8vw,5rem); }
+.album-art,.artist-art,.artist-album-art { display: grid; place-items: center; flex: 0 0 clamp(8rem,20vw,14rem); aspect-ratio: 1; border-radius: 1rem; background: var(--pulso-soft); color: var(--pulso-accent-text); font-size: clamp(3rem,8vw,5rem); }
 .artist-art { border-radius: 50%; }
 .album-hero h2,.artist-hero h2 { margin: .35rem 0; font-size: clamp(2rem,5vw,3.5rem); line-height: 1.05; letter-spacing: -.04em; }
 .album-hero p,.artist-hero p { margin: .4rem 0; }.album-artist { font-weight: 700; }
@@ -34,7 +34,7 @@
 .pulso-app .album-page .album-actions>button { border-radius:999px;padding-inline:1.25rem; }
 .pulso-app .album-page .album-art { box-shadow:0 .75rem 2rem #07112020; }
 .pulso-app .album-page .album-tracks>li { border-radius:.6rem; }
-.pulso-app .album-page .album-tracks>li:has(.playback-indicator) .album-track-copy strong { color:var(--pulso-accent); }
+.pulso-app .album-page .album-tracks>li:has(.playback-indicator) .album-track-copy strong { color:var(--pulso-accent-text); }
 .pulso-app .album-page .album-track-copy { flex:1; }
 .pulso-app .album-page .album-track-copy strong { overflow-wrap:anywhere; }
 .pulso-app .album-page .album-track-badges { padding-inline-end:.5rem;overflow-wrap:anywhere; }

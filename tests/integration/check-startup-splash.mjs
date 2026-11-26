@@ -166,7 +166,9 @@ try{
       const sheet=[...document.styleSheets].find(sheet=>sheet.href?.startsWith(location.origin));
       sheet.insertRule('html { font-size: 200% !important; }',sheet.cssRules.length);
      });
+     assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'dark');
      for(const colorScheme of ['light','dark']){
+      await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},colorScheme);
       await page.emulateMedia({colorScheme,reducedMotion:'reduce'});
       const geometry=await logo.evaluate(el=>{
        const {x,y,width,height}=el.getBoundingClientRect();
@@ -180,7 +182,7 @@ try{
       assert.equal(geometry.scroll,width);
       assert.equal(geometry.font,'32px');
       assert.equal(geometry.animation,'none');
-      assert.equal(geometry.background,colorScheme==='dark'?'rgb(17, 22, 32)':'rgb(244, 246, 250)');
+      assert.equal(geometry.background,colorScheme==='dark'?'rgb(0, 0, 0)':'rgb(250, 247, 248)');
      }
     }finally{firstResponse.resolve();}
     const retry=page.getByRole('button',{name:'Reintentar conexión de cuenta'});
