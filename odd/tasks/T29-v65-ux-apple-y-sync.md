@@ -1,7 +1,7 @@
 # T29 · Rediseño UX/UI estilo Apple Music + sincronización entre dispositivos (v65)
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** Especificación ODD aprobada para implementación (pendiente de ejecución por incrementos en `v65-ux-apple` + integración con `v65-neon-sync`).
+- **Estado:** Implementada, batería completa 100 % PASS en Chromium y WebKit, revisión independiente favorable (`Seguro publicar v65`, 0 hallazgos); lista para publicación y verificación en vivo en Cloudflare Workers Free (USD 0). Aceptación física en iPhone (`D`): NO EJECUTADA.
 - **Fecha:** 2026-11-26
 - **Línea base:** v64 publicada (`/releases/9acd333be5ff334d.html`, commit `a056588`, rama `release/v64`). Worktree de UI/UX: `v65-ux-apple`. Worktree paralelo de sincronización: `v65-neon-sync`.
 - **Requisitos SPEC vinculados:** W04, W05, W06, W07, W08, W10, W13, W17, W18 · **Invariantes SPEC:** V2, V3, V5, V6, V7, V8, V11, V13, V14, V15, V16, V19, V21, V22, V23, V27, V28, V29, V30
@@ -321,3 +321,33 @@ Ejecutar con validación proporcional (`doc/SPEC.md` §V.2) tras cada incremento
   - `npm run check` (`typecheck`, `lint`, `test:unit`, `test:cloudflare`, `test:py`), `npm run typecheck:tests`, `npm run build`.
   - Matrices de navegador en **Chromium y WebKit**.
 - Revisión independiente (`gemini-4-neon` medio) antes de publicar en Cloudflare Workers (`v65`) y verificar en vivo. Las 16 pruebas físicas en iPhone (`docs/IPHONE-ACEPTACION.md`) permanecen **NO EJECUTADAS** hasta ejecución del propietario.
+
+---
+
+## Evidencia de validación previa a publicación (`release/v65`, commit `a4de1ae`)
+
+### 1. Implementación y correcciones cerradas
+- **Sincronización Neon entre dispositivos (`b7cbeef`, `U-SYNC-01`):**
+  - Diagnóstico sobre Neon: 2 filas en `public.pulso_account_library` (`1 playlist / 10 pistas` y `2 playlists / 103 pistas`), 5 usuarios / 5 correos únicos (`duplicateEmailUsers: false`), RLS `SELECT/INSERT/UPDATE` operativo.
+  - 3 fallos corregidos: `preparedLibraryAccount === activeAccount` en `librarySync.ready()` (elimina carrera en dispositivo nuevo); `applyAccountLibrary` devuelve `{changed, needsSync}` para encolar cambios concurrentes durante una sincronización; `librarySync.retry()` limpia `retryAt` en `conflict`/`unavailable` sin saltarse `rateLimited` (`429`).
+- **Paleta OLED negro puro + rojo vino oscuro (`2342d6f`, `a4de1ae`, `U-THEME-01`):** modo oscuro por defecto (`#000000`, `#0d0b0d`, `#8c1630` rellenos, `#d84a67` texto/iconos/progreso con contraste WCAG AA), modo claro manual `#faf7f8`, `index.html` y `manifest.webmanifest` en `#000000`, Favoritos/letras/almacenamiento armonizados.
+- **UX/UI estilo Apple Music (`2342d6f`, `b6e1024`, `07abea9`, `128ae7c`, `7f14983`, `a4de1ae`, `U-UX-01`–`U-UX-08`):**
+  - `useLongPress` + apertura programática de `TrackActionsMenu` + `TrackMenuHost` admitido con `viewAct()` / `canOrganize` / `canAppend`.
+  - `PlaybackIndicator` `inline` (sustituyendo número de pista en Álbumes) y `overlay` (centrado sobre carátula `48×48` en Playlists y Búsqueda), respetando pausa y `prefers-reduced-motion`.
+  - Cabecera de álbum unificada (`formatAlbumHeaderMeta` sin `1 discos`, **▶ / ⇄ / ↓ / `⋯`** con *Retirar álbum* y *Fuente de los metadatos* en `⋯`), filas compactas de 2 líneas sin tarjeta azul inline.
+  - Búsqueda limpia con `⋯` y long-press en resultados `track`; sellado inferior opaco móvil (`::after`) + `overflow: hidden` + progreso limpio en `.mini-player`; cola compacta con iconos SVG (`↑`, `↓`, `×`) conservando `aria-label` a `320 px` 200 %; Inicio sin «Continuar escuchando» y con «Tus álbumes».
+
+### 2. Batería completa (local + navegadores Chromium y WebKit)
+- **Batería completa en `2352881`:**
+  - Estáticas (`typecheck`, `typecheck:tests`, `lint`, `build`): **PASS**.
+  - Unitarias: **1063/1063 PASS** · Cloudflare/Miniflare: **74/74 PASS** · Servidor Python: **10/10 PASS**.
+  - Navegadores (**Chromium / WebKit**): `check-ux-v65.mjs` **8/8 / 8/8** · `check-account-library-main.mjs` **5/5 / 5/5** · `check-artwork-rows-dock.mjs` **6/6 / 6/6** · `check-player-notice.mjs` **5/5 / 5/5** · `check-download-feedback.mjs` **8/8 / 8/8** · `check-startup-splash.mjs` **10/10 / 10/10** · `check-persistent-cache-main.mjs` **13/13 / 13/13** · `check-playlist-resume-main.mjs` **46/46 / 46/46** · `check-playlist-full-download-main.mjs` **62/62 / 62/62** (incl. `V64-08`, `V64-09`, `queue-v64-album-playback`) · `playlist-detail-cases` **10/10 / 10/10** · T27 `check-local-playback.mjs` integridad **14/14 / 14/14** y playlist **2/2 / 2/2**.
+- **Revalidación tras los arreglos de revisión en `a4de1ae`:** `typecheck`, `typecheck:tests`, `lint`, `build`, **1063/1063** unitarias, UX **8/8 × 2**, inicio **10/10 × 2**, álbum **32**, feedback **8/8 × 2** — todo **PASS**.
+
+### 3. Revisión independiente (`gemini-4-neon` medio)
+- Primera revisión (`release/v64..2352881`): 1 hallazgo Alto (`trackMenuHost` usando `actWork` en vez de `viewAct`), 1 Medio (`error-bubble.css:40` contraste `:focus-visible`) y 4 Bajos → todos corregidos en `a4de1ae`.
+- Revisión delta (`2352881..a4de1ae`): **0 Bloqueantes, 0 Altos, 0 Medios, 0 Bajos** → veredicto explícito **`Seguro publicar v65`**.
+
+### 4. Pendientes abiertos
+- Publicación y verificación en vivo en Cloudflare Workers (`v65`) — en curso.
+- Aceptación física en iPhone (`docs/IPHONE-ACEPTACION.md`, 16 pruebas): **NO EJECUTADA** (exclusiva del propietario).
