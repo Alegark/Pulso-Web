@@ -1,3 +1,4 @@
+import {formatAlbumHeaderMeta} from '../library/album-header-meta';
 import {announceDownloadMessage,CollectionDownloadButton} from './DownloadDock';
 import {BackButton} from './BackButton';
 import {downloadWithCurrentApp} from '../service-worker/download-update';
@@ -226,7 +227,7 @@ export function AlbumPageController(props:Props){
  const albumImage=detail?.edition.artworkUrl??props.artworkUrl??(editions.length===1?editions[0].artworkUrl:undefined);
  return <section className="album-page" aria-labelledby={headingId}>
   <BackButton onClick={()=>{if(active())props.onBack();}}>{props.backLabel??(props.libraryView?'Volver a Biblioteca':'Volver a búsqueda')}</BackButton>
-  <div className="album-hero"><span className="album-art"><CollectionCover variant="album" artworkUrl={albumImage} trackIds={firstCopy?[firstCopy]:[]} enabled={props.visible}/></span><div><p className="catalog-eyebrow">ÁLBUM</p><h2 id={headingId} ref={heading} tabIndex={-1}>{detail?.edition.title??props.title}</h2><p className="album-artist">{detail?.edition.artist??props.artist}</p>{detail&&<p>{detail.tracks.length} pistas · {new Set(detail.tracks.map(t=>t.disc)).size} discos</p>}{savedAlbum&&<p role="status">{downloaded} de {detail!.tracks.length} descargadas</p>}</div></div>
+  <div className="album-hero"><span className="album-art"><CollectionCover variant="album" artworkUrl={albumImage} trackIds={firstCopy?[firstCopy]:[]} enabled={props.visible}/></span><div><p className="catalog-eyebrow">ÁLBUM</p><h2 id={headingId} ref={heading} tabIndex={-1}>{detail?.edition.title??props.title}</h2><p className="album-artist">{detail?.edition.artist??props.artist}</p>{detail&&<p>{formatAlbumHeaderMeta(detail.tracks.length,new Set(detail.tracks.map(t=>t.disc)).size,downloaded,!!savedAlbum)}</p>}</div></div>
 
   {status&&<p role="status">{status}</p>}
   {retryTarget!==undefined&&<button type="button" onClick={()=>{if(!active())return;if(retryTarget)chooseEdition(retryTarget);else retryMetadata();}}>Reintentar consulta</button>}
