@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {validateAccountLibrary,emptyLibrary,mergeAccountLibraries,type AccountLibraryDocument} from '../../src/accounts/library-document.mjs';
 import {createLibrarySync,LibrarySyncConflict,accountLibraryRequest} from '../../src/accounts/library-sync';
+import {RateLimited} from '../../src/http/rate-limit.mjs';
 import {copyImportResult} from '../../src/imports/import-protocol';
 import {validateTrack} from '../../src/library/local-copy-removal-snapshot';
 const uuid=(n:number)=>`${String(n).padStart(8,'0')}-1111-4111-8111-111111111111`;
@@ -32,6 +33,17 @@ test('failed or conflicting sync keeps local changes and never reports saved',as
  for(const error of [new Error('offline'),new LibrarySyncConflict()]){let applied=false;const controller=createLibrarySync({ready:()=>true,read:async()=>({document:document(),base:emptyLibrary()}),remote:async()=>({accountId:uuid(20),revision:1,document:emptyLibrary()}),save:async()=>{throw error;},apply:async()=>{applied=true;},changed:()=>{}});
  controller.account(uuid(20));await controller.sync();assert.equal(applied,false);assert.equal(controller.getSnapshot(),error instanceof LibrarySyncConflict?'conflict':'unavailable');controller.dispose();}
 });
+test('manual retry after a conflict does not wait for automatic backoff',async()=>{
+ const id=uuid(20);let attempts=0;
+ const controller=createLibrarySync({ready:()=>true,read:async()=>({document:document(),base:emptyLibrary()}),remote:async()=>({accountId:id,revision:1,document:emptyLibrary()}),
+  save:async(_id,_r,d)=>{if(++attempts===1)throw new LibrarySyncConflict();return {accountId:id,revision:2,document:d};},apply:async()=>false,changed:()=>{}});
+ try{controller.account(id);await controller.sync();assert.equal(controller.getSnapshot(),'conflict');await controller.retry();assert.equal(attempts,2);assert.equal(controller.getSnapshot(),'saved');}finally{controller.dispose();}
+});
+test('manual retry respects a server rate limit',async()=>{
+ let attempts=0;const controller=createLibrarySync({ready:()=>true,read:async()=>({document:document(),base:emptyLibrary()}),
+  remote:async()=>{attempts++;throw new RateLimited(new Response(null,{status:429,headers:{'Retry-After':'60'}}));},save:async()=>{throw Error('unexpected write');},apply:async()=>false,changed:()=>{}});
+ try{controller.account(uuid(20));await controller.sync();assert.equal(controller.getSnapshot(),'rateLimited');await controller.retry();assert.equal(attempts,1);}finally{controller.dispose();}
+});
 test('account-owned imported tracks remain accepted by worker and physical-removal boundaries',()=>{
  const t={...track(1),accountId:uuid(20),assetId:uuid(30),audioFingerprint:{algorithm:'sha256',sha256:'a'.repeat(64),bytes:16},revision:1,manualOverrides:{}};
  const {catalog,localAlbum,inLibrary,...row}=t;assert.equal(catalog,null);assert.equal(localAlbum,null);assert.equal(inLibrary,true);
@@ -50,6 +62,18 @@ test('only an apply that changes local rows refreshes the library view',async()=
   controller.account(id);await controller.sync();
   assert.equal(controller.getSnapshot(),'saved');assert.equal(notifications,0);
   changed=true;await controller.sync();assert.equal(notifications,1);
+ }finally{controller.dispose();}
+});
+
+test('waits for account preparation before reading, and retries edits merged during apply',async()=>{
+ const id=uuid(20),local=document();let ready=false,reads=0,applies=0;
+ const controller=createLibrarySync({ready:()=>ready,read:async()=>{reads++;return {document:local,base:local};},
+  remote:async()=>({accountId:id,revision:1,document:local}),save:async()=>{throw Error('unexpected write');},
+  apply:async()=>({changed:++applies===1,needsSync:applies===1}),changed:()=>{}});
+ try{
+  controller.account(id);await controller.sync();assert.equal(reads,0);assert.equal(controller.getSnapshot(),'idle');
+  ready=true;await controller.sync();assert.equal(reads,1);
+  await new Promise(resolve=>setTimeout(resolve,900));assert.equal(reads,2);assert.equal(controller.getSnapshot(),'saved');
  }finally{controller.dispose();}
 });
 
