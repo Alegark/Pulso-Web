@@ -1,7 +1,7 @@
 # T30 · Nuevo control de reproductor y portada fiable de álbumes (v66)
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** Especificación ODD aprobada para implementación en `v66-polish`.
+- **Estado:** Implementada, batería completa 100 % PASS en Chromium y WebKit, revisión independiente favorable (`Seguro publicar v66`, 0 bloqueantes/altos/medios); lista para publicación con poda en Cloudflare Workers Free (USD 0). Aceptación física en iPhone (`D`): NO EJECUTADA.
 - **Fecha:** 2026-11-26
 - **Línea base:** v65 publicada (`/releases/5a7eef31d22eabf1.html`, despliegue `18c58796-f9f8-4e53-8572-9148055fec89`, versión 68, rama `release/v65`).
 - **Requisitos SPEC vinculados:** W04, W06, W08, W17, W18 · **Invariantes SPEC:** V11, V21, V27, V29, V30, K01 (prioridad manual/oculta de portada), T26 (caché persistente y revocación de ObjectURLs `A01`/`A02b`).
@@ -39,4 +39,10 @@ Typecheck, typecheck:tests, lint y build PASS; unitarias 1063/1063, Cloudflare 7
 
 Validación focal local: typecheck, typecheck:tests, lint, unitarias, Cloudflare (74/74) y build PASS. Retención: 5/5 pruebas; navegador v66 2/2 por motor, incluido el caso directo de pista sin archivo con fallback y proveedor, y portadas 6/6 por motor. La primera ejecución de caché persistente registró dos tiempos de espera en WebKit; la repetición pasó 13/13 por motor. El gesto interrumpido y la reapertura también pasan en ambos motores.
 
-El `--dry-run` contra el archivo v65 indicado (SHA-256 `f0390526b616da6b44397a1a053ea364eb91ab153b2417bef5f1fd1ff87adf41`) rechaza su `publishedAt: null`, pues es un manifiesto congelado, no promovido. Con `--mark-published` y la fecha de creación `2026-11-26T21:15:19.047Z` del recibo MCP (precisión de milisegundos exigida por el preparador), se generó localmente una copia derivada SHA-256 `9dde0ce2e4f2ddfd9d1b246146f464a43fc98955c69b2620b8c80f125043648a`; sobre ella, la simulación devuelve 0 copias, 300 archivos retirados, 84397613 bytes, 0 publicaciones previas y sin legado. El manifiesto original no se modificó. La promoción autoritativa y verificación pública corresponden a integración.
+El `--dry-run` contra el archivo v65 indicado (SHA-256 `f0390526b616da6b44397a1a053ea364eb91ab153b2417bef5f1fd1ff87adf41`) rechaza su `publishedAt: null`, pues es un manifiesto congelado, no promovido. Con `--mark-published` y la fecha de creación `2026-11-26T21:15:19.047Z` del recibo MCP (precisión de milisegundos exigida por el preparador), se promovió `.local/test-evidence/publish-v65/published-site-manifest.json` (SHA-256 `9dde0ce2e4f2ddfd9d1b246146f464a43fc98955c69b2620b8c80f125043648a`); sobre ella, la simulación devuelve 0 copias, 300 archivos retirados, 84.397.613 bytes (~84,40 MB), 0 publicaciones previas y sin legado.
+
+## Revisión independiente (`gemini-4-neon` medio)
+
+- Primera revisión (`release/v65..5088f85`): **0 Bloqueantes, 0 Altos**, 1 Medio y 5 Bajos → veredicto **`Seguro publicar v66`**.
+- Revisión delta (`5088f85..fda3729`, tras aplicar `U-V66-03` y cerrar el hallazgo Medio + menores, además de `7/7` PASS en `cloudflare-retention.test.mjs` y `cloudflare-navigation.test.mjs`): **0 Bloqueantes, 0 Altos, 0 Medios** (2 notas Bajas no bloqueantes) → veredicto **`Seguro publicar v66`**.
+- Pendiente abierto: publicación + verificación en vivo en Cloudflare Workers (`v66`), y las **16 pruebas físicas en iPhone (`docs/IPHONE-ACEPTACION.md`), que siguen NO EJECUTADAS**.
