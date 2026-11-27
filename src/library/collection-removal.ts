@@ -20,7 +20,7 @@ export interface CollectionContext {readonly signal:AbortSignal; current():boole
 declare const previewBrand: unique symbol;
 export interface CollectionPreviewToken {readonly [previewBrand]:true}
 export interface CollectionConsent {readonly confirm:true; readonly acceptPossibleOnlyCopyLoss:true}
-export interface CollectionPreview {readonly token:CollectionPreviewToken; readonly tracks:number; readonly copiesEligible:number; readonly estimatedBytes:number; readonly retainedShared:number; readonly cleanupAvailable:true}
+export interface CollectionPreview {readonly token:CollectionPreviewToken; readonly tracks:number; readonly copiesEligible:number; readonly estimatedBytes:number; readonly retainedShared:number; readonly cleanupAvailable:true; readonly queuedTrackIds:readonly string[]}
 export interface CollectionOutcome {readonly metadata:'committed'|'not-committed'|'unknown'; readonly cleanup:'complete'|'stopped'|'not-started'; readonly freedBytes:number; readonly removed:number; readonly skipped:number; readonly skipReasons:readonly string[]; readonly reason:string|null}
 /** Host must create a fresh context AFTER reservation; release settles its resources. */
 export interface CollectionCleanupHost {readContext():RemovalReadContext;settlementReadContext?():RemovalReadContext;reserve(target:Readonly<LocalAsset>):Promise<{kind:'reserved';context:RemovalContext;release():Promise<void>}|{kind:'blocked';reason:string}>;record(tracking:RemovalTracking):Promise<boolean>;forget(tracking:RemovalTracking):Promise<boolean>}
@@ -75,7 +75,7 @@ function affectedFor(s:Snapshot,selection:CollectionSelection):string[] {
  if(!group)throw new Error('collection-changed');return [...new Set(group.saved?group.coverTrackIds:group.trackIds)];
 }
 async function read(c:CollectionContext,selection:CollectionSelection):Promise<Snapshot>{check(c);const db=await openExistingDatabase();try{check(c);const tx=admittedTransaction(db,['tracks','playlists','assets','settings']);const done=transactionDone(tx);try{const s=await snapshot(tx,c,selection);await done;check(c);return s;}catch(e){try{tx.abort();}catch{}await done.catch(()=>{});throw e;}}finally{closeDatabase(db);}}
-export async function previewCollectionRemoval(selection:CollectionSelection,c:CollectionContext):Promise<CollectionPreview>{
+export async function previewCollectionRemoval(selection:CollectionSelection,c:CollectionContext,options?:{evictQueued?:boolean}):Promise<CollectionPreview>{
  if(selection.kind==='playlist'&&(!uuid(selection.id)||!Number.isSafeInteger(selection.revision)||selection.revision<1)||selection.kind==='album'&&(selection.scope!=='global-library'||typeof selection.key!=='string')||selection.kind==='cache'&&selection.scope!=='global-listening-cache'||!['playlist','album','cache'].includes(selection.kind))throw new Error('collection-invalid');
  const s=await read(c,selection);const affected=affectedFor(s,selection);const affectedSet=new Set(affected);
  const remainingLists=selection.kind==='playlist'?s.playlists.filter(p=>p.id!==selection.id):s.playlists;
@@ -83,16 +83,16 @@ export async function previewCollectionRemoval(selection:CollectionSelection,c:C
  const firstTrackByAsset=new Map<string,Track>();
  for(const t of s.tracks)if(t.assetId!==null&&affectedSet.has(t.id)&&!firstTrackByAsset.has(t.assetId))firstTrackByAsset.set(t.assetId,t);
  const sharedAlbumCopy=indexCopyProtection(s.tracks,t=>s.album?.otherSavedTrackIds.has(t.id)===true);
- const protectedCopy=indexCopyProtection(s.tracks,t=>t.favorite||protectedIds.has(t.id)||s.queued.has(t.id)||s.membership.get(t.id)===true&&!(selection.kind==='album'&&affectedSet.has(t.id)));
- const targets:Data['targets']=[];let eligible=0,estimatedBytes=0,shared=0;
+ const protectedCopy=indexCopyProtection(s.tracks,t=>t.favorite||protectedIds.has(t.id)||(!options?.evictQueued&&s.queued.has(t.id))||s.membership.get(t.id)===true&&!(selection.kind==='album'&&affectedSet.has(t.id)));
+ const targets:Data['targets']=[];const queuedTrackIds=new Set<string>();let eligible=0,estimatedBytes=0,shared=0;
  for(const asset of s.assets){
   const track=firstTrackByAsset.get(asset.id);if(!track)continue;
   const sharedAlbum=sharedAlbumCopy(asset);
   targets.push({asset,track,sharedAlbum});
-  if(sharedAlbum||protectedCopy(asset))shared++;else{eligible++;estimatedBytes+=asset.bytes;}
+  if(sharedAlbum||protectedCopy(asset))shared++;else{eligible++;estimatedBytes+=asset.bytes;if(options?.evictQueued)for(const t of s.tracks)if(s.queued.has(t.id)&&(t.assetId===asset.id||t.audioFingerprint?.sha256===asset.sha256&&t.audioFingerprint?.bytes===asset.bytes))queuedTrackIds.add(t.id);}
  }
  const token=Object.freeze({}) as CollectionPreviewToken;previews.set(token,{selection:{...selection},snapshot:s,affected,targets,context:c});
- return Object.freeze({token,tracks:affected.length,copiesEligible:eligible,estimatedBytes,retainedShared:shared,cleanupAvailable:true});
+ return Object.freeze({token,tracks:affected.length,copiesEligible:eligible,estimatedBytes,retainedShared:shared,cleanupAvailable:true,queuedTrackIds:Object.freeze([...queuedTrackIds])});
 }
 export function releaseCollectionRemovalPreview(token:CollectionPreviewToken):void {previews.delete(token);}
 export async function confirmCollectionRemoval(token:CollectionPreviewToken,consent:CollectionConsent,c:CollectionContext,host:CollectionCleanupHost):Promise<CollectionOutcome>{

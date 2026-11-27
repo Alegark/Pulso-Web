@@ -6,6 +6,7 @@ import type {SourceReviewResult} from '../playback/source-review-admission';
 import type {LocalAsset} from '../library/library';
 
 export interface CollectionHost {
+ evictFromQueue?(trackIds:readonly string[],assetIds:readonly string[]):Promise<boolean>;
  activity:Activity; canStart():boolean; captureRaw():()=>boolean;
  gate(active:boolean):void; reserve(target:Readonly<LocalAsset>):SourceReviewResult;
  removed?(selection:core.CollectionSelection):void; refresh():Promise<void>; adopt(snapshot:CopyRemovalStartup):void; checkpoint(current:()=>boolean):void; changed():void;
@@ -35,7 +36,7 @@ export function createCollectionRemovalController(host:CollectionHost){
   r.token=host.activity.begin();
   const work=(async()=>{try{
    if(!r.token||!live(r))throw Error('admission');
-   const result=await core.previewCollectionRemoval(selection,r.context);r.preview=result.token;
+   const result=await core.previewCollectionRemoval(selection,r.context,{evictQueued:!!host.evictFromQueue});r.preview=result.token;
    if(live(r)&&r.token.current())publish({state:'ready',summary:result});
    else if(!disposed)publish({state:'blocked',message:'La revisión ya no está vigente.'});
   }catch{if(!disposed&&run===r)publish({state:'blocked',message:'No se pudo preparar la revisión. Conservamos la colección.'});}
@@ -43,9 +44,15 @@ export function createCollectionRemovalController(host:CollectionHost){
  }
  async function confirm(expected:CollectionView){
   const r=run;if(view!==expected||!r||!live(r)||r.settling||view.state!=='ready'||!view.accepted||!r.preview)return;
-  const token=r.preview;r.preview=null;r.settling=true;publish({state:'working',accepted:false});
+  let token=r.preview;r.preview=null;const summary=view.summary;r.settling=true;publish({state:'working',accepted:false});
   const work=(async()=>{let outcome:core.CollectionOutcome|null=null;
    try{
+    if(summary?.queuedTrackIds.length&&host.evictFromQueue){
+     const ok=await host.evictFromQueue(summary.queuedTrackIds,[]);
+     if(!ok||!live(r)){core.releaseCollectionRemovalPreview(token);outcome={metadata:'not-committed',cleanup:'not-started',freedBytes:0,removed:0,skipped:0,skipReasons:[],reason:'queue-eviction-failed'};return;}
+     core.releaseCollectionRemovalPreview(token);const fresh=await core.previewCollectionRemoval(r.selection,r.context);token=fresh.token;
+     if(!live(r)||fresh.tracks!==summary.tracks||fresh.copiesEligible!==summary.copiesEligible||fresh.retainedShared!==summary.retainedShared){core.releaseCollectionRemovalPreview(token);outcome={metadata:'not-committed',cleanup:'not-started',freedBytes:0,removed:0,skipped:0,skipReasons:[],reason:'collection-changed'};return;}
+    }
     outcome=await core.confirmCollectionRemoval(token,{confirm:true,acceptPossibleOnlyCopyLoss:true},r.context,{
      readContext(){if(!r.token)r.token=host.activity.begin();return {signal:r.abort.signal,current:()=>live(r)&&!!r.token?.current()};},
      settlementReadContext(){if(!r.token)r.token=host.activity.begin();return {signal:new AbortController().signal,current:()=>safe(r.raw)&&!!r.token?.current()};},
@@ -74,7 +81,7 @@ export function createCollectionRemovalController(host:CollectionHost){
       const scanAbort=new AbortController();const snapshot=await scanCopyRemovalStartup({signal:scanAbort.signal,current:r.raw});if(safe(r.raw))host.adopt(refreshFailed?{...snapshot,unknown:true}:snapshot);
      }
     }
-    if(!disposed&&run===r){const uncertain=!outcome||outcome.metadata==='unknown'||outcome.cleanup==='stopped';publish({state:uncertain?'uncertain':'done',result:outcome?{...outcome,freedBytes:uncertain?null:outcome.freedBytes}:null,message:uncertain?'El resultado de las copias puede estar incompleto. Revisa cualquier retirada pendiente antes de volver a actuar.':null});}
+    if(!disposed&&run===r){const uncertain=!outcome||outcome.metadata==='unknown'||outcome.cleanup==='stopped';publish({state:uncertain?'uncertain':outcome?.metadata==='not-committed'?'blocked':'done',result:outcome?{...outcome,freedBytes:uncertain?null:outcome.freedBytes}:null,message:uncertain?'El resultado de las copias puede estar incompleto. Revisa cualquier retirada pendiente antes de volver a actuar.':null});}
     r.settling=false;if(!live(r))release(r);
    }
   })();r.settlement=work;await work;

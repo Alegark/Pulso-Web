@@ -39,6 +39,7 @@ export function createDownloadRemovalController(host:CollectionHost,core:typeof 
   const work=(async()=>{
    let removed=0,skipped=0,processed=0,freedBytes=0,reason:string|null=null,uncertain=false;
    try{
+    if(host.evictFromQueue){const ok=await host.evictFromQueue(r.entries.map(e=>e.trackId),r.entries.map(e=>e.asset.id));if(!ok||!live(r)){reason='queue-eviction-failed';uncertain=true;return;}}
     for(const entry of r.entries){
      if(!live(r)){reason='cancelled';break;}
      r.token=host.activity.begin();if(!r.token){reason='admission-unavailable';break;}

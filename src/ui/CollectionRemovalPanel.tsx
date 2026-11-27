@@ -7,6 +7,7 @@ export interface CollectionRemovalPanelProps {
   title: string
   kind: 'playlist' | 'album' | 'cache'
   summary: { tracks: number; eligibleCopies: number; estimatedBytes: number; retainedShared: number } | null
+  queuedCount?: number
   accepted: boolean
   onAccepted: (value: boolean) => void
   onConfirm: () => void
@@ -54,6 +55,7 @@ export function CollectionRemovalPanel(props: CollectionRemovalPanelProps) {
         <div><dt>Audio estimado</dt><dd>{formatStorageMB(summary.estimatedBytes)}</dd></div>
         <div><dt>Copias protegidas</dt><dd>{summary.retainedShared}</dd></div>
       </dl>}
+      {state === 'ready' && (props.queuedCount ?? 0) > 0 && <p>Al confirmar, las canciones de esta selección que estén en la cola se retirarán de la cola.</p>}
       {state === 'ready' && <label className="collection-removal__consent">
         <input type="checkbox" checked={props.accepted} onChange={(event) => guard(() => props.onAccepted(event.target.checked))} />
         <span>{cache ? 'Eliminar las copias de escucha que no estén guardadas en Biblioteca, favoritos o playlists. Se conservan los archivos en uso.' : 'Entiendo que se eliminará esta colección y las copias que no use otra biblioteca, playlist o favorito. Algunas pueden ser las únicas copias guardadas.'}</span>
