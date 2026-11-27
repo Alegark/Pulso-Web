@@ -10,8 +10,8 @@ export const PlayerArtworkCacheContext=React.createContext<PlayerArtworkCache|nu
 const noSubscription=()=>()=>{};
 const emptySnapshot=()=>undefined;
 
-export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=true,preferUrl=false,sharedArtworkKey,refreshToken}:{
- url?:string|null;trackId?:string;className:string;fallback?:string|null;enabled?:boolean;preferUrl?:boolean;sharedArtworkKey?:string;refreshToken?:number;
+export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=true,preferUrl=false,sharedArtworkKey,refreshToken,fallbackTrackIds}:{
+ url?:string|null;trackId?:string;className:string;fallback?:string|null;enabled?:boolean;preferUrl?:boolean;sharedArtworkKey?:string;refreshToken?:number;fallbackTrackIds?:readonly string[];
 }){
  const trackArtwork=React.useContext(TrackCatalogArtwork),storedUrl=trackId?trackArtwork.get(trackId):undefined;
  const {keys,revision}=React.useContext(TrackArtworkIdentity);
@@ -28,7 +28,7 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
   return()=>{cache?.signal.removeEventListener('abort',revokeAll);revokeAll();};
  },[cache,revokeAll]);
  const [view,setView]=React.useState<{key:string;url:string;cache:PlayerArtworkCache|null}|null>(null);
- const key=JSON.stringify([imageUrl,trackId,enabled,identity,refreshToken??revision]);
+ const key=JSON.stringify([imageUrl,trackId,enabled,identity,refreshToken??revision,fallbackTrackIds?.join(',')??'']);
  React.useEffect(()=>{
   let alive=true;
   const active=()=>alive&&!cache?.signal.aborted;
@@ -37,13 +37,18 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
    const objectUrl=URL.createObjectURL(blob);objectUrls.current.add(objectUrl);setView({key,url:objectUrl,cache});
   };
   const localWins=async()=>{
-   if(!trackId)return false;
-   const local=await readArtwork(trackId,!!imageUrl);
-   if(!active())return true;
-   const priority=artworkPriority(local);
-   if(local.state==='ready')publish(local.blob);
-   if(priority==='hidden'){revokeAll();setView(null);}
-   return priority!=='remote';
+   if(trackId){
+    const local=await readArtwork(trackId,!!imageUrl);
+    if(!active())return true;
+    if(local.state==='ready'){publish(local.blob);return true;}
+    if(artworkPriority(local)==='hidden'){revokeAll();setView(null);return true;}
+   }
+   for(const candidateId of [...new Set(fallbackTrackIds??[])].filter(id=>id!==trackId).slice(0,6)){
+    const candidate=await readArtwork(candidateId,true);
+    if(!active())return true;
+    if(candidate.state==='ready'){publish(candidate.blob);return true;}
+   }
+   return false;
   };
   const publishRemote=async(blob:Blob)=>{
    if(active()&&!await localWins())publish(blob);

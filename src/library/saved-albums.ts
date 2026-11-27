@@ -149,6 +149,7 @@ export function libraryAlbumCards(tracks:readonly Track[],albums:readonly SavedA
  const saved=albums.map(album=>({
   saved:true as const,key:savedAlbumGroupKey(album.edition.id),label:album.edition.title,artist:album.edition.artist,
   editionId:album.edition.id,artworkUrl:album.edition.artworkUrl,count:album.tracks.length,
+  coverTrackIds:resolvedAlbumTracks(album,resolve).flatMap(({trackId})=>trackId?[trackId]:[]),
   trackIds:resolvedAlbumTracks(album,resolve).flatMap(({trackId})=>trackId&&included.has(trackId)?[trackId]:[]),
  }));
  const covered=new Set(saved.flatMap(album=>album.trackIds));

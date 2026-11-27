@@ -89,3 +89,6 @@
 .mini-catalog-art { display:grid; place-items:center; width:100%; height:100%; }
 
 @media (max-width: 1023px) { .pulso-app .mini-player { overflow: hidden; } }
+
+.pulso-app .mini-player__expand svg { inline-size:17px; block-size:17px; }
+.pulso-app .mini-player__expand:hover { background:var(--pulso-surface-elevated); color:var(--pulso-foreground); }
