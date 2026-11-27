@@ -112,7 +112,8 @@ import {AppFailure,copyFailureV1,fromKnownError,makeFailure} from './errors/app-
 import {copyFeatureObservation,panelFailure,type BeginPanelDiagnostic,type PanelDiagnosticAttempt,type PanelOperation} from './diagnostics/panel-mapping';
 import type {Capabilities} from './diagnostics/export';
 import {DiagnosticsPanel} from './ui/DiagnosticsPanel';
-import {TelegramPanel} from './ui/TelegramPanel';
+import {TelegramPanel,type ContinuousPrefetchRunner} from './ui/TelegramPanel';
+import {createContinuousCollectionController,planInitialCollectionQueue,type CollectionSlot} from './playback/continuous-collection';
 import {PlaybackIndicator} from './ui/PlaybackIndicator';
 import {useLongPress} from './ui/useLongPress';
 
@@ -347,6 +348,27 @@ const queueInsertions=createQueueInsertionController({
  },
  onStatus:insertionStatus,
 });
+let continuousRunner:ContinuousPrefetchRunner|null=null;
+let continuousNotice:{waitingTitle:string|null;errorMessage:string|null}={waitingTitle:null,errorMessage:null};
+let pendingCollectionContext:{kind:'playlist'|'collection';slots:readonly CollectionSlot[]}|null=null;
+const isContinuousTrackAvailable=(id:string)=>{const t=tracks.find(track=>track.id===id);return !!t&&trackAvailability(t,availability)==='available';};
+const continuousCollection=createContinuousCollectionController({
+ canStartPrefetch:()=>control.owner&&!busy&&databaseState==='ready'&&!copyRemovalBlocked()&&!queueForeignBlocked()&&!sourceReview.hasReservation()&&!albumCoordinator.running&&!albumCoordinator.dispatching&&!albumCoordinator.songFlight&&!albumCoordinator.prefetchFlight&&navigator.onLine!==false&&!!continuousRunner?.isReady(),
+ isTrackAvailable:isContinuousTrackAvailable,
+ resolveSlotTrackId:slot=>{if(slot.trackId)return slot.trackId;if(slot.kind==='album-track'){try{return createSongResolver(tracks,songAliases)(slot.choice);}catch{return null;}}return null;},
+ downloadSlot:(slot,signal)=>continuousRunner?continuousRunner.downloadSlot(slot,signal):Promise.resolve({state:'failed',channelWide:true}),
+ async insertNextTracks(trackIds,expectedQueueEpoch){
+  if(player.queueEpoch!==expectedQueueEpoch||!insertionBaseReady())return 'rejected';
+  const selection=trackIds.flatMap(id=>tracks.some(t=>t.id===id)?[{selectionKey:crypto.randomUUID(),trackId:id,entryId:crypto.randomUUID()}]:[]);
+  if(selection.length!==trackIds.length)return 'rejected';
+  const accepted=queueInsertions.enqueue({intentId:crypto.randomUUID(),placement:'next',selection},{current:()=>insertionBaseReady()&&control.owner&&!busy&&!copyRemovalBlocked()&&player.queueEpoch===expectedQueueEpoch});
+  if(accepted.kind==='rejected')return 'rejected';const res=await accepted.handle.result;return res.kind==='inserted'?'inserted':res.kind==='cancelled'?'cancelled':'rejected';
+ },
+ selectAndPlayTrack(trackId,epoch){if(control.owner&&!busy&&!collectionBlocked()&&player.queueEpoch===epoch){const idx=player.entries.findIndex(e=>e.trackId===trackId);if(idx>=0)player.select(idx,true);}},
+ pauseCurrent(){if(control.owner&&player.current)player.pause();},
+ getPlayerSnapshot:()=>({queueEpoch:player.queueEpoch,state:player.state,currentTrackId:player.current?.trackId??null,currentTime:Number.isFinite(audio.currentTime)?audio.currentTime:0,duration:Number.isFinite(audio.duration)?audio.duration:0,repeat:player.repeat,shuffled:!!player.shuffleOrder,hasFollowingInQueue:player.following()>=0,entryTrackIds:player.entries.map(e=>e.trackId)}),
+ onStateChange(next){continuousNotice=next;emit();},
+});
 function insertionStatus(value:InsertionStatus){
  if(value.phase==='uncertain'){queueInsertionUncertain=true;control.activity.block('queue-insertion',true);}
  const current=insertionPresentations.get(value.intentId);if(!current?.())return;
@@ -368,6 +390,7 @@ async function replaceQueue(...args:Parameters<typeof queueWork>){
  if(queueInsertionUncertain)return;await admitted('prepare-queue',queueWork,...args);
 }
 async function clearQueue(){
+ continuousCollection.clear();pendingCollectionContext=null;
  const admitted=captureInsertionCurrent();if(!admitted())return;
  queueInsertions.cancelAll('replaced');await queueInsertions.whenSettled();if(!admitted())return;
  const current=captureRemovalRaw(),operation=control.activity.begin();if(!operation)return;
@@ -512,7 +535,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
  const admitted=captureForeignMutationCurrent(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent();
  if(!admitted()||busy||copyRemovalPending||collectionBlocked()||queueForeignBlocked()||
   !recoverPending&&(copyRemovalBlocked()||!songAdmissionIdle()))return null;
- const intent=purpose==='playback'?++selectedSongIntent:selectedSongIntent;let queueing=false,playUsed=false,rememberedId:string|null=null,primaryArtist:string|null=null;
+ const intent=purpose==='playback'?++selectedSongIntent:selectedSongIntent;let queueing=false,playUsed=false,rememberedId:string|null=null,primaryArtist:string|null=null,selectedChoice:SongChoice|null=null;
  const current=()=>(purpose!=='playback'||intent===selectedSongIntent)&&raw()&&review()&&(purpose==='batch'||queueing||admitted());
  const parked=new Set<string>();
  const downloadReady=()=>!busy&&!copyRemovalBlocked(parked)&&!queueForeignBlocked()&&songAdmissionIdle(parked);
@@ -575,6 +598,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
    return management?.current()?management.add(live):false;
   },
   async lookup(choice:SongChoice,signal:AbortSignal,repair=false){
+   selectedChoice=choice;
    const live=()=>current()&&!signal.aborted;
    primaryArtist=((choice.source==='itunes'||choice.source==='musicbrainz')?choice.searchArtist:choice.source==='lrclib'?choice.artist:null)?.trim()||null;
    if(!downloadReady())await waitForDownload(signal);
@@ -616,7 +640,7 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
    try{await rememberCurrentSongAlias(choice,trackId,audio.sha256,audio.bytes,()=>current()&&!signal.aborted&&token.current());return {state:'saved' as const,trackId};}
    catch{return {state:'uncertain' as const,trackId};}finally{token.end();}
   },
-  async play(trackId:string,caller:()=>boolean,signal:AbortSignal,queueTrackIds?:readonly string[]){
+  async play(trackId:string,caller:()=>boolean,signal:AbortSignal,queueTrackIds?:readonly string[],collectionSlots?:readonly CollectionSlot[]){
    if(purpose!=='playback'||playUsed||signal.aborted||!current()||!caller()||busy||copyRemovalBlocked()||queueForeignBlocked())return 'failed' as const;playUsed=true;
    const guardedPlay=async()=>{
     if(startupStatus.startsWith('Cola lista y pausada.')){startupStatus='Cola preparada.';emit();}
@@ -629,16 +653,22 @@ function captureSongPlayback(purpose:'playback'|'download'|'batch'='playback',re
      return player.state==='playing'?'playing' as const:player.lastFailure==='autoplay-denied'?'gesture-required' as const:'failed' as const;
     }finally{signal.removeEventListener('abort',stop);}
    };
-   const orderedIds=queueTrackIds&&queueTrackIds.length>1&&queueTrackIds.includes(trackId)?[...queueTrackIds]:[trackId];
+   const context=collectionSlots?{kind:'album' as const,slots:collectionSlots}:pendingCollectionContext?.slots.some(slot=>slot.trackId===trackId)?pendingCollectionContext:null;
+   let slotsWithTrack=context?.slots.map(slot=>{if(slot.trackId===trackId)return slot;if(slot.kind==='album-track'){try{if(createSongResolver(tracks,songAliases)(slot.choice)===trackId)return {...slot,trackId};}catch{/* unresolved */}}return slot;});
+   let chosenIdx=slotsWithTrack?.findIndex(slot=>slot.trackId===trackId)??-1;
+   if(slotsWithTrack&&chosenIdx<0&&selectedChoice){chosenIdx=slotsWithTrack.findIndex(slot=>slot.kind==='album-track'&&slot.choice.source===selectedChoice?.source&&slot.choice.id===selectedChoice.id);if(chosenIdx>=0)slotsWithTrack=slotsWithTrack.map((slot,index)=>index===chosenIdx?{...slot,trackId}:slot);}
+   const planned=slotsWithTrack&&chosenIdx>=0?planInitialCollectionQueue(slotsWithTrack,chosenIdx,id=>id===trackId||isContinuousTrackAvailable(id)):null;
+   const orderedIds=planned?.queueTrackIds.length?planned.queueTrackIds:queueTrackIds&&queueTrackIds.length>1&&queueTrackIds.includes(trackId)?[...queueTrackIds]:[trackId];
    const startIndex=orderedIds.indexOf(trackId);
-   if(orderedIds.length>1&&player.entries.length===orderedIds.length&&player.entries.every((entry,index)=>entry.trackId===orderedIds[index])){if(player.index!==startIndex)player.select(startIndex,false);return guardedPlay();}
-   if(orderedIds.length===1&&player.current?.trackId===trackId)return guardedPlay();
+   const activate=()=>{if(context&&slotsWithTrack&&chosenIdx>=0){continuousCollection.activate({queueEpoch:player.queueEpoch,kind:context.kind,slots:slotsWithTrack});pendingCollectionContext=null;}};
+   if(orderedIds.length>1&&player.entries.length===orderedIds.length&&player.entries.every((entry,index)=>entry.trackId===orderedIds[index])){if(player.index!==startIndex)player.select(startIndex,false);activate();return guardedPlay();}
+   if(orderedIds.length===1&&player.current?.trackId===trackId){activate();return guardedPlay();}
    queueing=true;
    const live=()=>current()&&caller();
    try{
     const before=player.queueEpoch;await queue(orderedIds,undefined,[],live,startIndex);
     if(!live()||busy||copyRemovalBlocked()||player.queueEpoch===before||player.current?.trackId!==trackId)return 'failed' as const;
-    return await guardedPlay();
+    activate();return await guardedPlay();
    }finally{queueing=false;}
   },
  });
@@ -946,6 +976,7 @@ async function flushQueue(saved:Snapshot,key:string,current:()=>boolean=()=>true
  }finally{closeDatabase(db);}
 }
 async function evictFromQueue(trackIds:readonly string[],assetIds:readonly string[]):Promise<boolean>{
+ continuousCollection.clear();pendingCollectionContext=null;
  const current=captureRemovalRaw(),evictTracks=new Set(trackIds),evictAssets=new Set(assetIds);
  for(const track of tracks)if(evictTracks.has(track.id)&&track.assetId)evictAssets.add(track.assetId);
  const fingerprints=new Set(storedAssets.filter(asset=>evictAssets.has(asset.id)).map(asset=>`${asset.sha256}:${asset.bytes}`));
@@ -1033,15 +1064,17 @@ function syncMediaSession(){
  const state=player.state==='playing'?'playing':'paused';if(navigator.mediaSession.playbackState!==state)navigator.mediaSession.playbackState=state;
 }
 player.subscribe(change=>{
+ continuousCollection.observePlayer(change);
  if(change==='state'){if(player.state==='playing'&&startupStatus.startsWith('Cola lista y pausada.'))startupStatus='Cola preparada.';sourceProtection.observePlayer();syncMediaSession();}
  schedulePositionSave(change);
  if(change==='state')emit();
 });
 function clearMediaSession(){mediaSessionIdentity=null;mediaSessionArtwork=null;if('mediaSession'in navigator){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState='none';for(const action of ['play','pause','nexttrack','previoustrack','seekto']as const)try{navigator.mediaSession.setActionHandler(action,null);}catch{/* optional */}}}
 function installMediaSession(){if(!('mediaSession'in navigator))return;const scope=scopeId;
- for(const [action,handler]of Object.entries({play:()=>void player.play(),pause:()=>player.pause(),nexttrack:()=>player.next(),previoustrack:()=>player.previous(),seekto:(d:MediaSessionActionDetails)=>{if(d.seekTime!==undefined)player.seek(d.seekTime);}}))try{navigator.mediaSession.setActionHandler(action as MediaSessionAction,(d)=>{if(scope===scopeId&&control.owner&&!busy&&(action==='pause'||!collectionBlocked())){cancelSelectedSongIntent();handler(d);}});}catch{/* optional */}
+ for(const [action,handler]of Object.entries({play:()=>void player.play(),pause:()=>{continuousCollection.cancelPrefetch();player.pause();},nexttrack:()=>{if(player.following()>=0)player.next();else continuousCollection.requestNextPending();},previoustrack:()=>player.previous(),seekto:(d:MediaSessionActionDetails)=>{if(d.seekTime!==undefined)player.seek(d.seekTime);}}))try{navigator.mediaSession.setActionHandler(action as MediaSessionAction,(d)=>{if(scope===scopeId&&control.owner&&!busy&&(action==='pause'||!collectionBlocked())){cancelSelectedSongIntent();handler(d);}});}catch{/* optional */}
 }
 async function prepareRelease(){
+ continuousCollection.clear();pendingCollectionContext=null;
  const saved=snapshot(),key=playbackCheckpointKey();suspendedSnapshot=saved;
  ++scopeId;diagnostics.resetScope();player.suspend();clearMediaSession();
  sourceProtection.invalidateScope();await sourceProtection.releaseUnused();
@@ -1075,6 +1108,7 @@ document.addEventListener('pointerdown',()=>{transferPlayIntent=null;},true);
 document.addEventListener('keydown',event=>{if(['Tab','Escape','Enter',' '].includes(event.key))transferPlayIntent=null;},true);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){transferPlayIntent=null;savePosition();}});
 window.addEventListener('pagehide',()=>{
+ continuousCollection.clear();pendingCollectionContext=null;
  transferPlayIntent=null;
  diagnostics.resetScope();const saved=snapshot(),key=playbackCheckpointKey();suspendedSnapshot=saved;
  control.hide(async()=>{await writes;if(saved)await flushQueue(saved,key);},releaseBlocked);
@@ -1090,6 +1124,7 @@ registerDatabaseUseGuard(databaseAdmitted);
 function applyDatabaseLifecycle(state:DatabaseLifecycleState){
  transferPlayIntent=null;
  if(databaseReloadRequired()||databaseState===state)return;
+ continuousCollection.clear();pendingCollectionContext=null;
  ++databaseGeneration;
  queueInsertions.cancelAll('revoked');
  databaseState=state;copyRemovalPending=true;copyRemovalStartup=null;metadataRescanBlocked=true;control.activity.block('metadata-rescan',true);control.activity.block('database',true);
@@ -1136,6 +1171,7 @@ function accountBoundary(){
  const {user,status:accountStatus}=accountController.getSnapshot(),next=user?.id??null;
  artworkAccountBoundary(next,accountStatus);
  if(next===activeAccount)return;
+ continuousCollection.clear();pendingCollectionContext=null;
  const previous=activeAccount;activeAccount=next;libraryLoadedFor=null;if(previous){status='';startupStatus='';}librarySync.account(next);preparedLibraryAccount=null;lastLibrarySyncSignature='';savedArtists=[];savedArtistRevision++;savedAlbums=[];savedAlbumRevision++;songAliases=new Map();tracks=[];playlists=[];addedTrackIds=new Set();availability=new Map();
  if(previous){
   const key=playbackCheckpointKey();accountEpoch++;accountQueue=snapshot();accountQueueOwner=previous;transferPlayIntent=null;cancelSelectedSongIntent();queueInsertions.cancelAll('user');control.cancelTransfer();audio.pause();player.suspend();player.setQueue([]);clearMediaSession();
@@ -1336,6 +1372,7 @@ function App(){
  }
  function closeRemoval(){removalFocus.current={kind:'close',current:rescanResponse(),opener:removalOpener.current};removalOpener.current=null;setRemovalRequest(null);requestAnimationFrame(focusRemoval);}
  function openCollection(selection:import('./library/collection-removal').CollectionSelection,title:string,opener:HTMLButtonElement,options?:{cacheMode?:'audio'|'all'}){
+ continuousCollection.clear();pendingCollectionContext=null;
   if(!mutationCurrent())return;const current=rescanResponse();
   if(!collectionController.start(selection,title,options))return;
   collectionOpener.current=opener;requestAnimationFrame(()=>{if(current()&&collectionController.getView().visible){collectionHeading.current?.focus({preventScroll:true});collectionHeading.current?.scrollIntoView({block:'start'});}});
@@ -1391,7 +1428,7 @@ function App(){
   requestAnimationFrame(()=>{if(current())routeHeading.current?.focus({preventScroll:true});});
  }
  const playAuth=accountEpoch,playScope=scopeId,playProof=control.proof,playGeneration=databaseGeneration;const playCurrent=()=>accountAvailable()&&playAuth===accountEpoch&&playScope===scopeId&&playProof===control.proof&&playGeneration===databaseGeneration;
- const play=()=>{if(!playCurrent()||collectionBlocked())return;if(!owner){void useThisTab(true);return;}transferPlayIntent=null;if(!busy&&player.entries.length){cancelSelectedSongIntent();void player.play();}};const pause=()=>{if(!playCurrent())return;transferPlayIntent=null;if(owner&&!busy&&player.current){cancelSelectedSongIntent();player.pause();}};
+ const play=()=>{if(!playCurrent()||collectionBlocked())return;if(!owner){void useThisTab(true);return;}transferPlayIntent=null;if(!busy&&player.entries.length){cancelSelectedSongIntent();void player.play();}};const pause=()=>{if(!playCurrent())return;transferPlayIntent=null;if(owner&&!busy&&player.current){cancelSelectedSongIntent();continuousCollection.cancelPrefetch();player.pause();}};
  React.useLayoutEffect(()=>{
   const bars=[document.querySelector<HTMLElement>('.shell-nav'),document.querySelector<HTMLElement>('.mini-player')];
   const measure=()=>bars.forEach((bar,i)=>document.documentElement.style.setProperty(i?'--mini-height':'--nav-height',`${bar&&getComputedStyle(bar).position==='fixed'&&(i!==0||window.innerWidth<1024)?bar.getBoundingClientRect().height:0}px`));
@@ -1486,6 +1523,7 @@ function App(){
  const searchPagination=useLibraryPage(routeTotals.buscar,JSON.stringify(views.buscar));
  const pagination=destination==='buscar'?searchPagination:libraryPagination;
  const playableCollection=React.useMemo(()=>visible.filter(({track})=>trackAvailability(track,availability)==='available'),[visible,availability]);
+ const collectionSlots:CollectionSlot[]=visible.map(({key,track})=>({kind:'library-track',slotKey:key,trackId:track.id,title:track.title,artist:track.artist}));
  const omittedCopies=visible.length-playableCollection.length;
  const collectionPlaybackViewKey=React.useMemo(()=>JSON.stringify([viewScope,playableCollection.map(({track})=>track.id)]),[viewScope,playableCollection]);
  const latestCollectionPlaybackView=React.useRef(collectionPlaybackViewKey);latestCollectionPlaybackView.current=collectionPlaybackViewKey;
@@ -1495,13 +1533,17 @@ function App(){
   if(!replacementCurrent()||!owner||busy||copyRemovalBlocked()||!sourceReview.canPrepare()||!visible.length)return;
   if(!playableCollection.length){
    const track=visible[0].track;
+   pendingCollectionContext={kind:selected?'playlist':'collection',slots:collectionSlots};
    requestLibraryDownload([track.id],track.title,true);
    return;
   }
+  const startVisibleIndex=startKey===undefined?visible.findIndex(row=>isContinuousTrackAvailable(row.track.id)):visible.findIndex(row=>row.key===startKey);
+  const plan=planInitialCollectionQueue(collectionSlots,startVisibleIndex,isContinuousTrackAvailable);
   const startIndex=startKey===undefined?null:playableCollection.findIndex(row=>row.key===startKey);
   if(startIndex===-1)return;
   if(startIndex!==null&&player.state==='playing'&&player.current&&playableCollection[startIndex].track.id===player.current.trackId)return;
-  if(collectionQueueMatches&&player.current){
+  if(collectionQueueMatches&&player.current&&plan.queueTrackIds.length===playableCollection.length){
+   continuousCollection.activate({queueEpoch:player.queueEpoch,kind:selected?'playlist':'collection',slots:collectionSlots});pendingCollectionContext=null;
    if(startIndex===null){if(player.state==='playing')pause();else play();}
    else if(player.index===startIndex){if(player.state!=='playing')play();}
    else {cancelSelectedSongIntent();transferPlayIntent=null;player.select(startIndex,true);}
@@ -1510,10 +1552,11 @@ function App(){
   const view=shellResponse(),raw=captureRemovalRaw(),review=sourceReview.captureCurrent(),key=collectionPlaybackViewKey;
   cancelSelectedSongIntent();const playbackIntent=selectedSongIntent;
   const live=()=>playbackIntent===selectedSongIntent&&view()&&raw()&&review()&&latestCollectionPlaybackView.current===key;
-  const ids=playableCollection.map(({track})=>track.id),epoch=player.queueEpoch;
-  const preparing={view:key,trackId:ids[startIndex??0]};setCollectionPreparing(preparing);
-  try{await viewQueue(ids,undefined,[],live,startIndex??0);
+  const ids=plan.queueTrackIds,epoch=player.queueEpoch;if(!ids.length)return;
+  const preparing={view:key,trackId:ids[plan.startQueueIndex]};setCollectionPreparing(preparing);
+  try{await viewQueue(ids,undefined,[],live,plan.startQueueIndex);
   if(!live()||document.visibilityState==='hidden'||busy||copyRemovalBlocked()||queueForeignBlocked()||!sourceReview.canPrepare()||player.queueEpoch!==epoch+1||!player.current)return;
+  continuousCollection.activate({queueEpoch:player.queueEpoch,kind:selected?'playlist':'collection',slots:collectionSlots});pendingCollectionContext=null;
   transferPlayIntent=null;if(startupStatus.startsWith('Cola lista y pausada.')){startupStatus='Cola preparada.';emit();}void player.play();
   }finally{setCollectionPreparing(value=>value===preparing?null:value);}
  }
@@ -1705,7 +1748,7 @@ function App(){
  }} onOpen={openSpotifyPlaylist}/>}
 <section className="settings-group settings-appearance"><h3>Apariencia</h3><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label></section><DownloadNotificationSettings/><section className="settings-group settings-app-update" aria-labelledby="app-update-heading"><h3 id="app-update-heading">Actualización de la app</h3><div className="settings-group__body"><p>Versión en ejecución: {runningVersion}</p><p role="status">{manualReloadPending?'Esperando a que terminen las operaciones para recargar…':updateState==='checking'?'Comprobando versión…':updateState==='current'?'Actualizada':updateState==='available'?'Nueva versión disponible':'No se pudo comprobar si hay actualizaciones.'}</p><button type="button" disabled={manualReloadPending||updateNavigationLocked} onClick={()=>{player.pause();automaticUpdates?.reload();}}>Recargar app</button><p>Recarga Pulso y conserva tus datos. Si hay música sonando, se pausará.</p></div></section><section className="settings-group" aria-label="Sincronización de biblioteca"><h3>Biblioteca de tu cuenta</h3><div className="settings-group__body"><p role="status">{librarySyncMessage[librarySyncState]}</p><p>Las playlists, los favoritos y los datos de las canciones se conservan con tu cuenta. Los álbumes y artistas guardados, y las descargas, se conservan en este dispositivo.</p><button type="button" disabled={!owner||busy||librarySyncState==='syncing'} onClick={()=>void librarySync.retry()}>Sincronizar biblioteca</button></div></section></div><div className="settings-groups">
 <section hidden={settingsSection!=='connections'} className="settings-group"><h3>Cuenta y fuentes</h3><div className="settings-group__body"><section aria-label="Música de Telegram"><details className="settings-help"><summary>Cómo buscar y escuchar</summary><p>En Buscar puedes consultar sugerencias musicales y las opciones del bot que elijas. Conecta tu cuenta de Telegram y configura tus bots para consultarlos. Al elegir una canción se comprueba tu copia local; si falta, se obtiene del bot para descargarla y escucharla. Límite por canción: {formatStorageMB(AUDIO_FILE_MAX_BYTES)}.</p></details></section>
- <TelegramPanel warmConnectionSignal={warmConnectionSignal} trackMenuHost={trackMenuHost} requiredSetup songAliases={songAliases} localAvailability={availability} savedAlbums={savedAlbums} saveAlbum={saveCatalogAlbum} albumSaveBlockedReason={albumSaveBlockedReason}
+ <TelegramPanel onContinuousPrefetchRunner={runner=>{continuousRunner=runner;}} warmConnectionSignal={warmConnectionSignal} trackMenuHost={trackMenuHost} requiredSetup songAliases={songAliases} localAvailability={availability} savedAlbums={savedAlbums} saveAlbum={saveCatalogAlbum} albumSaveBlockedReason={albumSaveBlockedReason}
   connectionWorkPending={()=>sourceProtection.hasPendingPreparation()||!!botImportActive}
   libraryAlbum={albumPage&&libraryAlbumTarget?{page:albumPage,target:libraryAlbumTarget,visible:page==='biblioteca'&&!settingsOpen&&!playerOpen}:undefined} captureDownloadOwner={captureDownloadOwner} downloadStorageReady={downloadStorageReady} downloadUpdateWait={downloadUpdateWait} onStopDownloadUpdate={stopDownloadUpdate} downloadCollection={downloadCollection} downloadStorageTarget={storageOpen&&!playerOpen?storageDownloadTarget:null} onSetupReady={onSetupReady} accountId={account.user?.id} activity={control.activity} canConnect={telegramBlocked===null} blockedReason={telegramBlocked} libraryPending={telegramLibraryPending} libraryLoaded={libraryLoadedFor!==null&&libraryLoadedFor===account.user?.id} onCheckControl={canUseThisTab?()=>{if(!playCurrent())return;transferPlayIntent=null;void control.acquire();}:undefined} onRequestControl={canUseThisTab?()=>{if(playCurrent())void useThisTab();}:undefined} scopeKey={`${accountEpoch}:${scopeId}:${control.proof}:${databaseGeneration}`} captureCurrent={captureTelegramCurrent} captureLifetime={captureTelegramLifetime} captureSongPlayback={captureSongPlayback} captureSongDownload={captureSongDownload} captureAlbumDownload={captureAlbumDownload} captureBatchDownload={captureBatchDownload} onReviewedDownload={operationId=>{if(operationId)verifiedResponse(operationId);void refresh(false,false,null).catch(()=>{});}} onReviewDownloadStorage={()=>{
   const target=document.getElementById('download-copy-recovery')??document.getElementById('download-response-recovery');
@@ -1768,7 +1811,7 @@ function App(){
  {activeGroup?.kind==='album'&&!activeGroup.unknown&&libraryAlbums.some(group=>group.key===activeGroup.key)&&<button type="button" className="collection-menu-danger" data-menu-dismiss-after="true" disabled={!canOrganize} onClick={event=>openCollection({kind:'album',scope:'global-library',key:activeGroup.key},activeGroup.label,trackActionOpener(event.currentTarget))}>Retirar álbum</button>}
   </TrackActionsMenu>}/>
  {!visible.length&&<div className="collection-empty"><p>Esta colección todavía no tiene canciones.</p><button type="button" onClick={()=>navigate('buscar')}>Buscar canciones</button></div>}
- {pagination.pages>1&&<LibraryPagination {...pagination}/>}<ol className="tracks" start={pagination.start+1}>{pageRows.map(({track,key,playlistIndex})=>{const info=albumMetadata.get(track.id)!,artworkKey=artworkKeys.get(track.id);return <LongPressTrackRow key={key} pending={trackAvailability(track,availability)!=='available'}>{openSignal=><><div className="collection-track-art-wrap"><CatalogArtwork key={control.proof+track.id} trackId={track.id} sharedArtworkKey={artworkKey} refreshToken={artworkRefreshToken} className="collection-track-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>{owner&&player.state==='playing'&&player.current?.trackId===track.id&&<PlaybackIndicator variant="overlay"/>}</div><button className="collection-track-main" aria-label={`Escuchar ${track.title}`} aria-current={player.current?.trackId===track.id?'true':undefined} disabled={!owner||busy||databaseState!=='ready'||copyRemovalBlocked()||!sourceReview.canPrepare()} onClick={()=>{if(trackAvailability(track,availability)==='available')void playCollection(key);else requestLibraryDownload([track.id],track.title,true);}}><strong>{track.title}</strong><span>{trackAvailability(track,availability)==='available'&&<svg className="collection-track-download" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 12h10"/></svg>}{track.artist??'Artista desconocido'}{displayTrackAlbum(track)&&` · ${displayTrackAlbum(track)}`}</span></button>{((collectionPreparing?.view===collectionPlaybackViewKey&&collectionPreparing.trackId===track.id)||(player.current?.trackId===track.id&&(player.state==='loading'||player.state==='buffering')))&&<span className="collection-track-loading" role="status"><span>Preparando canción…</span><progress aria-label={`Carga de ${track.title}`}/></span>}<TrackActionsMenu openSignal={openSignal} title={track.title} artist={track.artist??'Artista desconocido'} active={page==='biblioteca'&&!settingsOpen&&libraryDetail&&!playerOpen} artwork={<CatalogArtwork trackId={track.id} sharedArtworkKey={artworkKey} refreshToken={artworkRefreshToken} className="track-actions-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>}>
+ {pagination.pages>1&&<LibraryPagination {...pagination}/>}<ol className="tracks" start={pagination.start+1}>{pageRows.map(({track,key,playlistIndex})=>{const info=albumMetadata.get(track.id)!,artworkKey=artworkKeys.get(track.id);return <LongPressTrackRow key={key} pending={trackAvailability(track,availability)!=='available'}>{openSignal=><><div className="collection-track-art-wrap"><CatalogArtwork key={control.proof+track.id} trackId={track.id} sharedArtworkKey={artworkKey} refreshToken={artworkRefreshToken} className="collection-track-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>{owner&&player.state==='playing'&&player.current?.trackId===track.id&&<PlaybackIndicator variant="overlay"/>}</div><button className="collection-track-main" aria-label={`Escuchar ${track.title}`} aria-current={player.current?.trackId===track.id?'true':undefined} disabled={!owner||busy||databaseState!=='ready'||copyRemovalBlocked()||!sourceReview.canPrepare()} onClick={()=>{if(trackAvailability(track,availability)==='available')void playCollection(key);else {pendingCollectionContext={kind:selected?'playlist':'collection',slots:collectionSlots};requestLibraryDownload([track.id],track.title,true);}}}><strong>{track.title}</strong><span>{trackAvailability(track,availability)==='available'&&<svg className="collection-track-download" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 12h10"/></svg>}{track.artist??'Artista desconocido'}{displayTrackAlbum(track)&&` · ${displayTrackAlbum(track)}`}</span></button>{((collectionPreparing?.view===collectionPlaybackViewKey&&collectionPreparing.trackId===track.id)||(player.current?.trackId===track.id&&(player.state==='loading'||player.state==='buffering')))&&<span className="collection-track-loading" role="status"><span>Preparando canción…</span><progress aria-label={`Carga de ${track.title}`}/></span>}<TrackActionsMenu openSignal={openSignal} title={track.title} artist={track.artist??'Artista desconocido'} active={page==='biblioteca'&&!settingsOpen&&libraryDetail&&!playerOpen} artwork={<CatalogArtwork trackId={track.id} sharedArtworkKey={artworkKey} refreshToken={artworkRefreshToken} className="track-actions-art" enabled={page==='biblioteca'&&!settingsOpen&&libraryDetail}/>}>
  <button disabled={!canOrganize} aria-pressed={track.favorite} ref={button=>{if(button)favoriteButtons.current.set(key,button);else favoriteButtons.current.delete(key);}} onClick={event=>void toggleFavorite(track,key,event.currentTarget)}>{track.favorite?'Quitar favorito':'Favorito'}</button>
  <button disabled={!canAppend||trackAvailability(track,availability)!=='available'} aria-label={`Añadir a continuación ${track.title}`} onClick={event=>addSelection([{key,track}],'next',event)}>Reproducir a continuación</button>
  <button disabled={!canAppend||trackAvailability(track,availability)!=='available'} aria-label={`Añadir al final ${track.title}`} onClick={event=>addSelection([{key,track}],'end',event)}>Añadir al final de la cola</button>
@@ -1803,10 +1846,10 @@ function App(){
     {player.current&&<details className="player-lyrics-options"><summary>Opciones de letras</summary><LyricsPanel activity={control.activity} key={`lyrics:${control.proof}:${player.current.trackId}`} trackId={player.current.trackId} title={player.current.title} timeSeconds={audio.currentTime} canEdit={canOrganize} captureWriteCurrent={captureLyricsWriteCurrent} onStatus={text=>{status=text;emit();if(text==='Letras guardadas.'||text==='Elección «Sin letras» guardada por ti.'||text==='Elección «Sin letras» guardada.')playerLyrics.reload();}}/></details>}
    </>}
    queue={playerQueue}
-   status={player.error||(player.state==='loading'?'Preparando audio…':player.state==='buffering'?'Esperando audio…':!owner?'El control está en otra pestaña.':null)}
+   status={continuousNotice.waitingTitle??continuousNotice.errorMessage??(player.error||(player.state==='loading'?'Preparando audio…':player.state==='buffering'?'Esperando audio…':!owner?'El control está en otra pestaña.':null))}
    playing={owner&&player.state==='playing'} favorite={currentTrack?.favorite??false} shuffle={!!player.shuffleOrder} repeat={player.repeat} position={audio.currentTime} duration={duration}
-   canPlay={canPlayHere} canPause={owner&&!busy&&!!player.current} canPrevious={owner&&!busy&&!collectionBlocked()&&!!player.current} canNext={owner&&!busy&&!collectionBlocked()&&player.following()>=0} canSeek={owner&&!busy&&!collectionBlocked()&&duration>0} canOrganize={canOrganize&&!!player.current}
-   onPlay={play} onPause={pause} onPrevious={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();player.previous();}}} onNext={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();player.next();}}}
+   canPlay={canPlayHere} canPause={owner&&!busy&&!!player.current} canPrevious={owner&&!busy&&!collectionBlocked()&&!!player.current} canNext={owner&&!busy&&!collectionBlocked()&&(player.following()>=0||continuousCollection.hasNextPending())} canSeek={owner&&!busy&&!collectionBlocked()&&duration>0} canOrganize={canOrganize&&!!player.current}
+   onPlay={play} onPause={pause} onPrevious={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();player.previous();}}} onNext={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();if(player.following()>=0)player.next();else continuousCollection.requestNextPending();}}}
    onSeek={value=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();player.seek(value);}}} onShuffle={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked())player.setShuffle(!player.shuffleOrder);}} onRepeat={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked())player.setRepeat(player.repeat==='off'?'all':player.repeat==='all'?'one':'off');}}
    trackId={currentTrack?.id??null} current={playerActionCurrent}
    favoritePending={playerOrganizationFlight.current}
@@ -1817,7 +1860,7 @@ function App(){
  <OrganizationPanel key={`organization:${control.proof}`} activity={control.activity} beginDiagnostic={beginPanelDiagnostic} canWrite={canOrganize} captureWriteCurrent={captureLyricsWriteCurrent} onStatus={text=>{status=text;emit();}} onCommitted={(attempt?:PanelDiagnosticAttempt)=>refresh(true,false,(attempt&&panelDiagnosticHandles.get(attempt))??null,'refresh')}/>
 
  </div></details><details className="settings-group"><summary>Diagnóstico técnico</summary><DiagnosticsPanel session={diagnostics} capabilities={diagnosticCapabilities}/><p>La autorización de Telegram se conserva en este navegador hasta que cierres la sesión, la elimines o sea invalidada por Telegram o el navegador. Los códigos y las contraseñas no se guardan. Las copias locales ya existentes se conservan en este navegador; una limpieza del navegador puede eliminarlas. En el modo compatible para archivos pequeños, la reproducción admite hasta {formatStorageMB(AUDIO_FILE_MAX_BYTES)} por audio y {formatStorageMB(AUDIO_BLOB_TOTAL_MAX_BYTES)} por cola; las copias mayores pueden requerir otro transporte para reproducirse. Portadas locales PNG/JPEG/WebP de hasta {formatStorageMB(2*1024*1024)}; extracción incrustada de ID3v2.3/2.4 sencillo, M4A covr y WAV con ID3, con límites de recursos. Otros formatos conservan un estado de portada explícito.</p></details></div>
- <PlaybackProgress subscribe={player.subscribe}>{()=> <MiniPlayer notice={!playerOpen?notice:null} artwork={currentTrack?<CatalogArtwork trackId={currentTrack.id} sharedArtworkKey={currentArtworkKey} refreshToken={artworkRefreshToken} className="mini-catalog-art" fallback={catalogCovers.has(currentTrack.id)?undefined:null}/>:undefined} title={player.current?.title??'Sin reproducción'} artist={player.current?(miniPlayerArtist(currentTrack,player.current.id,miniPlayerArtistHint?.entryId===player.current.id?miniPlayerArtistHint:storedArtistHint)??'Artista desconocido'):null} stateText={!owner?'Sin control en esta pestaña':player.state+(player.error?` · ${player.error}`:'')} playing={owner&&player.state==='playing'} canPlay={canPlayHere} canPause={owner&&!busy} onPlay={play} onPause={pause} onOpenPlayer={openPlayer} onPrevious={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();player.previous();}}} onNext={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();player.next();}}} canPrevious={owner&&!busy&&!collectionBlocked()} canNext={owner&&!busy&&!collectionBlocked()&&player.following()>=0} position={audio.currentTime} duration={duration} onSeek={value=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();player.seek(value);}}} volume={audio.volume} onVolume={value=>{if(playCurrent()){audio.volume=value;render();}}}/>}</PlaybackProgress></main></TrackArtworkIdentity.Provider></TrackCatalogArtwork.Provider></PlayerArtworkCacheContext.Provider>;
+ <PlaybackProgress subscribe={player.subscribe}>{()=> <MiniPlayer notice={!playerOpen?notice:null} artwork={currentTrack?<CatalogArtwork trackId={currentTrack.id} sharedArtworkKey={currentArtworkKey} refreshToken={artworkRefreshToken} className="mini-catalog-art" fallback={catalogCovers.has(currentTrack.id)?undefined:null}/>:undefined} title={player.current?.title??'Sin reproducción'} artist={player.current?(miniPlayerArtist(currentTrack,player.current.id,miniPlayerArtistHint?.entryId===player.current.id?miniPlayerArtistHint:storedArtistHint)??'Artista desconocido'):null} stateText={continuousNotice.waitingTitle??continuousNotice.errorMessage??(!owner?'Sin control en esta pestaña':player.state+(player.error?` · ${player.error}`:''))} playing={owner&&player.state==='playing'} canPlay={canPlayHere} canPause={owner&&!busy} onPlay={play} onPause={pause} onOpenPlayer={openPlayer} onPrevious={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();player.previous();}}} onNext={()=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();if(player.following()>=0)player.next();else continuousCollection.requestNextPending();}}} canPrevious={owner&&!busy&&!collectionBlocked()} canNext={owner&&!busy&&!collectionBlocked()&&(player.following()>=0||continuousCollection.hasNextPending())} position={audio.currentTime} duration={duration} onSeek={value=>{if(playCurrent()&&owner&&!busy&&!collectionBlocked()){cancelSelectedSongIntent();player.seek(value);}}} volume={audio.volume} onVolume={value=>{if(playCurrent()){audio.volume=value;render();}}}/>}</PlaybackProgress></main></TrackArtworkIdentity.Provider></TrackCatalogArtwork.Provider></PlayerArtworkCacheContext.Provider>;
 }
 createRoot(document.getElementById('root')!).render(<App/>);
 
