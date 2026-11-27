@@ -1,7 +1,7 @@
 # T31 · Agrupación fiel de álbumes sincronizados en escritorio (v67)
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** Especificación ODD aprobada para implementación en `v67-album-grouping`.
+- **Estado:** Validada en local (unitarias, Cloudflare, servidor, matrices Chromium+WebKit y revisión independiente `Seguro publicar v67`); pendiente de publicación en Cloudflare y aceptación física en iPhone (`docs/IPHONE-ACEPTACION.md`, 16 pruebas NO EJECUTADAS).
 - **Fecha:** 2026-11-27
 - **Línea base:** v66 publicada (`/releases/c70c6318de067d99.html`, despliegue `2b4a6230-af7e-4ef7-8b89-7f978596d553`, versión 69, rama `release/v66`).
 - **Requisitos SPEC vinculados:** W05, W06, W07, W08, W17, W18 · **Invariantes SPEC:** V11, V21, V29, V30.
@@ -25,3 +25,12 @@
 | ID | Prueba | Nivel | Criterio de paso |
 |---|---|---|---|
 | **U-V67-01** | `tests/unit/groups.test.ts` (pistas de un mismo `editionId` iTunes y MusicBrainz con `track.album` distinto / `"- Single"`, prioridad absoluta de `manualOverrides`, ordenación por `catalogChoice.id` cuando falta ID3, contrato Spotify intacto) + `tests/integration/check-account-library-main.mjs` (dispositivo B limpio sin `savedAlbums` recibe por sync pistas del mismo álbum iTunes con un `track.album` distinto y muestra **1** sola tarjeta de álbum en Biblioteca e Inicio) en Chromium y WebKit | U / B | 0 álbumes duplicados/fragmentados de 1 canción cuando comparten `editionId`; etiqueta canónica del álbum; `manualOverrides` sigue ganando siempre; batería completa PASS en ambos motores. |
+
+---
+
+## Evidencia de validación y revisión independiente (pre-publicación v67)
+
+- **Implementación:** `d79beb5` (`src/library/catalog-release.ts`, `src/library/groups.ts`, `src/ui/HomeView.tsx`, `tests/unit/groups.test.ts`, `tests/integration/check-account-library-main.mjs`).
+- **Validación ejecutada:** `typecheck`, `typecheck:tests`, `lint`, `build`, `1070/1070` unitarias (`vitest`), `74/74` Cloudflare (`tests/cloudflare`), `10/10` servidor Python y `17/17` suites de navegador en Chromium y WebKit (incluyendo `check-account-library-main.mjs` en ambos motores y la serie `999976b` completa).
+- **Revisión independiente (Antigravity `gemini-4-neon` medio):** PASS sobre `release/v66..999976b` (0 Bloqueantes, 0 Altos, 0 Medios, 0 Bajos) — veredicto **`Seguro publicar v67`**.
+- **Pendiente abierto del propietario:** aceptación física en iPhone (`docs/IPHONE-ACEPTACION.md`, 16 pruebas NO EJECUTADAS).
