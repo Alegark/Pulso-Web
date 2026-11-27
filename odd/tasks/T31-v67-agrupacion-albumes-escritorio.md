@@ -1,7 +1,7 @@
 # T31 · Agrupación fiel de álbumes sincronizados en escritorio (v67)
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** Validada en local (unitarias, Cloudflare, servidor, matrices Chromium+WebKit y revisión independiente `Seguro publicar v67`); pendiente de publicación en Cloudflare y aceptación física en iPhone (`docs/IPHONE-ACEPTACION.md`, 16 pruebas NO EJECUTADAS).
+- **Estado:** Publicada y verificada en vivo en **v67** (`/releases/48727d3675574cce.html`, despliegue `64a6d29f-9f27-4931-81f4-f5e8332c8f89`, versión 70, rama `release/v67`); aceptación física en iPhone (`docs/IPHONE-ACEPTACION.md`, 16 pruebas) sigue **NO EJECUTADA**.
 - **Fecha:** 2026-11-27
 - **Línea base:** v66 publicada (`/releases/c70c6318de067d99.html`, despliegue `2b4a6230-af7e-4ef7-8b89-7f978596d553`, versión 69, rama `release/v66`).
 - **Requisitos SPEC vinculados:** W05, W06, W07, W08, W17, W18 · **Invariantes SPEC:** V11, V21, V29, V30.
@@ -33,4 +33,5 @@
 - **Implementación:** `d79beb5` (`src/library/catalog-release.ts`, `src/library/groups.ts`, `src/ui/HomeView.tsx`, `tests/unit/groups.test.ts`, `tests/integration/check-account-library-main.mjs`).
 - **Validación ejecutada:** `typecheck`, `typecheck:tests`, `lint`, `build`, `1070/1070` unitarias (`vitest`), `74/74` Cloudflare (`tests/cloudflare`), `10/10` servidor Python y `17/17` suites de navegador en Chromium y WebKit (incluyendo `check-account-library-main.mjs` en ambos motores y la serie `999976b` completa).
 - **Revisión independiente (Antigravity `gemini-4-neon` medio):** PASS sobre `release/v66..999976b` (0 Bloqueantes, 0 Altos, 0 Medios, 0 Bajos) — veredicto **`Seguro publicar v67`**.
+- **Publicación y verificación en vivo (2026-11-27):** desplegada en Cloudflare Workers Free (`/releases/48727d3675574cce.html`, versión 70, despliegue `64a6d29f-9f27-4931-81f4-f5e8332c8f89`, recibos en `.local/test-evidence/publish-v67/`). Verificación en vivo PASS (`.local/test-evidence/publish-v67/live-verification.json`): `GET /api/account-library` HTTP `200`, `homeAlbums: 1` con las 9 pistas del álbum real agrupadas en 1 sola tarjeta (0 álbumes falsos de 1 canción).
 - **Pendiente abierto del propietario:** aceptación física en iPhone (`docs/IPHONE-ACEPTACION.md`, 16 pruebas NO EJECUTADAS).
