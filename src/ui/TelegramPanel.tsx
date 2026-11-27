@@ -49,7 +49,7 @@ export function TelegramPanel({warmConnectionSignal,trackMenuHost,songAliases,lo
  React.useLayoutEffect(()=>registerUpdateBlocker(()=>{
   const service=client.current,phase=service?.snapshot().phase??updateState.current.phase;
   const search=service?.searchSnapshot(),bots=service?.botsSnapshot(),sources=service?.sourcesSnapshot();
-  return !['disconnected','connected','error'].includes(phase)||Object.entries(updateState.current).some(([key,value])=>key!=='phase'&&value.trim()!=='')||
+  return !!albumCoordinator.prefetchFlight||!['disconnected','connected','error'].includes(phase)||Object.entries(updateState.current).some(([key,value])=>key!=='phase'&&value.trim()!=='')||
    !!(search?.pending||search?.cancelling||bots?.pending||bots?.cancelling||sources?.pending||sources?.reading||sources?.cancelling);
  }),[]);
  const lifetime=React.useRef(captureLifetime);lifetime.current=captureLifetime;
@@ -59,7 +59,7 @@ export function TelegramPanel({warmConnectionSignal,trackMenuHost,songAliases,lo
   let live=true;phoneAttempt.current=null;
   const service=new TelegramSessionClient(activity,()=>lifetime.current(),value=>{if(live)setState(value);},undefined,undefined,value=>{if(live)setSources(value);},undefined,undefined,value=>{if(live)setBots(value);},value=>{if(live)setSearchState(value);},()=>current.current());
   const revalidate=()=>service.revalidate();
-  service.configureConnectionLifecycle(document.visibilityState==='visible',()=>!!(albumCoordinator.running||albumCoordinator.dispatching||albumCoordinator.songFlight||pendingConnectionWork.current?.()));
+  service.configureConnectionLifecycle(document.visibilityState==='visible',()=>!!(albumCoordinator.running||albumCoordinator.dispatching||albumCoordinator.songFlight||albumCoordinator.prefetchFlight||pendingConnectionWork.current?.()));
   albumCoordinator.listeners.add(revalidate);
   client.current=service;setState(initialSessionState());setSources(null);setBots(null);setSearchState(null);
   return()=>{live=false;albumCoordinator.listeners.delete(revalidate);client.current=null;service.dispose();};

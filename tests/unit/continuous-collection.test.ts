@@ -32,3 +32,13 @@ test('channel failure falls forward without retry',async()=>{
  c.activate({queueEpoch:1,kind:'playlist',slots});assert.equal(c.requestNextPending(),true);await flush();assert.deepEqual(inserted,[['d']]);assert.deepEqual(played,['d']);c.observePlayer('progress');await flush();assert.equal(calls,1);
 });
 test('abort coordinator flight',()=>{let calls=0;albumCoordinator.prefetchFlight={token:{},abort:()=>{calls++;}};abortPrefetchFlight(albumCoordinator);assert.equal(calls,1);delete albumCoordinator.prefetchFlight;});
+test('queue insertion state event during a manual next does not cancel playback',async()=>{
+ const s=snapshot(),played:string[]=[];let changes=0;
+ const c=createContinuousCollectionController({canStartPrefetch:()=>true,isTrackAvailable:id=>id==='a',resolveSlotTrackId:slot=>slot.trackId,downloadSlot:async()=>({state:'ready',trackId:'b'}),insertNextTracks:async()=>{c.observePlayer('state');return 'inserted';},selectAndPlayTrack:id=>played.push(id),pauseCurrent:()=>{s.state='paused';c.observePlayer('state');},getPlayerSnapshot:()=>s,onStateChange:()=>{changes++;}});
+ c.activate({queueEpoch:1,kind:'playlist',slots});assert.equal(changes,0);assert.equal(c.requestNextPending(),true);await flush();assert.deepEqual(played,['b']);assert.equal(changes,2);
+});
+test('repeat all does not insert an already queued track',async()=>{
+ const s={...snapshot(),currentTrackId:'d',repeat:'all' as const,entryTrackIds:['a','b','c','d']};let downloads=0,insertions=0;
+ const c=createContinuousCollectionController({canStartPrefetch:()=>true,isTrackAvailable:()=>true,resolveSlotTrackId:slot=>slot.trackId,downloadSlot:async()=>{downloads++;return {state:'ready',trackId:'a'};},insertNextTracks:async()=>{insertions++;return 'inserted';},selectAndPlayTrack:()=>{},pauseCurrent:()=>{},getPlayerSnapshot:()=>s,onStateChange:()=>{}});
+ c.activate({queueEpoch:1,kind:'playlist',slots});assert.equal(c.hasNextPending(),false);c.observePlayer('progress');await flush();assert.equal(downloads,0);assert.equal(insertions,0);
+});

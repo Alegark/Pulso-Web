@@ -20,19 +20,19 @@ export function planInitialCollectionQueue(slots:readonly CollectionSlot[],start
 }
 export function shouldTriggerPrefetch(s:PlayerSnapshot){return s.state==='playing'&&s.repeat!=='one'&&!s.shuffled&&!s.hasFollowingInQueue&&Number.isFinite(s.duration)&&s.duration>0&&Number.isFinite(s.currentTime)&&s.currentTime>=0&&(s.duration<=45||s.duration-s.currentTime<=45||s.currentTime/s.duration>=0.6);}
 export interface CollectionContext {queueEpoch:number;kind:'album'|'playlist'|'collection';slots:readonly CollectionSlot[];failedSlots:Set<string>;remoteBlocked:boolean;prefetchingSlotKey:string|null;repeat:'off'|'one'|'all'}
-export function nextPendingSlot(context:CollectionContext,currentTrackId:string|null,resolve:(slot:CollectionSlot)=>string|null,isAvailable:(id:string)=>boolean){
+export function nextPendingSlot(context:CollectionContext,currentTrackId:string|null,resolve:(slot:CollectionSlot)=>string|null,isAvailable:(id:string)=>boolean,entryTrackIds:readonly string[]=[]){
  const current=context.slots.findIndex(slot=>resolve(slot)===currentTrackId&&currentTrackId!==null);if(current<0||context.prefetchingSlotKey!==null)return null;
  const count=context.repeat==='all'?context.slots.length-1:context.slots.length-current-1;
- for(let offset=1;offset<=count;offset++){const index=(current+offset)%context.slots.length,slot=context.slots[index];if(context.failedSlots.has(slot.slotKey))continue;const id=resolve(slot);return id&&isAvailable(id)?{kind:'already-available' as const,trackId:id,startSlotIndex:index}:{kind:'needs-download' as const,slot,slotIndex:index};}return null;
+ for(let offset=1;offset<=count;offset++){const index=(current+offset)%context.slots.length,slot=context.slots[index];if(context.failedSlots.has(slot.slotKey))continue;const id=resolve(slot);if(id&&entryTrackIds.includes(id))continue;return id&&isAvailable(id)?{kind:'already-available' as const,trackId:id,startSlotIndex:index}:{kind:'needs-download' as const,slot,slotIndex:index};}return null;
 }
 export function createContinuousCollectionController(host:ContinuousPrefetchHost){
- let context:CollectionContext|null=null,flight:AbortController|null=null,waiting=false,suppressPause=false,flightOrigin:string|null=null,notice={waitingTitle:null as string|null,errorMessage:null as string|null};
- const emit=(waitingTitle:string|null,errorMessage:string|null)=>{notice={waitingTitle,errorMessage};host.onStateChange(notice);};
+ let context:CollectionContext|null=null,flight:AbortController|null=null,waiting=false,suppressPause=false,inserting:AbortController|null=null,flightOrigin:string|null=null,notice={waitingTitle:null as string|null,errorMessage:null as string|null};
+ const emit=(waitingTitle:string|null,errorMessage:string|null)=>{if(notice.waitingTitle===waitingTitle&&notice.errorMessage===errorMessage)return;notice={waitingTitle,errorMessage};host.onStateChange(notice);};
  const resolved=new Map<string,string>();
  const resolve=(slot:CollectionSlot)=>resolved.get(slot.slotKey)??host.resolveSlotTrackId(slot);
  const cancel=()=>{flight?.abort();flight=null;flightOrigin=null;if(context)context.prefetchingSlotKey=null;waiting=false;emit(null,null);};
  const clear=()=>{cancel();context=null;resolved.clear();};
- const pending=()=>{if(!context)return null;const snapshot=host.getPlayerSnapshot();context.repeat=snapshot.repeat;return nextPendingSlot(context,snapshot.currentTrackId,resolve,host.isTrackAvailable);};
+ const pending=()=>{if(!context)return null;const snapshot=host.getPlayerSnapshot();context.repeat=snapshot.repeat;return nextPendingSlot(context,snapshot.currentTrackId,resolve,host.isTrackAvailable,snapshot.entryTrackIds);};
  const run=async()=>{
   const ctx=context;if(!ctx||flight)return;const target=pending();if(!target){if(waiting){waiting=false;emit(null,'No se pudo preparar la siguiente canción.');}return;}
   const index=target.kind==='already-available'?target.startSlotIndex:target.slotIndex,slot=ctx.slots[index];
@@ -46,10 +46,10 @@ export function createContinuousCollectionController(host:ContinuousPrefetchHost
    if(result.state==='ready'){trackId=result.trackId;resolved.set(slot.slotKey,trackId);}
    else if(result.state==='failed'){
     ctx.failedSlots.add(slot.slotKey);if(result.channelWide)ctx.remoteBlocked=true;
-    for(let i=index+1;i<ctx.slots.length;i++){const id=resolve(ctx.slots[i]);if(id&&host.isTrackAvailable(id)){trackId=id;start=i;break;}}
+    for(let i=index+1;i<ctx.slots.length;i++){const id=resolve(ctx.slots[i]);if(id&&host.isTrackAvailable(id)&&!host.getPlayerSnapshot().entryTrackIds.includes(id)){trackId=id;start=i;break;}}
    }
-   if(trackId){const ids=[trackId];for(let i=start+1;i<ctx.slots.length;i++){const id=resolve(ctx.slots[i]);if(!id||!host.isTrackAvailable(id))break;ids.push(id);}
-    const inserted=await host.insertNextTracks(ids,ctx.queueEpoch);if(!valid())return;
+   if(trackId){const ids=[trackId];for(let i=start+1;i<ctx.slots.length;i++){const id=resolve(ctx.slots[i]);if(!id||!host.isTrackAvailable(id))break;if(!host.getPlayerSnapshot().entryTrackIds.includes(id)&&!ids.includes(id))ids.push(id);}
+    let inserted:'inserted'|'rejected'|'cancelled';inserting=abort;try{inserted=await host.insertNextTracks(ids,ctx.queueEpoch);}finally{if(inserting===abort)inserting=null;}if(!valid())return;
     if(waiting&&inserted==='inserted'){waiting=false;emit(null,null);host.selectAndPlayTrack(trackId,ctx.queueEpoch);}
     else if(waiting){waiting=false;emit(null,'No se pudo preparar la siguiente canción.');}
    }else if(waiting){waiting=false;emit(null,'No se pudo preparar la siguiente canción.');}
@@ -58,7 +58,7 @@ export function createContinuousCollectionController(host:ContinuousPrefetchHost
  };
  return {
   activate(input:{queueEpoch:number;kind:'album'|'playlist'|'collection';slots:readonly CollectionSlot[]}){clear();context={...input,failedSlots:new Set(),remoteBlocked:false,prefetchingSlotKey:null,repeat:'off'};},
-  observePlayer(change:PlayerChange){if(!context)return;const s=host.getPlayerSnapshot();if(s.queueEpoch!==context.queueEpoch||s.shuffled||!s.currentTrackId){clear();return;}if(flight&&flightOrigin!==s.currentTrackId){cancel();return;}if(change==='state'&&s.state==='paused'&&!suppressPause){cancel();return;}if(change==='state'&&s.state==='ended'&&!s.hasFollowingInQueue&&s.repeat!=='one'){if(flight||pending()){waiting=true;emit('Preparando siguiente canción…',null);void run();}return;}if(shouldTriggerPrefetch(s)&&!context.remoteBlocked)void run();},
+  observePlayer(change:PlayerChange){if(!context)return;const s=host.getPlayerSnapshot();if(s.queueEpoch!==context.queueEpoch||s.shuffled||!s.currentTrackId){clear();return;}if(flight&&flightOrigin!==s.currentTrackId){cancel();return;}if(change==='state'&&s.state==='paused'&&!suppressPause&&!(inserting&&inserting===flight)){cancel();return;}if(change==='state'&&s.state==='ended'&&!s.hasFollowingInQueue&&s.repeat!=='one'){if(flight||pending()){waiting=true;emit('Preparando siguiente canción…',null);void run();}return;}if(shouldTriggerPrefetch(s)&&!context.remoteBlocked)void run();},
   hasNextPending(){return !!flight||!!pending();},
   requestNextPending(){if(!context||(!flight&&!pending()))return false;suppressPause=true;try{host.pauseCurrent();}finally{suppressPause=false;}waiting=true;context.remoteBlocked=false;emit('Preparando siguiente canción…',null);void run();return true;},
   cancelPrefetch:cancel,clear,
