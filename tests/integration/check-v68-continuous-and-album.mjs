@@ -1,4 +1,4 @@
-// Partial U-V68-01 coverage only. U-V68-02, U-V68-03 and U-V68-04 remain untested here.
+// U-V68-01 and the Inicio artwork preload portion of U-V68-04.
 import {build,preview} from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import {chromium,webkit} from 'playwright-core';
@@ -33,7 +33,36 @@ try{
     else{await page.locator('.album-page').waitFor();await page.locator('.album-page').getByRole('button',{name:'Opciones del álbum'}).click();await page.getByRole('button',{name:'Retirar álbum',exact:true}).waitFor();}
     cases.push(`${engine}: ${entry}`);
    }finally{await context.close();}
-  }}finally{await browser.close();}
+  }
+  const context=await browser.newContext({serviceWorkers:'block',viewport:{width:390,height:844}});
+  try{
+   let remoteRequests=0;
+   await context.route('**/*',r=>{const u=new URL(r.request().url());if(u.origin===origin||['blob:','data:'].includes(u.protocol))return r.continue();remoteRequests++;return r.abort();});
+   await installRequiredAccountFixture(context,origin);
+   const page=await context.newPage();page.setDefaultTimeout(15000);
+   await page.goto(`${origin}/${ws.dir}/seed.html`);await page.waitForFunction(()=>!!window.setupV68SyncedAlbum);
+   await page.evaluate(async()=>{await window.setupV68SyncedAlbum();await window.seedV68Artwork();});
+   await page.addInitScript(()=>{
+    Object.defineProperty(Navigator.prototype,'onLine',{get:()=>false,configurable:true});
+    delete Navigator.prototype.serviceWorker;
+    const get=IDBObjectStore.prototype.get;const transactions=new WeakMap();window.v68ArtworkReads=[];
+    IDBObjectStore.prototype.get=function(...args){
+     const request=get.apply(this,args);
+     if(this.transaction.db.name==='pulso-web-cache-v1'&&this.name==='artwork'&&this.transaction.mode==='readonly'){
+      let entry=transactions.get(this.transaction);if(!entry){entry={keys:[],hits:0};transactions.set(this.transaction,entry);window.v68ArtworkReads.push(entry);}
+      entry.keys.push(args[0]);request.addEventListener('success',()=>{if(request.result)entry.hits++;});
+     }
+     return request;
+    };
+   });
+   await page.goto(origin);await page.locator('.home-albums button').filter({hasText:'Álbum sintético'}).waitFor();
+   await page.waitForFunction(()=>window.v68ArtworkReads.some(x=>x.hits>0));
+   assert.equal(await page.locator('.shell-nav').getByRole('button',{name:'Inicio',exact:true}).getAttribute('aria-current'),'page');
+   const reads=await page.evaluate(()=>window.v68ArtworkReads.filter(x=>x.hits>0));
+   assert.ok(reads.some(x=>x.keys.length>1),'la precarga debe agrupar lecturas en una transacción');
+   assert.equal(remoteRequests,0);cases.push(`${engine}: U-V68-04 Inicio offline`);
+  }finally{await context.close();}
+  }finally{await browser.close();}
  }
  console.log('PASS',cases.length,cases.join('; '));
 }catch(error){console.error('FAIL',error.stack||error);process.exitCode=1;}

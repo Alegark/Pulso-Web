@@ -1,5 +1,6 @@
 import './interface-main-fixture';
 import {openDatabase,closeDatabase} from '../../src/storage/database';
+import {PersistentArtwork} from '../../src/cache/persistent-artwork';
 
 Object.assign(window,{setupV68SyncedAlbum:async()=>{
  await (window as unknown as {setupCollectionFixture:()=>Promise<void>}).setupCollectionFixture();
@@ -13,4 +14,11 @@ Object.assign(window,{setupV68SyncedAlbum:async()=>{
   }
   tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);
  });}finally{closeDatabase(db);}
+}});
+
+Object.assign(window,{seedV68Artwork:async()=>{
+ const storage=new PersistentArtwork('11111111-1111-4111-8111-111111111111',new AbortController().signal);
+ const bytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/aS8AAAAASUVORK5CYII='),c=>c.charCodeAt(0));
+ const image={blob:new Blob([bytes],{type:'image/png'}),mime:'image/png' as const,width:1,height:1,sha256:'0'.repeat(64)};
+ for(const key of ['provider:edition:201','provider:album:artista sintetico:album sintetico'])await storage.put(key,image,Date.now());
 }});
