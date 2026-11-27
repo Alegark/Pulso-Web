@@ -1,7 +1,7 @@
 # T33 · Vista de álbum unificada, reproducción continua con pre-descarga inteligente, portadas estables en iOS y precarga rápida (v68)
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** Especificación ODD lista para implementación en 2 lotes (`Lote 1: U-V68-01 + U-V68-03 + U-V68-04`; `Lote 2: U-V68-02`).
+- **Estado:** Validada en local (unitarias, Cloudflare, servidor, matrices Chromium+WebKit y revisión independiente `Seguro publicar v68`); pendiente de publicación en Cloudflare, verificación en vivo HTTPS y aceptación física en iPhone (`docs/IPHONE-ACEPTACION.md`, 16 pruebas NO EJECUTADAS).
 - **Fecha:** 2026-11-27
 - **Línea base:** v67 publicada (`/releases/48727d3675574cce.html`, rama `release/v67`, commit `6b786aa`, despliegue `64a6d29f-9f27-4931-81f4-f5e8332c8f89`, versión 70).
 - **Requisitos SPEC vinculados:** W03, W05, W06, W07, W08, W10, W11, W17, W18.
@@ -482,3 +482,16 @@ Módulo de dominio sin dependencias de React ni DOM, 100 % testeable en unitaria
 3. **Cierre pre-publicación (una sola vez antes de publicar v68):**
    - Batería completa (`typecheck`, `typecheck:tests`, `lint`, `build`, todas las unitarias y matrices de navegador en Chromium y WebKit) + revisión independiente (`gemini-4-neon` medio) + actualización de `odd/tasks/T33-*.md` y sincronización Engram verificada.
    - Recordatorio obligatorio: registrar que la aceptación física en iPhone (`docs/IPHONE-ACEPTACION.md`) sigue `NO EJECUTADA` hasta que el propietario la valide en su teléfono real.
+
+---
+
+## 6. Evidencia de validación y revisión independiente (pre-publicación v68)
+
+- **Implementación:** `37726f5` (Lote 1: `U-V68-01`, `U-V68-03`, `U-V68-04`), `de39d34`, `b46fd5f`, `1e0a1a1`, `81e71e0`, `03bcc67`, `a955846`, `694391e` (Lote 2: `U-V68-02` + fix de carrera `savePosition`/`canStartPrefetch` diferido + suite navegador Chromium/WebKit) y `a6c33db` (cierre de los 6 hallazgos de revisión independiente).
+- **Validación ejecutada (`a6c33db` / batería de regresión sobre `81e71e0`–`a6c33db`):**
+  - `typecheck`, `typecheck:tests`, `lint`, `build`: **PASS**
+  - Unitarias (`vitest`): **`1082/1082` PASS** (incluyendo `continuous-collection.test.ts`, `saved-albums.test.tsx`, `persistent-artwork-cache.test.ts` C04 intacto)
+  - Cloudflare / Node server: **`74/74` PASS** · Servidor Python: **`10/10` PASS**
+  - Navegador **Chromium y WebKit**: `check-v68-continuous-and-album.mjs` **`12/12` Chromium y `12/12` WebKit** (`U-V68-01` Inicio/Biblioteca/offline, `U-V68-04` Inicio offline y `warm`, `U-V68-02a` playlist + álbum caché sin Biblioteca, `U-V68-02b-next`, `U-V68-02b-pause`, `U-V68-02c-rate`, `U-V68-02c-preempt` en playlist y en álbum/Buscar), `check-v66-polish.mjs` **`2/2` × 2** (`U-V68-03` iOS `IntersectionObserver` + `unavailable` fallback), `check-v67-storage-removal.mjs` **`5/5` × 2**, `check-persistent-cache-main.mjs` **`13/13` × 2**, `check-ux-v65.mjs` **`8/8` × 2**, `check-account-library-main.mjs` **`6/6` × 2**, `check-storage-groups-main.mjs` **`3/3` × 2**, `check-settings-design.mjs` **`4/4` × 2**, `check-collection-removal-current.mjs` `queue` **`3/3`**.
+- **Revisión independiente (Antigravity `gemini-4-neon` medio):** primera ronda detectó 1 Alto (preempción en `MusicSearchController`), 1 Medio (`waitingOrigin` en `retryTimer`) y 4 Bajos, todos cerrados en `a6c33db`; revisión delta independiente PASS (`0` Bloqueantes, `0` Altos, `0` Medios, `1` Bajo menor sin impacto en concurrencia ni descargas: `await abortPrefetchFlight` en `runAlbumDownload` cede 1 microtask antes de `relaunches.count = 0`) — veredicto **`Seguro publicar v68`**.
+- **Pendiente abierto del propietario:** aceptación física en iPhone (`docs/IPHONE-ACEPTACION.md`, 16 pruebas NO EJECUTADAS).
