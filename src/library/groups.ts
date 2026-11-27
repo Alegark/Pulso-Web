@@ -1,5 +1,5 @@
 import {resolveLocalAlbumMetadata} from './album-metadata';
-import {albumEditionId,displayTrackAlbum,searchedITunesRelease,trackCatalogRelease} from './catalog-release';
+import {albumEditionId,catalogChoiceOrder,displayTrackAlbum,searchedITunesRelease,trackCatalogRelease} from './catalog-release';
 import type {Track} from './library';
 
 export type MetadataProvenance = 'manual' | 'tags' | 'catalog';
@@ -174,7 +174,7 @@ export function getGroupTracks(tracks: readonly Track[], group: LibraryGroup): T
 
 /** Apply only within an explicitly selected album, before pagination/queue snapshot. */
 export function orderAlbumRows<R extends {track:Track}>(rows:readonly R[]):R[] {
- const ordinal=(t:Track,field:'disc'|'track')=>{const s=resolveLocalAlbumMetadata(t)[field];return s.state==='known'?s.value.current:null;};
+ const ordinal=(t:Track,field:'disc'|'track')=>{const s=resolveLocalAlbumMetadata(t)[field];return s.state==='known'?s.value.current:catalogChoiceOrder(t)?.[field]??null;};
  const compare=(a:number|null,b:number|null)=>a===b?0:a===null?1:b===null?-1:a-b;
  return rows.map((row,index)=>({row,index,disc:ordinal(row.track,'disc'),track:ordinal(row.track,'track')})).sort((a,b)=>compare(a.disc,b.disc)||compare(a.track,b.track)||a.index-b.index).map(x=>x.row);
 }

@@ -36,19 +36,32 @@ export function trackCatalogRelease(track:Track):CatalogRelease|null {
  return release&&(!track.album?.trim()||musicCatalogKey(track.album)===musicCatalogKey(release.title))?release:null;
 }
 
-export const displayTrackAlbum=(track:Track)=>track.album?.trim()?track.album:trackCatalogRelease(track)?.title??(albumEditionId(track)!==null?searchedAlbumChoice(track)?.album??null:null);
+export function displayTrackAlbum(track:Track):string|null {
+ if(Object.hasOwn(track.manualOverrides??{},'album'))return track.album;
+ const choice=albumEditionId(track)!==null?searchedAlbumChoice(track):null;
+ return choice?.album??(track.album?.trim()?track.album:trackCatalogRelease(track)?.title??null);
+}
 
 function searchedAlbumChoice(track:Track){
  const choice=track.catalogChoice;
  return choice&&(choice.source==='itunes'||choice.source==='musicbrainz')&&choice.album?.trim()&&
-  !Object.keys(track.manualOverrides??{}).length&&(!track.album?.trim()||musicCatalogKey(track.album)===musicCatalogKey(choice.album))?choice:null;
+  !Object.keys(track.manualOverrides??{}).length?choice:null;
 }
 
 export function searchedITunesRelease(track:Track):number|null {
- if(Object.keys(track.manualOverrides??{}).length||track.catalogChoice?.source!=='itunes'||!track.catalogChoice.album||
-  track.album?.trim()&&musicCatalogKey(track.album)!==musicCatalogKey(track.catalogChoice.album))return null;
+ if(Object.keys(track.manualOverrides??{}).length||track.catalogChoice?.source!=='itunes'||!track.catalogChoice.album?.trim())return null;
  const id=Number(/^itunes:([1-9][0-9]*):[1-9][0-9]*:[1-9][0-9]*:[1-9][0-9]*$/.exec(track.catalogChoice.id)?.[1]);
  return positive(id)?id:null;
+}
+
+export function catalogChoiceOrder(track:Track):{disc:number;track:number}|null {
+ const choice=searchedAlbumChoice(track);
+ if(!choice||albumEditionId(track)===null)return null;
+ const match=choice.source==='itunes'?/^itunes:[1-9][0-9]*:([1-9][0-9]*):([1-9][0-9]*):[1-9][0-9]*$/.exec(choice.id):
+  /^musicbrainz:[0-9a-f-]+:([1-9][0-9]*):([1-9][0-9]*):[0-9a-f-]+$/.exec(choice.id);
+ if(!match)return null;
+ const disc=Number(match[1]),position=Number(match[2]);
+ return positive(disc)&&positive(position)?{disc,track:position}:null;
 }
 
 /** Exact recording IDs are shared by choices and locally attached releases. */
