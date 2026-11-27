@@ -13,7 +13,7 @@ export function PlayerSurface({open,onClose,children,announcement}:PlayerSurface
   const close=useRef(onClose);
   close.current=onClose;
   const gesture=useRef<{x:number;y:number;id:number}|null>(null);
-  useLayoutEffect(()=>()=>{gesture.current=null;},[]);
+  useLayoutEffect(()=>{if(!open)gesture.current=null;return ()=>{gesture.current=null;};},[open]);
   const move=(event:PointerEvent<HTMLDivElement>)=>{
     const start=gesture.current;
     if(!start||start.id!==event.pointerId)return;

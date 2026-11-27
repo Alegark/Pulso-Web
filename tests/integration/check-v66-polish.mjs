@@ -135,25 +135,29 @@ try{
     await expand.click();const close=page.locator('.player-surface__grabber'),toolbar=page.locator('.player-surface__toolbar');
     const geometry=await page.evaluate(()=>{const toolbar=document.querySelector('.player-surface__toolbar').getBoundingClientRect(),close=document.querySelector('.player-surface__grabber').getBoundingClientRect(),art=document.querySelector('.np-art').getBoundingClientRect();return {width:close.width,height:close.height,center:Math.abs((close.left+close.right-toolbar.left-toolbar.right)/2),bottom:close.bottom,art:art.top,transport:document.querySelector('.np-transport').getBoundingClientRect().bottom,viewport:innerHeight,content:getComputedStyle(document.querySelector('.player-surface__grabber'),'::before').content};});
     assert.ok(geometry.width>=44&&geometry.height>=44&&geometry.center<1&&geometry.art>=geometry.bottom&&geometry.transport<=geometry.viewport,JSON.stringify(geometry));assert.notEqual(geometry.content,'"⌄"');
+    await toolbar.dispatchEvent('pointerdown',{pointerId:8,isPrimary:true,pointerType:'touch',button:0,clientX:190,clientY:20});
     await close.click();await close.waitFor({state:'detached'});await expand.click();
+    await toolbar.dispatchEvent('pointermove',{pointerId:8,isPrimary:true,pointerType:'touch',clientX:192,clientY:80});
+    assert.equal(await close.count(),1,'Un gesto anterior no debe cerrar la reapertura');
     await toolbar.dispatchEvent('pointerdown',{pointerId:7,isPrimary:true,pointerType:'touch',button:0,clientX:190,clientY:20});
     await toolbar.dispatchEvent('pointermove',{pointerId:7,isPrimary:true,pointerType:'touch',clientX:192,clientY:80});
     await close.waitFor({state:'detached'});
    });
    await check('v66-album-cover-fallback',async page=>{
     await page.goto(`${origin}/${albumFixture}`);await page.waitForFunction(()=>typeof window.setupV66Albums==='function');await page.evaluate(()=>window.setupV66Albums());
+    for(const selector of ['.fallback-cover img','.provider-cover img'])await page.locator(selector).waitFor();
     await page.goto(origin);await page.locator('.shell-nav').waitFor();
     const home=title=>page.locator('.home-albums button').filter({hasText:title});
     const library=title=>page.locator('.library-grid .collection-card').filter({hasText:title});
     const loaded=async card=>{await card.locator('img').waitFor();assert.equal(await card.locator('img').evaluate(img=>img.complete&&img.naturalWidth>0),true);};
-    for(const title of ['Álbum con portada','Álbum proveedor'])await loaded(home(title));
+    for(const title of ['Álbum con portada','Álbum proveedor','Álbum sin archivo'])await loaded(home(title));
     await page.locator('.shell-nav').getByRole('button',{name:'Biblioteca'}).click();
-    for(const title of ['Álbum con portada','Álbum proveedor'])await loaded(library(title));
+    for(const title of ['Álbum con portada','Álbum proveedor','Álbum sin archivo'])await loaded(library(title));
     await page.locator('.mini-player__expand').click();await page.locator('.player-surface__grabber').click();
-    for(const title of ['Álbum con portada','Álbum proveedor'])await loaded(library(title));
+    for(const title of ['Álbum con portada','Álbum proveedor','Álbum sin archivo'])await loaded(library(title));
     await library('Álbum con portada').click();await page.locator('.library-detail:visible').waitFor();
     await page.getByRole('button',{name:'Volver a Biblioteca'}).click();
-    for(const title of ['Álbum con portada','Álbum proveedor'])await loaded(library(title));
+    for(const title of ['Álbum con portada','Álbum proveedor','Álbum sin archivo'])await loaded(library(title));
    });
   }finally{await browser?.close();}
  }

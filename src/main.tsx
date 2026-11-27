@@ -1492,7 +1492,7 @@ function App(){
  const preloadKeys=[...new Set(preloadIds.flatMap(id=>{
   const shared=artworkKeys.get(id),url=catalogCovers.get(id),catalog=url?catalogArtworkKey(url):null;
   return [...(catalog?[catalog]:[]),...(shared?['provider:'+shared]:[])];
- })),...libraryAlbums.flatMap(group=>{const key=albumArtworkKey({editionId:group.editionId,album:group.label,artist:group.artist});const url=group.saved?group.artworkUrl:undefined;return [...(key?['provider:'+key]:[]),...(url?[catalogArtworkKey(url)]:[])];})];
+ })),...libraryAlbums.flatMap(group=>{const key=albumArtworkKey({editionId:group.editionId,album:group.label,artist:group.artist});const url=group.saved?group.artworkUrl:undefined;const catalog=url?catalogArtworkKey(url):null;return [...(key?['provider:'+key]:[]),...(catalog?[catalog]:[])];})];
  const preloadSignature=JSON.stringify(preloadKeys);
  React.useEffect(()=>{
   if(page!=='biblioteca'||settingsOpen||!account.user?.id)return;

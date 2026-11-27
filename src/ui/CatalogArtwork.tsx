@@ -38,7 +38,7 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
   };
   const localWins=async()=>{
    if(trackId){
-    const local=await readArtwork(trackId,!!imageUrl);
+    const local=await readArtwork(trackId,!!(imageUrl||identity));
     if(!active())return true;
     if(local.state==='ready'){publish(local.blob);return true;}
     if(artworkPriority(local)==='hidden'){revokeAll();setView(null);return true;}
