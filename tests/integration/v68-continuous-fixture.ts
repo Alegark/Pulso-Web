@@ -1,6 +1,26 @@
 import './interface-main-fixture';
 import {openDatabase,closeDatabase} from '../../src/storage/database';
 import {PersistentArtwork} from '../../src/cache/persistent-artwork';
+import {saveTelegramSession,sessionLease} from '../../src/telegram/saved-session';
+import {rememberCompletedSetup} from '../../src/ui/RequiredSetup';
+import {createPlaylist,changePlaylist} from '../../src/library/library';
+
+Object.assign(window,{seedV68ContinuousPlaylist:async()=>{
+ await (window as unknown as {setupCollectionFixture:()=>Promise<void>}).setupCollectionFixture();
+ const lease=await sessionLease();
+ if(!await saveTelegramSession(lease,'TESTONLY_V68_SESSION'))throw Error('session fixture');
+ rememberCompletedSetup('11111111-1111-4111-8111-111111111111');
+ const {rows}=JSON.parse(sessionStorage.getItem('test-own-fixture')!);
+ const db=await openDatabase();
+ try{await new Promise<void>((resolve,reject)=>{
+  const tx=db.transaction('tracks','readwrite'),store=tx.objectStore('tracks');
+  const request=store.get(rows[1].track);
+  request.onsuccess=()=>store.put({...request.result,assetId:null,duration:30},rows[1].track);
+  tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);
+ });}finally{closeDatabase(db);}
+ const list=await createPlaylist('Continuidad sintética');
+ for(let i=0;i<3;i++)await changePlaylist(list.id,i+1,{type:'add',trackId:rows[i].track});
+}});
 
 Object.assign(window,{setupV68SyncedAlbum:async()=>{
  await (window as unknown as {setupCollectionFixture:()=>Promise<void>}).setupCollectionFixture();

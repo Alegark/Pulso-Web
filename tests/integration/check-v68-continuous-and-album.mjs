@@ -62,6 +62,42 @@ try{
    assert.ok(reads.some(x=>x.keys.length>1),'la precarga debe agrupar lecturas en una transacción');
    assert.equal(remoteRequests,0);cases.push(`${engine}: U-V68-04 Inicio offline`);
   }finally{await context.close();}
+  const warmContext=await browser.newContext({serviceWorkers:'block',viewport:{width:390,height:844}});
+  try{
+   await warmContext.route('**/*',r=>{const u=new URL(r.request().url());return u.origin===origin||['blob:','data:'].includes(u.protocol)?r.continue():r.abort();});
+   await installRequiredAccountFixture(warmContext,origin);
+   const page=await warmContext.newPage();page.setDefaultTimeout(15000);
+   await page.goto(`${origin}/${ws.dir}/seed.html`);await page.waitForFunction(()=>!!window.seedV68ContinuousPlaylist);await page.evaluate(()=>window.seedV68ContinuousPlaylist());
+   await page.addInitScript(()=>{
+    delete Navigator.prototype.serviceWorker;
+    const NativeWorker=window.Worker;window.__v68WorkerLog={connection:[],search:[],workers:[],commands:[]};
+    window.Worker=class{
+     constructor(url,options){
+      window.__v68WorkerLog.workers.push(String(url));
+      if(!String(url).includes('session.worker-'))return new NativeWorker(url,options);
+      this.postMessage=message=>{
+       window.__v68WorkerLog.commands.push(message.type);
+       if(message.type==='restore')queueMicrotask(()=>this.onmessage?.({data:{version:2,session:message.session,request:message.request,phase:'connected',error:null,retryAt:null,delivery:null,binding:{accountRef:crypto.randomUUID(),accountEpoch:1},saved:{peerRef:crypto.randomUUID(),kind:'saved',name:'Mensajes guardados'},bots:[{providerRef:crypto.randomUUID(),username:'ivkmbot',label:'Bot sintético',status:'verified-profile',compatibility:'unverified'}]}}));
+       else if(message.protocol==='pulso-telegram-connection')window.__v68WorkerLog.connection.push(message.type);
+       else if(message.protocol==='pulso-bot-search')window.__v68WorkerLog.search.push(message.type);
+      };
+     }
+     terminate(){}
+    };
+    let visible=true;Object.defineProperty(document,'visibilityState',{get:()=>visible?'visible':'hidden',configurable:true});
+    window.__v68Visibility=value=>{visible=value;document.dispatchEvent(new Event('visibilitychange'));};
+   });
+   await page.goto(origin);
+   await page.waitForFunction(()=>window.__v68WorkerLog.connection.length===0);
+   await page.waitForTimeout(1000);
+   await page.evaluate(()=>window.__v68Visibility(false));
+   try{await page.waitForFunction(()=>window.__v68WorkerLog.connection.includes('suspend'));}catch(error){console.error(await page.evaluate(()=>window.__v68WorkerLog));throw error;}
+   await page.locator('.home-playlists button').filter({hasText:'Continuidad sintética'}).click();
+   await page.evaluate(()=>window.__v68Visibility(true));
+   await page.waitForFunction(()=>window.__v68WorkerLog.connection.includes('warm'));
+   assert.deepEqual(await page.evaluate(()=>window.__v68WorkerLog.search),[]);
+   cases.push(`${engine}: U-V68-04 warm`);
+  }finally{await warmContext.close();}
   }finally{await browser.close();}
  }
  console.log('PASS',cases.length,cases.join('; '));
