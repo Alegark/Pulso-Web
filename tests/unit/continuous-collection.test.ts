@@ -23,7 +23,7 @@ test('one prefetch waits at end then inserts contiguous run and plays',async()=>
 test('pause or epoch change cancels outstanding request',async()=>{
  const s=snapshot();let signal!:AbortSignal,finish!:(result:{state:'ready';trackId:string})=>void,plays=0;
  const c=createContinuousCollectionController({canStartPrefetch:()=>true,isTrackAvailable:id=>id==='a',resolveSlotTrackId:slot=>slot.trackId,downloadSlot:(_slot,sig)=>{signal=sig;return new Promise(r=>{finish=r;});},insertNextTracks:async()=> 'inserted',selectAndPlayTrack:()=>{plays++;},pauseCurrent:()=>{},getPlayerSnapshot:()=>s,onStateChange:()=>{}});
- c.activate({queueEpoch:1,kind:'playlist',slots});assert.equal(c.requestNextPending(),true);s.state='paused';c.observePlayer('state');assert.equal(signal.aborted,true);finish({state:'ready',trackId:'b'});await flush();assert.equal(plays,0);
+ c.activate({queueEpoch:1,kind:'playlist',slots});assert.equal(c.requestNextPending(),true);s.state='paused';c.observePlayer('state');assert.equal(signal.aborted,false);c.cancelPrefetch();assert.equal(signal.aborted,true);finish({state:'ready',trackId:'b'});await flush();assert.equal(plays,0);
  s.state='playing';c.observePlayer('progress');s.queueEpoch=2;c.observePlayer('state');assert.equal(signal.aborted,true);
 });
 test('channel failure falls forward without retry',async()=>{
@@ -41,4 +41,10 @@ test('repeat all does not insert an already queued track',async()=>{
  const s={...snapshot(),currentTrackId:'d',repeat:'all' as const,entryTrackIds:['a','b','c','d']};let downloads=0,insertions=0;
  const c=createContinuousCollectionController({canStartPrefetch:()=>true,isTrackAvailable:()=>true,resolveSlotTrackId:slot=>slot.trackId,downloadSlot:async()=>{downloads++;return {state:'ready',trackId:'a'};},insertNextTracks:async()=>{insertions++;return 'inserted';},selectAndPlayTrack:()=>{},pauseCurrent:()=>{},getPlayerSnapshot:()=>s,onStateChange:()=>{}});
  c.activate({queueEpoch:1,kind:'playlist',slots});assert.equal(c.hasNextPending(),false);c.observePlayer('progress');await flush();assert.equal(downloads,0);assert.equal(insertions,0);
+});
+
+test('transient admission and deferred download retry without poisoning the pending slot',async()=>{
+ const s=snapshot(),played:string[]=[],attempts:string[]=[];let ready=false;
+ const c=createContinuousCollectionController({canStartPrefetch:()=>ready,isTrackAvailable:id=>id==='a',resolveSlotTrackId:slot=>slot.trackId,downloadSlot:async slot=>{attempts.push(slot.slotKey);return attempts.length===1?{state:'deferred'}:{state:'ready',trackId:'b'};},insertNextTracks:async()=> 'inserted',selectAndPlayTrack:id=>played.push(id),pauseCurrent:()=>{},getPlayerSnapshot:()=>s,onStateChange:()=>{}});
+ c.activate({queueEpoch:1,kind:'playlist',slots});assert.equal(c.requestNextPending(),true);await new Promise(r=>setTimeout(r,150));assert.deepEqual(attempts,[]);ready=true;await new Promise(r=>setTimeout(r,250));assert.deepEqual(attempts,['b','b']);assert.deepEqual(played,['b']);c.clear();
 });

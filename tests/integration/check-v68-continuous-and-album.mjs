@@ -62,6 +62,67 @@ try{
    assert.ok(reads.some(x=>x.keys.length>1),'la precarga debe agrupar lecturas en una transacción');
    assert.equal(remoteRequests,0);cases.push(`${engine}: U-V68-04 Inicio offline`);
   }finally{await context.close();}
+
+  for(const scenario of ["02a","02b-next","02b-pause","02c-rate","02c-preempt"]){
+   console.log("RUN",engine,scenario);const context=await browser.newContext({serviceWorkers:"block",viewport:{width:1200,height:844}});
+   try{
+    await context.route("**/*",r=>{const u=new URL(r.request().url());return u.origin===origin||["blob:","data:"].includes(u.protocol)?r.continue():r.abort();});
+    await installRequiredAccountFixture(context,origin);
+    const page=await context.newPage();page.setDefaultTimeout(15000);
+    await page.goto(`${origin}/${ws.dir}/seed.html`);await page.waitForFunction(()=>!!window.seedV68ContinuousPlaylist);await page.evaluate(()=>window.seedV68ContinuousPlaylist());
+    await page.addInitScript(({scenario})=>{
+     delete Navigator.prototype.serviceWorker;
+     const native=window.Worker, log=window.__v68Log={search:[],download:[],cancel:[],active:0,max:0,events:[]};
+     window.__v68HoldDownload=scenario.includes("next")||scenario.includes("pause")||scenario.includes("preempt");
+     window.__v68BotMode=scenario.includes("rate")?"rate-limit":"normal";
+     const bytes=new Uint8Array(32044),v=new DataView(bytes.buffer);const put=(s,p)=>[...s].forEach((c,i)=>bytes[p+i]=c.charCodeAt(0));
+     put("RIFF",0);v.setUint32(4,bytes.length-8,true);put("WAVEfmt ",8);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);put("data",36);v.setUint32(40,bytes.length-44,true);bytes[100]=7;
+     const digest=crypto.subtle.digest("SHA-256",bytes).then(b=>Array.from(new Uint8Array(b),x=>x.toString(16).padStart(2,"0")).join(""));
+     const envelope=m=>Object.fromEntries(["protocol","version","sessionId","accountRef","accountEpoch","providerRevision","queryId","requestId"].map(k=>[k,m[k]]));
+     window.Worker=class{
+      constructor(url,options){if(!String(url).includes("session.worker-"))return new native(url,options);this.pending=null;}
+      postMessage(m){
+       const send=(command,extra,retryAt=null)=>queueMicrotask(()=>this.onmessage?.({data:{protocol:"pulso-bot-search",version:1,reply:{...envelope(command),...extra},sessionClosed:false,retryAt,retryBlocked:false}}));
+       if(m.type==="restore"){log.restored=true;queueMicrotask(()=>this.onmessage?.({data:{version:2,session:m.session,request:m.request,phase:"connected",error:null,retryAt:null,delivery:null,binding:{accountRef:crypto.randomUUID(),accountEpoch:1},saved:{peerRef:crypto.randomUUID(),kind:"saved",name:"Mensajes guardados"},bots:[{providerRef:crypto.randomUUID(),username:"ivkmbot",label:"Bot sintético",status:"verified-profile",compatibility:"unverified"}]}}));}
+       else if(m.type==="bot-search.search"){log.search.push({queryId:m.queryId,target:m.target});log.active++;log.max=Math.max(log.max,log.active);
+        if(window.__v68BotMode==="rate-limit"){log.active--;const retryAt=Date.now()+60000;send(m,{type:"bot-search.error",error:"rate-limit",delivery:"acknowledged",retryAt,retryBlocked:false},retryAt);}
+        else send(m,{type:"bot-search.result",delivery:"acknowledged",rows:[{rowRef:crypto.randomUUID(),kind:"audio",title:m.target.title,performer:m.target.artist,durationSeconds:Math.round(m.target.durationSeconds||2),mimeType:"audio/wav",bytes:bytes.length,correlation:"reply"}],expiresAt:Date.now()+60000,expectedTarget:m.target});
+       }else if(m.type==="bot-search.download"){
+        log.download.push(m.target);let cancelled=false;this.pending={m,cancel:()=>{cancelled=true;}};
+        window.__v68ReleaseDownload=async()=>{if(cancelled)return;const sha256=await digest;if(cancelled)return;this.pending=null;log.active--;send(m,{type:"bot-search.downloaded",audio:{blob:new Blob([bytes],{type:"audio/wav"}),bytes:bytes.length,mime:"audio/wav",sha256,target:m.target}});};
+        if(!window.__v68HoldDownload)void window.__v68ReleaseDownload();
+       }else if(m.type==="bot-search.cancel"){log.cancel.push(m.targetRequestId);if(this.pending){const original=this.pending.m;this.pending.cancel();this.pending=null;log.active--;send(original,{type:"bot-search.error",error:"cancelled",delivery:"acknowledged",retryAt:null,retryBlocked:false});}send(m,{type:"bot-search.cancelled",targetRequestId:m.targetRequestId});}
+      }
+      terminate(){}
+     };
+     const NativeAudio=window.Audio;window.Audio=function(...args){const audio=new NativeAudio(...args);window.__v68Audio=audio;for(const type of ["play","pause","playing","ended"])audio.addEventListener(type,()=>log.events.push(type));return audio;};
+    },{scenario});
+    await page.goto(origin);await page.locator(".home-playlists button").filter({hasText:"Continuidad sintética"}).click();
+    await page.waitForFunction(()=>window.__v68Log.restored);await page.waitForTimeout(1500);await page.getByRole("button",{name:"Escuchar Sintética 0"}).click();
+    await page.waitForFunction(()=>window.__v68Log.events.includes("playing"));
+    await page.waitForFunction(()=>window.__v68Log.restored);await page.waitForTimeout(500);await page.evaluate(()=>{window.__v68Audio.currentTime=window.__v68Audio.duration*0.7;window.__v68Audio.dispatchEvent(new Event("timeupdate"));});await page.waitForFunction(()=>window.__v68Log.search.length===1).catch(async e=>{console.error(await page.evaluate(()=>({log:window.__v68Log,paused:window.__v68Audio.paused,time:window.__v68Audio.currentTime,body:document.body.innerText.slice(-500)})));throw e;});
+    if(scenario==="02a"){
+     await page.waitForFunction(()=>window.__v68Log.download.length===1&&window.__v68Log.active===0);
+     await page.locator(".collection-track-main").filter({hasText:"Sintética 1"}).locator(".collection-track-download").waitFor();await page.waitForTimeout(500);const before=await page.evaluate(()=>window.__v68Log.events.slice());
+     assert.equal(before.filter(x=>x==="pause").length,0);assert.equal(before.filter(x=>x==="play").length,1);
+     await page.evaluate(()=>{const a=window.__v68Audio;a.currentTime=a.duration;a.dispatchEvent(new Event("ended"));});
+     await page.waitForFunction(()=>document.querySelector(".collection-track-main[aria-current=true]")?.getAttribute("aria-label")==="Escuchar Sintética 1").catch(async e=>{console.error(await page.evaluate(()=>({log:window.__v68Log,current:document.querySelector(".collection-track-main[aria-current=true]")?.getAttribute("aria-label"),body:document.body.innerText.slice(-1200)})));throw e;});
+     assert.equal(await page.evaluate(()=>window.__v68Log.search.length),1);
+    }else if(scenario==="02b-next"||scenario==="02b-pause"){
+     await page.waitForFunction(()=>window.__v68Log.download.length===1);const next=page.getByRole("button",{name:"Siguiente",exact:true});assert.equal(await next.isEnabled(),true);await next.click();await page.getByText("Preparando siguiente canción…").first().waitFor({state:"attached"}).catch(async e=>{console.error(await page.evaluate(()=>({log:window.__v68Log,body:document.body.innerText.slice(-1800)})));throw e;});
+     if(scenario==="02b-pause")await page.getByRole("button",{name:"Pausar desde minirreproductor"}).click();
+     await page.evaluate(()=>window.__v68ReleaseDownload());
+     if(scenario==="02b-next")await page.waitForFunction(()=>document.querySelector(".collection-track-main[aria-current=true]")?.getAttribute("aria-label")==="Escuchar Sintética 1").catch(async e=>{console.error(await page.evaluate(()=>({log:window.__v68Log,current:document.querySelector(".collection-track-main[aria-current=true]")?.getAttribute("aria-label"),body:document.body.innerText.slice(-1200)})));throw e;});
+     else{await page.waitForTimeout(500);assert.notEqual(await page.locator(".collection-track-main[aria-current=true]").getAttribute("aria-label"),"Escuchar Sintética 1");}
+    }else if(scenario==="02c-rate"){
+     for(let i=0;i<4;i++)await page.evaluate(()=>window.__v68Audio.dispatchEvent(new Event("timeupdate")));
+     await page.waitForTimeout(500);assert.equal(await page.evaluate(()=>window.__v68Log.search.length),1);assert.equal(await page.evaluate(()=>window.__v68Audio.paused),false);
+    }else{
+     await page.waitForFunction(()=>window.__v68Log.download.length===1);await page.getByRole("button",{name:"Escuchar Sintética 1"}).click();await page.waitForFunction(()=>window.__v68Log.cancel.length===1);assert.ok(await page.evaluate(()=>window.__v68Log.max<=1));
+    }
+    cases.push(`${engine}: U-V68-${scenario}`);
+   }finally{await context.close();}
+  }
   const warmContext=await browser.newContext({serviceWorkers:'block',viewport:{width:390,height:844}});
   try{
    await warmContext.route('**/*',r=>{const u=new URL(r.request().url());return u.origin===origin||['blob:','data:'].includes(u.protocol)?r.continue():r.abort();});

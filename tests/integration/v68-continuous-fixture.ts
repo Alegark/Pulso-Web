@@ -15,7 +15,7 @@ Object.assign(window,{seedV68ContinuousPlaylist:async()=>{
  try{await new Promise<void>((resolve,reject)=>{
   const tx=db.transaction('tracks','readwrite'),store=tx.objectStore('tracks');
   const request=store.get(rows[1].track);
-  request.onsuccess=()=>store.put({...request.result,assetId:null,duration:30},rows[1].track);
+  request.onsuccess=()=>store.put({...request.result,assetId:null,duration:2},rows[1].track);
   tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);
  });}finally{closeDatabase(db);}
  const list=await createPlaylist('Continuidad sintética');

@@ -29,7 +29,7 @@ import {RequiredSetup,SetupBots,setupWasCompleted,rememberCompletedSetup} from '
 type MusicSearchProps = React.ComponentProps<typeof MusicSearchController>;
 export interface ContinuousPrefetchRunner {
  isReady():boolean;
- downloadSlot(slot:CollectionSlot,signal:AbortSignal):Promise<{state:'ready';trackId:string}|{state:'failed';channelWide:boolean;message?:string}|{state:'cancelled'}>;
+ downloadSlot(slot:CollectionSlot,signal:AbortSignal):Promise<{state:'ready';trackId:string}|{state:'failed';channelWide:boolean;message?:string}|{state:'cancelled'}|{state:'deferred'}>;
 }
 export interface TelegramPanelProps {
  onContinuousPrefetchRunner?:(runner:ContinuousPrefetchRunner|null)=>void;
@@ -135,8 +135,9 @@ export function TelegramPanel({onContinuousPrefetchRunner,warmConnectionSignal,t
   const runner:ContinuousPrefetchRunner={
    isReady(){const p=latestRef.current,c=client.current,s=c?.searchSnapshot();return !setupNeededRef.current&&p.phase==='connected'&&navigator.onLine!==false&&orderedProviders(p.bots).length>0&&!!s?.available&&!s.pending&&!s.cancelling&&!s.retryBlocked&&(s.retryAt===null||s.retryAt<=Date.now());},
    async downloadSlot(slot,signal){
-    if(signal.aborted||!runner.isReady()||albumCoordinator.running||albumCoordinator.dispatching||albumCoordinator.songFlight||albumCoordinator.prefetchFlight)return {state:'failed',channelWide:true};
-    const attempt=latestRef.current.captureSongDownload?.();if(!attempt?.current())return {state:'failed',channelWide:true};
+    if(signal.aborted)return {state:'cancelled'};
+    if(!runner.isReady()||albumCoordinator.running||albumCoordinator.dispatching||albumCoordinator.songFlight||albumCoordinator.prefetchFlight)return {state:'deferred'};
+    const attempt=latestRef.current.captureSongDownload?.();if(!attempt?.current())return {state:'deferred'};
     let choice:SongChoice;
     if(slot.kind==='album-track')choice=slot.choice;
     else {const track=latestRef.current.localTracks.find(t=>t.id===slot.trackId);if(!track)return {state:'failed',channelWide:false};choice={source:'local',id:'local:'+track.id,title:track.manualOverrides.title??track.catalogChoice?.title??track.title,artist:'artist' in track.manualOverrides?track.manualOverrides.artist??null:track.catalogChoice?.artist??track.artist,album:'album' in track.manualOverrides?track.manualOverrides.album??null:track.catalogChoice?.album??track.album,duration:track.catalogChoice?.duration??track.duration};}
