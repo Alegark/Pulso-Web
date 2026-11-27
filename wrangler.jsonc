@@ -23,6 +23,7 @@
       "/api/account-library",
       "/api/spotify-playlist/*",
       "/api/spotify-track/*",
+      "/api/youtube-playlist",
       "/telegram-config.json"
     ]
   },
