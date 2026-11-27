@@ -1,7 +1,7 @@
 # T30 · Nuevo control de reproductor y portada fiable de álbumes (v66)
 
 - **Método:** ODD (`doc/SPEC.md` §C.5 y §V.2)
-- **Estado:** Implementada, batería completa 100 % PASS en Chromium y WebKit, revisión independiente favorable (`Seguro publicar v66`, 0 bloqueantes/altos/medios); lista para publicación con poda en Cloudflare Workers Free (USD 0). Aceptación física en iPhone (`D`): NO EJECUTADA.
+- **Estado:** Publicada y verificada en vivo en Cloudflare Workers Free (USD 0) como **v66** (`/releases/c70c6318de067d99.html`, despliegue `2b4a6230-af7e-4ef7-8b89-7f978596d553`, versión 69, con poda de 300 archivos / 84,40 MB antiguos). Aceptación física en iPhone (`D`): NO EJECUTADA.
 - **Fecha:** 2026-11-26
 - **Línea base:** v65 publicada (`/releases/5a7eef31d22eabf1.html`, despliegue `18c58796-f9f8-4e53-8572-9148055fec89`, versión 68, rama `release/v65`).
 - **Requisitos SPEC vinculados:** W04, W06, W08, W17, W18 · **Invariantes SPEC:** V11, V21, V27, V29, V30, K01 (prioridad manual/oculta de portada), T26 (caché persistente y revocación de ObjectURLs `A01`/`A02b`).
@@ -45,4 +45,10 @@ El `--dry-run` contra el archivo v65 indicado (SHA-256 `f0390526b616da6b44397a1a
 
 - Primera revisión (`release/v65..5088f85`): **0 Bloqueantes, 0 Altos**, 1 Medio y 5 Bajos → veredicto **`Seguro publicar v66`**.
 - Revisión delta (`5088f85..fda3729`, tras aplicar `U-V66-03` y cerrar el hallazgo Medio + menores, además de `7/7` PASS en `cloudflare-retention.test.mjs` y `cloudflare-navigation.test.mjs`): **0 Bloqueantes, 0 Altos, 0 Medios** (2 notas Bajas no bloqueantes) → veredicto **`Seguro publicar v66`**.
-- Pendiente abierto: publicación + verificación en vivo en Cloudflare Workers (`v66`), y las **16 pruebas físicas en iPhone (`docs/IPHONE-ACEPTACION.md`), que siguen NO EJECUTADAS**.
+
+## Publicación y verificación en vivo (`v66`)
+
+- **Despliegue (`a04fc41` / código `fda3729`):** entrada `/releases/c70c6318de067d99.html` (`307` → `/releases/c70c6318de067d99` `200`), deployment `2b4a6230-af7e-4ef7-8b89-7f978596d553`, versión `c01a862f-d2f9-45e1-8c7d-0b6e9c5ffcbb` (**#69**, 100 %), Worker `330.980` bytes (`841456dfb8b09ef6970d9375a70e7c420cfa13fe6a6e13a91fc6490f06978152`), manifiesto promovido `9.577` bytes (`635ec609285e173469d074ec684a8980469fc976ddcfbe98b82b2744a00f5fa8`), **50** rutas estáticas, **0** históricas, **13** bindings, **14** reglas `run_worker_first`, `observability: null`, sin `X-Pulso-Diag`. Recibos en `.local/test-evidence/publish-v66/`.
+- **Poda verificada en HTTPS (`U-V66-03`):** `copiedFiles: 0`, **300** archivos y **84.397.613 bytes (~84,40 MB)** retirados del manifiesto activo; `GET /releases/5a7eef31d22eabf1.html` (`Accept: */*`) devuelve **`404`**, mientras que navegación (`Accept: text/html`) devuelve **`200`** con `meta pulso-release = c70c6318de067d99`.
+- **Verificación en vivo (Chromium móvil `390×844`, `.local/test-evidence/publish-v66/live-verification.json`):** PASS en `.mini-player__expand` (`44×44`, SVG diagonal), `.player-surface__grabber` (`72×44`, centrado, píldora, `content: none`, `artTop: 132.3 >= bottom: 64`, cierra limpio), portadas de álbumes en Biblioteca e Inicio antes y después de abrir/cerrar el reproductor (`loaded: 1/1`) y `GET /api/account-library` HTTP `200` sin `503`.
+- **Pendiente abierto:** las **16 pruebas físicas en iPhone (`docs/IPHONE-ACEPTACION.md`) siguen NO EJECUTADAS** (exclusivas del propietario).
