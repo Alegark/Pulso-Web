@@ -146,11 +146,14 @@ export function resolvedAlbumTracks(detail:AlbumDetail,resolve:ReturnType<typeof
 export function libraryAlbumCards(tracks:readonly Track[],albums:readonly SavedAlbum[],aliases?:SongAliases|null,allTracks=tracks){
  const resolve=createSongResolver(allTracks,aliases);
  const included=new Set(tracks.map(track=>track.id));
- const saved=albums.map(album=>({
+ const saved=albums.map(album=>{
+  const resolved=resolvedAlbumTracks(album,resolve);
+  return {
   saved:true as const,key:savedAlbumGroupKey(album.edition.id),label:album.edition.title,artist:album.edition.artist,
   editionId:album.edition.id,artworkUrl:album.edition.artworkUrl,count:album.tracks.length,
-  trackIds:resolvedAlbumTracks(album,resolve).flatMap(({trackId})=>trackId&&included.has(trackId)?[trackId]:[]),
- }));
+  coverTrackIds:resolved.flatMap(({trackId})=>trackId?[trackId]:[]),
+  trackIds:resolved.flatMap(({trackId})=>trackId&&included.has(trackId)?[trackId]:[]),
+ };});
  const covered=new Set(saved.flatMap(album=>album.trackIds));
  const local=tracks.filter(track=>!covered.has(track.id));
  const index=new Map(local.map(track=>[track.id,track]));

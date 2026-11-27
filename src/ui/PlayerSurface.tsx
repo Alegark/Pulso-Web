@@ -1,4 +1,4 @@
-import {useLayoutEffect,useRef,type ReactNode} from 'react';
+import {useLayoutEffect,useRef,type ReactNode,type PointerEvent} from 'react';
 
 interface PlayerSurfaceProps {
   open: boolean;
@@ -12,6 +12,14 @@ export function PlayerSurface({open,onClose,children,announcement}:PlayerSurface
   const surface=useRef<HTMLElement>(null);
   const close=useRef(onClose);
   close.current=onClose;
+  const gesture=useRef<{x:number;y:number;id:number}|null>(null);
+  useLayoutEffect(()=>{if(!open)gesture.current=null;return ()=>{gesture.current=null;};},[open]);
+  const move=(event:PointerEvent<HTMLDivElement>)=>{
+    const start=gesture.current;
+    if(!start||start.id!==event.pointerId)return;
+    const dx=event.clientX-start.x,dy=event.clientY-start.y;
+    if(dy>=56&&dy>Math.abs(dx)*1.3){gesture.current=null;close.current();}
+  };
 
   useLayoutEffect(()=>{
     const node=surface.current;
@@ -64,7 +72,7 @@ export function PlayerSurface({open,onClose,children,announcement}:PlayerSurface
 
   return <section ref={surface} id="player" className="player-surface" hidden={!open} data-open={open?'true':undefined}
     role={open?'dialog':undefined} aria-modal={open?true:undefined} aria-label="Reproductor" tabIndex={-1}>
-    {open&&<div className="player-surface__toolbar"><span>Ahora suena</span><button type="button" onClick={onClose} aria-label="Cerrar reproductor">Volver</button></div>}
+    {open&&<div className="player-surface__toolbar" onPointerDown={event=>{if(event.isPrimary&&(event.pointerType!=='mouse'||event.button===0))gesture.current={x:event.clientX,y:event.clientY,id:event.pointerId};}} onPointerMove={move} onPointerUp={event=>{move(event);gesture.current=null;}} onPointerCancel={()=>{gesture.current=null;}}><button type="button" className="player-surface__grabber" onClick={onClose} aria-label="Cerrar reproductor"><span className="player-surface__grabber-pill" aria-hidden="true"/></button><span>Ahora suena</span></div>}
     <p className="pulso-visually-hidden" role="status" aria-atomic="true">{open?announcement:null}</p>
     {children}
   </section>;

@@ -24,43 +24,38 @@ const published = (releases, legacy) => ({
 });
 const retirement = (candidate, previous, legacyEvidence) => planRetention({candidate, previous, legacyEvidence, asOf: now});
 
-test('conserva todas las publicaciones de los últimos 30 días, incluido el límite exacto', () => {
-  const history = [release(6, 1), release(5, 2), release(4, 3), release(3, 30), release(2, 31), release(1, 32)];
-  const plan = retirement(draft(7), published(history));
-  assert.deepEqual(plan.manifest.releases.map(item => item.entry), [7, 6, 5, 4, 3].map(entry));
-  const expected = [...assets(2), ...assets(1)].filter(name => name !== shared).sort().map(name => record(name));
+test('retira todas las versiones anteriores y conserva los assets compartidos del candidato', () => {
+  const history = [release(6, 0), release(5, 2), release(4, 3), release(3, 30), release(2, 31), release(1, 32)];
+  const candidate = draft(7), plan = retirement(candidate, published(history));
+  assert.deepEqual(plan.manifest.releases.map(item => item.entry), [entry(7)]);
+  const expected = [...new Set(history.flatMap(item => item.assets))].filter(name => name !== shared).sort().map(name => record(name));
   assert.deepEqual(plan.retired, expected);
   assert.equal(plan.retiredBytes, expected.reduce((sum, file) => sum + file.bytes, 0));
-  assert.ok(plan.manifest.files.some(file => file.path === shared));
-  assert.deepEqual(retirement(draft(7), published(history)), plan);
+  assert.deepEqual(plan.copy, []);
+  assert.deepEqual(plan.manifest.files, candidate.files);
+  assert.deepEqual(retirement(candidate, published(history)), plan);
 });
 
-test('el mínimo cuenta tres HTML distintos y permite volver a publicar la entrada actual', () => {
-  const history = [release(5, 31), release(5, 32), release(4, 33), release(3, 34), release(2, 35), release(1, 36)];
+test('republicar la entrada actual no retira su HTML ni sus assets', () => {
+  const history = [release(5, 0), release(5, 32), release(4, 33)];
   const plan = retirement(draft(5), published(history));
-  assert.deepEqual(plan.manifest.releases.map(item => item.entry), [5, 4, 3, 2].map(entry));
-  assert.ok(!plan.retired.some(file => file.path === path(5)));
+  assert.deepEqual(plan.manifest.releases.map(item => item.entry), [entry(5)]);
+  assert.ok(assets(5).every(name => !plan.retired.some(file => file.path === name)));
+  assert.deepEqual(plan.copy, []);
   assert.equal(markPublished(plan.manifest, now).releases[0].publishedAt, now);
   assert.ok(!Object.hasOwn(markPublished(plan.manifest, now), 'plannedAt'));
 });
 
-test('el legado se conserva por la fecha límite y hasta conocer tres entradas anteriores más nuevas', () => {
+test('retira el inventario heredado salvo los assets compartidos del candidato', () => {
   const oldAssets = [...new Set([...assets(1), ...assets(2)])];
   const previous = {files: [...oldAssets, ...stable].map(name => record(name))};
-  const evidence = {entry: entry(2), publishedAt: daysAgo(60)};
-  const first = retirement(draft(3), previous, evidence);
-  assert.deepEqual(first.retired, []);
-  assert.deepEqual(first.manifest.legacy.assets, oldAssets.sort());
-  const stillNeeded = retirement(draft(5), published([release(4, 38), release(3, 40)], first.manifest.legacy));
-  assert.deepEqual(stillNeeded.retired, []);
-  const dated = [release(5, 35), release(4, 38), release(3, 40)];
-  const expired = retirement(draft(6), published(dated, first.manifest.legacy));
-  assert.ok(expired.retired.some(file => file.path === path(1)));
-  assert.ok(!expired.retired.some(file => file.path === shared));
-  assert.equal(expired.manifest.legacy, undefined);
-  const recent = retirement(draft(6), published([release(5, 1), release(4, 2), release(3, 3)],
-    {...first.manifest.legacy, lastPublishedAt: daysAgo(30)}));
-  assert.deepEqual(recent.retired, []);
+  const evidence = {entry: entry(2), publishedAt: now};
+  const plan = retirement(draft(3), previous, evidence);
+  assert.deepEqual(plan.retired, oldAssets.filter(name => name !== shared).sort().map(name => record(name)));
+  assert.deepEqual(plan.copy, []);
+  assert.equal(plan.manifest.legacy, undefined);
+  assert.ok(plan.manifest.files.some(file => file.path === shared));
+  assert.throws(() => retirement(draft(3), previous, {...evidence, publishedAt: daysAgo(-1)}), /posterior/);
 });
 
 test('rechaza inventarios corruptos, procedencia incompleta y colisiones', () => {
@@ -81,7 +76,7 @@ test('rechaza inventarios corruptos, procedencia incompleta y colisiones', () =>
   assert.throws(() => retirement(candidate, good), /ruta estable/);
 });
 
-test('freeze copia los bytes verificados y revierte el staging ante un SHA distinto', async () => {
+test('freeze conserva solo el candidato y rechaza un SHA anterior inválido', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'pulso-retention-'));
   const directory = join(temporary, 'site'), output = join(temporary, 'frozen.json');
   const candidate = draft(5), previous = published([release(4, 1), release(3, 2), release(2, 3), release(1, 31)]);
@@ -96,14 +91,12 @@ test('freeze copia los bytes verificados y revierte el staging ante un SHA disti
     }
     const plan = await freezeSite({...config, dryRun: true, loadPrevious: () => assert.fail('La simulación es local')});
     assert.ok(plan.retired.some(file => file.path === path(1)));
-    const failedFile = plan.copy[1];
-    await assert.rejects(freezeSite({...config, loadPrevious: async file => file === failedFile
-      ? Buffer.alloc(file.bytes, 65) : body(file)}), /SHA-256 distintos/);
-    await assert.rejects(readFile(output), {code: 'ENOENT'});
-    await assert.rejects(readFile(pathToFile(plan.copy[0])), {code: 'ENOENT'});
-    const frozen = await freezeSite({...config, loadPrevious: async file => body(file)});
+    assert.deepEqual(plan.copy, []);
+    assert.deepEqual(plan.retired, [...new Set(previous.releases.flatMap(item => item.assets))]
+      .filter(name => name !== shared).sort().map(name => record(name)));
+    const frozen = await freezeSite({...config, loadPrevious: () => assert.fail('No hay copias')});
     assert.deepEqual(JSON.parse(await readFile(output)), frozen.manifest);
-    assert.deepEqual(await readFile(pathToFile(plan.copy[0])), body(plan.copy[0]));
+    assert.deepEqual(frozen.manifest.files, candidate.files);
     await assert.rejects(readFile(join(directory, path(1))), {code: 'ENOENT'});
 
     const previousPath = join(temporary, 'previous.json');

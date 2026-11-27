@@ -1,6 +1,6 @@
 # Pendientes abiertos · 2026-11-26
 
-Pulso sirve [v65](https://pulso-web.pruebassoftware.workers.dev/releases/5a7eef31d22eabf1.html) desde `release/v65`. El registro de publicación está en [P0-W](../odd/tasks/P0-W.md#2026-11-26--publicación-de-v65) y [T29](../odd/tasks/T29-v65-ux-apple-y-sync.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
+Pulso sirve [v66](https://pulso-web.pruebassoftware.workers.dev/releases/c70c6318de067d99.html) desde `release/v66`. El registro de publicación está en [P0-W](../odd/tasks/P0-W.md#2026-11-27--publicación-de-v66) y [T30](../odd/tasks/T30-v66-reproductor-y-portada-album.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
 
 ## Pendientes de v64 / v63
 
@@ -54,9 +54,14 @@ Al registrar v61 se sincronizó la base local compartida `.local/engram` con los
 
 WebKit WPE emite `style-src-attr` con `blockedURI: inline` para el selector de Apariencia de [src/main.tsx:1547](../src/main.tsx#L1547). El mapa de fuentes sitúa el evento en `node_modules/react-dom/cjs/react-dom-client.production.js:8514`, en la llamada que crea el elemento `select`. La política aplicada procede de [index.html:1](../index.html#L1). La reproducción se confirmó en v60 (`086aaac`) y v61 (`d718b9d`). El arnés de velocidad registra esa infracción y la compara con la ejecución de referencia del mismo perfil.
 
-## 8. Estado actualizado tras v65 · 2026-11-26
+## 8. Estado actualizado tras v66 · 2026-11-27
 
-La publicación vigente es **v65** (`/releases/5a7eef31d22eabf1.html`), rama `release/v65`, despliegue `18c58796-f9f8-4e53-8572-9148055fec89` (versión 68).
+La publicación vigente es **v66** (`/releases/c70c6318de067d99.html`), rama `release/v66`, despliegue `2b4a6230-af7e-4ef7-8b89-7f978596d553` (versión 69).
+
+### 8.0 Resuelto en v66 (`T30`)
+- **Nuevo control del reproductor (`U-V66-01`):** sustituido el glifo Unicode `⌄` por un tirador centrado estilo iOS (`.player-surface__grabber`, `72×44 px`, píldora redondeada + gesto swipe-down) y el chevrón `∧` del MiniPlayer por un icono SVG limpio de expansión diagonal.
+- **Portadas de álbumes en Biblioteca e Inicio (`U-V66-02`, caso «mosca»):** `libraryAlbumCards()` expone `coverTrackIds` (incluyendo pistas en caché de escucha sin tocar `trackIds`/`albumRemovalMembership`), `CollectionCover`/`CatalogArtwork` revisan hasta 6 pistas candidatas + `sharedArtworkKey` (`albumArtworkKey`, respetando `K01` y revocación `A01`/`A02b`) + chequeo inmediato de visibilidad, y `preloadKeys` precarga `provider:<sharedKey>` y `artworkUrl`.
+- **Poda de versiones anteriores en Cloudflare (`U-V66-03`):** política de retención ajustada a `0` versiones previas por instrucción expresa del propietario (`2026-11-27`). Retirados **300 archivos antiguos (84,40 MB)** en el despliegue de v66 (`50` rutas estáticas, `0` históricas; GET directo al recurso v65 anterior responde `404` y navegación `Accept: text/html` responde `200` abriendo v66). Los otros 3 Workers ajenos de la cuenta no se tocaron.
 
 ### 8.1 Resuelto en v65
 - **Paleta negro puro OLED (`#000000`) + rojo vino oscuro (`#8c1630` / `#d84a67`):** tema oscuro por defecto en app, `index.html`, `manifest.webmanifest` y splash, modo claro manual (`#faf7f8` / `#7a1228`) conservado, Favoritos/letras/almacenamiento armonizados (`U-THEME-01`).

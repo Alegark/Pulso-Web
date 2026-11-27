@@ -31,10 +31,15 @@
 /* Current route is conveyed by text weight and color; outlines remain for keyboard focus. */
 .pulso-app .shell-nav button[aria-current="page"]:not(:focus-visible) { outline: none; }
 .pulso-app .player-surface[data-open="true"] { background: var(--pulso-canvas); border: 0; }
-.pulso-app .player-surface__toolbar { display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; gap: .5rem; margin-block-end: .5rem; background: var(--pulso-canvas); }
-.pulso-app .player-surface__toolbar > span { grid-column: 2; grid-row: 1; text-align: center; color: var(--pulso-foreground); font-weight: 650; }
-.pulso-app .player-surface__toolbar > button { grid-column: 1; grid-row: 1; inline-size: 44px; block-size: 44px; min-inline-size: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; font-size: 0; }
-.pulso-app .player-surface__toolbar > button::before { content: "⌄"; display: block; font-size: 2rem; line-height: 1; }
+.pulso-app .player-surface__toolbar { display:flex; flex-direction:column; align-items:center; gap:.15rem; padding-block:.25rem .4rem; margin-block-end:.25rem; background:var(--pulso-canvas); touch-action:none; }
+.pulso-app .player-surface__grabber { inline-size:72px; min-inline-size:44px; block-size:44px; min-block-size:44px; display:grid; place-items:center; padding:0; border:0; border-radius:999px; background:transparent; cursor:pointer; }
+.pulso-app .player-surface__grabber-pill { display:block; inline-size:38px; block-size:5px; border-radius:999px; background:rgba(255,255,255,.32); transition:background-color 150ms ease, transform 150ms ease; }
+.pulso-app .player-surface__grabber:hover .player-surface__grabber-pill, .pulso-app .player-surface__grabber:active .player-surface__grabber-pill { background:rgba(255,255,255,.52); }
+.pulso-app .player-surface__toolbar > span { font-size:.78rem; font-weight:600; letter-spacing:.02em; color:var(--pulso-muted); text-align:center; }
+html[data-theme="light"] .pulso-app .player-surface__grabber-pill { background:rgba(24,13,17,.24); }
+html[data-theme="light"] .pulso-app .player-surface__grabber:hover .player-surface__grabber-pill, html[data-theme="light"] .pulso-app .player-surface__grabber:active .player-surface__grabber-pill { background:rgba(24,13,17,.42); }
+@media (prefers-color-scheme: light) { html[data-theme="system"] .pulso-app .player-surface__grabber-pill { background:rgba(24,13,17,.24); } html[data-theme="system"] .pulso-app .player-surface__grabber:hover .player-surface__grabber-pill, html[data-theme="system"] .pulso-app .player-surface__grabber:active .player-surface__grabber-pill { background:rgba(24,13,17,.42); } }
+@media (prefers-reduced-motion: reduce) { .pulso-app .player-surface__grabber-pill { transition:none; } }
 .pulso-app .np-context { margin: 0; }
 .pulso-app .np-lyrics-preview p { font-size: clamp(1.4rem,4vw,1.8rem); font-weight: 700; letter-spacing: -.035em; line-height: 1.35; margin-block: .5rem 1rem; }
 .pulso-app .np-lyrics-card > button { border: 0; background: var(--pulso-surface); }

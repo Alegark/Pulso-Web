@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 
-const windowMs = 30 * 24 * 60 * 60 * 1000;
-const minimumPrevious = 3;
+const windowMs = 0;
+const minimumPrevious = 0;
 const entryPattern = /^\/releases\/[a-f0-9]{16}\.html$/;
 const shaPattern = /^[a-f0-9]{64}$/;
 const pathPattern = /^(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+$/;
@@ -123,14 +123,15 @@ export function planRetention({candidate, previous, legacyEvidence, asOf}) {
     assert.ok(age <= now, 'Publicación posterior a la fecha de corte');
     const inFloor = floor.size <= minimumPrevious && !floor.has(release.entry);
     if (inFloor) floor.add(release.entry);
-    if (inFloor || age >= cutoff) retained.push(release);
+    if ((windowMs !== 0 || minimumPrevious !== 0) && (inFloor || age >= cutoff)) retained.push(release);
   }
   if (legacy) {
     const lastPublished = timestamp(legacy.lastPublishedAt);
     assert.ok(lastPublished <= now, 'Publicación heredada posterior a la fecha de corte');
     const newerEntries = new Set(retained.filter(release =>
       release.entry !== candidate.currentEntry && timestamp(release.publishedAt) > lastPublished).map(release => release.entry));
-    if (lastPublished < cutoff && newerEntries.size >= minimumPrevious) legacy = undefined;
+    if ((windowMs === 0 && minimumPrevious === 0) ||
+      (lastPublished < cutoff && newerEntries.size >= minimumPrevious)) legacy = undefined;
   }
 
   const keep = new Set([...retained.flatMap(release => release.assets), ...(legacy?.assets ?? [])]);

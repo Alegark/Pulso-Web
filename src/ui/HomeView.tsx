@@ -16,7 +16,7 @@ export interface HomePlaylist {
   count: number;
 }
 
-export interface HomeAlbum { key: string; title: string; artist: string | null; count: number; artworkUrl?: string; trackIds: readonly string[]; saved: boolean; }
+export interface HomeAlbum { key: string; title: string; artist: string | null; count: number; artworkUrl?: string; sharedArtworkKey?: string; trackIds: readonly string[]; saved: boolean; }
 
 export interface HomeViewProps {
   visible?: boolean;
@@ -47,7 +47,7 @@ export function HomeView(props: HomeViewProps) {
       {!playlists.length&&<button onClick={props.onOpenSearch}><span aria-hidden="true"><MusicIcon name="search"/></span><strong>Buscar música</strong></button>}
     </div>
     {props.empty&&<div className="home-empty"><MusicIcon name="library"/><h3>Haz espacio para tu música</h3><p>Tu música aparecerá aquí cuando la añadas a tu biblioteca.</p><button onClick={props.onOpenSearch}>Buscar música</button></div>}
-    {!!props.albums?.length&&<section aria-labelledby="home-albums-heading"><div className="home-section-heading"><h3 id="home-albums-heading">Tus álbumes</h3></div><div className="home-albums">{props.albums.map(album=><button key={album.key} onClick={event=>props.onOpenAlbum?.(album.key,event.currentTarget)}><span className="home-art"><CollectionCover variant="album" trackIds={album.trackIds} artworkUrl={album.artworkUrl} enabled={enabled}/></span><strong>{album.title}</strong><small>{album.artist??`${album.count} canciones`}</small></button>)}</div></section>}
+    {!!props.albums?.length&&<section aria-labelledby="home-albums-heading"><div className="home-section-heading"><h3 id="home-albums-heading">Tus álbumes</h3></div><div className="home-albums">{props.albums.map(album=><button key={album.key} onClick={event=>props.onOpenAlbum?.(album.key,event.currentTarget)}><span className="home-art"><CollectionCover variant="album" trackIds={album.trackIds} artworkUrl={album.artworkUrl} sharedArtworkKey={album.sharedArtworkKey} enabled={enabled}/></span><strong>{album.title}</strong><small>{album.artist??`${album.count} canciones`}</small></button>)}</div></section>}
     <section aria-labelledby="home-playlists-heading"><div className="home-section-heading"><h3 id="home-playlists-heading">Tus playlists</h3><button disabled={!props.canCreate} onClick={props.onCreatePlaylist}><MusicIcon name="plus"/>Crear playlist</button></div>{playlists.length?<div className="home-playlists">{playlists.map(list=><button key={list.id} onClick={()=>props.onOpenPlaylist(list.id)}><span className="home-art"><CollectionCover trackIds={list.trackIds??[]} enabled={enabled}/></span><strong>{list.name}</strong><small>{list.count} canciones</small></button>)}</div>:<p>Crea una playlist para reunir tus canciones.</p>}</section>
   </div>;
 }
