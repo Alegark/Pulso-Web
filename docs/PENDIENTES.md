@@ -1,6 +1,6 @@
 # Pendientes abiertos · 2026-11-27
 
-Pulso sirve [v68](https://pulso-web.pruebassoftware.workers.dev/releases/571e2536f7ea05ad.html) desde `release/v68`. El registro de publicación está en [P0-W](../odd/tasks/P0-W.md#2026-11-27--publicación-de-v68) y [T33](../odd/tasks/T33-v68-album-continuidad-y-portadas.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
+Pulso sirve [v69](https://pulso-web.pruebassoftware.workers.dev/releases/0cf30b686e707151.html) desde `release/v69`. El registro de publicación está en [P0-W](../odd/tasks/P0-W.md#2026-11-27--publicación-de-v69) y [T34](../odd/tasks/T34-v69-album-estado-durante-descarga.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
 
 ## Pendientes de v64 / v63
 
@@ -54,11 +54,14 @@ Al registrar v61 se sincronizó la base local compartida `.local/engram` con los
 
 WebKit WPE emite `style-src-attr` con `blockedURI: inline` para el selector de Apariencia de [src/main.tsx:1547](../src/main.tsx#L1547). El mapa de fuentes sitúa el evento en `node_modules/react-dom/cjs/react-dom-client.production.js:8514`, en la llamada que crea el elemento `select`. La política aplicada procede de [index.html:1](../index.html#L1). La reproducción se confirmó en v60 (`086aaac`) y v61 (`d718b9d`). El arnés de velocidad registra esa infracción y la compara con la ejecución de referencia del mismo perfil.
 
-## 8. Estado actualizado tras v68 · 2026-11-27
+## 8. Estado actualizado tras v69 · 2026-11-27
 
-La publicación vigente es **v68** (`/releases/571e2536f7ea05ad.html`), rama `release/v68`, despliegue `7b0ee098-35ff-48ad-9e54-79910027256c` (versión 71).
+La publicación vigente es **v69** (`/releases/0cf30b686e707151.html`), rama `release/v69`, despliegue `80451b5b-d780-493f-aae5-bacfbe5e88a4` (versión 72).
 
-### 8.0 Resuelto en v68 (`T33`)
+### 8.0 Resuelto en v69 (`T34`)
+- **Álbumes visibles y reproducibles durante descarga de playlist (`U-V69-01`):** `AlbumPageController` resuelve el estado local verificado (`effectiveAlbumCopy` en `src/library/album-effective-copy.ts`) desde `localTracks` + `songAliases` + `localAvailability === 'available'` + `libraryTrackIds` cuando una descarga global de otra playlist suspende la inspección profunda (preservando la prioridad de `copies[id]` en reposo y sin falsos positivos en copias corruptas o huérfanas). Así los álbumes ya descargados muestran todas sus canciones descargadas (y `✓` completado en `CollectionDownloadButton`) y permiten pulsar `▶ Reproducir`, `⇄ Aleatorio` o cualquier pista descargada vía `trackMenuHost.onPlayTracks` (ampliado con `startIndex` y `collectionSlots`) sin interrumpir ni competir con la descarga de la playlist.
+
+### 8.1 Resuelto en v68 (`T33`)
 - **Vista de álbum unificada (`U-V68-01`):** abrir cualquier álbum con `editionId` desde Inicio o Biblioteca (ya sea guardado localmente o sincronizado desde la cuenta en escritorio) entra directamente a `AlbumPageController` sin pantalla intermedia ni botón «Ver álbum completo», ofreciendo «Retirar álbum» en `Opciones del álbum` y fallback offline «Ver pistas locales».
 - **Reproducción continua con pre-descarga inteligente (`U-V68-02`):** nuevo controlador `src/playback/continuous-collection.ts` conectado a `main.tsx` y `TelegramPanel.tsx`. Encola inicialmente el tramo contiguo descargado hasta el primer hueco y, durante la reproducción (`playing`, `repeat !== 'one'`, sin `shuffle`), al llegar a `≤ 45 s` restantes o `≥ 60 %` de progreso, pre-descarga 1 sola canción por adelantado en segundo plano (caché de escucha en álbum no guardado sin añadir a Biblioteca; copia del `Track` en playlist) y la inserta vía `queueInsertions` sin pausar ni reiniciar la pista actual. Si termina la pista o se pulsa **Siguiente** hacia una pista pendiente, muestra «Preparando siguiente canción…» y continúa; pausa manual o cambio de pista cancela la continuación; cualquier acción manual del usuario preempta el prefetch sin dos consultas concurrentes; `rate-limit`/fallo no entra en bucle.
 - **Portadas estables en iOS / caso «mosca» (`U-V68-03`):** `CollectionCover` enclava visibilidad tras mostrarse (resiste callbacks `isIntersecting: false` de Safari iOS) y añade modo `eager` en cabeceras; `AlbumPageController` y `CollectionHeader` pasan hasta 6 pistas + `sharedArtworkKey`; `CatalogArtwork` con `allowFallbackOnUnavailable` continúa a `fallbackTrackIds`/`imageUrl`/`sharedArtworkKey` cuando una pista candidata devuelve `unavailable` (preservando intacto `artworkPriority` C04, ocultación manual `manual: true` y revocación `A01`/`A02b`) y evita el parpadeo a `♪` al cambiar `key`.
