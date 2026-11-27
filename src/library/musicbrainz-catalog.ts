@@ -63,6 +63,7 @@ export function parseMusicBrainzDetail(data:unknown,requested:CatalogId):AlbumRe
 export class MusicBrainzCatalog{
  private readonly cache=new Map<string,{expires:number;data:unknown}>();
  constructor(private readonly fetcher:typeof fetch=fetch){}
+ clearCache():void {this.cache.clear();}
  search(title:string,artist:string|null,request:AlbumRequest):Promise<AlbumResult<AlbumEdition[]>>{
   if(!text(title)||artist!==null&&artist!==''&&!text(artist))return Promise.resolve({ok:false,reason:'invalid'});
   return this.get('/search?'+new URLSearchParams({term:title,...(artist?{artist}:{})}),request,parseMusicBrainzEditions).then(result=>result.ok&&artist?{ok:true,value:result.value.filter(e=>same(e.title,title)&&same(e.artist,artist))}:result);

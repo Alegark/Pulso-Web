@@ -1,3 +1,4 @@
+import {registerSearchCacheCleaner} from '../library/search-caches';
 import type {TrackMenuHost} from './track-menu-host';
 import {TrackActionsMenu,TrackPlaylistAction,trackActionOpener} from './TrackActionsMenu';
 import {useLongPress} from './useLongPress';
@@ -28,6 +29,7 @@ import {createSongResolver,type SongAliases} from '../library/selected-song';
 import type {AvailabilityRecord} from '../library/shell-selectors';
 import {PlaybackIndicator} from './PlaybackIndicator';
 const catalog=new AlbumCatalog((...args)=>fetch(...args));
+registerSearchCacheCleaner(()=>catalog.clearCache());
 interface Props {
  trackMenuHost?:TrackMenuHost; playerPlaying?:boolean;
  savedAlbums?:readonly SavedAlbum[]; fixedDetail?:SavedAlbum; libraryView?:boolean; albumOptions?:React.ReactNode;

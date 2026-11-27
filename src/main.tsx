@@ -1,3 +1,5 @@
+import {clearCatalogArtworkCaches} from './library/catalog-artwork';
+import {clearSearchCaches} from './library/search-caches';
 import type {TrackMenuHost} from './ui/track-menu-host';
 import {albumCoordinator} from './library/album-download';
 import {albumDownloadKey,libraryDownloadKey} from './library/collection-download-queue';
@@ -1272,6 +1274,7 @@ function App(){
  const collectionController=React.useMemo(()=>{const reason=`collection-removal:${collectionKey}:${crypto.randomUUID()}`;return createCollectionRemovalController({activity:control.activity,
   canStart:()=>collectionKey===removalScopeKey()&&owner&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&!botImportActive&&!deferredQueueRestore&&sourceReview.canPrepare()&&control.activity.idle,
   captureRaw:captureRemovalRaw,evictFromQueue,
+  clearExtraCaches:async()=>{const id=accountController.getSnapshot().user?.id;if(!id)return false;const ok=await purgeArtworkAccount(id);if(accountController.getSnapshot().user?.id!==id)return false;artworkCache.retire();artworkCache=new PlayerArtworkCache(id);artworkRefreshToken++;clearCatalogArtworkCaches();clearSearchCaches();emit();return ok;},
   gate:active=>{if(active){if(collectionKey!==removalScopeKey())return;collectionGate=collectionKey;control.activity.block(reason,true);}else{control.activity.block(reason,false);if(collectionGate===collectionKey)collectionGate=null;}emit();},
   reserve:target=>{control.activity.block(reason,false);try{return sourceReview.reserve(target);}finally{control.activity.block(reason,true);}},refresh:()=>refresh(true,false,null),
   adopt:snapshot=>{if(collectionKey!==removalScopeKey())return;copyRemovalStartup={key:collectionKey,snapshot};++removalRecoveryEpoch;setCopyRemovalBlocking(collectionKey,snapshot.unknown||snapshot.pending.length>0,true);},
@@ -1329,9 +1332,9 @@ function App(){
   if(!dest)return;removalFocus.current=null;dest.focus({preventScroll:true});dest.scrollIntoView({behavior:'auto',block:intent.kind==='open'?'start':'nearest',inline:'nearest'});
  }
  function closeRemoval(){removalFocus.current={kind:'close',current:rescanResponse(),opener:removalOpener.current};removalOpener.current=null;setRemovalRequest(null);requestAnimationFrame(focusRemoval);}
- function openCollection(selection:import('./library/collection-removal').CollectionSelection,title:string,opener:HTMLButtonElement){
+ function openCollection(selection:import('./library/collection-removal').CollectionSelection,title:string,opener:HTMLButtonElement,options?:{cacheMode?:'audio'|'all'}){
   if(!mutationCurrent())return;const current=rescanResponse();
-  if(!collectionController.start(selection,title))return;
+  if(!collectionController.start(selection,title,options))return;
   collectionOpener.current=opener;requestAnimationFrame(()=>{if(current()&&collectionController.getView().visible){collectionHeading.current?.focus({preventScroll:true});collectionHeading.current?.scrollIntoView({block:'start'});}});
  }
  function openDownloadRemoval(ids:string[],title:string,opener:HTMLButtonElement){
@@ -1669,7 +1672,7 @@ function App(){
   <h2 id="settings-heading" ref={settingsHeading} tabIndex={-1}>Configuración</h2>
   <button type="button" onClick={closeSettings}>Cerrar configuración</button>
 <p className="settings-intro">Tu cuenta, tu música y este navegador.</p><nav className="settings-navigation" aria-label="Secciones de configuración">{([['general','General'],['connections','Conexiones'],['tools','Herramientas']] as const).map(([id,label])=><button key={id} aria-current={settingsSection===id?'page':undefined} onClick={()=>setSettingsSection(id)}>{label}</button>)}</nav><div hidden={settingsSection!=='general'} className="settings-general">
-{storageSummary&&listeningCache&&<StorageSettings downloadTarget={setStorageDownloadTarget} summary={storageSummary} groups={storageGroups} onRemove={openDownloadRemoval} items={downloads.map(({asset,aliases})=>{const track=aliases[0],inUse=protectedCopies?.unknown===true||aliases.some(t=>pendingTrackIds.has(t.id));return {inQueue:!inUse&&queuedAssetIds.has(asset.id),id:asset.id,title:track?.title??'Archivo sin ficha',artist:track?.artist??'Artista desconocido',bytes:asset.bytes,protected:inUse,removable:!!track&&removalEligibleTracks.has(track.id),action:<button disabled={!canOrganize||!track||inUse||!removalEligibleTracks.has(track.id)} onClick={event=>{if(track)openRemoval(track,event.currentTarget);}} aria-label={`Quitar descarga de ${track?.title??'archivo sin ficha'}`}>Quitar descarga</button>};})} cacheCopies={listeningCache.copies} canClean={canOrganize} onClean={button=>openCollection({kind:'cache',scope:'global-listening-cache'},'Caché de escucha',button)} canCheck={owner&&!busy&&!botImportActive} onCheck={()=>void admitted('refresh-library',checkFiles)}/>}
+{storageSummary&&listeningCache&&<StorageSettings downloadTarget={setStorageDownloadTarget} summary={storageSummary} groups={storageGroups} onRemove={openDownloadRemoval} items={downloads.map(({asset,aliases})=>{const track=aliases[0],inUse=protectedCopies?.unknown===true||aliases.some(t=>pendingTrackIds.has(t.id));return {inQueue:!inUse&&queuedAssetIds.has(asset.id),id:asset.id,title:track?.title??'Archivo sin ficha',artist:track?.artist??'Artista desconocido',bytes:asset.bytes,protected:inUse,removable:!!track&&removalEligibleTracks.has(track.id),action:<button disabled={!canOrganize||!track||inUse||!removalEligibleTracks.has(track.id)} onClick={event=>{if(track)openRemoval(track,event.currentTarget);}} aria-label={`Quitar descarga de ${track?.title??'archivo sin ficha'}`}>Quitar descarga</button>};})} cacheCopies={listeningCache.copies} canClean={canOrganize} onClean={button=>openCollection({kind:'cache',scope:'global-listening-cache'},'Caché de escucha',button)} onCleanAll={button=>openCollection({kind:'cache',scope:'global-listening-cache'},'Toda la caché',button,{cacheMode:'all'})} canCheck={owner&&!busy&&!botImportActive} onCheck={()=>void admitted('refresh-library',checkFiles)}/>}
 {settingsOpen&&settingsSection==='general'&&<SpotifyPlaylistImport key={account.user.id} canImport={canOrganize&&mutationCurrent()}
  onImport={async(data,uiCurrent)=>{
   const saved:{result:Awaited<ReturnType<typeof importSpotifyPlaylist>>|null;refreshed:boolean}={result:null,refreshed:false};
