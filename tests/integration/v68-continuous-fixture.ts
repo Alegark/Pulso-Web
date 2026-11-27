@@ -36,6 +36,20 @@ Object.assign(window,{setupV68SyncedAlbum:async()=>{
  });}finally{closeDatabase(db);}
 }});
 
+Object.assign(window,{seedV69AlbumAndPlaylist:async(complete=false)=>{
+ await (window as unknown as {seedV68ContinuousPlaylist:()=>Promise<void>}).seedV68ContinuousPlaylist();
+ const {rows}=JSON.parse(sessionStorage.getItem('test-own-fixture')!);
+ const db=await openDatabase();
+ try{await new Promise<void>((resolve,reject)=>{
+  const tx=db.transaction('tracks','readwrite'),store=tx.objectStore('tracks');
+  for(const i of (complete?[0,2]:[0,1,2])){
+   const request=store.get(rows[i].track);
+   request.onsuccess=()=>store.put({...request.result,manualOverrides:{},catalogRelease:{source:'itunes',releaseId:201,trackId:301+i,disc:1,position:complete&&i===2?2:i+1,title:'Álbum sintético',artist:'Artista sintético'}},rows[i].track);
+  }
+  tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);
+ });}finally{closeDatabase(db);}
+}});
+
 Object.assign(window,{seedV68Artwork:async()=>{
  const storage=new PersistentArtwork('11111111-1111-4111-8111-111111111111',new AbortController().signal);
  const bytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/aS8AAAAASUVORK5CYII='),c=>c.charCodeAt(0));

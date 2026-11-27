@@ -1,3 +1,4 @@
+import type {CollectionSlot} from '../playback/continuous-collection';
 import type {Playlist, Track} from '../library/library';
 export interface TrackMenuHost {
  canOrganize: boolean; canAppend: boolean; playlists: readonly Playlist[];
@@ -6,5 +7,5 @@ export interface TrackMenuHost {
  onAddToPlaylist: (playlistId: string, trackId: string) => void;
  onQueueNext: (trackId: string) => void; onQueueLater: (trackId: string) => void;
  onOpenRemoval: (trackId: string, opener: HTMLButtonElement) => void;
- onPlayTracks: (trackIds: readonly string[], shuffle?: boolean) => void; onTogglePlayPause: () => void;
+ onPlayTracks: (trackIds: readonly string[], shuffle?: boolean, startIndex?: number, collectionSlots?: readonly CollectionSlot[]) => void; onTogglePlayPause: () => void;
 }

@@ -9,6 +9,7 @@ import {indexCopyProtection} from '../../src/library/listening-cache';
 import type {LocalAsset} from "../../src/library/library";
 import type {Track} from '../../src/library/library';
 import {CollectionCover} from '../../src/ui/CollectionCover';
+import {effectiveAlbumCopy} from '../../src/library/album-effective-copy';
 
 const date='2026-11-23T12:00:00.000Z';
 const tracks=[1,2,3,4].map(position=>({
@@ -22,6 +23,19 @@ function local(position:number,releaseId=42):Track {
    source:'itunes',releaseId,trackId:80+position,disc:1,position,title:'Álbum',artist:'Artista',
   }};
 }
+
+test('U-V69-01 usa disponibilidad verificada y conserva prioridad de inspección profunda',()=>{
+ const track=local(1),id=track.id,library=new Set([id]);
+ const availability=(state:'available'|'missing'|'invalid')=>new Map([[id,{state,generation:'1'}]]);
+ assert.deepEqual(effectiveAlbumCopy(undefined,id,track,availability('available'),library),{state:'available',trackId:id,inLibrary:true});
+ assert.equal(effectiveAlbumCopy(undefined,id,track,availability('missing'),library),undefined);
+ assert.equal(effectiveAlbumCopy(undefined,id,track,availability('invalid'),library),undefined);
+ assert.equal(effectiveAlbumCopy(undefined,id,{...track,assetId:null},availability('available'),library),undefined);
+ assert.equal(effectiveAlbumCopy(undefined,id,undefined,availability('available'),library),undefined);
+ const missing={state:'missing' as const,trackId:id,inLibrary:false};
+ assert.equal(effectiveAlbumCopy(missing,id,track,availability('available'),library),missing);
+ assert.equal(effectiveAlbumCopy(undefined,id,track,availability('available'),new Set())?.inLibrary,false);
+});
 
 test('El registro de álbum se valida al escribir y al leer y conserva el orden',()=>{
  const album=copySavedAlbum({...snapshot,tracks:[...tracks].reverse()},42);
