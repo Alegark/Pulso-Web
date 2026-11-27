@@ -10,7 +10,7 @@ import {downloadNotifications} from '../pwa/download-notifications';
 
 export interface AlbumDownloadRun {scope:string;editionId:CatalogId;key:string;title:string;abort:AbortController;stop?:(discardCheckpoint?:boolean)=>void;accountId?:string;collectionKey?:string}
 export interface AlbumCoordinator {
- dispatching?:boolean;songFlight?:object;
+ dispatching?:boolean;songFlight?:object;prefetchFlight?:{token:object;abort:()=>void};
  running:boolean;uncertainTracks:Set<CatalogId>;remoteClock:{settledAt:number};
  rows:Map<CatalogId,{key:string;rows:AlbumRow[];message?:string}>;listeners:Set<()=>void>;
  active?:AlbumDownloadRun;notice?:{title:string;titles?:string[];progress:AlbumProgress};
@@ -21,6 +21,7 @@ export interface AlbumCoordinator {
  removeQueued?:(key:string)=>void;
 }
 export const albumCoordinator:AlbumCoordinator={running:false,uncertainTracks:new Set(),remoteClock:{settledAt:0},rows:new Map(),listeners:new Set()};
+export function abortPrefetchFlight(coordinator:AlbumCoordinator){coordinator.prefetchFlight?.abort();}
 export function notifyAlbumDownload(coordinator:AlbumCoordinator){for(const notify of coordinator.listeners)notify();}
 export const albumRunKey=(album:AlbumDetail,accountId?:string)=>JSON.stringify([accountId??null,JSON.stringify(album.tracks.map(track=>albumTrackChoice(track,album.edition.title)))]);
 

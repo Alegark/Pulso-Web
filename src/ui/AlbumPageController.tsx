@@ -1,3 +1,4 @@
+import type {CollectionSlot} from '../playback/continuous-collection';
 import {registerSearchCacheCleaner} from '../library/search-caches';
 import type {TrackMenuHost} from './track-menu-host';
 import {TrackActionsMenu,TrackPlaylistAction,trackActionOpener} from './TrackActionsMenu';
@@ -36,7 +37,7 @@ interface Props {
  savedAlbums?:readonly SavedAlbum[]; fixedDetail?:SavedAlbum; libraryView?:boolean; albumOptions?:React.ReactNode; onShowLocalTracks?:()=>void;
  localTracks?:readonly Track[]; songAliases?:SongAliases|null; localAvailability?:ReadonlyMap<string,AvailabilityRecord>; albumSaveBlockedReason?:string;
  saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures)=>Promise<SaveAlbumResult>;
- songPending?:boolean;accountId?:string;resumeDownload?:()=>void;metadataOnly?:boolean;coordinator:AlbumCoordinator;captureInspection?:()=>SongCopyInspection|null;selectedKey:string|null;actionKey?:string|null;libraryTrackIds?:ReadonlySet<string>;playerTrackId?:string|null;title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;searchBatch?:{data:unknown;pending:boolean};backLabel?:string;scope:string;visible:boolean;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;providers:readonly OrderedProvider[];capture:()=>SongPlaybackAttempt|null;management:(id:string)=>SongManagement|null;onBack:()=>void;onChoose:(choice:SongChoice,queueSlots?:readonly (string|null)[],chosenIndex?:number)=>void;songActions:React.ReactNode}
+ songPending?:boolean;accountId?:string;resumeDownload?:()=>void;metadataOnly?:boolean;coordinator:AlbumCoordinator;captureInspection?:()=>SongCopyInspection|null;selectedKey:string|null;actionKey?:string|null;libraryTrackIds?:ReadonlySet<string>;playerTrackId?:string|null;title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;searchBatch?:{data:unknown;pending:boolean};backLabel?:string;scope:string;visible:boolean;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;providers:readonly OrderedProvider[];capture:()=>SongPlaybackAttempt|null;management:(id:string)=>SongManagement|null;onBack:()=>void;onChoose:(choice:SongChoice,queueSlots?:readonly (string|null)[],chosenIndex?:number,collectionSlots?:readonly CollectionSlot[])=>void;songActions:React.ReactNode}
 const metadataIdentity=(props:Props)=>JSON.stringify([props.title,props.artist,props.editionId??null,props.scope]);
 const catalogError=(reason:AlbumFailure,detail:boolean,stage?:AlbumStage,httpStatus?:number,backup=false)=>{
  const prefix=detail?'No se pudo verificar la lista completa de pistas.':'No se pudo consultar el catálogo de álbumes.';
@@ -252,6 +253,7 @@ export function AlbumPageController(props:Props){
  }).length??0;
  const albumAction=props.libraryView?'Descargar faltantes':progress?'Continuar álbum':'Añadir álbum';
  const queueSlots=detail?.tracks.map((track,index)=>{const id=albumTrackChoice(track,detail.edition.title).id;return available(id,index)?copies[id]?.trackId??visibleRows?.[index]?.trackId??null:null;})??[];
+ const collectionSlots:CollectionSlot[]=detail?.tracks.map((track,index)=>{const choice=albumTrackChoice(track,detail.edition.title);return {kind:'album-track',slotKey:choice.id,choice,title:choice.title,artist:choice.artist,trackId:queueSlots[index]};})??[];
  const availableTrackIds=queueSlots.filter((id):id is string=>!!id);
  const coverTrackIds=[...new Set(availableTrackIds)].slice(0,6);
  const coverSharedKey=albumArtworkKey({editionId:detail?.edition.id??props.editionId,album:detail?.edition.title??props.title,artist:detail?.edition.artist??props.artist})??undefined;
@@ -270,7 +272,7 @@ export function AlbumPageController(props:Props){
   {detail&&props.metadataOnly&&<><h3 className="album-tracks-heading">Canciones</h3><ol className="album-tracks">{detail.tracks.map(track=><li key={`${track.disc}:${track.position}`}><span className="album-track-copy"><strong><bdi dir="auto">{track.title}</bdi></strong><span><bdi dir="auto">{track.artist}</bdi></span></span></li>)}</ol></>}
   {detail&&!props.metadataOnly&&<>
    <div className="album-actions">
-    <button className="album-play-btn" type="button" disabled={!albumPlaying&&(inspecting||running||!!props.songPending||!detail.tracks.length)} onClick={()=>{if(albumPlaying){props.trackMenuHost?.onTogglePlayPause();return;}const index=Math.max(0,queueSlots.findIndex(Boolean));props.onChoose(albumTrackChoice(detail.tracks[index],detail.edition.title),queueSlots,index);}}>{albumPlaying?'❚❚ Pausar':'▶ Reproducir'}</button>
+    <button className="album-play-btn" type="button" disabled={!albumPlaying&&(inspecting||running||!!props.songPending||!detail.tracks.length)} onClick={()=>{if(albumPlaying){props.trackMenuHost?.onTogglePlayPause();return;}const index=Math.max(0,queueSlots.findIndex(Boolean));props.onChoose(albumTrackChoice(detail.tracks[index],detail.edition.title),queueSlots,index,collectionSlots);}}>{albumPlaying?'❚❚ Pausar':'▶ Reproducir'}</button>
     <button className="album-shuffle-btn" type="button" disabled={!availableTrackIds.length||!props.trackMenuHost||inspecting||props.coordinator.running||!!props.songPending} onClick={()=>{if(!active()||inspecting||props.coordinator.running||props.songPending)return;props.trackMenuHost?.onPlayTracks(availableTrackIds,true);}}>⇄ Aleatorio</button>
     <CollectionDownloadButton coordinator={props.coordinator} accountId={props.accountId} label={albumAction} collectionKey={albumDownloadKey(detail.edition.id)} showLabel={props.libraryView} disabled={saving||inspecting} onStart={()=>void addAlbum()}/>
     <TrackActionsMenu title={detail.edition.title} artist={detail.edition.artist} label="Opciones del álbum" closeLabel="Cerrar opciones del álbum" active={props.visible&&!props.metadataOnly}>
@@ -289,7 +291,7 @@ export function AlbumPageController(props:Props){
     const trackId=copy?.trackId??row?.trackId;
     const local=trackId?localTrackIndex.get(trackId):undefined;
     const inLibrary=!!member(choice.id,index);
-    return <AlbumTrackRow key={`${track.disc}:${track.position}`} track={track} trackId={trackId} present={present} inLibrary={inLibrary} failed={failed} copyState={copy?.state} saved={!!savedAlbum} host={props.trackMenuHost} playing={!!trackId&&props.playerTrackId===trackId&&!!props.playerPlaying} visible={props.visible&&!props.metadataOnly} disabled={inspecting||props.coordinator.running||!!props.songPending} local={local} albumTitle={detail.edition.title} onChoose={()=>{if(active()&&!props.coordinator.running&&!inspecting)props.onChoose(choice,queueSlots,index);}} songActions={(props.actionKey??props.selectedKey)===choice.id&&props.songActions}/>;
+    return <AlbumTrackRow key={`${track.disc}:${track.position}`} track={track} trackId={trackId} present={present} inLibrary={inLibrary} failed={failed} copyState={copy?.state} saved={!!savedAlbum} host={props.trackMenuHost} playing={!!trackId&&props.playerTrackId===trackId&&!!props.playerPlaying} visible={props.visible&&!props.metadataOnly} disabled={inspecting||props.coordinator.running||!!props.songPending} local={local} albumTitle={detail.edition.title} onChoose={()=>{if(active()&&!props.coordinator.running&&!inspecting)props.onChoose(choice,queueSlots,index,collectionSlots);}} songActions={(props.actionKey??props.selectedKey)===choice.id&&props.songActions}/>;
    })}</ol>
   </> }
 
