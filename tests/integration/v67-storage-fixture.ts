@@ -26,6 +26,7 @@ Object.assign(window,{setupV67QueuePlaylist:async()=>{
  const imported=await importFileDetailed(new File([b],'Solo playlist.wav',{type:'audio/wav'}),new AbortController().signal,()=>{},{backend:'idb',libraryMode:'cache'});
  if(imported.kind!=='confirmed')throw Error('fixture import');
  const second=imported.result.track;await editTrack(second.id,second.revision,{album:'Álbum solo caché dos',artist:'Artista sintético'});
+ f.rows.push({track:second.id,asset:await readRecord('assets',second.assetId!)});sessionStorage.setItem('test-own-fixture',JSON.stringify(f));
  await changePlaylist(f.list,3,{type:'add',trackId:second.id});
  const {saveAlbumRecord}=await import('../../src/library/saved-albums');
  const {rememberSongAlias}=await import('../../src/library/selected-song');

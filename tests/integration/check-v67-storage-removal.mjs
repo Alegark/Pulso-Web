@@ -1,7 +1,7 @@
 import {build,preview} from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import {chromium,webkit} from 'playwright-core';
-import {writeFile,cp} from 'node:fs/promises';
+import {writeFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {createTestWorkspace} from './test-workspace.mjs';
 import {installRequiredAccountFixture} from './required-account-fixture.mjs';
@@ -9,7 +9,6 @@ const ws=await createTestWorkspace('v67-storage-removal');let server;const cases
 try{
  await writeFile(`${ws.dir}/seed.html`,'<script type="module" src="/tests/integration/v67-storage-fixture.ts"></script>');
  await build({configFile:false,plugins:[tailwindcss()],logLevel:'error',build:{outDir:`${ws.dir}/bundle`,rolldownOptions:{input:{main:'index.html',seed:`${ws.dir}/seed.html`}}}});
- await cp('dist',`${ws.dir}/bundle`,{recursive:true});
  server=await preview({configFile:false,build:{outDir:`${ws.dir}/bundle`},preview:{host:'127.0.0.1',port:0}});const origin=`http://127.0.0.1:${server.httpServer.address().port}`;
  for(const [engine,launcher] of [['chromium',chromium],['webkit',webkit]]){
   const browser=await launcher.launch(engine==='chromium'?{headless:true,executablePath:'/usr/bin/chromium'}:{headless:true});const context=await browser.newContext({serviceWorkers:'block',viewport:{width:390,height:844}});
@@ -57,6 +56,12 @@ try{
    await page.getByRole('button',{name:/Quitar seleccionadas/}).click();const dialog=page.getByRole('dialog',{name:'Quitar descargas'});await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Quitar 1 descarga',exact:true}).click();await dialog.getByText('1 descarga retirada',{exact:false}).waitFor();
    const state=await page.evaluate(async f=>{const db=await new Promise((resolve,reject)=>{const q=indexedDB.open('pulso-web-local-v1');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});const tx=db.transaction(['tracks','assets','chunks','playlists','settings']);const get=(store,key)=>new Promise((resolve,reject)=>{const q=tx.objectStore(store).get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});const track=await get('tracks',f.rows[4].track),asset=await get('assets',f.rows[4].asset.id),playlist=await get('playlists',f.list),queue=await get('settings','library-playback');const chunks=await new Promise((resolve,reject)=>{const q=tx.objectStore('chunks').count(IDBKeyRange.bound([f.rows[4].asset.storageKey,0],[f.rows[4].asset.storageKey,Number.MAX_SAFE_INTEGER]));q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});db.close();return {track,asset,playlist,queue,chunks};},fixture);
    assert.equal(state.track.assetId,null);assert.equal(state.asset,undefined);assert.equal(state.chunks,0);assert.ok(state.playlist.entries.some(e=>e.trackId===fixture.rows[4].track));assert.ok(!state.queue.entries.some(e=>e.trackId===fixture.rows[4].track));cases.push(`${engine}: queued manual selection deletes bytes and preserves playlist`);
+   assert.ok(state.queue.entries.some(e=>e.trackId===fixture.rows[5].track));
+   await dialog.getByRole('button',{name:'Cerrar',exact:true}).click();
+   const secondRow=page.locator('.storage-download-row').filter({hasText:'Solo playlist'});await secondRow.getByRole('checkbox').check();
+   await page.getByRole('button',{name:/Quitar seleccionadas/}).click();await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Quitar 1 descarga',exact:true}).click();await dialog.getByText('1 descarga retirada',{exact:false}).waitFor();
+   const secondState=await page.evaluate(async f=>{const db=await new Promise((resolve,reject)=>{const q=indexedDB.open('pulso-web-local-v1');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});const tx=db.transaction(['assets','chunks','settings']);const get=(store,key)=>new Promise((resolve,reject)=>{const q=tx.objectStore(store).get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});const asset=await get('assets',f.rows[5].asset.id),queue=await get('settings','library-playback');const chunks=await new Promise((resolve,reject)=>{const q=tx.objectStore('chunks').count(IDBKeyRange.bound([f.rows[5].asset.storageKey,0],[f.rows[5].asset.storageKey,Number.MAX_SAFE_INTEGER]));q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});db.close();return {asset,queue,chunks};},fixture);
+   assert.equal(secondState.asset,undefined);assert.equal(secondState.chunks,0);for(const n of [4,5])assert.ok(!secondState.queue.entries.some(e=>e.trackId===fixture.rows[n].track));cases.push(`${engine}: consecutive queued removals delete both files without reload`);
   }finally{await queueContext.close();}
   const albumContext=await browser.newContext({serviceWorkers:'block',viewport:{width:390,height:844}});
   try{

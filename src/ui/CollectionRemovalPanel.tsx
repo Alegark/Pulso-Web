@@ -61,7 +61,7 @@ export function CollectionRemovalPanel(props: CollectionRemovalPanelProps) {
       {state === 'ready' && (props.queuedCount ?? 0) > 0 && <p>Al confirmar, las canciones de esta selección que estén en la cola se retirarán de la cola.</p>}
       {state === 'ready' && <label className="collection-removal__consent">
         <input type="checkbox" checked={props.accepted} onChange={(event) => guard(() => props.onAccepted(event.target.checked))} />
-        <span>{cache ? 'Eliminar las copias de escucha que no estén guardadas en Biblioteca, favoritos o playlists. Se conservan los archivos en uso.' : 'Entiendo que se eliminará esta colección y las copias que no use otra biblioteca, playlist o favorito. Algunas pueden ser las únicas copias guardadas.'}</span>
+        <span>{cache ? all ? 'Eliminar las copias de escucha no guardadas, las portadas en caché y las búsquedas en memoria. Se conservan Biblioteca, álbumes guardados, playlists, Favoritos y los archivos en uso.' : 'Eliminar las copias de escucha que no estén guardadas en Biblioteca, favoritos o playlists. Se conservan los archivos en uso.' : 'Entiendo que se eliminará esta colección y las copias que no use otra biblioteca, playlist o favorito. Algunas pueden ser las únicas copias guardadas.'}</span>
       </label>}
       {state === 'ready' && cache && !all && summary?.eligibleCopies === 0 && <p>No hay copias de caché que se puedan retirar en este momento.</p>}
       {state === 'working' && <p role="status">{cache ? 'Limpieza en curso… Puedes solicitar la cancelación.' : 'Eliminación en curso… Puedes solicitar la cancelación.'}</p>}

@@ -955,11 +955,14 @@ async function evictFromQueue(trackIds:readonly string[],assetIds:readonly strin
   !!(protection.current&&(evictTracks.has(protection.current.trackId)||matchesSource(protection.current.source)))||
   protection.prepared.some(ref=>evictTracks.has(ref.trackId)||matchesSource(ref.source))||protection.retainedSources.some(matchesSource);
  let protection=sourceProtection.getReadonlySnapshot();
- if(!player.entries.some(e=>evictTracks.has(e.trackId))&&!suspendedSnapshot?.entries.some(e=>evictTracks.has(e.trackId))&&!matches(protection))return current()&&!protection.unknown;
+ let persistedQueue:Snapshot|undefined;
+ try{await writes;if(!current())return false;const raw=await readRecord<unknown>('settings','library-playback');if(raw!==undefined){const normalized=normalizeSnapshot(raw);if(!normalized)return false;persistedQueue=normalized.snapshot;}}catch{return false;}
+ if(!current())return false;
+ if(!player.entries.some(e=>evictTracks.has(e.trackId))&&!suspendedSnapshot?.entries.some(e=>evictTracks.has(e.trackId))&&!savedCheckpoint?.structure.entries.some(e=>evictTracks.has(e.trackId))&&!persistedQueue?.entries.some(e=>evictTracks.has(e.trackId))&&!matches(protection))return current()&&!protection.unknown;
  queueInsertions.cancelAll('replaced');await queueInsertions.whenSettled();if(!current())return false;
- const before=snapshot();const survivingEntries=(before?.entries??[]).filter(e=>!evictTracks.has(e.trackId));
+ const before=player.entries.length?snapshot():(suspendedSnapshot??savedCheckpoint?.structure??persistedQueue);const survivingEntries=(before?.entries??[]).filter(e=>!evictTracks.has(e.trackId));
  const ids=new Set(survivingEntries.map(e=>e.id));const currentEntryId=before?.currentEntryId&&ids.has(before.currentEntryId)?before.currentEntryId:null;
- const saved:Snapshot={version:1,entries:survivingEntries,currentEntryId,position:currentEntryId?before?.position??0:0,repeat:player.repeat,shuffleOrder:before?.shuffleOrder?.filter(id=>ids.has(id))??null};
+ const saved:Snapshot={version:1,entries:survivingEntries,currentEntryId,position:currentEntryId?before?.position??0:0,repeat:before?.repeat??player.repeat,shuffleOrder:before?.shuffleOrder?.filter(id=>ids.has(id))??null};
  player.suspend();player.setQueue([]);suspendedSnapshot=undefined;clearMediaSession();sourceProtection.invalidateScope();await sourceProtection.releaseUnused();
  protection=sourceProtection.getReadonlySnapshot();if(!current()||protection.unknown||matches(protection))return false;
  try{await writes;if(!current())return false;await flushQueue(saved,playbackCheckpointKey(),current);return current();}catch{return false;}
