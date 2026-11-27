@@ -20,6 +20,7 @@ import {SpotifyPlaylistImport} from './ui/SpotifyPlaylistImport';
 import {enrichSpotifyPlaylist,tracksWithSpotifyReleases,type SpotifyCatalogProgress} from './playlists/spotify-catalog';
 import {albumEditionId,catalogRecordingId,displayTrackAlbum,trackCatalogRelease} from './library/catalog-release';
 import {importSpotifyPlaylist} from './playlists/spotify-import';
+import {importYoutubePlaylist} from './playlists/youtube-import';
 import {groupStorageDownloads} from './library/storage-groups';
 import {StorageSettings} from './ui/StorageSettings';
 import './ui/settings-layout.css';
@@ -1745,6 +1746,19 @@ function App(){
   const available=saved.result.playlist.entries.filter(({trackId})=>availability.get(trackId)?.state==='available').length;
   startSpotifyCatalog(saved.result.playlist.id);
   return {...saved.result,available};
+ }} onImportYoutube={async(data,uiCurrent)=>{
+  const saved:{result:Awaited<ReturnType<typeof importYoutubePlaylist>>|null;refreshed:boolean}={result:null,refreshed:false};
+  let importError:unknown;
+  await viewAct(async current=>{
+   try{saved.result=await importYoutubePlaylist(data,account.user!.id,()=>current()&&mutationCurrent()&&uiCurrent());}
+   catch(error){importError=error;}
+  },()=>{saved.refreshed=true;});
+  if(importError)throw importError;
+  if(!saved.result||!saved.refreshed)return null;
+  // Same collection download as «Descargar playlist completa»: one by one, a failed song is set aside and the rest continue.
+  const ids=saved.result.playlist.entries.map(({trackId})=>trackId),missing=ids.filter(id=>availability.get(id)?.state!=='available');
+  if(missing.length)requestLibraryDownload(missing,saved.result.playlist.name);
+  return {...saved.result,available:ids.length-missing.length,downloading:missing.length};
  }} onOpen={openSpotifyPlaylist}/>}
 <section className="settings-group settings-appearance"><h3>Apariencia</h3><label>Apariencia<select disabled={!canOrganize} value={theme} onChange={e=>{const next=e.target.value;void viewAct(async()=>{await writeRecord('settings','theme',next);if(!control.owner)return;setTheme(next);document.documentElement.dataset.theme=next;});}}><option value="system">Sistema</option><option value="light">Clara</option><option value="dark">Oscura</option></select></label></section><DownloadNotificationSettings/><section className="settings-group settings-app-update" aria-labelledby="app-update-heading"><h3 id="app-update-heading">Actualización de la app</h3><div className="settings-group__body"><p>Versión en ejecución: {runningVersion}</p><p role="status">{manualReloadPending?'Esperando a que terminen las operaciones para recargar…':updateState==='checking'?'Comprobando versión…':updateState==='current'?'Actualizada':updateState==='available'?'Nueva versión disponible':'No se pudo comprobar si hay actualizaciones.'}</p><button type="button" disabled={manualReloadPending||updateNavigationLocked} onClick={()=>{player.pause();automaticUpdates?.reload();}}>Recargar app</button><p>Recarga Pulso y conserva tus datos. Si hay música sonando, se pausará.</p></div></section><section className="settings-group" aria-label="Sincronización de biblioteca"><h3>Biblioteca de tu cuenta</h3><div className="settings-group__body"><p role="status">{librarySyncMessage[librarySyncState]}</p><p>Las playlists, los favoritos y los datos de las canciones se conservan con tu cuenta. Los álbumes y artistas guardados, y las descargas, se conservan en este dispositivo.</p><button type="button" disabled={!owner||busy||librarySyncState==='syncing'} onClick={()=>void librarySync.retry()}>Sincronizar biblioteca</button></div></section></div><div className="settings-groups">
 <section hidden={settingsSection!=='connections'} className="settings-group"><h3>Cuenta y fuentes</h3><div className="settings-group__body"><section aria-label="Música de Telegram"><details className="settings-help"><summary>Cómo buscar y escuchar</summary><p>En Buscar puedes consultar sugerencias musicales y las opciones del bot que elijas. Conecta tu cuenta de Telegram y configura tus bots para consultarlos. Al elegir una canción se comprueba tu copia local; si falta, se obtiene del bot para descargarla y escucharla. Límite por canción: {formatStorageMB(AUDIO_FILE_MAX_BYTES)}.</p></details></section>
