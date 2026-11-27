@@ -21,6 +21,7 @@ export type MusicSuggestionsSearchOptions = {signal?:AbortSignal;current:()=>boo
 export type MusicSuggestionsClient = {
  search(query:string,options:MusicSuggestionsSearchOptions):Promise<MusicSuggestionsResult>;
  getRateState():MusicSuggestionsRateState;
+ clearCache():void;
  /** Permanently closes this instance, cancels publication and clears RAM cache. */
  close():void;
 };
@@ -137,5 +138,5 @@ export function createMusicSuggestionsClient(deps:MusicSuggestionsDependencies={
   try{return await Promise.race([work,terminalPromise]);}
   finally{clearTimeout(timer);options.signal?.removeEventListener('abort',abort);}
  }
- return {search,getRateState,close(){if(closed)return;closed=true;epoch++;cache.clear();active?.cancel({state:'closed'});}};
+ return {search,getRateState,clearCache(){cache.clear();},close(){if(closed)return;closed=true;epoch++;cache.clear();active?.cancel({state:'closed'});}};
 }

@@ -1,6 +1,6 @@
-# Pendientes abiertos · 2026-11-26
+# Pendientes abiertos · 2026-11-27
 
-Pulso sirve [v66](https://pulso-web.pruebassoftware.workers.dev/releases/c70c6318de067d99.html) desde `release/v66`. El registro de publicación está en [P0-W](../odd/tasks/P0-W.md#2026-11-27--publicación-de-v66) y [T30](../odd/tasks/T30-v66-reproductor-y-portada-album.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
+Pulso sirve [v67](https://pulso-web.pruebassoftware.workers.dev/releases/48727d3675574cce.html) desde `release/v67`. El registro de publicación está en [P0-W](../odd/tasks/P0-W.md#2026-11-27--publicación-de-v67), [T31](../odd/tasks/T31-v67-agrupacion-albumes-escritorio.md) y [T32](../odd/tasks/T32-v67-almacenamiento-y-borrado.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
 
 ## Pendientes de v64 / v63
 
@@ -54,11 +54,17 @@ Al registrar v61 se sincronizó la base local compartida `.local/engram` con los
 
 WebKit WPE emite `style-src-attr` con `blockedURI: inline` para el selector de Apariencia de [src/main.tsx:1547](../src/main.tsx#L1547). El mapa de fuentes sitúa el evento en `node_modules/react-dom/cjs/react-dom-client.production.js:8514`, en la llamada que crea el elemento `select`. La política aplicada procede de [index.html:1](../index.html#L1). La reproducción se confirmó en v60 (`086aaac`) y v61 (`d718b9d`). El arnés de velocidad registra esa infracción y la compara con la ejecución de referencia del mismo perfil.
 
-## 8. Estado actualizado tras v66 · 2026-11-27
+## 8. Estado actualizado tras v67 · 2026-11-27
 
-La publicación vigente es **v66** (`/releases/c70c6318de067d99.html`), rama `release/v66`, despliegue `2b4a6230-af7e-4ef7-8b89-7f978596d553` (versión 69).
+La publicación vigente es **v67** (`/releases/48727d3675574cce.html`), rama `release/v67`, despliegue `64a6d29f-9f27-4931-81f4-f5e8332c8f89` (versión 70).
 
-### 8.0 Resuelto en v66 (`T30`)
+### 8.0 Resuelto en v67 (`T31` + `T32`)
+- **Agrupación fiel de álbumes sincronizados en escritorio (`T31`, `U-V67-01`):** `searchedAlbumChoice()` / `searchedITunesRelease()` conservan la edición de catálogo explícita (`itunes`/`musicbrainz`) sin exigir igualdad con la etiqueta ID3 `track.album` del bot cuando no hay `manualOverrides` (respetando el contrato de Spotify y la prioridad absoluta de `manualOverrides`), con ordenación por `catalogChoice.id` de respaldo y agrupación unificada en Inicio y Biblioteca. Verificado en vivo en Cloudflare: las 9 pistas del álbum real del perfil aparecen como **1** solo álbum (antes 2).
+- **Borrado real de descargas al retirar álbum (`T32`, `U-V67-02`):** `evictFromQueue()` libera bundles de `sourceProtection`, actualiza `savedCheckpoint` y `library-playback` (incluyendo retiradas consecutivas sin recarga) y realiza re-preview manteniendo intactos `strictPolicy` y el CAS de `confirmCollectionRemoval`; además `affectedFor()` y `otherSavedTrackIds` cubren `coverTrackIds` de álbumes guardados. Verificado en vivo tras reproducir/pausar el álbum: «Retirar álbum» reporta `9/9` copias elegibles (`37,98 MB`, `0` protegidas) con aviso de retirada de cola.
+- **Gestión manual de descargas agrupada y seleccionable (`T32`, `U-V67-03`, `U-V67-04`):** `groupStorageDownloads()` recibe `addedTrackIds` para que las canciones de playlists se muestren dentro de su playlist y no generen álbumes individuales falsos; las pistas en cola pasan a `· En cola` con checkbox habilitado (evicción al confirmar), reservando `· En uso` deshabilitado a operaciones activas o estado `unknown`; cada fila está envuelta en `<label className="storage-download-row">` (`≥ 44 px`, `74,36 px` en vivo) para seleccionar tocando cualquier punto.
+- **Limpiar caché en dos modos (`T32`, `U-V67-05`):** Almacenamiento ofrece `Limpiar caché de escucha` (solo audios no guardados) y `Limpiar toda la caché` (habilitado incluso con `cacheCopies === 0`; borra audios no guardados, purga `pulso-web-cache-v1`, rota `PlayerArtworkCache` revocando ObjectURLs `A01`/`A02b` y limpia las 4 cachés de búsqueda en memoria conservando rate-limits, Biblioteca, álbumes guardados, playlists, Favoritos, portadas manuales y Telegram).
+
+### 8.1 Resuelto en v66 (`T30`)
 - **Nuevo control del reproductor (`U-V66-01`):** sustituido el glifo Unicode `⌄` por un tirador centrado estilo iOS (`.player-surface__grabber`, `72×44 px`, píldora redondeada + gesto swipe-down) y el chevrón `∧` del MiniPlayer por un icono SVG limpio de expansión diagonal.
 - **Portadas de álbumes en Biblioteca e Inicio (`U-V66-02`, caso «mosca»):** `libraryAlbumCards()` expone `coverTrackIds` (incluyendo pistas en caché de escucha sin tocar `trackIds`/`albumRemovalMembership`), `CollectionCover`/`CatalogArtwork` revisan hasta 6 pistas candidatas + `sharedArtworkKey` (`albumArtworkKey`, respetando `K01` y revocación `A01`/`A02b`) + chequeo inmediato de visibilidad, y `preloadKeys` precarga `provider:<sharedKey>` y `artworkUrl`.
 - **Poda de versiones anteriores en Cloudflare (`U-V66-03`):** política de retención ajustada a `0` versiones previas por instrucción expresa del propietario (`2026-11-27`). Retirados **300 archivos antiguos (84,40 MB)** en el despliegue de v66 (`50` rutas estáticas, `0` históricas; GET directo al recurso v65 anterior responde `404` y navegación `Accept: text/html` responde `200` abriendo v66). Los otros 3 Workers ajenos de la cuenta no se tocaron.

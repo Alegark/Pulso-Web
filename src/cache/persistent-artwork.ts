@@ -71,9 +71,9 @@ function deleteAccount(tx:IDBTransaction,accountId:string){
  tx.objectStore('meta').delete(accountId);
 }
 
-export async function purgeArtworkAccount(accountId:string){
- try{await transact(artworkStores,'readwrite',async tx=>deleteAccount(tx,accountId));}
- catch{/* A storage failure must not block sign-out. Subsequent confirmed entry retries the purge. */}
+export async function purgeArtworkAccount(accountId:string):Promise<boolean>{
+ try{await transact(artworkStores,'readwrite',async tx=>deleteAccount(tx,accountId));return true;}
+ catch{return false;}
 }
 
 export async function retainArtworkAccount(accountId:string,signal:AbortSignal){

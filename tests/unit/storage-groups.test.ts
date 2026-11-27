@@ -32,3 +32,9 @@ test('other downloads preserve track and asset order without searching assets pe
  assert.equal(other?.bytes,loose.length*100);
  assert.ok(reads<=assets.length*4,`asset id read ${reads} times`);
 });
+
+test('playlist-only downloads do not create albums while library albums and loose files remain',()=>{
+ const tracks=[t('listed','x','Playlist album'),t('owned','y','Library album'),t('loose','z','Loose album')];
+ const groups=groupStorageDownloads(tracks,[p('list',['listed'])],[a('x'),a('y'),a('z')],[],undefined,new Set(['owned']));
+ assert.deepEqual(groups.map(g=>[g.kind,g.trackIds]),[['playlist',['listed']],['album',['owned']],['other',['loose']]]);
+});

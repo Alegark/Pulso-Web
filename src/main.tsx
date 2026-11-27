@@ -1,3 +1,5 @@
+import {clearCatalogArtworkCaches} from './library/catalog-artwork';
+import {clearSearchCaches} from './library/search-caches';
 import type {TrackMenuHost} from './ui/track-menu-host';
 import {albumCoordinator} from './library/album-download';
 import {albumDownloadKey,libraryDownloadKey} from './library/collection-download-queue';
@@ -935,13 +937,35 @@ function writeQueueCheckpoint(store:IDBObjectStore,key:string,value:QueuePositio
  store.put(queuePositionRecord(checkpoint.structure,value),queuePositionKey);
  return checkpoint;
 }
-async function flushQueue(saved:Snapshot,key:string){
+async function flushQueue(saved:Snapshot,key:string,current:()=>boolean=()=>true){
  const db=await openExistingDatabase();
  try{
   const tx=admittedTransaction(db,'settings','readwrite'),done=transactionDone(tx);
-  try{const checkpoint=writeQueueCheckpoint(tx.objectStore('settings'),key,saved,()=>saved);await done;savedCheckpoint=checkpoint;}
+  try{if(!current())throw Error('queue-stale');const checkpoint=writeQueueCheckpoint(tx.objectStore('settings'),key,saved,()=>saved);if(!current())throw Error('queue-stale');await done;savedCheckpoint=checkpoint;}
   catch(error){try{tx.abort();}catch{/* settled */}await done.catch(()=>{});throw error;}
  }finally{closeDatabase(db);}
+}
+async function evictFromQueue(trackIds:readonly string[],assetIds:readonly string[]):Promise<boolean>{
+ const current=captureRemovalRaw(),evictTracks=new Set(trackIds),evictAssets=new Set(assetIds);
+ for(const track of tracks)if(evictTracks.has(track.id)&&track.assetId)evictAssets.add(track.assetId);
+ const fingerprints=new Set(storedAssets.filter(asset=>evictAssets.has(asset.id)).map(asset=>`${asset.sha256}:${asset.bytes}`));
+ for(const track of tracks)if(track.assetId&&evictAssets.has(track.assetId)||track.audioFingerprint&&fingerprints.has(`${track.audioFingerprint.sha256}:${track.audioFingerprint.bytes}`))evictTracks.add(track.id);
+ const matchesSource=(source:{asset:Readonly<LocalAsset>|null})=>!!source.asset&&(evictAssets.has(source.asset.id)||fingerprints.has(`${source.asset.sha256}:${source.asset.bytes}`));
+ const matches=(protection:ReturnType<typeof sourceProtection.getReadonlySnapshot>)=>
+  !!(protection.current&&(evictTracks.has(protection.current.trackId)||matchesSource(protection.current.source)))||
+  protection.prepared.some(ref=>evictTracks.has(ref.trackId)||matchesSource(ref.source))||protection.retainedSources.some(matchesSource);
+ let protection=sourceProtection.getReadonlySnapshot();
+ let persistedQueue:Snapshot|undefined;
+ try{await writes;if(!current())return false;const raw=await readRecord<unknown>('settings','library-playback');if(raw!==undefined){const normalized=normalizeSnapshot(raw);if(!normalized)return false;persistedQueue=normalized.snapshot;}}catch{return false;}
+ if(!current())return false;
+ if(!player.entries.some(e=>evictTracks.has(e.trackId))&&!suspendedSnapshot?.entries.some(e=>evictTracks.has(e.trackId))&&!savedCheckpoint?.structure.entries.some(e=>evictTracks.has(e.trackId))&&!persistedQueue?.entries.some(e=>evictTracks.has(e.trackId))&&!matches(protection))return current()&&!protection.unknown;
+ queueInsertions.cancelAll('replaced');await queueInsertions.whenSettled();if(!current())return false;
+ const before=player.entries.length?snapshot():(suspendedSnapshot??savedCheckpoint?.structure??persistedQueue);const survivingEntries=(before?.entries??[]).filter(e=>!evictTracks.has(e.trackId));
+ const ids=new Set(survivingEntries.map(e=>e.id));const currentEntryId=before?.currentEntryId&&ids.has(before.currentEntryId)?before.currentEntryId:null;
+ const saved:Snapshot={version:1,entries:survivingEntries,currentEntryId,position:currentEntryId?before?.position??0:0,repeat:before?.repeat??player.repeat,shuffleOrder:before?.shuffleOrder?.filter(id=>ids.has(id))??null};
+ player.suspend();player.setQueue([]);suspendedSnapshot=undefined;clearMediaSession();sourceProtection.invalidateScope();await sourceProtection.releaseUnused();
+ protection=sourceProtection.getReadonlySnapshot();if(!current()||protection.unknown||matches(protection))return false;
+ try{await writes;if(!current())return false;await flushQueue(saved,playbackCheckpointKey(),current);return current();}catch{return false;}
 }
 const playbackCheckpointKey=()=>`${accountEpoch}:${scopeId}:${player.queueRevision}`;
 let saveFailureBurst=false;let saveFailureScope=diagnostics.scope();
@@ -1252,7 +1276,8 @@ function App(){
  const collectionKey=removalKey;
  const collectionController=React.useMemo(()=>{const reason=`collection-removal:${collectionKey}:${crypto.randomUUID()}`;return createCollectionRemovalController({activity:control.activity,
   canStart:()=>collectionKey===removalScopeKey()&&owner&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&!botImportActive&&!deferredQueueRestore&&sourceReview.canPrepare()&&control.activity.idle,
-  captureRaw:captureRemovalRaw,
+  captureRaw:captureRemovalRaw,evictFromQueue,
+  clearExtraCaches:async()=>{const id=accountController.getSnapshot().user?.id;if(!id)return false;const ok=await purgeArtworkAccount(id);if(accountController.getSnapshot().user?.id!==id)return false;artworkCache.retire();artworkCache=new PlayerArtworkCache(id);artworkRefreshToken++;clearCatalogArtworkCaches();clearSearchCaches();emit();return ok;},
   gate:active=>{if(active){if(collectionKey!==removalScopeKey())return;collectionGate=collectionKey;control.activity.block(reason,true);}else{control.activity.block(reason,false);if(collectionGate===collectionKey)collectionGate=null;}emit();},
   reserve:target=>{control.activity.block(reason,false);try{return sourceReview.reserve(target);}finally{control.activity.block(reason,true);}},refresh:()=>refresh(true,false,null),
   adopt:snapshot=>{if(collectionKey!==removalScopeKey())return;copyRemovalStartup={key:collectionKey,snapshot};++removalRecoveryEpoch;setCopyRemovalBlocking(collectionKey,snapshot.unknown||snapshot.pending.length>0,true);},
@@ -1268,7 +1293,7 @@ function App(){
  });},[collectionKey]);
  const downloadRemovalController=React.useMemo(()=>{const reason=`download-removal:${collectionKey}:${crypto.randomUUID()}`;return createDownloadRemovalController({activity:control.activity,
   canStart:()=>collectionKey===removalScopeKey()&&owner&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked()&&!botImportActive&&!deferredQueueRestore&&sourceReview.canPrepare()&&control.activity.idle,
-  captureRaw:captureRemovalRaw,
+  captureRaw:captureRemovalRaw,evictFromQueue,
   gate:active=>{if(active){if(collectionKey!==removalScopeKey())return;collectionGate=collectionKey;control.activity.block(reason,true);}else{control.activity.block(reason,false);if(collectionGate===collectionKey)collectionGate=null;}emit();},
   reserve:target=>{control.activity.block(reason,false);try{return sourceReview.reserve(target);}finally{control.activity.block(reason,true);}},refresh:()=>refresh(true,false,null),
   adopt:snapshot=>{if(collectionKey!==removalScopeKey())return;copyRemovalStartup={key:collectionKey,snapshot};++removalRecoveryEpoch;setCopyRemovalBlocking(collectionKey,snapshot.unknown||snapshot.pending.length>0,true);},
@@ -1310,9 +1335,9 @@ function App(){
   if(!dest)return;removalFocus.current=null;dest.focus({preventScroll:true});dest.scrollIntoView({behavior:'auto',block:intent.kind==='open'?'start':'nearest',inline:'nearest'});
  }
  function closeRemoval(){removalFocus.current={kind:'close',current:rescanResponse(),opener:removalOpener.current};removalOpener.current=null;setRemovalRequest(null);requestAnimationFrame(focusRemoval);}
- function openCollection(selection:import('./library/collection-removal').CollectionSelection,title:string,opener:HTMLButtonElement){
+ function openCollection(selection:import('./library/collection-removal').CollectionSelection,title:string,opener:HTMLButtonElement,options?:{cacheMode?:'audio'|'all'}){
   if(!mutationCurrent())return;const current=rescanResponse();
-  if(!collectionController.start(selection,title))return;
+  if(!collectionController.start(selection,title,options))return;
   collectionOpener.current=opener;requestAnimationFrame(()=>{if(current()&&collectionController.getView().visible){collectionHeading.current?.focus({preventScroll:true});collectionHeading.current?.scrollIntoView({block:'start'});}});
  }
  function openDownloadRemoval(ids:string[],title:string,opener:HTMLButtonElement){
@@ -1586,10 +1611,10 @@ function App(){
  const downloads=React.useMemo(()=>settingsOpen?storedAssets.map(asset=>({asset,aliases:tracks.filter(track=>track.assetId===asset.id)})):[],[settingsOpen,tracks,storedAssets]);
  const listeningCache=React.useMemo(()=>storageOpen?summarizeListeningCache({tracks,assets:storedAssets,libraryTrackIds:addedTrackIds,playlists}):null,[storageOpen,tracks,storedAssets,addedTrackIds,playlists]);
  const storageSummary=React.useMemo(()=>storageOpen?summarizeStorage(storedAssets,new Set(listeningCacheAssets({tracks,assets:storedAssets,libraryTrackIds:addedTrackIds,playlists}).map(asset=>asset.id)),storageEstimate):null,[storageOpen,tracks,storedAssets,addedTrackIds,playlists,storageEstimate]);
- const storageGroups=React.useMemo(()=>storageOpen?groupStorageDownloads(tracks,playlists,storedAssets,savedAlbums,songAliases):[],[storageOpen,tracks,playlists,storedAssets,savedAlbums,songAliases]);
+ const storageGroups=React.useMemo(()=>storageOpen?groupStorageDownloads(tracks,playlists,storedAssets,savedAlbums,songAliases,addedTrackIds):[],[storageOpen,tracks,playlists,storedAssets,savedAlbums,songAliases,addedTrackIds]);
  const protectedCopies=settingsOpen?sourceProtection.getReadonlySnapshot():null;
- const protectedAssetIds=new Set([protectedCopies?.current,...(protectedCopies?.prepared??[])].flatMap(ref=>ref?.source.asset?[ref.source.asset.id]:[]));
- for(const source of protectedCopies?.retainedSources??[])if(source.asset)protectedAssetIds.add(source.asset.id);
+ const queuedAssetIds=new Set([protectedCopies?.current,...(protectedCopies?.prepared??[])].flatMap(ref=>ref?.source.asset?[ref.source.asset.id]:[]));
+ for(const source of protectedCopies?.retainedSources??[])if(source.asset)queuedAssetIds.add(source.asset.id);
  const pendingTrackIds=new Set((protectedCopies?.pending??[]).flatMap(p=>p.trackIds));
  const canOrganize=owner&&!busy&&!copyRemovalBlocked()&&!queueForeignBlocked();
  const collectionTitle=selected?.name??(favorites?'Favoritos':activeGroup?.label??'Colección');
@@ -1650,7 +1675,7 @@ function App(){
   <h2 id="settings-heading" ref={settingsHeading} tabIndex={-1}>Configuración</h2>
   <button type="button" onClick={closeSettings}>Cerrar configuración</button>
 <p className="settings-intro">Tu cuenta, tu música y este navegador.</p><nav className="settings-navigation" aria-label="Secciones de configuración">{([['general','General'],['connections','Conexiones'],['tools','Herramientas']] as const).map(([id,label])=><button key={id} aria-current={settingsSection===id?'page':undefined} onClick={()=>setSettingsSection(id)}>{label}</button>)}</nav><div hidden={settingsSection!=='general'} className="settings-general">
-{storageSummary&&listeningCache&&<StorageSettings downloadTarget={setStorageDownloadTarget} summary={storageSummary} groups={storageGroups} onRemove={openDownloadRemoval} items={downloads.map(({asset,aliases})=>{const track=aliases[0],inUse=protectedAssetIds.has(asset.id)||aliases.some(t=>pendingTrackIds.has(t.id));return {id:asset.id,title:track?.title??'Archivo sin ficha',artist:track?.artist??'Artista desconocido',bytes:asset.bytes,protected:inUse,removable:!!track&&removalEligibleTracks.has(track.id),action:<button disabled={!canOrganize||!track||inUse||!removalEligibleTracks.has(track.id)} onClick={event=>{if(track)openRemoval(track,event.currentTarget);}} aria-label={`Quitar descarga de ${track?.title??'archivo sin ficha'}`}>Quitar descarga</button>};})} cacheCopies={listeningCache.copies} canClean={canOrganize} onClean={button=>openCollection({kind:'cache',scope:'global-listening-cache'},'Caché de escucha',button)} canCheck={owner&&!busy&&!botImportActive} onCheck={()=>void admitted('refresh-library',checkFiles)}/>}
+{storageSummary&&listeningCache&&<StorageSettings downloadTarget={setStorageDownloadTarget} summary={storageSummary} groups={storageGroups} onRemove={openDownloadRemoval} items={downloads.map(({asset,aliases})=>{const track=aliases[0],inUse=protectedCopies?.unknown===true||aliases.some(t=>pendingTrackIds.has(t.id));return {inQueue:!inUse&&queuedAssetIds.has(asset.id),id:asset.id,title:track?.title??'Archivo sin ficha',artist:track?.artist??'Artista desconocido',bytes:asset.bytes,protected:inUse,removable:!!track&&removalEligibleTracks.has(track.id),action:<button disabled={!canOrganize||!track||inUse||!removalEligibleTracks.has(track.id)} onClick={event=>{if(track)openRemoval(track,event.currentTarget);}} aria-label={`Quitar descarga de ${track?.title??'archivo sin ficha'}`}>Quitar descarga</button>};})} cacheCopies={listeningCache.copies} canClean={canOrganize} onClean={button=>openCollection({kind:'cache',scope:'global-listening-cache'},'Caché de escucha',button)} onCleanAll={button=>openCollection({kind:'cache',scope:'global-listening-cache'},'Toda la caché',button,{cacheMode:'all'})} canCheck={owner&&!busy&&!botImportActive} onCheck={()=>void admitted('refresh-library',checkFiles)}/>}
 {settingsOpen&&settingsSection==='general'&&<SpotifyPlaylistImport key={account.user.id} canImport={canOrganize&&mutationCurrent()}
  onImport={async(data,uiCurrent)=>{
   const saved:{result:Awaited<ReturnType<typeof importSpotifyPlaylist>>|null;refreshed:boolean}={result:null,refreshed:false};

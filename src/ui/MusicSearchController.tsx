@@ -1,3 +1,4 @@
+import {registerSearchCacheCleaner} from '../library/search-caches';
 import type {TrackMenuHost} from './track-menu-host';
 import {downloadNotifications} from '../pwa/download-notifications';
 import {resolveSearchSingle} from '../library/music-search-single';
@@ -32,6 +33,7 @@ import {AlbumCatalog,albumHintsFromSongs,catalogSongsFromBatch,type AlbumEdition
 // Construction performs no IO. Each mounted view owns only its request and AbortSignal.
 const suggestionsClient=createMusicSuggestionsClient();
 const metadataCatalog=new AlbumCatalog((...args)=>fetch(...args));
+registerSearchCacheCleaner(()=>{suggestionsClient.clearCache();metadataCatalog.clearCache();});
 const pendingArtworkBatch={data:null,pending:true} as const;
 // Retain unresolved album delivery across navigation and account/scope remounts.
 export interface LibraryAlbumPage {

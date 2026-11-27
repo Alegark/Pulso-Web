@@ -6,13 +6,15 @@ import type {SourceReviewResult} from '../playback/source-review-admission';
 import type {LocalAsset} from '../library/library';
 
 export interface CollectionHost {
+ clearExtraCaches?():Promise<boolean>;
+ evictFromQueue?(trackIds:readonly string[],assetIds:readonly string[]):Promise<boolean>;
  activity:Activity; canStart():boolean; captureRaw():()=>boolean;
  gate(active:boolean):void; reserve(target:Readonly<LocalAsset>):SourceReviewResult;
  removed?(selection:core.CollectionSelection):void; refresh():Promise<void>; adopt(snapshot:CopyRemovalStartup):void; checkpoint(current:()=>boolean):void; changed():void;
 }
 type State='preparing'|'ready'|'working'|'done'|'uncertain'|'blocked';
 export interface CollectionView {
- readonly visible:boolean; readonly state:State; readonly title:string; readonly kind:'playlist'|'album'|'cache';
+ readonly cacheMode?:'audio'|'all'; readonly visible:boolean; readonly state:State; readonly title:string; readonly kind:'playlist'|'album'|'cache';
  readonly summary:core.CollectionPreview|null; readonly accepted:boolean; readonly result:(Omit<core.CollectionOutcome,'freedBytes'> & {freedBytes:number|null})|null; readonly message:string|null;
 }
 type Run={selection:core.CollectionSelection;abort:AbortController;raw:()=>boolean;context:core.CollectionContext;token:ActivityToken|null;preview:core.CollectionPreviewToken|null;settlement:Promise<void>|null;settling:boolean;released:boolean};
@@ -23,19 +25,19 @@ export function createCollectionRemovalController(host:CollectionHost){
  const publish=(patch:Partial<CollectionView>)=>{if(!disposed){view=Object.freeze({...view,...patch});host.changed();}};
  const live=(r:Run)=>!disposed&&run===r&&!r.abort.signal.aborted&&safe(r.raw);
  function release(r:Run){if(r.released||r.settling)return;r.released=true;if(r.preview)core.releaseCollectionRemovalPreview(r.preview);r.preview=null;r.token?.end();r.token=null;if(run===r){run=null;host.gate(false);if(safe(r.raw))host.checkpoint(r.raw);}}
- function start(selection:core.CollectionSelection,title:string){
+ function start(selection:core.CollectionSelection,title:string,options?:{cacheMode?:'audio'|'all'}){
   if(disposed||run)return false;
   if(!host.canStart()){
-   publish({...initial,visible:true,state:'blocked',title,kind:selection.kind,message:'Hay una operación en curso o no se puede comprobar el almacenamiento ahora. Espera a que termine y vuelve a abrir la revisión.'});
+   publish({...initial,visible:true,state:'blocked',title,kind:selection.kind,cacheMode:options?.cacheMode,message:'Hay una operación en curso o no se puede comprobar el almacenamiento ahora. Espera a que termine y vuelve a abrir la revisión.'});
    return true;
   }
   const raw=host.captureRaw(),abort=new AbortController();
   const r:Run={selection,abort,raw,context:{signal:abort.signal,current:()=>live(r)},token:null,preview:null,settlement:null,settling:true,released:false};
-  run=r;host.gate(true);publish({...initial,visible:true,state:'preparing',title,kind:selection.kind});
+  run=r;host.gate(true);publish({...initial,visible:true,state:'preparing',title,kind:selection.kind,cacheMode:options?.cacheMode});
   r.token=host.activity.begin();
   const work=(async()=>{try{
    if(!r.token||!live(r))throw Error('admission');
-   const result=await core.previewCollectionRemoval(selection,r.context);r.preview=result.token;
+   const result=await core.previewCollectionRemoval(selection,r.context,{evictQueued:!!host.evictFromQueue});r.preview=result.token;
    if(live(r)&&r.token.current())publish({state:'ready',summary:result});
    else if(!disposed)publish({state:'blocked',message:'La revisión ya no está vigente.'});
   }catch{if(!disposed&&run===r)publish({state:'blocked',message:'No se pudo preparar la revisión. Conservamos la colección.'});}
@@ -43,9 +45,22 @@ export function createCollectionRemovalController(host:CollectionHost){
  }
  async function confirm(expected:CollectionView){
   const r=run;if(view!==expected||!r||!live(r)||r.settling||view.state!=='ready'||!view.accepted||!r.preview)return;
-  const token=r.preview;r.preview=null;r.settling=true;publish({state:'working',accepted:false});
+  let token=r.preview;r.preview=null;const summary=view.summary;r.settling=true;publish({state:'working',accepted:false});
   const work=(async()=>{let outcome:core.CollectionOutcome|null=null;
+   let extraFailed=false;
    try{
+    if(view.cacheMode==='all'&&summary?.copiesEligible===0){
+     core.releaseCollectionRemovalPreview(token);
+     const cleared=await host.clearExtraCaches?.()??false;extraFailed=!cleared;
+     if(cleared)outcome={metadata:'committed',cleanup:'complete',removed:0,skipped:summary.retainedShared,freedBytes:0,skipReasons:[],reason:null};
+     return;
+    }
+    if(summary?.queuedTrackIds.length&&host.evictFromQueue){
+     const ok=await host.evictFromQueue(summary.queuedTrackIds,[]);
+     if(!ok||!live(r)){core.releaseCollectionRemovalPreview(token);outcome={metadata:'not-committed',cleanup:'not-started',freedBytes:0,removed:0,skipped:0,skipReasons:[],reason:'queue-eviction-failed'};return;}
+     core.releaseCollectionRemovalPreview(token);const fresh=await core.previewCollectionRemoval(r.selection,r.context);token=fresh.token;
+     if(!live(r)||fresh.tracks!==summary.tracks||fresh.copiesEligible!==summary.copiesEligible||fresh.retainedShared!==summary.retainedShared){core.releaseCollectionRemovalPreview(token);outcome={metadata:'not-committed',cleanup:'not-started',freedBytes:0,removed:0,skipped:0,skipReasons:[],reason:'collection-changed'};return;}
+    }
     outcome=await core.confirmCollectionRemoval(token,{confirm:true,acceptPossibleOnlyCopyLoss:true},r.context,{
      readContext(){if(!r.token)r.token=host.activity.begin();return {signal:r.abort.signal,current:()=>live(r)&&!!r.token?.current()};},
      settlementReadContext(){if(!r.token)r.token=host.activity.begin();return {signal:new AbortController().signal,current:()=>safe(r.raw)&&!!r.token?.current()};},
@@ -64,6 +79,7 @@ export function createCollectionRemovalController(host:CollectionHost){
      // receipt; keep the original non-reviving scope guard and exact pointer CAS.
      async forget(tracking){return safe(r.raw)&&clearRemovalTracking(tracking);},
     });
+    if(view.cacheMode==='all'&&outcome.metadata==='committed'&&outcome.cleanup==='complete'){extraFailed=true;extraFailed=!(await host.clearExtraCaches?.()??false);}
    }catch{/* An unknown outcome must be inspected, never replayed. */}
    finally{
     r.token?.end();r.token=null;
@@ -74,7 +90,7 @@ export function createCollectionRemovalController(host:CollectionHost){
       const scanAbort=new AbortController();const snapshot=await scanCopyRemovalStartup({signal:scanAbort.signal,current:r.raw});if(safe(r.raw))host.adopt(refreshFailed?{...snapshot,unknown:true}:snapshot);
      }
     }
-    if(!disposed&&run===r){const uncertain=!outcome||outcome.metadata==='unknown'||outcome.cleanup==='stopped';publish({state:uncertain?'uncertain':'done',result:outcome?{...outcome,freedBytes:uncertain?null:outcome.freedBytes}:null,message:uncertain?'El resultado de las copias puede estar incompleto. Revisa cualquier retirada pendiente antes de volver a actuar.':null});}
+    if(!disposed&&run===r){const uncertain=extraFailed||!outcome||outcome.metadata==='unknown'||outcome.cleanup==='stopped';publish({state:uncertain?'uncertain':outcome?.metadata==='not-committed'?'blocked':'done',result:outcome?{...outcome,freedBytes:uncertain?null:outcome.freedBytes}:null,message:uncertain?'El resultado de las copias puede estar incompleto. Revisa cualquier retirada pendiente antes de volver a actuar.':null});}
     r.settling=false;if(!live(r))release(r);
    }
   })();r.settlement=work;await work;

@@ -13,7 +13,7 @@ function wav(salt:number){const b=new Uint8Array(160044),v=new DataView(b.buffer
 type Fixture={scenario:string;list:string;other:string|null;rows:{track:string;asset:LocalAsset;choice:SongChoice}[]};
 Object.assign(window,{
  async setupCurrentCollection(scenario:string,backend:'idb'|'opfs'){
-  const db=await openDatabase();closeDatabase(db);const list=await createPlaylist('Lista propia'),other=scenario==='playlists'?await createPlaylist('Otra lista'):null;const rows:Fixture['rows']=[];
+  const db=await openDatabase();closeDatabase(db);const list=await createPlaylist('Lista propia'),other=scenario==='playlists'||scenario==='queue'?await createPlaylist('Otra lista'):null;const rows:Fixture['rows']=[];
   for(let i=0;i<2;i++){
    const title=i===0?'Compartida propia':'Exclusiva propia';
    const added=scenario==='album-first'||scenario==='playlist-first'&&i===0;

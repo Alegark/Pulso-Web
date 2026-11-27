@@ -1,9 +1,11 @@
+import {registerSearchCacheCleaner} from '../library/search-caches';
 import {BackButton} from './BackButton';
 import React from 'react';
 import {CollectionCover} from './CollectionCover';
 import {AlbumCatalog,type AlbumEdition,type CatalogArtist} from '../library/album-catalog';
 
 const catalog = new AlbumCatalog((...args) => fetch(...args));
+registerSearchCacheCleaner(()=>catalog.clearCache());
 interface SearchProps { query:string; scope:string; visible:boolean; request:number; onOpen:(artist:CatalogArtist,opener:HTMLButtonElement)=>void }
 export function ArtistSearchResults(props:SearchProps) {
  const [rows,setRows]=React.useState<CatalogArtist[]>([]),[status,setStatus]=React.useState('');

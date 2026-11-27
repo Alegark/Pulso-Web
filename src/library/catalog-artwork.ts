@@ -49,7 +49,8 @@ async function limited(r:Response,max:number,signal:AbortSignal):Promise<Uint8Ar
  try{while(true){if(signal.aborted)throw Error('aborted');const part=await abortable(reader.read(),signal);if(signal.aborted)throw Error('aborted');if(part.done){done=true;break;}size+=part.value.length;if(size>max||chunks.length>=8192)throw Error('size');chunks.push(part.value);}const out=new Uint8Array(size);let offset=0;for(const chunk of chunks){out.set(chunk,offset);offset+=chunk.length;}return out;}
  finally{signal.removeEventListener('abort',cancel);if(!done)cancel();try{reader.releaseLock();}catch{/* An outstanding read can settle later. */}}
 }
-const transientArtwork=new PlayerArtworkCache();
+let transientArtwork=new PlayerArtworkCache();
+export function clearCatalogArtworkCaches(){searchCache.clear();transientArtwork.retire();transientArtwork=new PlayerArtworkCache();}
 let running=0;const queue:(()=>void)[]=[];
 async function acquire(){if(running>=4){await new Promise<void>(resolve=>queue.push(resolve));return;}running++;}
 function release(){const next=queue.shift();if(next)next();else running--;}

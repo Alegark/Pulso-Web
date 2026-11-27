@@ -158,6 +158,7 @@ export function parseAlbumDetail(data: unknown, id: number): AlbumResult<AlbumDe
 class ITunesAlbumCatalog {
   private readonly cache = new Map<string, { expires: number; value: unknown }>()
   constructor(private readonly fetcher: typeof fetch = fetch) {}
+  clearCache():void { this.cache.clear() }
   async search(title: string, artist: string | null, request: AlbumRequest): Promise<AlbumResult<AlbumEdition[]>> {
     if (!text(title) || !(artist === null || artist === '' || text(artist))) return fail('invalid')
     const query = new URLSearchParams({ term: [title, artist].filter(Boolean).join(' '), country: 'US', media: 'music', entity: 'album', limit: '20' })
@@ -307,6 +308,7 @@ class ITunesAlbumCatalog {
 export class AlbumCatalog extends ITunesAlbumCatalog {
  private readonly backup:MusicBrainzCatalog;
  constructor(fetcher:typeof fetch=fetch){super(fetcher);this.backup=new MusicBrainzCatalog(fetcher);}
+ override clearCache():void {super.clearCache();this.backup.clearCache();}
  private async enabled(request:AlbumRequest):Promise<boolean>{try{return !request.signal.aborted&&request.current()&&await musicBrainzEnabled(request.signal)&&!request.signal.aborted&&request.current();}catch{return false;}}
  override async search(title:string,artist:string|null,request:AlbumRequest):Promise<AlbumResult<AlbumEdition[]>>{
   const primary=await super.search(title,artist,request);

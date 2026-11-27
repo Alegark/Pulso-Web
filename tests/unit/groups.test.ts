@@ -2,7 +2,7 @@ import {unknownLocalAlbum} from '../../src/library/album-metadata.ts';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import type {Track} from '../../src/library/library.ts';
-import {groupArtists, groupAlbums, selectGroup, getGroupTracks} from '../../src/library/groups.ts';
+import {groupArtists, groupAlbums, selectGroup, getGroupTracks, orderAlbumRows} from '../../src/library/groups.ts';
 
 function track(id: string, patch: Partial<Track> = {}): Track {
  return {id, assetId: `asset-${id}`, title: 'Canción', artist: 'Artista', album: 'Álbum',
@@ -182,3 +182,18 @@ test('compilation conflicts remain separate and missing flags never bridge an am
  const fallbackFlag = track('fallback', {localAlbum:albumSource(null, false)});
  assert.equal(groupAlbums([yes,fallbackFlag]).length, 2);
 });
+
+for (const [source,firstId,secondId] of [
+ ['itunes','itunes:900:1:1:10','itunes:900:1:2:11'],
+ ['musicbrainz','musicbrainz:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:1:1:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','musicbrainz:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:1:2:cccccccc-cccc-4ccc-8ccc-cccccccccccc'],
+] as const) {
+ test(`${source} catalog editions group contradictory tags and order rows`, () => {
+  const first=track('first',{album:'Álbum X',catalogChoice:{source,id:firstId,title:'Uno',artist:'Artista',album:'Álbum X',duration:60}});
+  const second=track('second',{album:'Pista 2 - Single',artist:'Artista feat. Otro',catalogChoice:{source,id:secondId,title:'Dos',artist:'Artista feat. Otro',album:'Álbum X',duration:60}});
+  const groups=groupAlbums([second,first]);
+  assert.equal(groups.length,1);assert.equal(groups[0].label,'Álbum X');assert.deepEqual(groups[0].trackIds,['second','first']);
+  assert.deepEqual(orderAlbumRows([{track:second},{track:first}]).map(row=>row.track.id),['first','second']);
+  const edited={...second,album:'Mi edición',manualOverrides:{album:'Mi edición'}};
+  assert.deepEqual(groupAlbums([first,edited]).map(group=>group.label),['Álbum X','Mi edición']);
+ });
+}
