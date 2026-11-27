@@ -48,3 +48,15 @@ test('transient admission and deferred download retry without poisoning the pend
  const c=createContinuousCollectionController({canStartPrefetch:()=>ready,isTrackAvailable:id=>id==='a',resolveSlotTrackId:slot=>slot.trackId,downloadSlot:async slot=>{attempts.push(slot.slotKey);return attempts.length===1?{state:'deferred'}:{state:'ready',trackId:'b'};},insertNextTracks:async()=> 'inserted',selectAndPlayTrack:id=>played.push(id),pauseCurrent:()=>{},getPlayerSnapshot:()=>s,onStateChange:()=>{}});
  c.activate({queueEpoch:1,kind:'playlist',slots});assert.equal(c.requestNextPending(),true);await new Promise(r=>setTimeout(r,150));assert.deepEqual(attempts,[]);ready=true;await new Promise(r=>setTimeout(r,250));assert.deepEqual(attempts,['b','b']);assert.deepEqual(played,['b']);c.clear();
 });
+test('changing track during retry cancels waiting and does not auto-advance',async()=>{
+ for(const track of ['b','c']){
+  const s=snapshot(),played:string[]=[];let ready=false,calls=0;
+  const c=createContinuousCollectionController({canStartPrefetch:()=>ready,isTrackAvailable:id=>id==='a',resolveSlotTrackId:slot=>slot.trackId,downloadSlot:async()=>{calls++;return {state:'ready',trackId:'d'};},insertNextTracks:async()=> 'inserted',selectAndPlayTrack:id=>played.push(id),pauseCurrent:()=>{},getPlayerSnapshot:()=>s,onStateChange:()=>{}});
+  c.activate({queueEpoch:1,kind:'playlist',slots});assert.equal(c.requestNextPending(),true);s.currentTrackId=track;c.observePlayer('state');ready=true;await new Promise(r=>setTimeout(r,150));assert.equal(calls,0);assert.deepEqual(played,[]);c.clear();
+ }
+});
+test('external pause after manual next completion cancels a subsequent prefetch',async()=>{
+ const s=snapshot();let signal!:AbortSignal,calls=0;
+ const c=createContinuousCollectionController({canStartPrefetch:()=>true,isTrackAvailable:id=>id==='a',resolveSlotTrackId:slot=>slot.trackId,downloadSlot:(_slot,sig)=>{calls++;signal=sig;return calls===1?Promise.resolve({state:'ready',trackId:'b'}):new Promise(()=>{});},insertNextTracks:async()=> 'inserted',selectAndPlayTrack:()=>{},pauseCurrent:()=>{},getPlayerSnapshot:()=>s,onStateChange:()=>{}});
+ c.activate({queueEpoch:1,kind:'playlist',slots});assert.equal(c.requestNextPending(),true);await flush();s.currentTrackId='b';s.state='playing';c.observePlayer('progress');assert.equal(calls,2);s.state='paused';c.observePlayer('state');assert.equal(signal.aborted,true);c.clear();
+});

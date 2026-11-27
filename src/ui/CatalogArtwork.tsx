@@ -42,7 +42,7 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
     const local=await readArtwork(trackId,!!(imageUrl||identity));
     if(!active())return true;
     if(local.state==='ready'){publish(local.blob);return true;}
-    if(artworkPriority(local)==='hidden'&&!(allowFallbackOnUnavailable&&local.state==='unavailable')){revokeAll();setView(null);return true;}
+    if(artworkPriority(local)==='hidden'&&!(allowFallbackOnUnavailable&&!('manual' in local&&local.manual)&&local.state==='unavailable')){revokeAll();setView(null);return true;}
    }
    for(const candidateId of [...new Set(fallbackTrackIds??[])].filter(id=>id!==trackId).slice(0,6)){
     const candidate=await readArtwork(candidateId,true);

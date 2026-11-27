@@ -143,7 +143,8 @@ export function TelegramPanel({onContinuousPrefetchRunner,warmConnectionSignal,t
     else {const track=latestRef.current.localTracks.find(t=>t.id===slot.trackId);if(!track)return {state:'failed',channelWide:false};choice={source:'local',id:'local:'+track.id,title:track.manualOverrides.title??track.catalogChoice?.title??track.title,artist:'artist' in track.manualOverrides?track.manualOverrides.artist??null:track.catalogChoice?.artist??track.artist,album:'album' in track.manualOverrides?track.manualOverrides.album??null:track.catalogChoice?.album??track.album,duration:track.catalogChoice?.duration??track.duration};}
     const target=parseBotSearchTarget({title:choice.title.normalize('NFC').trim(),artist:choice.artist?.normalize('NFC').trim()||null,album:choice.album?.normalize('NFC').trim()||null,durationSeconds:choice.duration});if(!target)return {state:'failed',channelWide:false};
     const abort=new AbortController(),onAbort=()=>abort.abort();signal.addEventListener('abort',onAbort,{once:true});if(signal.aborted)abort.abort();
-    const token={};albumCoordinator.prefetchFlight={token,abort:()=>abort.abort()};notifyAlbumDownload(albumCoordinator);
+    let settle!:()=>void;const settled=new Promise<void>(resolve=>{settle=resolve;});
+    const token={};albumCoordinator.prefetchFlight={token,abort:()=>abort.abort(),settled};notifyAlbumDownload(albumCoordinator);
     try{
      const local=await attempt.lookup(choice,abort.signal);if(abort.signal.aborted)return {state:'cancelled'};
      if(local){await attempt.rememberAlias?.(choice,local,abort.signal);return {state:'ready',trackId:local};}
@@ -155,7 +156,7 @@ export function TelegramPanel({onContinuousPrefetchRunner,warmConnectionSignal,t
      if(result.state!=='audio')return {state:'failed',channelWide:result.state!=='known-failure'||result.reasons.some(r=>['rate-limit','session-expired','network','uncertain','busy','timeout'].includes(r))};
      const saved=await attempt.save(result.audio,choice,abort.signal,()=>{});if(abort.signal.aborted)return {state:'cancelled'};
      return saved.state==='saved'&&saved.trackId?{state:'ready',trackId:saved.trackId}:{state:'failed',channelWide:saved.state==='uncertain'};
-    }finally{signal.removeEventListener('abort',onAbort);if(albumCoordinator.prefetchFlight?.token===token){delete albumCoordinator.prefetchFlight;notifyAlbumDownload(albumCoordinator);}}
+    }finally{signal.removeEventListener('abort',onAbort);if(albumCoordinator.prefetchFlight?.token===token){delete albumCoordinator.prefetchFlight;notifyAlbumDownload(albumCoordinator);}settle();}
    },
   };
   const register=latestRef.current.onContinuousPrefetchRunner;register?.(runner);return()=>register?.(null);

@@ -10,7 +10,7 @@ import {BackButton} from './BackButton';
 import {downloadWithCurrentApp} from '../service-worker/download-update';
 import {musicBrainzId} from '../library/catalog-id';
 import type {CatalogId} from '../library/catalog-id';
-import {albumRunKey,runAlbumDownload,type AlbumCoordinator} from '../library/album-download';
+import {abortPrefetchFlight,albumRunKey,runAlbumDownload,type AlbumCoordinator} from '../library/album-download';
 import {albumDownloadKey} from '../library/collection-download-queue';
 export type {AlbumCoordinator} from '../library/album-download';
 import {catalogTransportMode} from '../library/catalog-fetch';
@@ -199,6 +199,7 @@ export function AlbumPageController(props:Props){
  },[detail,props.visible,props.metadataOnly,inspectionKey,running,props.songPending,props.coordinator.dispatching]);
  const savedAlbum=props.savedAlbums?.find(album=>album.edition.id===detail?.edition.id);
  async function addAlbum(download=true,restoring=false){
+  if(download)void abortPrefetchFlight(props.coordinator);
   if(!active()||savingRef.current||!detail||download&&inspecting)return;
   if(!savedAlbum&&props.saveAlbum&&props.albumSaveBlockedReason){
    setSaveNotice(props.albumSaveBlockedReason);return;

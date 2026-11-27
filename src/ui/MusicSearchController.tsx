@@ -158,10 +158,11 @@ export function MusicSearchController(props:Props){
  const choices=React.useMemo(()=>musicSearchCatalog(query,props.tracks,remoteQuery===normalizeMusicSuggestionsQuery(query)?remote:[],catalogQuery===normalizeMusicSuggestionsQuery(query)?editions:[],catalogQuery===normalizeMusicSuggestionsQuery(query)?artists:[],artworkBatch?.scope===props.scopeKey&&artworkBatch.query===normalizeMusicSuggestionsQuery(query)?albumHintsFromSongs(artworkBatch.data):[],artworkBatch?.scope===props.scopeKey&&artworkBatch.query===normalizeMusicSuggestionsQuery(query)?catalogSongsFromBatch(artworkBatch.data):[]),[query,props.tracks,remote,remoteQuery,catalogQuery,editions,artists,artworkBatch,props.scopeKey]);
  const primary=props.bots?.providers[0]??null;
  const selectedProvider=primary?{id:primary.providerRef,username:primary.username,label:primary.label,supported:['ivkmbot','lydbot','ansmusicbot','kdmusic_bot','deezermusicbot'].includes(primary.username.toLowerCase())}:null;
- const provider=primary?.providerRef??null,ownPending=!!cancel||!!state?.cancelling;
+ const prefetchOwned=!!downloads.prefetchFlight&&!flightPending()&&!albumCoordinator.running;
+ const provider=primary?.providerRef??null,ownPending=!prefetchOwned&&(!!cancel||!!state?.cancelling);
  const limited=!!state?.retryBlocked||state?.retryAt!==null&&state?.retryAt!==undefined&&Date.now()<state.retryAt;
  const providers=orderedProviders(props.bots);
- const ready=props.canConnect&&props.phase==='connected'&&!!state?.available&&!state.pending&&!limited&&providers.length>0;
+ const ready=props.canConnect&&props.phase==='connected'&&!!state?.available&&(!state.pending||prefetchOwned)&&(!state.cancelling||prefetchOwned)&&!limited&&providers.length>0;
  const rateNotice=state?.retryBlocked?'Telegram ha limitado las consultas sin indicar un plazo utilizable. No se reintentará automáticamente.':limited&&state?.retryAt?'Telegram permite reintentar después de '+new Date(state.retryAt).toLocaleTimeString()+'.':null;
  const results=displayedQuery!==null&&state?.queryId===displayedQuery?state.rows.map(row=>resultView(row,state.expectedTarget)):[];
  const revokeMetadata=()=>{++metadataEpoch.current;const attempt=metadataAttempt.current;metadataAttempt.current=null;attempt?.abort.abort();setSuggesting(false);};
@@ -315,7 +316,8 @@ export function MusicSearchController(props:Props){
   // Only the already admitted single resolution may enter while hidden.
   // New gestures still require the current visible render.
   if(capturedAttempt?!(mounted.current&&latest.current.scopeKey===props.scopeKey&&latest.current.client===client&&capturedAttempt.current()):!current())return;
-  if(!capturedAttempt){abortPrefetchFlight(albumCoordinator);client?.connectionActivity?.();}
+  const prefetchSettled=abortPrefetchFlight(albumCoordinator);
+  if(!capturedAttempt)client?.connectionActivity?.();
   const id=choice.id;
   const key=songChoiceKey(choice)??JSON.stringify([choice.source,choice.id,choice.title,choice.artist]);
   const old=flight.current;
@@ -340,7 +342,10 @@ export function MusicSearchController(props:Props){
     await finishPlay(f,local,queueSlots,chosenIndex,collectionSlots);return;
    }
    if(!navigator.onLine){f.phase='error';setNotice('Sin conexión. Conéctate para conseguir esta canción. Las copias ya descargadas siguen disponibles.');pulse();return;}
-   if(!ready||!capturedProviders.length||!client||f.revision===undefined){f.phase='error';setNotice(!capturedProviders.length?'Añade un bot compatible en «Bots de música» para conseguir esta canción.':'Conecta Telegram para conseguir esta canción. Las copias ya descargadas no necesitan conexión.');pulse();return;}
+   await prefetchSettled;if(!live(f))return;
+   if(client)await new Promise<void>(resolve=>{let unsubscribe=()=>{};const done=()=>{unsubscribe();abort.signal.removeEventListener('abort',done);resolve();};const check=()=>{const snapshot=client.searchSnapshot();if(!live(f)||!snapshot.pending&&!snapshot.cancelling)done();};unsubscribe=client.subscribeSearch(check);abort.signal.addEventListener('abort',done,{once:true});check();});
+   if(!live(f))return;const fresh=client?.searchSnapshot();const freshReady=latest.current.canConnect&&latest.current.phase==='connected'&&!!fresh?.available&&!fresh.pending&&!fresh.cancelling&&!fresh.retryBlocked&&(fresh.retryAt===null||fresh.retryAt<=Date.now());
+   if(!freshReady||!capturedProviders.length||!client||f.revision===undefined){f.phase='error';setNotice(!capturedProviders.length?'Añade un bot compatible en «Bots de música» para conseguir esta canción.':'Conecta Telegram para conseguir esta canción. Las copias ya descargadas no necesitan conexión.');pulse();return;}
    f.phase='update';
    const allowed=await downloadWithCurrentApp(props.accountId,{kind:'song',choice},()=>live(f)&&latest.current.accountId===props.accountId);
    if(!live(f))return;
