@@ -1,5 +1,9 @@
 import {LibraryDownloadController,type CollectionDownloadAction} from './LibraryDownloadController';
-import {albumCoordinator} from '../library/album-download';
+import {albumCoordinator,notifyAlbumDownload} from '../library/album-download';
+import {orderedProviders,acquireFromOrderedBots} from '../library/ordered-bot-acquisition';
+import {parseBotSearchTarget} from '../telegram/bot-search-protocol';
+import type {CollectionSlot} from '../playback/continuous-collection';
+import type {SongChoice} from '../library/selected-song';
 import {formatStorageMB} from '../library/storage-format';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {registerUpdateBlocker} from '../service-worker/update-blockers';
@@ -23,8 +27,13 @@ import {normalizeInternationalTelegramPhone,internationalPhoneNumberErrorText as
 import './telegram.css';
 import {RequiredSetup,SetupBots,setupWasCompleted,rememberCompletedSetup} from './RequiredSetup';
 type MusicSearchProps = React.ComponentProps<typeof MusicSearchController>;
+export interface ContinuousPrefetchRunner {
+ isReady():boolean;
+ downloadSlot(slot:CollectionSlot,signal:AbortSignal):Promise<{state:'ready';trackId:string}|{state:'failed';channelWide:boolean;message?:string}|{state:'cancelled'}|{state:'deferred'}>;
+}
 export interface TelegramPanelProps {
- trackMenuHost?:MusicSearchProps['trackMenuHost'];
+ onContinuousPrefetchRunner?:(runner:ContinuousPrefetchRunner|null)=>void;
+ trackMenuHost?:MusicSearchProps['trackMenuHost']; warmConnectionSignal?:number;
  songAliases?:MusicSearchProps['songAliases'];localAvailability?:MusicSearchProps['localAvailability'];
  libraryAlbum?:{page:NonNullable<MusicSearchProps['libraryAlbum']>;target:HTMLElement;visible:boolean};
  savedAlbums?:MusicSearchProps['savedAlbums'];
@@ -32,7 +41,7 @@ export interface TelegramPanelProps {
  albumSaveBlockedReason?:string;
  connectionWorkPending?:()=>boolean;
  captureDownloadOwner?:()=>()=>boolean;downloadStorageReady?:()=>boolean;downloadUpdateWait?:'checking'|'updating'|null;onStopDownloadUpdate?:()=>void;downloadCollection?:CollectionDownloadAction;downloadStorageTarget?:HTMLElement|null;canSaveArtist?:boolean;savedArtists?:MusicSearchProps['savedArtists'];saveArtist?:MusicSearchProps['saveArtist'];requiredSetup?:boolean;onSetupReady?:(ready:boolean)=>void;accountId?:string;activity:Activity;canConnect:boolean;scopeKey:string;captureCurrent:()=>()=>boolean;captureLifetime?:()=>()=>boolean;captureSongPlayback?:()=>SongPlaybackAttempt|null;captureSongDownload?:()=>SongPlaybackAttempt|null;captureAlbumDownload?:()=>SongPlaybackAttempt|null;captureBatchDownload?:(recoverPending?:boolean)=>SongPlaybackAttempt|null;onReviewDownloadStorage?:()=>void;onReviewedDownload?:(operationId?:string)=>void;captureSongCopyInspection?:()=>SongCopyInspection|null;blockedReason?:TelegramBlockReason;libraryPending?:boolean;libraryLoaded?:boolean;onCheckControl?:()=>void;onRequestControl?:()=>void;searchTarget?:HTMLElement|null;searchVisible?:boolean;localTracks?:readonly Track[];libraryTrackIds?:ReadonlySet<string>;songPlaylists?:readonly Playlist[];playerTrackId?:string|null;playerPlaying?:boolean;captureSongManagement?:(id:string)=>SongManagement|null;captureDownloadSave?:()=>((audio:BotDownloadedAudio,signal:AbortSignal,onProgress:(bytes:number)=>void)=>Promise<'saved'|'failed'|'uncertain'>)|null}
-export function TelegramPanel({trackMenuHost,songAliases,localAvailability,libraryAlbum,savedAlbums,saveAlbum,albumSaveBlockedReason,connectionWorkPending,requiredSetup=false,captureDownloadOwner,downloadStorageReady,onSetupReady,downloadUpdateWait,onStopDownloadUpdate,downloadCollection,downloadStorageTarget,savedArtists,saveArtist,canSaveArtist,accountId,activity,canConnect,scopeKey,captureCurrent,captureLifetime=captureCurrent,captureSongPlayback,captureSongDownload,captureAlbumDownload,captureBatchDownload,onReviewDownloadStorage,onReviewedDownload,captureSongCopyInspection,blockedReason='busy',libraryPending=false,libraryLoaded=false,onCheckControl,onRequestControl,searchTarget=null,searchVisible=false,localTracks=[],libraryTrackIds,songPlaylists=[],playerTrackId=null,playerPlaying=false,captureSongManagement,captureDownloadSave}:TelegramPanelProps){
+export function TelegramPanel({onContinuousPrefetchRunner,warmConnectionSignal,trackMenuHost,songAliases,localAvailability,libraryAlbum,savedAlbums,saveAlbum,albumSaveBlockedReason,connectionWorkPending,requiredSetup=false,captureDownloadOwner,downloadStorageReady,onSetupReady,downloadUpdateWait,onStopDownloadUpdate,downloadCollection,downloadStorageTarget,savedArtists,saveArtist,canSaveArtist,accountId,activity,canConnect,scopeKey,captureCurrent,captureLifetime=captureCurrent,captureSongPlayback,captureSongDownload,captureAlbumDownload,captureBatchDownload,onReviewDownloadStorage,onReviewedDownload,captureSongCopyInspection,blockedReason='busy',libraryPending=false,libraryLoaded=false,onCheckControl,onRequestControl,searchTarget=null,searchVisible=false,localTracks=[],libraryTrackIds,songPlaylists=[],playerTrackId=null,playerPlaying=false,captureSongManagement,captureDownloadSave}:TelegramPanelProps){
  const preference=useTelegramPhonePreference(accountId),phoneTouched=React.useRef(false);
  const phoneAttempt=React.useRef<{client:TelegramSessionClient;accountId:string;phone:string;scope:string}|null>(null);
  const [searchState,setSearchState]=React.useState<BotSearchSnapshot|null>(null);
@@ -44,11 +53,12 @@ export function TelegramPanel({trackMenuHost,songAliases,localAvailability,libra
  const [pageGeneration,setPageGeneration]=React.useState(0);
  const [state,setState]=React.useState<SessionState>(initialSessionState);const [phone,setPhone]=React.useState('');const [country,setCountry]=React.useState('');const [code,setCode]=React.useState('');const [password,setPassword]=React.useState('');const [consent,setConsent]=React.useState(false);
  const [now,setNow]=React.useState(Date.now);const client=React.useRef<TelegramSessionClient|null>(null);const heading=React.useRef<HTMLHeadingElement>(null);const input=React.useRef<HTMLInputElement>(null);const current=React.useRef(captureCurrent);current.current=captureCurrent;
+ React.useEffect(()=>{if(warmConnectionSignal)client.current?.connectionActivity?.();},[warmConnectionSignal]);
  const updateState=React.useRef({phase:state.phase,phone,code,password,country});updateState.current={phase:state.phase,phone,code,password,country};
  React.useLayoutEffect(()=>registerUpdateBlocker(()=>{
   const service=client.current,phase=service?.snapshot().phase??updateState.current.phase;
   const search=service?.searchSnapshot(),bots=service?.botsSnapshot(),sources=service?.sourcesSnapshot();
-  return !['disconnected','connected','error'].includes(phase)||Object.entries(updateState.current).some(([key,value])=>key!=='phase'&&value.trim()!=='')||
+  return !!albumCoordinator.prefetchFlight||!['disconnected','connected','error'].includes(phase)||Object.entries(updateState.current).some(([key,value])=>key!=='phase'&&value.trim()!=='')||
    !!(search?.pending||search?.cancelling||bots?.pending||bots?.cancelling||sources?.pending||sources?.reading||sources?.cancelling);
  }),[]);
  const lifetime=React.useRef(captureLifetime);lifetime.current=captureLifetime;
@@ -58,7 +68,7 @@ export function TelegramPanel({trackMenuHost,songAliases,localAvailability,libra
   let live=true;phoneAttempt.current=null;
   const service=new TelegramSessionClient(activity,()=>lifetime.current(),value=>{if(live)setState(value);},undefined,undefined,value=>{if(live)setSources(value);},undefined,undefined,value=>{if(live)setBots(value);},value=>{if(live)setSearchState(value);},()=>current.current());
   const revalidate=()=>service.revalidate();
-  service.configureConnectionLifecycle(document.visibilityState==='visible',()=>!!(albumCoordinator.running||albumCoordinator.dispatching||albumCoordinator.songFlight||pendingConnectionWork.current?.()));
+  service.configureConnectionLifecycle(document.visibilityState==='visible',()=>!!(albumCoordinator.running||albumCoordinator.dispatching||albumCoordinator.songFlight||albumCoordinator.prefetchFlight||pendingConnectionWork.current?.()));
   albumCoordinator.listeners.add(revalidate);
   client.current=service;setState(initialSessionState());setSources(null);setBots(null);setSearchState(null);
   return()=>{live=false;albumCoordinator.listeners.delete(revalidate);client.current=null;service.dispose();};
@@ -118,6 +128,40 @@ export function TelegramPanel({trackMenuHost,songAliases,localAvailability,libra
   restoring?'initializing':!canConnect?'blocked':'disconnected';
  const setupNeeded=requiredSetup&&(!completed||savedSession==='checking'||savedSession==='unknown'||savedSession==='absent'&&state.phase!=='connected'||state.phase==='connected'&&!!bots?.binding&&bots.providers.length===0);
  React.useLayoutEffect(()=>{onSetupReady?.(!setupNeeded);},[onSetupReady,setupNeeded]);
+ const setupNeededRef=React.useRef(setupNeeded);setupNeededRef.current=setupNeeded;
+ const latestRef=React.useRef({phase:state.phase,bots,localTracks,captureSongDownload,onContinuousPrefetchRunner});
+ latestRef.current={phase:state.phase,bots,localTracks,captureSongDownload,onContinuousPrefetchRunner};
+ React.useEffect(()=>{
+  const runner:ContinuousPrefetchRunner={
+   isReady(){const p=latestRef.current,c=client.current,s=c?.searchSnapshot();return !setupNeededRef.current&&p.phase==='connected'&&navigator.onLine!==false&&orderedProviders(p.bots).length>0&&!!s?.available&&!s.pending&&!s.cancelling&&!s.retryBlocked&&(s.retryAt===null||s.retryAt<=Date.now());},
+   async downloadSlot(slot,signal){
+    if(signal.aborted)return {state:'cancelled'};
+    if(!runner.isReady()||albumCoordinator.running||albumCoordinator.dispatching||albumCoordinator.songFlight||albumCoordinator.prefetchFlight)return {state:'deferred'};
+    const attempt=latestRef.current.captureSongDownload?.();if(!attempt?.current())return {state:'deferred'};
+    let choice:SongChoice;
+    if(slot.kind==='album-track')choice=slot.choice;
+    else {const track=latestRef.current.localTracks.find(t=>t.id===slot.trackId);if(!track)return {state:'failed',channelWide:false};choice={source:'local',id:'local:'+track.id,title:track.manualOverrides.title??track.catalogChoice?.title??track.title,artist:'artist' in track.manualOverrides?track.manualOverrides.artist??null:track.catalogChoice?.artist??track.artist,album:'album' in track.manualOverrides?track.manualOverrides.album??null:track.catalogChoice?.album??track.album,duration:track.catalogChoice?.duration??track.duration};}
+    const target=parseBotSearchTarget({title:choice.title.normalize('NFC').trim(),artist:choice.artist?.normalize('NFC').trim()||null,album:choice.album?.normalize('NFC').trim()||null,durationSeconds:choice.duration});if(!target)return {state:'failed',channelWide:false};
+    const abort=new AbortController(),onAbort=()=>abort.abort();signal.addEventListener('abort',onAbort,{once:true});if(signal.aborted)abort.abort();
+    let settle!:()=>void;const settled=new Promise<void>(resolve=>{settle=resolve;});
+    const token={};albumCoordinator.prefetchFlight={token,abort:()=>abort.abort(),settled};notifyAlbumDownload(albumCoordinator);
+    try{
+     const local=await attempt.lookup(choice,abort.signal);if(abort.signal.aborted)return {state:'cancelled'};
+     if(local){await attempt.rememberAlias?.(choice,local,abort.signal);return {state:'ready',trackId:local};}
+     const service=client.current,providers=orderedProviders(latestRef.current.bots),revision=latestRef.current.bots?.revision,networkCurrent=service?.captureBotsCurrent();
+     if(!service||!providers.length||revision===undefined||!networkCurrent)return {state:'failed',channelWide:true};
+     const current=()=>!abort.signal.aborted&&albumCoordinator.prefetchFlight?.token===token&&attempt.current()&&networkCurrent()&&latestRef.current.bots?.revision===revision;
+     const result=await acquireFromOrderedBots({client:service,providers,revision,target,signal:abort.signal,current,networkCurrent,remoteClock:albumCoordinator.remoteClock,progress:()=>{}});
+     if(abort.signal.aborted)return {state:'cancelled'};
+     if(result.state!=='audio')return {state:'failed',channelWide:result.state!=='known-failure'||result.reasons.some(r=>['rate-limit','session-expired','network','uncertain','busy','timeout'].includes(r))};
+     const saved=await attempt.save(result.audio,choice,abort.signal,()=>{});if(abort.signal.aborted)return {state:'cancelled'};
+     return saved.state==='saved'&&saved.trackId?{state:'ready',trackId:saved.trackId}:{state:'failed',channelWide:saved.state==='uncertain'};
+    }finally{signal.removeEventListener('abort',onAbort);if(albumCoordinator.prefetchFlight?.token===token){delete albumCoordinator.prefetchFlight;notifyAlbumDownload(albumCoordinator);}settle();}
+   },
+  };
+  const register=latestRef.current.onContinuousPrefetchRunner;register?.(runner);return()=>register?.(null);
+ },[]);
+
  const finishSetup=()=>{const service=client.current,snapshot=service?.botsSnapshot();if(service!==actionClient||!sessionAction?.()||!actionCurrent()||!canConnect||service?.snapshot().phase!=='connected'||!snapshot?.binding||snapshot.pending||snapshot.cancelling||!snapshot.providers.length)return;rememberCompletedSetup(accountId);setCompletion({accountId,done:true});};
  const normalizedPhone=normalizeInternationalTelegramPhone(phone);
  const draftReason=setupNeeded&&phone===''?null:!normalizedPhone.ok?phoneNumberErrorText[normalizedPhone.error]:!consent?'Marca la autorización para enviar tu número a Telegram.':null;

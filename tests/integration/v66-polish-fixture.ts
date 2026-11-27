@@ -1,11 +1,12 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {CatalogArtwork,PlayerArtworkCacheContext} from '../../src/ui/CatalogArtwork';
+import {CollectionCover} from '../../src/ui/CollectionCover';
 import './interface-main-fixture';
 import {closeDatabase,openDatabase,readRecord,writeRecord} from '../../src/storage/database';
 import type {Track} from '../../src/library/library';
 import {saveAlbumRecord} from '../../src/library/saved-albums';
-import {readArtwork,storeEmbeddedArtwork} from '../../src/library/artwork';
+import {readArtwork,storeEmbeddedArtwork,setManualArtwork} from '../../src/library/artwork';
 import {validateArtwork} from '../../src/imports/artwork';
 import {PlayerArtworkCache} from '../../src/library/player-artwork-cache';
 
@@ -37,9 +38,15 @@ Object.assign(window,{setupV66Albums:async()=>{
  const db=await openDatabase();try{await new Promise<void>((resolve,reject)=>{const tx=db.transaction('settings','readwrite');tx.objectStore('settings').delete('artwork:v1:'+rows[1].track);tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);});}finally{closeDatabase(db);}
  const primary=await readArtwork(rows[1].track,true),fallback=await readArtwork(rows[2].track,true);
  if(primary.state!=='unrecorded'||fallback.state!=='ready')throw Error(`fixture artwork: ${primary.state}/${fallback.state}`);
+ const manualOriginal=await readArtwork(rows[3].track);
+ await setManualArtwork(rows[3].track,null,manualOriginal.revision);
  const host=document.createElement('div');host.id='metadata-only-covers';document.body.append(host);
  createRoot(host).render(React.createElement(PlayerArtworkCacheContext.Provider,{value:cache},
   React.createElement(CatalogArtwork,{className:'fallback-cover',trackId:rows[1].track,sharedArtworkKey:'edition:813',fallbackTrackIds:[rows[2].track]}),
-  React.createElement(CatalogArtwork,{className:'provider-cover',trackId:rows[1].track,sharedArtworkKey:'edition:812'})));
+  React.createElement(CatalogArtwork,{className:'provider-cover',trackId:rows[1].track,sharedArtworkKey:'edition:812'}),
+  React.createElement('div',{className:'v68-observed'},React.createElement(CollectionCover,{variant:'album',trackIds:[rows[2].track]})),
+  React.createElement('div',{className:'v68-album-fallback'},React.createElement(CollectionCover,{variant:'album',trackIds:['missing-test-track',rows[2].track],eager:true})),
+  React.createElement(CatalogArtwork,{className:'v68-track-hidden',trackId:'missing-test-track',fallbackTrackIds:[rows[2].track]}),
+  React.createElement('div',{className:'v68-manual-hidden'},React.createElement(CollectionCover,{variant:'album',trackIds:[rows[3].track,rows[2].track],eager:true}))));
 
 }});

@@ -144,8 +144,30 @@ try{
     await close.waitFor({state:'detached'});
    });
    await check('v66-album-cover-fallback',async page=>{
+    await page.addInitScript(()=>{
+     if(!location.pathname.endsWith('v66-polish-fixture.html'))return;
+     const nativeRect=Element.prototype.getBoundingClientRect;
+     Element.prototype.getBoundingClientRect=function(){
+      if(this.classList.contains('collection-cover'))return {width:0,height:0,top:100000,bottom:100000,left:0,right:0,x:0,y:100000,toJSON(){return {};}};
+      return nativeRect.call(this);
+     };
+     const callbacks=[];
+     window.__v68False=()=>callbacks.forEach(callback=>callback([{isIntersecting:false}]));
+     window.IntersectionObserver=class {
+      constructor(callback){this.callback=callback;callbacks.push(callback);}
+      observe(){queueMicrotask(()=>this.callback([{isIntersecting:true}]));}
+      disconnect(){}
+      unobserve(){}
+      takeRecords(){return [];}
+     };
+    });
     await page.goto(`${origin}/${albumFixture}`);await page.waitForFunction(()=>typeof window.setupV66Albums==='function');await page.evaluate(()=>window.setupV66Albums());
-    for(const selector of ['.fallback-cover img','.provider-cover img'])await page.locator(selector).waitFor();
+    for(const selector of ['.fallback-cover img','.provider-cover img','.v68-album-fallback img'])await page.locator(selector).waitFor();
+    assert.equal(await page.locator('.v68-track-hidden img').count(),0);
+    assert.equal(await page.locator('.v68-manual-hidden img').count(),0);
+    await page.locator('.v68-observed img').waitFor();
+    await page.evaluate(()=>window.__v68False());
+    await page.locator('.v68-observed img').waitFor();
     await page.goto(origin);await page.locator('.shell-nav').waitFor();
     const home=title=>page.locator('.home-albums button').filter({hasText:title});
     const library=title=>page.locator('.library-grid .collection-card').filter({hasText:title});

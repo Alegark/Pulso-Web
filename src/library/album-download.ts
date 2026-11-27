@@ -10,7 +10,7 @@ import {downloadNotifications} from '../pwa/download-notifications';
 
 export interface AlbumDownloadRun {scope:string;editionId:CatalogId;key:string;title:string;abort:AbortController;stop?:(discardCheckpoint?:boolean)=>void;accountId?:string;collectionKey?:string}
 export interface AlbumCoordinator {
- dispatching?:boolean;songFlight?:object;
+ dispatching?:boolean;songFlight?:object;prefetchFlight?:{token:object;abort:()=>void;settled?:Promise<void>};
  running:boolean;uncertainTracks:Set<CatalogId>;remoteClock:{settledAt:number};
  rows:Map<CatalogId,{key:string;rows:AlbumRow[];message?:string}>;listeners:Set<()=>void>;
  active?:AlbumDownloadRun;notice?:{title:string;titles?:string[];progress:AlbumProgress};
@@ -21,6 +21,7 @@ export interface AlbumCoordinator {
  removeQueued?:(key:string)=>void;
 }
 export const albumCoordinator:AlbumCoordinator={running:false,uncertainTracks:new Set(),remoteClock:{settledAt:0},rows:new Map(),listeners:new Set()};
+export function abortPrefetchFlight(coordinator:AlbumCoordinator):Promise<void>{const flight=coordinator.prefetchFlight;flight?.abort();return flight?.settled??Promise.resolve();}
 export function notifyAlbumDownload(coordinator:AlbumCoordinator){for(const notify of coordinator.listeners)notify();}
 export const albumRunKey=(album:AlbumDetail,accountId?:string)=>JSON.stringify([accountId??null,JSON.stringify(album.tracks.map(track=>albumTrackChoice(track,album.edition.title)))]);
 
@@ -32,6 +33,7 @@ export async function runAlbumDownload(p:{
  queued?:boolean;
 }):Promise<CollectionDownloadOutcome>{
  const {detail,attempt,client,revision,coordinator}=p;
+ await abortPrefetchFlight(coordinator);
  if(coordinator.running||!attempt.current())return 'deferred';
  const {id:editionId,title}=detail.edition,abort=new AbortController(),key=albumRunKey(detail,p.accountId);
  let cancelled=false;

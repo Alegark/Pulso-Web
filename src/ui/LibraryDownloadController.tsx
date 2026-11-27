@@ -7,7 +7,7 @@ import {registerUpdateBlocker} from '../service-worker/update-blockers';
 import {subscribeLibraryDownloads,subscribeLibraryTrackReviews,releaseUncertainSingleDownload,downloadLibrarySelection,type LibraryDownloadRequest} from '../library/library-download';
 import {canAutoResumeLibraryDownload,claimLibraryDownload,stopAutomaticLibraryDownload,clearHeldLibraryDownload,discardLibraryDownloadCheckpoint,readHeldLibraryDownload,readLibraryDownloadCheckpoint,writeLibraryDownloadCheckpoint,pendingLibraryTrack,releaseLibraryTrack,sameHeldDownload,writeHeldLibraryDownload,type HeldDownload,type LibraryDownloadCheckpoint} from '../library/library-download-checkpoint';
 import {inspectLibraryTrackDownload} from '../library/library-download-recovery';
-import {albumCoordinator,notifyAlbumDownload,runAlbumDownload} from '../library/album-download';
+import {albumCoordinator,abortPrefetchFlight,notifyAlbumDownload,runAlbumDownload} from '../library/album-download';
 import {albumDownloadKey,libraryDownloadKey,createCollectionDownloadQueue,collectionQueueStorageKey,type CollectionDownloadJob,type CollectionDownloadOutcome} from '../library/collection-download-queue';
 import {readSavedAlbum,type SavedAlbum,type SavedAlbumFailures,type SaveAlbumResult} from '../library/saved-albums';
 import type {AlbumDetail} from '../library/album-catalog';
@@ -82,6 +82,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   }catch{setNotice('No se pudo descartar el progreso de la descarga.');}
  }
  function enqueue(job:CollectionDownloadJob){
+  abortPrefetchFlight(albumCoordinator);
   const account=latest.current.accountId;
   if(!account||!hasControl()){setNotice('Usa Pulso en esta pestaña para descargar.');return;}
   if(latest.current.storageReady?.()===false){
@@ -111,6 +112,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
  },[]);
 
  async function reviewTrack(trackId:string,title:string,retry:'no'|'safe'|'preserve'='no'){
+  abortPrefetchFlight(albumCoordinator);
   const p=latest.current,account=p.accountId,guard=p.captureLifetime?.();
   if(!account||!pageLive.current||guard&&!guard()||checking.current||admission.current||flight.current||
    albumCoordinator.running||albumCoordinator.dispatching||albumCoordinator.songFlight)return;
@@ -158,6 +160,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
   return p.connectionPhase==='blocked'?'El control de la pestaña o el acceso a Almacenamiento todavía impide continuar. El progreso se conserva.':null;
  };
  async function startChecked(request:LibraryDownloadRequest,restore?:LibraryDownloadCheckpoint,automatic=false){
+  if(!automatic)abortPrefetchFlight(albumCoordinator);
   if(admission.current||checking.current||albumCoordinator.dispatching||albumCoordinator.songFlight)return;
   const blocked=accessMessage();
   if(blocked){if(!automatic)setNotice(blocked);return;}
@@ -521,7 +524,7 @@ export function LibraryDownloadController(props:{libraryPending?:boolean;library
    const p=latest.current;
    const intent=pendingDownloadAfterUpdate(account);
    if(token.cancelled||!sameOwner()||!hasControl()||document.visibilityState==='hidden'||navigator.onLine===false||
-    albumCoordinator.running||albumCoordinator.songFlight||flight.current||checking.current||waiting.current||admission.current||
+    albumCoordinator.running||albumCoordinator.songFlight||albumCoordinator.prefetchFlight||flight.current||checking.current||waiting.current||admission.current||
     albumCoordinator.dispatching&&dispatch.current!==token||downloadHandoffInProgress(account)||
     intent&&!matchesIntent(intent)||
     p.libraryPending||job.kind==='library'&&!p.libraryLoaded||!p.connected||p.connectionPhase!=='connected'||!orderedProviders(p.bots).length||
