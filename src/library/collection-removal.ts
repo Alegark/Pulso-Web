@@ -72,7 +72,7 @@ function affectedFor(s:Snapshot,selection:CollectionSelection):string[] {
  }
  if(selection.scope!=='global-library')throw new Error('collection-invalid');
  const group=s.album?.selected;
- if(!group)throw new Error('collection-changed');return [...new Set(group.trackIds)];
+ if(!group)throw new Error('collection-changed');return [...new Set(group.saved?group.coverTrackIds:group.trackIds)];
 }
 async function read(c:CollectionContext,selection:CollectionSelection):Promise<Snapshot>{check(c);const db=await openExistingDatabase();try{check(c);const tx=admittedTransaction(db,['tracks','playlists','assets','settings']);const done=transactionDone(tx);try{const s=await snapshot(tx,c,selection);await done;check(c);return s;}catch(e){try{tx.abort();}catch{}await done.catch(()=>{});throw e;}}finally{closeDatabase(db);}}
 export async function previewCollectionRemoval(selection:CollectionSelection,c:CollectionContext):Promise<CollectionPreview>{

@@ -169,7 +169,7 @@ export function libraryAlbumCards(tracks:readonly Track[],albums:readonly SavedA
 // Includes shared tracks even when two different roster entries resolve to the same TrackId.
 export function albumRemovalMembership(cards:ReturnType<typeof libraryAlbumCards>,key:string){
  const selected=cards.find(card=>card.key===key);
- const otherSavedTrackIds=new Set(cards.flatMap(card=>card.saved&&card.key!==key?card.trackIds:[]));
+ const otherSavedTrackIds=new Set(cards.flatMap(card=>card.saved&&card.key!==key?card.coverTrackIds:[]));
  const detach=selected?.trackIds.filter(id=>!otherSavedTrackIds.has(id))??[];
  return {selected,otherSavedTrackIds,detach};
 }

@@ -162,6 +162,25 @@ test('Retirar una edición conserva la pertenencia y la copia que completa otra 
 });
 
 
+test('Las pistas en caché compartidas entre álbumes guardados permanecen protegidas',()=>{
+ const albumA=copySavedAlbum({...snapshot,edition:{...snapshot.edition,trackCount:1},tracks:[tracks[0]]})!;
+ const albumB=copySavedAlbum({...albumA,edition:{...albumA.edition,id:99,title:'Álbum deluxe'},tracks:[{...albumA.tracks[0],releaseId:99}]})!;
+ const id='11111111-1111-4111-8111-111111111111';
+ const fingerprint={sha256:'a'.repeat(64),bytes:123};
+ const track:Track={...local(1),id,audioFingerprint:{algorithm:'sha256',...fingerprint}};
+ const key=songChoiceKey({id:'itunes:99:1:1:81',source:'itunes',title:'Pista 1',artist:'Artista',album:'Álbum deluxe',duration:45})!;
+ const aliases=new Map([[key,{...fingerprint,key,trackId:id,version:1}]]);
+ const shared=albumRemovalMembership(libraryAlbumCards([],[albumA,albumB],aliases,[track]),savedAlbumGroupKey(42));
+ assert.deepEqual(shared.selected?.coverTrackIds,[id]);
+ const groups=groupStorageDownloads([track],[],[{id:track.assetId,bytes:123} as LocalAsset],[albumA],aliases,new Set());
+ assert.deepEqual(groups.map(group=>[group.kind,group.trackIds]),[['album',[id]]]);
+ assert.deepEqual([...shared.otherSavedTrackIds],[id]);
+ assert.deepEqual(shared.detach,[]);
+ const exclusive=albumRemovalMembership(libraryAlbumCards([],[albumA],aliases,[track]),savedAlbumGroupKey(42));
+ assert.equal(exclusive.otherSavedTrackIds.size,0);
+ assert.deepEqual(exclusive.selected?.coverTrackIds,[id]);
+});
+
 test('Al superar la cota de alias se descarta la lectura completa y no se resuelve por etiquetas',async()=>{
  const previous=Object.getOwnPropertyDescriptor(globalThis,'IDBKeyRange');
  Object.defineProperty(globalThis,'IDBKeyRange',{configurable:true,value:{bound:()=>({})}});

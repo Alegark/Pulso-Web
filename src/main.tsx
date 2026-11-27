@@ -1586,7 +1586,7 @@ function App(){
  const downloads=React.useMemo(()=>settingsOpen?storedAssets.map(asset=>({asset,aliases:tracks.filter(track=>track.assetId===asset.id)})):[],[settingsOpen,tracks,storedAssets]);
  const listeningCache=React.useMemo(()=>storageOpen?summarizeListeningCache({tracks,assets:storedAssets,libraryTrackIds:addedTrackIds,playlists}):null,[storageOpen,tracks,storedAssets,addedTrackIds,playlists]);
  const storageSummary=React.useMemo(()=>storageOpen?summarizeStorage(storedAssets,new Set(listeningCacheAssets({tracks,assets:storedAssets,libraryTrackIds:addedTrackIds,playlists}).map(asset=>asset.id)),storageEstimate):null,[storageOpen,tracks,storedAssets,addedTrackIds,playlists,storageEstimate]);
- const storageGroups=React.useMemo(()=>storageOpen?groupStorageDownloads(tracks,playlists,storedAssets,savedAlbums,songAliases):[],[storageOpen,tracks,playlists,storedAssets,savedAlbums,songAliases]);
+ const storageGroups=React.useMemo(()=>storageOpen?groupStorageDownloads(tracks,playlists,storedAssets,savedAlbums,songAliases,addedTrackIds):[],[storageOpen,tracks,playlists,storedAssets,savedAlbums,songAliases,addedTrackIds]);
  const protectedCopies=settingsOpen?sourceProtection.getReadonlySnapshot():null;
  const protectedAssetIds=new Set([protectedCopies?.current,...(protectedCopies?.prepared??[])].flatMap(ref=>ref?.source.asset?[ref.source.asset.id]:[]));
  for(const source of protectedCopies?.retainedSources??[])if(source.asset)protectedAssetIds.add(source.asset.id);
