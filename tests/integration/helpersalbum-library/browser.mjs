@@ -394,7 +394,7 @@ export async function runGroups({newContext,origin,fixture,report,run,selected,s
   await fresh({spotifyAlbum:true,idb:process.env.MUSIC_FLOW_ENGINE==='webkit'});await completeRequiredSetup();albumMode='mixed';
   await nav('Biblioteca').click();
   const card=page.locator('.library-grid .collection-card').filter({hasText:'MUSIC_FLOW Album'});
-  await card.click();await button('Ver álbum completo').click();await button('Guardar álbum').click();
+  await card.click();await button('Guardar álbum').click();
   const detail=page.locator('.library-detail .album-page');
   await detail.getByText('2 de 4 descargadas',{exact:true}).waitFor();
   await button('Volver a Biblioteca').click();await card.waitFor();

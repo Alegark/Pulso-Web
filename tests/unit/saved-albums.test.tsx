@@ -63,6 +63,13 @@ test('Una portada de álbum ocupa una sola celda y cuatro canciones de playlist 
  assert.equal(playlist.match(/collection-cover__tile/g)?.length,4);
 });
 
+test('La portada eager de álbum mantiene el formato y los grupos sincronizados identifican su edición',()=>{
+ const [group]=libraryAlbumCards([local(1)],[]);
+ assert.equal(group.saved,false);
+ assert.equal(group.editionId,42);
+ assert.match(renderToStaticMarkup(<CollectionCover variant="album" eager trackIds={group.trackIds}/>),/collection-cover__tile/);
+});
+
 test('Una fila desconocida o corrupta queda aislada del resto de la lectura',async()=>{
  function response<T>(value:T):IDBRequest<T>{
   const request={result:value,onsuccess:null as (()=>void)|null};

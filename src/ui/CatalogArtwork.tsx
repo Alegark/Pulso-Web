@@ -10,8 +10,8 @@ export const PlayerArtworkCacheContext=React.createContext<PlayerArtworkCache|nu
 const noSubscription=()=>()=>{};
 const emptySnapshot=()=>undefined;
 
-export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=true,preferUrl=false,sharedArtworkKey,refreshToken,fallbackTrackIds}:{
- url?:string|null;trackId?:string;className:string;fallback?:string|null;enabled?:boolean;preferUrl?:boolean;sharedArtworkKey?:string;refreshToken?:number;fallbackTrackIds?:readonly string[];
+export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=true,preferUrl=false,sharedArtworkKey,refreshToken,fallbackTrackIds,allowFallbackOnUnavailable=false}:{
+ url?:string|null;trackId?:string;className:string;fallback?:string|null;enabled?:boolean;preferUrl?:boolean;sharedArtworkKey?:string;refreshToken?:number;fallbackTrackIds?:readonly string[];allowFallbackOnUnavailable?:boolean;
 }){
  const trackArtwork=React.useContext(TrackCatalogArtwork),storedUrl=trackId?trackArtwork.get(trackId):undefined;
  const {keys,revision}=React.useContext(TrackArtworkIdentity);
@@ -27,21 +27,22 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
   cache?.signal.addEventListener('abort',revokeAll,{once:true});
   return()=>{cache?.signal.removeEventListener('abort',revokeAll);revokeAll();};
  },[cache,revokeAll]);
- const [view,setView]=React.useState<{key:string;url:string;cache:PlayerArtworkCache|null}|null>(null);
+ const [view,setView]=React.useState<{key:string;anchor:string|null;url:string;cache:PlayerArtworkCache|null}|null>(null);
+ const anchor=identity??imageUrl??trackId??null;
  const key=JSON.stringify([imageUrl,trackId,enabled,identity,refreshToken??revision,fallbackTrackIds?.join(',')??'']);
  React.useEffect(()=>{
-  let alive=true;
+  let alive=true,published=false;
   const active=()=>alive&&!cache?.signal.aborted;
   const publish=(blob:Blob)=>{
    if(!active())return;
-   const objectUrl=URL.createObjectURL(blob);objectUrls.current.add(objectUrl);setView({key,url:objectUrl,cache});
+   published=true;const objectUrl=URL.createObjectURL(blob);objectUrls.current.add(objectUrl);setView({key,anchor,url:objectUrl,cache});
   };
   const localWins=async()=>{
    if(trackId){
     const local=await readArtwork(trackId,!!(imageUrl||identity));
     if(!active())return true;
     if(local.state==='ready'){publish(local.blob);return true;}
-    if(artworkPriority(local)==='hidden'){revokeAll();setView(null);return true;}
+    if(artworkPriority(local)==='hidden'&&!(allowFallbackOnUnavailable&&local.state==='unavailable')){revokeAll();setView(null);return true;}
    }
    for(const candidateId of [...new Set(fallbackTrackIds??[])].filter(id=>id!==trackId).slice(0,6)){
     const candidate=await readArtwork(candidateId,true);
@@ -66,10 +67,10 @@ export function CatalogArtwork({url,trackId,className,fallback='♪',enabled=tru
     const provider=await cache.readProvider(identity);
     if(provider)await publishRemote(provider.blob);
    }
-  }catch{/* Artwork is optional. */}})();
+  }catch{/* Artwork is optional. */}finally{if(active()&&!published){revokeAll();setView(null);}}})();
   return()=>{alive=false;};
- },[key,shared,cache,revokeAll]);
- const shown=enabled&&!cache?.signal.aborted&&view?.key===key&&view.cache===cache?view:null;
+ },[key,shared,cache,revokeAll,allowFallbackOnUnavailable]);
+ const shown=enabled&&!cache?.signal.aborted&&(view?.key===key||(allowFallbackOnUnavailable&&anchor!==null&&view?.anchor===anchor))&&view?.cache===cache?view:null;
  const shownUrl=React.useRef<string|null>(null);shownUrl.current=shown?.url??null;
  if(!shown&&fallback===null)return null;
  return <span className={className} aria-hidden="true">{shown?<img src={shown.url} alt="" onLoad={event=>{

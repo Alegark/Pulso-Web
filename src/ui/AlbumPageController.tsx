@@ -23,6 +23,7 @@ import type {SongChoice,SongPlaybackAttempt,SongManagement,SongCopyInspection} f
 import type {TelegramSessionClient} from '../telegram/session-client';
 import './album-page.css';
 import {CollectionCover} from './CollectionCover';
+import {albumArtworkKey} from '../library/player-artwork-cache';
 import type {Track} from '../library/library';
 import {resolvedAlbumTracks,type SavedAlbum,type SavedAlbumFailures,type SaveAlbumResult} from '../library/saved-albums';
 import {createSongResolver,type SongAliases} from '../library/selected-song';
@@ -32,7 +33,7 @@ const catalog=new AlbumCatalog((...args)=>fetch(...args));
 registerSearchCacheCleaner(()=>catalog.clearCache());
 interface Props {
  trackMenuHost?:TrackMenuHost; playerPlaying?:boolean;
- savedAlbums?:readonly SavedAlbum[]; fixedDetail?:SavedAlbum; libraryView?:boolean; albumOptions?:React.ReactNode;
+ savedAlbums?:readonly SavedAlbum[]; fixedDetail?:SavedAlbum; libraryView?:boolean; albumOptions?:React.ReactNode; onShowLocalTracks?:()=>void;
  localTracks?:readonly Track[]; songAliases?:SongAliases|null; localAvailability?:ReadonlyMap<string,AvailabilityRecord>; albumSaveBlockedReason?:string;
  saveAlbum?:(detail:AlbumDetail,current:()=>boolean,failure?:SavedAlbumFailures)=>Promise<SaveAlbumResult>;
  songPending?:boolean;accountId?:string;resumeDownload?:()=>void;metadataOnly?:boolean;coordinator:AlbumCoordinator;captureInspection?:()=>SongCopyInspection|null;selectedKey:string|null;actionKey?:string|null;libraryTrackIds?:ReadonlySet<string>;playerTrackId?:string|null;title:string;artist:string|null;editionId?:CatalogId;artworkUrl?:string;searchBatch?:{data:unknown;pending:boolean};backLabel?:string;scope:string;visible:boolean;client:TelegramSessionClient|null;revision:number|undefined;provider:string|null;providers:readonly OrderedProvider[];capture:()=>SongPlaybackAttempt|null;management:(id:string)=>SongManagement|null;onBack:()=>void;onChoose:(choice:SongChoice,queueSlots?:readonly (string|null)[],chosenIndex?:number)=>void;songActions:React.ReactNode}
@@ -250,17 +251,20 @@ export function AlbumPageController(props:Props){
   return available(id,index)&&member(id,index);
  }).length??0;
  const albumAction=props.libraryView?'Descargar faltantes':progress?'Continuar álbum':'Añadir álbum';
- const firstCopy=detail?.tracks.map(track=>copies[albumTrackChoice(track,detail.edition.title).id])
-  .find(copy=>copy?.state==='available'&&copy.trackId)?.trackId;
  const queueSlots=detail?.tracks.map((track,index)=>{const id=albumTrackChoice(track,detail.edition.title).id;return available(id,index)?copies[id]?.trackId??visibleRows?.[index]?.trackId??null:null;})??[];
  const availableTrackIds=queueSlots.filter((id):id is string=>!!id);
+ const coverTrackIds=[...new Set(availableTrackIds)].slice(0,6);
+ const coverSharedKey=albumArtworkKey({editionId:detail?.edition.id??props.editionId,album:detail?.edition.title??props.title,artist:detail?.edition.artist??props.artist})??undefined;
+ const hasPendingTracks=!!detail&&detail.tracks.length>availableTrackIds.length;
+ React.useEffect(()=>{if(props.visible&&!props.metadataOnly&&hasPendingTracks)props.client?.connectionActivity?.();},[props.visible,props.metadataOnly,detail?.edition.id,hasPendingTracks,props.client]);
  const albumPlaying=!!props.playerPlaying&&!!props.playerTrackId&&availableTrackIds.includes(props.playerTrackId);
  const albumImage=detail?.edition.artworkUrl??props.artworkUrl??(editions.length===1?editions[0].artworkUrl:undefined);
  return <section className="album-page" aria-labelledby={headingId}>
   <BackButton onClick={()=>{if(active())props.onBack();}}>{props.backLabel??(props.libraryView?'Volver a Biblioteca':'Volver a búsqueda')}</BackButton>
-  <div className="album-hero"><span className="album-art"><CollectionCover variant="album" artworkUrl={albumImage} trackIds={firstCopy?[firstCopy]:[]} enabled={props.visible}/></span><div><p className="catalog-eyebrow">ÁLBUM</p><h2 id={headingId} ref={heading} tabIndex={-1}>{detail?.edition.title??props.title}</h2><p className="album-artist">{detail?.edition.artist??props.artist}</p>{detail&&<p>{formatAlbumHeaderMeta(detail.tracks.length,new Set(detail.tracks.map(t=>t.disc)).size,downloaded,!!savedAlbum)}</p>}</div></div>
+  <div className="album-hero"><span className="album-art"><CollectionCover variant="album" artworkUrl={albumImage} trackIds={coverTrackIds} sharedArtworkKey={coverSharedKey} enabled={props.visible} eager/></span><div><p className="catalog-eyebrow">ÁLBUM</p><h2 id={headingId} ref={heading} tabIndex={-1}>{detail?.edition.title??props.title}</h2><p className="album-artist">{detail?.edition.artist??props.artist}</p>{detail&&<p>{formatAlbumHeaderMeta(detail.tracks.length,new Set(detail.tracks.map(t=>t.disc)).size,downloaded,!!savedAlbum)}</p>}</div></div>
 
   {status&&<p role="status">{status}</p>}
+  {props.libraryView&&props.onShowLocalTracks&&retryTarget!==undefined&&!detail&&<button type="button" onClick={()=>{if(active())props.onShowLocalTracks?.();}}>Ver pistas locales</button>}
   {retryTarget!==undefined&&<button type="button" onClick={()=>{if(!active())return;if(retryTarget)chooseEdition(retryTarget);else retryMetadata();}}>Reintentar consulta</button>}
   {editions.length>0&&(!detail||editions.length>1)&&<section aria-label="Ediciones"><h3>Ediciones</h3><ul>{editions.map(e=><li key={e.id}><button type="button" onClick={()=>chooseEdition(e)}>{e.title} · {e.artist} · {e.releaseDate?.slice(0,10)??'fecha desconocida'}{e.trackCount?` · ${e.trackCount} pistas`:''}</button></li>)}</ul></section>}
   {detail&&props.metadataOnly&&<><h3 className="album-tracks-heading">Canciones</h3><ol className="album-tracks">{detail.tracks.map(track=><li key={`${track.disc}:${track.position}`}><span className="album-track-copy"><strong><bdi dir="auto">{track.title}</bdi></strong><span><bdi dir="auto">{track.artist}</bdi></span></span></li>)}</ol></>}
@@ -272,7 +276,7 @@ export function AlbumPageController(props:Props){
     <TrackActionsMenu title={detail.edition.title} artist={detail.edition.artist} label="Opciones del álbum" closeLabel="Cerrar opciones del álbum" active={props.visible&&!props.metadataOnly}>
      {!savedAlbum&&props.saveAlbum&&<button type="button" disabled={saving} data-menu-dismiss-after="true" onClick={()=>void addAlbum(false)}>Guardar álbum</button>}
      <details className="catalog-sources"><summary>Fuente de los metadatos</summary><p>Catálogo {musicBrainzId(detail.edition.id)?<a href={'https://musicbrainz.org/release/'+detail.edition.id.slice(12)} target="_blank" rel="noopener noreferrer">MusicBrainz · respaldo</a>:<a href="https://www.apple.com/itunes/" target="_blank" rel="noopener noreferrer">iTunes US</a>}.</p></details>
-     {savedAlbum&&!props.coordinator.running&&!saving&&props.albumOptions}
+     {!props.coordinator.running&&!saving&&props.albumOptions}
     </TrackActionsMenu>
    </div>
    {saveNotice&&<p role="status">{saveNotice}</p>}
