@@ -30,7 +30,7 @@ Readback MCP verificó módulo, bindings y configuración; el readback HTTPS
 verificó las 188 rutas estáticas por longitud y SHA-256, la entrada/latest/SW,
 configuración de cuenta `enabled`/`google` y los rechazos anónimos/cross-origin.
 El recibo completo está en
-[`docs/evidence-back-navigation-web.json`](../docs/evidence-back-navigation-web.json);
+[`docs/evidence/evidence-back-navigation-web.json`](../docs/evidence/evidence-back-navigation-web.json);
 los datos detallados permanecen en `.local/test-evidence/back-buttons-1b9dPe/publication/`.
 La aceptación de cuenta/Telegram real y la aceptación física en iPhone siguen
 pendientes; esta publicación no cambia esos estados.

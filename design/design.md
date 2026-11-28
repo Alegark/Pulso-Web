@@ -3,7 +3,7 @@
 Estado: dirección visual aceptada como punto de partida el 2026-11-08.
 La implementación empieza por el shell y el reproductor responsive. Este
 documento gobierna su diseño; los contratos de datos, audio y permisos siguen
-en `doc/SPEC.md` y las decisiones posteriores de `odd/tasks/`.
+en `docs/architecture/SPEC.md` y las decisiones posteriores de `odd/tasks/`.
 
 ## Intención
 
