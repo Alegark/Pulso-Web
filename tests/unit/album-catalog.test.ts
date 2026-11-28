@@ -6,11 +6,73 @@ const collection = { wrapperType: 'collection', collectionType: 'Album', collect
 const track = (disc: number, position: number, count: number, id = position) => ({ wrapperType: 'track', kind: 'song', collectionId: 42, trackId: id, discNumber: disc, discCount: 2, trackNumber: position, trackCount: count, trackName: `Track ${position}`, artistName: 'Artist', trackTimeMillis: null })
 const body = () => ({ resultCount: 4, results: [{ ...collection }, track(2, 1, 1, 1), track(1, 2, 2, 1), track(1, 1, 2, 1)] })
 const request = () => ({ signal: new AbortController().signal, current: () => true })
+const song = (position: number, count: number) => ({ ...track(1, position, count), discCount: 1 })
+const video = (position: number, count: number) => ({ ...song(position, count), kind: 'music-video' })
+const detailBody = (trackCount: number, ...tracks: ReturnType<typeof track>[]) => ({
+  resultCount: tracks.length + 1, results: [{ ...collection, trackCount }, ...tracks],
+})
 
 test('complete multidisc sorts positions and retains repeated recording occurrences', () => {
   const result = parseAlbumDetail(body(), 42)
   assert.equal(result.ok, true)
   if (result.ok) assert.deepEqual(result.value.tracks.map(t => [t.disc, t.position, t.trackId]), [[1, 1, 1], [1, 2, 1], [2, 1, 1]])
+})
+const extrasCases = [
+  { name: 'a trailing video', input: detailBody(3, song(1, 2), song(2, 2), video(3, 3)), positions: [1, 2] },
+  { name: 'a video between songs', input: detailBody(3, song(3, 3), video(2, 3), song(1, 3)), positions: [1, 3] },
+  { name: 'an extra absent from the lookup', input: detailBody(3, song(1, 2), song(2, 2)), positions: [1, 2] },
+  { name: 'a trailing video and an absent extra', input: detailBody(4, song(1, 2), song(2, 2), video(3, 4)), positions: [1, 2] },
+  { name: 'a second disc with only a video', input: detailBody(2, { ...video(1, 1), discNumber: 2, discCount: 2 }, track(1, 1, 1)), positions: [1] },
+]
+for (const { name, input, positions } of extrasCases) {
+  test(`returns only ordered songs with ${name}`, () => {
+    const result = parseAlbumDetail(input, 42)
+    assert.ok(result.ok)
+    assert.equal(result.value.edition.trackCount, positions.length)
+    assert.deepEqual(result.value.tracks.map(t => [t.disc, t.position, t.title]), positions.map(position => [1, position, `Track ${position}`]))
+  })
+}
+test('keeps songs on both discs when the second disc ends with a video', () => {
+  const input = detailBody(4, { ...video(3, 3), discNumber: 2, discCount: 2 }, track(2, 2, 2), track(1, 1, 1), track(2, 1, 2))
+  const result = parseAlbumDetail(input, 42)
+  assert.ok(result.ok)
+  assert.equal(result.value.edition.trackCount, 3)
+  assert.deepEqual(result.value.tracks.map(t => [t.disc, t.position]), [[1, 1], [2, 1], [2, 2]])
+})
+const inconsistentExtras = [
+  ['missing positions on a disc with only a video', detailBody(12, track(1, 1, 2), track(1, 2, 2), { ...video(10, 10), discNumber: 2, discCount: 2 })],
+  ['video with a larger count at the last required song position', detailBody(3, song(1, 2), video(2, 3))],
+  ['video with a larger count between songs', detailBody(4, song(1, 3), video(2, 4), song(3, 3))],
+  ['video just beyond its declared count', detailBody(3, song(1, 2), video(2, 1))],
+  ['video far beyond its declared count', detailBody(3, song(1, 2), song(2, 2), video(50, 1))],
+  ['video count larger than the collection count', detailBody(3, song(1, 2), song(2, 2), video(3, 10))],
+  ['different counts declared by videos on the same disc', detailBody(5, song(1, 2), song(2, 2), video(3, 4), video(4, 5))],
+  ['sum of disc counts larger than the collection count', detailBody(5,
+    track(1, 1, 1), { ...video(2, 4), discCount: 2 },
+    track(2, 1, 2), track(2, 2, 2),
+  )],
+  ['lookup with no track rows', detailBody(3)],
+  ['song beyond its declared count', detailBody(2, song(2, 1))],
+  ['two videos at the same position', detailBody(3, song(1, 1), video(2, 3), { ...video(2, 3), trackId: 42 })],
+  ['video with a smaller count at a required song position', detailBody(3, song(2, 2), video(1, 1))],
+] as const
+for (const [name, input] of inconsistentExtras) {
+  test(`rejects ${name}`, () => {
+    assert.deepEqual(parseAlbumDetail(input, 42), { ok: false, reason: 'incomplete' })
+  })
+}
+test('rejects unverifiable coverage and collection totals with extras', () => {
+  const incomplete = [
+    detailBody(4, song(1, 3), song(3, 3), video(4, 4)),
+    detailBody(3, song(1, 2), song(2, 3), video(3, 3)),
+    detailBody(2, song(1, 2), song(2, 2), video(3, 3)),
+    detailBody(3, song(1, 2), song(2, 2), video(2, 3)),
+    detailBody(1, video(1, 1)),
+    detailBody(2, track(1, 1, 1), video(2, 2)),
+  ]
+  for (const input of incomplete) assert.deepEqual(parseAlbumDetail(input, 42), { ok: false, reason: 'incomplete' })
+  const foreignExtra = detailBody(2, song(1, 1), { ...video(2, 2), collectionId: 43 })
+  assert.deepEqual(parseAlbumDetail(foreignExtra, 42), { ok: false, reason: 'invalid' })
 })
 test('edition carries only a validated artwork URL without weakening track checks', () => {
   for (const [url, expected] of [['https://is1-ssl.mzstatic.com/image/100x100.jpg', 'https://is1-ssl.mzstatic.com/image/100x100.jpg'], ['https://evil.example/image.jpg', undefined], ['http://is1-ssl.mzstatic.com/image.jpg', undefined]] as const) {
@@ -51,7 +113,7 @@ test('stream over byte limit is cancelled and never parsed', async () => {
   assert.deepEqual(await catalog.load(99, request()), { ok: false, reason: 'too-large' })
   assert.equal(cancelled, true)
 })
-test('direct input refuses getters, exotic prototypes, cycles, wrong kind and cross edition', () => {
+test('direct input refuses getters, exotic prototypes, cycles, malformed kind and cross edition', () => {
   let invoked = false
   const accessor = body()
   Object.defineProperty(accessor.results[0], 'collectionName', { get() { invoked = true; return 'Edition' } })
@@ -61,8 +123,8 @@ test('direct input refuses getters, exotic prototypes, cycles, wrong kind and cr
   assert.equal(parseAlbumDetail(exotic, 42).ok, false)
   const cycle = body(); Object.assign(cycle, { cycle })
   assert.equal(parseAlbumDetail(cycle, 42).ok, false)
-  const wrong = body(); wrong.results[1] = { ...track(2, 1, 1), kind: 'music-video' }
-  assert.equal(parseAlbumDetail(wrong, 42).ok, false)
+  const wrong = body(); wrong.results[1] = { ...track(2, 1, 1), kind: ' ' }
+  assert.deepEqual(parseAlbumDetail(wrong, 42), { ok: false, reason: 'invalid' })
   const cross = body(); cross.results[1] = { ...track(2, 1, 1), collectionId: 43 }
   assert.equal(parseAlbumDetail(cross, 42).ok, false)
 })

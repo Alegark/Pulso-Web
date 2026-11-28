@@ -73,7 +73,8 @@ export async function readLyrics(trackId:string):Promise<LyricsRead>{
  let s:Snapshot|undefined;
  try{s=await snapshot(trackId);if(!s.exists)return {state:'absent',revision:0};describe(s.raw);
  const {record,parsed}=inspect(s.raw,trackId);
- if(!record.manual&&(!validAsset(s.asset)||s.asset.id!==s.assetId||s.assetId!==record.assetId||s.asset.sha256!==record.audioSha256))throw new LyricsError('conflict');
+ // An old detached record still describes this audio after an exact reimport.
+ if(!record.manual&&(!validAsset(s.asset)||s.asset.id!==s.assetId||s.asset.sha256!==record.audioSha256))throw new LyricsError('conflict');
  const origin:LyricsProvenance=record.manual?{provenance:'manual'}:{provenance:'embedded',source:record.source};
  return parsed.kind==='absent'?{state:'absent',revision:record.revision,origin}:{state:'ready',revision:record.revision,lyrics:parsed,origin};
  }catch(e){const error=normalize(e);let repairToken:string|undefined;

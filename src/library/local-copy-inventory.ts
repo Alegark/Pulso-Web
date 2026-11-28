@@ -1,3 +1,4 @@
+import {formatStorageMB} from './storage-format';
 import {admittedTransaction,closeDatabase} from '../storage/database';
 import {fail,issuedFailure,fromKnownError,makeFailure,nativeDOMName,type FailureV1} from '../errors/app-failure';
 import {committed,openDatabase,readRecord} from '../storage/database';
@@ -109,7 +110,33 @@ export async function readInventoryInWorker(context:CopyContext):Promise<RawInve
  const lists:{id:string;entries:{trackId:string}[]}[]=[];
  for(const {key,value} of entries.playlists){if(!record(value)||!uuid(value.id)||value.id!==key||!Number.isSafeInteger(value.revision)||Number(value.revision)<1||typeof value.name!=='string'||value.name.length<1||value.name.length>100||!Array.isArray(value.entries)||!value.entries.every(e=>record(e)&&uuid(e.id)&&uuid(e.trackId))){referencesComplete=false;continue;}if(new Set(value.entries.map(e=>e.id)).size!==value.entries.length||value.entries.some(e=>!tracks.has(e.trackId)))referencesComplete=false;lists.push({id:value.id,entries:value.entries as {trackId:string}[]});}
  const queueEntry=entries.settings.find(e=>e.key==='library-playback');const queue=queueEntry?normalizeSnapshot(queueEntry.value):null;if(queueEntry&&!queue||queue?.snapshot.entries.some(e=>!tracks.has(e.trackId)))referencesComplete=false;
- for(const g of groups.values()){if(!g.assets.length)continue;const ids=new Set(g.assets.map(a=>a.id));const trackIds=[...tracks].filter(([,t])=>t.assetId!==null&&ids.has(t.assetId)).map(([id])=>id);g.row.trackIds=trackIds;const refs=new Set(trackIds);g.row.references={tracks:trackIds.length,favorites:trackIds.filter(id=>tracks.get(id)!.favorite).length,playlists:lists.filter(l=>l.entries.some(e=>refs.has(e.trackId))).length,playlistEntries:lists.reduce((n,l)=>n+l.entries.filter(e=>refs.has(e.trackId)).length,0),queueOccurrences:queue?.snapshot.entries.filter(e=>refs.has(e.trackId)).length??0};}
+ type Counts={tracks:number;favorites:number;playlists:number;playlistEntries:number;queueOccurrences:number};
+ const rowsByAsset=new Map<string,{row:RawInventoryRow;counts:Counts}>(),countsByTrack=new Map<string,Counts>();
+ for(const g of groups.values()){
+  if(!g.assets.length)continue;
+  const counts:Counts={tracks:0,favorites:0,playlists:0,playlistEntries:0,queueOccurrences:0};
+  g.row.references=counts;
+  for(const asset of g.assets)rowsByAsset.set(asset.id,{row:g.row,counts});
+ }
+ for(const [id,track] of tracks){
+  if(track.assetId===null)continue;
+  const group=rowsByAsset.get(track.assetId);if(!group)continue;
+  group.row.trackIds.push(id);
+  group.counts.tracks++;
+  if(track.favorite)group.counts.favorites++;
+  countsByTrack.set(id,group.counts);
+ }
+ for(const list of lists){
+  const referenced=new Set<Counts>();
+  for(const entry of list.entries){
+   const counts=countsByTrack.get(entry.trackId);if(!counts)continue;
+   counts.playlistEntries++;referenced.add(counts);
+  }
+  for(const counts of referenced)counts.playlists++;
+ }
+ for(const entry of queue?.snapshot.entries??[]){
+  const counts=countsByTrack.get(entry.trackId);if(counts)counts.queueOccurrences++;
+ }
  // Discover IDB physical generations without retaining payloads. One record <=64KiB.
  const chunksDB=await openDatabase();try{const tx=admittedTransaction(chunksDB,'chunks');const done=committed(tx);void done.catch(()=>{});let count=0;
  await new Promise<void>((resolve,reject)=>{const req=tx.objectStore('chunks').openKeyCursor();req.onerror=()=>reject(req.error);req.onsuccess=()=>{try{checkCopyContext(context);const c=req.result;if(!c){resolve();return;}if(++count>COPY_LIMITS.chunkRecords){partial=true;physicalComplete=false;resolve();return;}const key=c.key;
@@ -147,4 +174,4 @@ export async function readInventoryInWorker(context:CopyContext):Promise<RawInve
  checkCopyContext(context);return {rows,partial,referencesComplete,observedBytes,logicalBytes,metadataBytes,scannedRecords,physicalComplete};
 }
 /** Safe closed UI reason; never reads arbitrary Error properties. */
-export function localCopyFailureReason(error:unknown):string {const f=fromKnownError(error,{phase:'read',backend:'none'});switch(f.code){case 'limit-exceeded':return 'La exportación individual admite hasta 8 MiB en esta fase. Conserva el archivo original.';case 'cancelled':return 'Operación cancelada.';case 'asset-changed':return 'La copia cambió desde la revisión. Actualiza el inventario.';case 'asset-missing':return 'Faltan los bytes. Vuelve a importar el archivo original exacto.';case 'digest-mismatch':case 'length-mismatch':case 'local-corrupt':return 'La copia no superó la comprobación. Conserva el original.';case 'conflict':return 'Finaliza o libera la preparación anterior.';case 'storage-denied':return 'El navegador no permitió leer el almacenamiento.';case 'database-blocked':return 'La base local necesita una apertura compatible.';default:return 'No se pudo comprobar la copia. Los datos se conservan.';}}
+export function localCopyFailureReason(error:unknown):string {const f=fromKnownError(error,{phase:'read',backend:'none'});switch(f.code){case 'limit-exceeded':return `La exportación individual admite hasta ${formatStorageMB(8*1024*1024)} en esta fase. Conserva el archivo original.`;case 'cancelled':return 'Operación cancelada.';case 'asset-changed':return 'La copia cambió desde la revisión. Actualiza el inventario.';case 'asset-missing':return 'Faltan los bytes. Vuelve a importar el archivo original exacto.';case 'digest-mismatch':case 'length-mismatch':case 'local-corrupt':return 'La copia no superó la comprobación. Conserva el original.';case 'conflict':return 'Finaliza o libera la preparación anterior.';case 'storage-denied':return 'El navegador no permitió leer el almacenamiento.';case 'database-blocked':return 'La base local necesita una apertura compatible.';default:return 'No se pudo comprobar la copia. Los datos se conservan.';}}

@@ -1,6 +1,7 @@
+import {BOT_DOWNLOAD_MAX_BYTES,isBotDownloadMime} from './bot-download-bytes';
 import Long from 'long';
 import {dataArray,positive} from './sources-protocol';
-import {BOT_SEARCH_BOUNDS as B,botSearchText,matchingSongRows,type BotSearchLimitError,type BotSearchTarget,type BotSearchRow} from './bot-search-protocol';
+import {BOT_SEARCH_BOUNDS as B,botSearchText,matchingSongRows,type BotSearchFileError,type BotSearchLimitError,type BotSearchTarget,type BotSearchRow} from './bot-search-protocol';
 /** Raw SDK values are worker-private. No getters, JSON hooks, bigint coercion or raw logging. */
 export const searchOwn=(v:unknown,k:string):unknown=>v&&typeof v==='object'?Object.getOwnPropertyDescriptor(v,k)?.value:undefined;
 export class BotSearchProjectionError extends Error {constructor(readonly code:'limit'|'unsupported',readonly limit:BotSearchLimitError|undefined=undefined){super(code);}}
@@ -43,10 +44,15 @@ function incomingBot(message:unknown,botId:number):boolean {
  return searchOwn(message,'_')==='message'&&samePeer(searchOwn(message,'peerId'),botId)&&
   (out===undefined||out===false)&&(sender===undefined||samePeer(sender,botId));
 }
-function history(raw:unknown,botId:number,limit:number):readonly unknown[] {
+function history(raw:unknown,botId:number,limit:number,missingId?:number):readonly unknown[] {
  if(!['messages.messages','messages.messagesSlice'].includes(searchOwn(raw,'_') as string))bad();
  const a=dataArray(searchOwn(raw,'messages'),limit);if(!a)bad('limit',limit===1?'limit-baseline':'limit-history');
- for(const m of a){if(!['message','messageService'].includes(searchOwn(m,'_') as string)||!messageId(searchOwn(m,'id'))||!samePeer(searchOwn(m,'peerId'),botId))bad();}
+ for(const m of a){
+  const type=searchOwn(m,'_'),id=searchOwn(m,'id'),peer=searchOwn(m,'peerId');
+  if(!messageId(id))bad();
+  if(type==='messageEmpty'&&a.length===1&&id===missingId&&(peer===undefined||samePeer(peer,botId)))continue;
+  if((type!=='message'&&type!=='messageService')||!samePeer(peer,botId))bad();
+ }
  return a;
 }
 export function botSearchBaseline(raw:unknown,botId:number):number {return history(raw,botId,1).reduce<number>((n,m)=>Math.max(n,searchOwn(m,'id') as number),0);}
@@ -61,8 +67,8 @@ export function botSearchAck(raw:unknown,botId:number,randomId:Long):number|null
  for(const u of a){if(searchOwn(u,'_')!=='updateNewMessage')continue;const m=searchOwn(u,'message');if(searchOwn(m,'id')===ids[0]&&(!samePeer(searchOwn(m,'peerId'),botId)||searchOwn(m,'out')!==true))return null;}
  return ids[0];
 }
-export interface BotSearchPrivateRef {readonly messageId:number;readonly callbackData?:Uint8Array;readonly fingerprint?:string;readonly audioFingerprint?:string;readonly row?:BotSearchRow}
-export interface BotSearchPage {readonly rows:readonly BotSearchRow[];readonly refs:ReadonlyMap<string,BotSearchPrivateRef>;readonly concurrent:boolean;readonly unrecognized:boolean}
+export interface BotSearchPrivateRef {readonly messageId:number;readonly callbackData?:Uint8Array;readonly fingerprint?:string;readonly audioFingerprint?:string;readonly documentId?:string;readonly row?:BotSearchRow}
+export interface BotSearchPage {readonly rows:readonly BotSearchRow[];readonly refs:ReadonlyMap<string,BotSearchPrivateRef>;readonly concurrent:boolean;readonly unrecognized:boolean;readonly rejectedFile?:BotSearchFileError}
 /** A callback can edit its original menu into audio. Include only that exact
  * message with a different document and messages newer than the pre-callback baseline; older neighbouring
  * recordings do not belong to this attempt. The raw window still has the same
@@ -72,7 +78,7 @@ export function projectBotCallbackPage(raw:unknown,botId:number,baseline:number,
  return projectBotSearchPage({_: 'messages.messages',messages,users:[],chats:[]},botId,Math.min(baseline,selectedMessage-1),outgoing,[selectedMessage],target);
 }
 export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,outgoing:number,additionalReplies:readonly number[]=[],target:BotSearchTarget|null=null):BotSearchPage {
- const messages=history(raw,botId,20),rows:BotSearchRow[]=[],refs=new Map<string,BotSearchPrivateRef>();let concurrent=false,unrecognized=false;
+ const messages=history(raw,botId,20),rows:BotSearchRow[]=[],refs=new Map<string,BotSearchPrivateRef>();let concurrent=false,unrecognized=false,rejectedFile:BotSearchPage['rejectedFile'];
  const add=(m:number,row:Omit<Extract<BotSearchRow,{kind:'option'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'message'}>,'rowRef'>|Omit<Extract<BotSearchRow,{kind:'audio'}>,'rowRef'>,data?:Uint8Array)=>{
   if(rows.length>=B.candidateRows)bad('limit','limit-candidates');const rowRef=crypto.randomUUID();rows.push(Object.freeze({...row,rowRef}));refs.set(rowRef,Object.freeze({messageId:m,...(data?{callbackData:data.slice()}: {})}));
  };
@@ -81,7 +87,7 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
   if(id<=outgoing||!incomingBot(m,botId))continue;
   const reply=searchOwn(m,'replyTo');let correlation:'reply'|'recent'='recent';
   if(reply!==undefined){const peer=searchOwn(reply,'replyToPeerId');if(searchOwn(reply,'_')!=='messageReplyHeader'||searchOwn(reply,'replyToMsgId')!==outgoing&&!additionalReplies.includes(searchOwn(reply,'replyToMsgId') as number)||peer!==undefined&&!samePeer(peer,botId))continue;correlation='reply';}
-  const fingerprint=botSearchMessageFingerprint(m);const start=rows.length,markup=searchOwn(m,'replyMarkup');
+  const start=rows.length,markup=searchOwn(m,'replyMarkup');
   if(searchOwn(markup,'_')==='replyInlineMarkup'){
    const keyboard=dataArray(searchOwn(markup,'rows'),B.keyboardRows);if(!keyboard)bad('limit','limit-keyboard-rows');
    for(const r of keyboard){if(searchOwn(r,'_')!=='keyboardInlineButtonRow')bad();const buttons=dataArray(searchOwn(r,'buttons'),20);if(!buttons)bad('limit','limit-keyboard-buttons');
@@ -99,23 +105,37 @@ export function projectBotSearchPage(raw:unknown,botId:number,baseline:number,ou
   if(searchOwn(media,'_')==='messageMediaDocument'&&searchOwn(doc,'_')==='document'){
    const attrs=dataArray(searchOwn(doc,'attributes'),20);if(!attrs)bad('limit','limit-document-attributes');const audio=attrs.filter(a=>searchOwn(a,'_')==='documentAttributeAudio');
    const mime=searchOwn(doc,'mimeType'),size=searchOwn(doc,'size');
-   if(audio.length===1&&searchOwn(audio[0],'voice')!==true&&typeof mime==='string'&&/^audio\/[a-z0-9.+-]{1,64}$/.test(mime)&&typeof size==='number'){
-    const bytes=size,duration=searchOwn(audio[0],'duration');
-    if(Number.isSafeInteger(bytes)&&bytes>0&&typeof duration==='number'&&Number.isFinite(duration)&&duration>=0&&duration<=86400)add(id,{kind:'audio',correlation,title:botSearchText(searchOwn(audio[0],'title')),performer:botSearchText(searchOwn(audio[0],'performer')),durationSeconds:duration,mimeType:mime,bytes});
+   if(audio.length===1&&searchOwn(audio[0],'voice')!==true){
+    const duration=searchOwn(audio[0],'duration');
+    if(typeof duration==='number'&&Number.isFinite(duration)&&duration>=0&&duration<=86400){
+     const candidate={kind:'audio' as const,correlation,title:botSearchText(searchOwn(audio[0],'title')),performer:botSearchText(searchOwn(audio[0],'performer')),durationSeconds:duration};
+     if(isBotDownloadMime(mime)&&typeof size==='number'&&Number.isSafeInteger(size)&&size>0&&size<=BOT_DOWNLOAD_MAX_BYTES)
+      add(id,{...candidate,mimeType:mime,bytes:size});
+    else if(target&&matchingSongRows([{...candidate,rowRef:'',mimeType:'audio/wav',bytes:1}],target).length){
+      if(typeof size==='number'&&size>BOT_DOWNLOAD_MAX_BYTES)rejectedFile='file-too-large';
+      else if(typeof mime==='string'&&/^audio\//i.test(mime)&&!isBotDownloadMime(mime))rejectedFile='file-unsupported';
+      else rejectedFile='file-invalid';
+    }
+    }
    }
   }
   const text=botSearchText(searchOwn(m,'message'),1000);if(text)add(id,{kind:'message',correlation,text});
-  for(const row of rows.slice(start)){const previous=refs.get(row.rowRef)!;const audioFingerprint=row.kind==='audio'?botSearchAudioFingerprint(m):null;refs.set(row.rowRef,Object.freeze({...previous,fingerprint,...(audioFingerprint?{audioFingerprint}:{}),row}));}
-  if(rows.length===start)unrecognized=true;
+  if(rows.length===start){unrecognized=true;continue;}
+  const fingerprint=botSearchMessageFingerprint(m);
+  for(const row of rows.slice(start)){const previous=refs.get(row.rowRef)!;const audioFingerprint=row.kind==='audio'?botSearchAudioFingerprint(m):null;const documentId=audioFingerprint?botSearchDocumentIdentity(m):null;refs.set(row.rowRef,Object.freeze({...previous,fingerprint,...(audioFingerprint&&documentId?{audioFingerprint,documentId}:{}),row}));}
  }
  // Decode and inspect every bounded candidate BEFORE truncating so concurrency
  // and duplicate exact matches cannot be hidden by display limits. Keep a matching
  // song even when a long ordinary menu places it after the first twenty rows.
  const matched=new Map((target?matchingSongRows(rows,target):[]).map((row,index)=>[row.rowRef,index]));
  const rank=(row:BotSearchRow)=>matched.get(row.rowRef)??(B.candidateRows+(row.kind==='audio'?1:row.kind==='option'?2:3));
- const selected=rows.map((row,index)=>({row,index})).sort((a,b)=>rank(a.row)-rank(b.row)||a.index-b.index).slice(0,B.rows).map(p=>p.row);
+ const seenDocuments=new Set<string>();
+ const selected=rows.map((row,index)=>({row,index})).sort((a,b)=>rank(a.row)-rank(b.row)||a.index-b.index).filter(({row})=>{
+  const documentId=refs.get(row.rowRef)?.documentId;if(!documentId)return true;
+  if(seenDocuments.has(documentId))return false;seenDocuments.add(documentId);return true;
+ }).slice(0,B.rows).map(p=>p.row);
  const selectedRefs=new Map(selected.map(row=>[row.rowRef,refs.get(row.rowRef)!]));
- return Object.freeze({rows:Object.freeze(selected),refs:selectedRefs,concurrent,unrecognized});
+ return Object.freeze({rows:Object.freeze(selected),refs:selectedRefs,concurrent,unrecognized,...(rejectedFile?{rejectedFile}:{})});
 }
 
 /** Canonical own-data snapshot; no SDK toJSON/accessor invocation. Caller validates raw budget first.
@@ -147,7 +167,9 @@ export function botSearchDocument(message:unknown):{location:{_: 'inputDocumentF
  if(!id||!accessHash||!(ref instanceof Uint8Array)||ref.length>4096||typeof dcId!=='number'||!Number.isSafeInteger(dcId)||dcId<1||dcId>5)return null;
  return {location:{_:'inputDocumentFileLocation',id,accessHash,fileReference:ref.slice(),thumbSize:''},dcId};
 }
-export function botSearchKnownMessage(raw:unknown,botId:number,id:number):unknown {return history(raw,botId,20).find(m=>searchOwn(m,'id')===id&&incomingBot(m,botId));}
+export function botSearchKnownMessage(raw:unknown,botId:number,id:number,allowMissing=false):unknown {
+ return history(raw,botId,20,allowMissing?id:undefined).find(m=>searchOwn(m,'id')===id&&incomingBot(m,botId));
+}
 
 /** Re-reading a recording may refresh its caption, preview or optional sender.
  * Pin the exact private message, reply anchor and immutable file descriptor;

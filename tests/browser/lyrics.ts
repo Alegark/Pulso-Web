@@ -88,7 +88,15 @@ await check('V11: parser fuera de transacción; ningún IO Blob/hash; reparació
 await check('cuota asíncrona inyectada en transacción aborta CAS y conserva elección',async()=>{
  const before=await readLyrics(track.id);assert(before.state==='ready','before async quota');
  const saved=JSON.stringify(await readRecord('settings',LYRICS_PREFIX+track.id));const put=IDBObjectStore.prototype.put;
- IDBObjectStore.prototype.put=function(value,key){const req=put.call(this,value,key);if(this.name==='settings'&&String(key)===LYRICS_PREFIX+track.id){const tx=this.transaction;queueMicrotask(()=>{Object.defineProperty(tx,'error',{value:new DOMException('async quota','QuotaExceededError')});tx.abort();});}return req;};
+ IDBObjectStore.prototype.put=function(value,key){
+ const req=put.call(this,value,key);
+ if(this.name==='settings'&&key===LYRICS_PREFIX+track.id){
+ const tx=this.transaction;
+ // Inject at commit, after the write request can no longer emit AbortError.
+ req.addEventListener('success',()=>{Object.defineProperty(tx,'error',{value:new DOMException('async quota','QuotaExceededError')});tx.abort();},{once:true});
+ }
+ return req;
+ };
  try{await rejects(()=>setManualLyrics(track.id,'No guardar','plain',before.revision),'quota');}finally{IDBObjectStore.prototype.put=put;}
  assert(saved===JSON.stringify(await readRecord('settings',LYRICS_PREFIX+track.id)),'async quota committed');
 });

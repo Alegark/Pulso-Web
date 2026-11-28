@@ -7,6 +7,8 @@ import {ASSET_DIRECTORY,generationLock,WRITER_LOCK,openAssetReader} from '../sto
 import {copySourceAsset,closedObject,sameSourceAsset} from '../playback/local-source-protocol';
 import {runCopyWorker} from './local-copy-client';
 import {copyLibraryMembership,libraryMembershipKey} from './library-membership';
+import {ARTWORK_PREFIX,type Artwork} from './artwork';
+import {LYRICS_PREFIX,type LyricsRecord} from './lyrics';
 import {normalizeSnapshot} from '../playback/queue-restore';
 import type {LocalAsset} from './library';
 import {REMOVAL_LIMITS as L,removalUUID as uuid,positive,journalKey,markerKey,copyRemovalConsent,copyRemovalTracking,type RemovalTracking,type RemovalCandidate,type RemovalPlan,type RemovalContinuation,type RemovalReadContext,type RemovalContext,type RemovalDiscovery,type RemovalPreview,type RemovalBlocked,type RemovalSummary,type RemovalJournalV1,type RemovalConsent,type RemovalOutcome,type RemovalInspection} from './local-copy-removal-contract';
@@ -17,7 +19,8 @@ const digest=(s:string)=>bytesToHex(sha256(new TextEncoder().encode(s)));
 const candidates=new WeakMap<RemovalCandidate,{target:LocalAsset;trackId:string;revision:number}>();
 interface PlanData {target:LocalAsset;snapshot:RemovalSnapshot;summary:RemovalSummary;tracking:RemovalTracking;planRevision:number;context:RemovalContext;used:boolean;controller:AbortController;settlement:Promise<RemovalOutcome>|null;detachedDigest:string;planDigest:string;preparedDispatched:boolean;strict:boolean}
 const plans=new WeakMap<RemovalPlan,PlanData>();
-const strictOutcomes=new WeakMap<RemovalOutcome,{context:RemovalContext;target:LocalAsset;tracking:RemovalTracking;state:'removed'|'not-committed';revision:number}>();
+const settledOutcomes=new WeakMap<RemovalOutcome,{context:RemovalContext;target:LocalAsset;tracking:RemovalTracking;state:'removed'|'not-committed';revision:number}>();
+const strictOutcomeResults=new WeakSet<RemovalOutcome>();
 const continuations=new WeakMap<RemovalContinuation,{journal:RemovalJournalV1;context:RemovalContext;planRevision:number;used:boolean}>();
 let activePlan:RemovalPlan|null=null;
 let planning=false;
@@ -108,11 +111,19 @@ async function prepare(d:PlanData,consent:RemovalConsent,c:RemovalContext):Promi
  const projected=[...s.prefix.map(e=>[e.key,e.value]),[identityKey,{version:1,incarnation:j.incarnation}],[journalKey(j.operationId),j],[markerKey(j.target),{version:1,incarnation:j.incarnation,operationId:j.operationId,revision:1}]];describeRemovalData(projected,{left:L.prefixBytes});check(c,d.target);if(!p.incarnation)tx.objectStore('settings').add({version:1,incarnation:j.incarnation},identityKey);putJournal(tx,j);return j;
  },false,()=>{d.preparedDispatched=true;});
 }
-async function detach(j:RemovalJournalV1,c:RemovalContext):Promise<RemovalJournalV1>{
+async function detach(j:RemovalJournalV1,c:RemovalContext):Promise<{journal:RemovalJournalV1;freedArtworkBytes:number}>{
  const expected=await coherent(j,c);
  return transaction(removalStores,'readwrite',c,async tx=>{check(c,j.target);const s=await scanRemovalSnapshot(tx,()=>check(c,j.target));snapshotCAS(s,j,false,expected.canonical);const {aliases}=validateRemovalSnapshot(s,j.target);check(c,j.target);
- for(const t of aliases)tx.objectStore('tracks').put({...t,assetId:null,revision:t.revision+1,audioFingerprint:{algorithm:'sha256',sha256:j.target.sha256,bytes:j.target.bytes}},t.id);
- tx.objectStore('assets').delete(j.target.id);const next={...j,state:'detached' as const,revision:j.revision+1};putJournal(tx,next);return next;
+ const settings=tx.objectStore('settings');let freedArtworkBytes=0;
+ for(const t of aliases){
+  const artworkKey=ARTWORK_PREFIX+t.id,lyricsKey=LYRICS_PREFIX+t.id;
+  const [artwork,lyrics]=await Promise.all([request<Artwork|undefined>(settings.get(artworkKey)),request<LyricsRecord|undefined>(settings.get(lyricsKey))]);
+  check(c,j.target);
+  if(artwork?.manual===false){settings.delete(artworkKey);if(artwork.state==='ready'&&artwork.blob instanceof Blob)freedArtworkBytes+=artwork.blob.size;}
+  if(lyrics?.manual===false)settings.delete(lyricsKey);
+  tx.objectStore('tracks').put({...t,assetId:null,revision:t.revision+1,audioFingerprint:{algorithm:'sha256',sha256:j.target.sha256,bytes:j.target.bytes}},t.id);
+ }
+ tx.objectStore('assets').delete(j.target.id);const next={...j,state:'detached' as const,revision:j.revision+1};putJournal(tx,next);return {journal:next,freedArtworkBytes};
  });
 }
 async function coherent(j:RemovalJournalV1,c:RemovalContext){check(c,j.target);const s=await scan(c);check(c,j.target);snapshotCAS(s,j,['detached','deleting','removed'].includes(j.state));return s;}
@@ -147,13 +158,13 @@ export async function confirmCopyRemoval(plan:RemovalPlan,value:RemovalConsent,c
  d.used=true;const abort=()=>d.controller.abort();c.signal.addEventListener('abort',abort,{once:true});if(c.signal.aborted)abort();const owned:RemovalContext={signal:d.controller.signal,current:()=>c.current(),runtimeProtectionCurrent:a=>c.runtimeProtectionCurrent(a)};
  d.settlement=(async()=>{let j:RemovalJournalV1|null=null;try{
  check(owned,d.target);await verifyPublished(d.target,owned);
- return await fenced({operationId:d.tracking.operationId,target:d.target},async()=>{try{check(owned,d.target);j=await prepare(d,consent,owned);check(owned,d.target);j=await detach(j,owned);check(owned,d.target);j=await remove(j,owned,now=>{j=now;});return outcome(j);}
+ return await fenced({operationId:d.tracking.operationId,target:d.target},async()=>{try{check(owned,d.target);j=await prepare(d,consent,owned);check(owned,d.target);const detached=await detach(j,owned);j=detached.journal;check(owned,d.target);j=await remove(j,owned,now=>{j=now;});return {...outcome(j),...(detached.freedArtworkBytes?{freedArtworkBytes:detached.freedArtworkBytes}:{})};}
  catch(e){const primary=fromKnownError(e,{phase:'commit',backend:d.target.backend});const secondary:RemovalOutcome['secondary'][number][]=[];
  if(j?.state==='prepared'){try{check(owned,d.target,true);j=await transition(j,'not-committed',owned,true);}catch(cleanup){secondary.push({phase:'reconcile',failure:fromKnownError(cleanup,{phase:'reconcile',backend:'idb'})});}}
- return {...attemptOutcome(d,j,e,primary),secondary};}},d.strict);
+ return {...attemptOutcome(d,j,e,primary),secondary};}},true);
  }catch(e){return attemptOutcome(d,j,e,fromKnownError(e,{phase:'verify',backend:d.target.backend}));}
  finally{c.signal.removeEventListener('abort',abort);if(activePlan===plan)activePlan=null;}
- })();const result=await d.settlement;if(d.strict&&(result.state==='removed'||result.state==='not-committed')&&result.preparation==='recorded'&&result.journalRevision!==null)strictOutcomes.set(result,{context:c,target:d.target,tracking:d.tracking,state:result.state,revision:result.journalRevision});return result;
+ })();const result=await d.settlement;if((result.state==='removed'||result.state==='not-committed')&&result.preparation==='recorded'&&result.journalRevision!==null){settledOutcomes.set(result,{context:c,target:d.target,tracking:d.tracking,state:result.state,revision:result.journalRevision});if(d.strict)strictOutcomeResults.add(result);}return result;
 }
 /** Cancels only this private attempt and awaits native settlement. Caller keeps
  * the reservation occupied until this promise resolves. Never republish. */
@@ -164,7 +175,12 @@ async function readPrefix(c:RemovalReadContext){const s=await transaction(['sett
 async function getJournal(tracking:RemovalTracking,c:RemovalReadContext){const r=copyRemovalTracking(tracking);if(!r)corrupt();const p=await readPrefix(c);if(p.incarnation!==r.incarnation)changed();const j=p.journals.find(j=>j.operationId===r.operationId);if(!j)changed();return {j};}
 /** Acknowledge only the fresh, private result of a strict collection operation. */
 export async function acknowledgeUnreferencedCopyRemoval(result:RemovalOutcome,c:RemovalContext):Promise<boolean>{
- const d=strictOutcomes.get(result);if(!d||d.context!==c)return false;strictOutcomes.delete(result);
+ if(!strictOutcomeResults.has(result))return false;return acknowledgeCopyRemoval(result,c);
+}
+/** Prune only a privately branded, fresh terminal result in its original live
+ * reservation. Never accepts a deserialized receipt or an uncertain attempt. */
+export async function acknowledgeCopyRemoval(result:RemovalOutcome,c:RemovalContext):Promise<boolean>{
+ const d=settledOutcomes.get(result);if(!d||d.context!==c||result.recoveryRequired)return false;settledOutcomes.delete(result);strictOutcomeResults.delete(result);
  try{return await fenced({operationId:d.tracking.operationId,target:d.target},async()=>{
   check(c,d.target);const {j}=await getJournal(d.tracking,c);if(j.state!==d.state||j.revision!==d.revision||!sameSourceAsset(j.target,d.target))changed();
   if(j.state==='removed'&&await physical(j,c)!=='absent')changed();

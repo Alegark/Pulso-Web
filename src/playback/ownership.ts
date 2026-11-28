@@ -10,13 +10,16 @@ export class Activity {
   get admitted() { return this.accepting; }
   get idle() { return this.active.size === 0 && this.unresolved.size === 0; }
   get resolved() { return this.unresolved.size === 0; }
+  resolvedExcept(key: string) { return this.resolved || this.unresolved.size === 1 && this.unresolved.has(key); }
   scope() { const generation=this.generation; return () => generation===this.generation; }
   get count() { return this.active.size; }
   open() { ++this.generation; this.accepting = true; this.changed(); }
-  reopen() { this.accepting = true; this.changed(); }
-  close() { this.accepting = false; this.changed(); }
-  invalidate() { this.close(); ++this.generation; }
-  block(key: string, blocked: boolean) { if (blocked) this.unresolved.add(key); else this.unresolved.delete(key); this.changed(); }
+  reopen() { if(!this.accepting){this.accepting = true; this.changed();} }
+  close() { if(this.accepting){this.accepting = false; this.changed();} }
+  invalidate() { ++this.generation; this.accepting=false; this.changed(); }
+  block(key: string, blocked: boolean) { const resolved=this.resolved,idle=this.idle;
+    if (blocked) this.unresolved.add(key); else this.unresolved.delete(key);
+    if(resolved!==this.resolved||idle!==this.idle)this.changed(); }
   begin(): ActivityToken | null {
     if (!this.accepting) return null;
     const generation = this.generation, id = Symbol(); this.active.add(id); this.changed();

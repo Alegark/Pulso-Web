@@ -3,23 +3,26 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {build} from 'esbuild';
 import {chromium} from 'playwright-core';
+import {chromiumPath, chromiumSkipReason} from '../../scripts/chromium-path.mjs';
 
-test('native IDB and Web Locks preserve order across reload and fence a late old lease',async()=>{
+test('native IDB and Web Locks preserve order across reload and fence a late old lease',{skip:chromiumPath ? false : chromiumSkipReason},async t=>{
  const bundle=await build({entryPoints:['src/telegram/saved-session.ts'],bundle:true,format:'iife',globalName:'vault',write:false});
- const server=createServer((_req,res)=>{res.setHeader('Content-Type','text/html');res.end('<!doctype html>');});await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();if(!address||typeof address==='string')throw Error('server');
- const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true,env:{...process.env,INSTABOX_HEADLESS:'1'}});
+ const server=createServer((_req,res)=>{res.setHeader('Content-Type','text/html');res.end('<!doctype html>');});await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise<void>(resolve=>server.close(()=>resolve())));
+ const address=server.address();if(!address||typeof address==='string')throw Error('server');
+ const browser=await chromium.launch({executablePath:chromiumPath,headless:true,chromiumSandbox:true,env:{...process.env,INSTABOX_HEADLESS:'1'}});
  try{const page=await browser.newPage();await page.goto(`http://127.0.0.1:${address.port}`);await page.addScriptTag({content:bundle.outputFiles[0].text});
   const lease=await page.evaluate(async()=>{const v=(globalThis as any).vault;const l=await v.sessionLease();await v.saveTelegramSession(l,'synthetic');await v.saveTelegramBots(l,[{username:'bravo',label:'Bravo',id:2,low:2,high:1},{username:'alpha',label:'Alpha',id:1,low:1,high:1}]);return l;});
   await page.reload();await page.addScriptTag({content:bundle.outputFiles[0].text});
   const result=await page.evaluate(async(old:string)=>{const v=(globalThis as any).vault;const locks=!!navigator.locks;const names=(await v.loadTelegramBots(old)).map((x:{username:string})=>x.username);const fresh=await v.sessionLease();await v.saveTelegramSession(fresh,'new synthetic');const late=await v.saveTelegramBots(old,[{username:'alpha',label:'Alpha',id:1,low:1,high:1}]);const empty=(await v.loadTelegramBots(fresh)).length;await v.saveTelegramBots(fresh,[]);await v.clearTelegramSessionLease(fresh);const present=await v.hasSavedTelegramSession();return {locks,names,late,empty,present};},lease);
   assert.deepEqual(result,{locks:true,names:['bravo','alpha'],late:false,empty:0,present:false});
- }finally{await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+ }finally{await browser.close();}
 });
 
-test('two native workers fence stale selection writes including an ABA change',async()=>{
+test('two native workers fence stale selection writes including an ABA change',{skip:chromiumPath ? false : chromiumSkipReason},async t=>{
  const bundle=await build({entryPoints:['src/telegram/saved-session.ts'],bundle:true,format:'iife',globalName:'vault',write:false});
- const server=createServer((_req,res)=>{res.setHeader('Content-Type','text/html');res.end('<!doctype html>');});await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();if(!address||typeof address==='string')throw Error('server');
- const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true,env:{...process.env,INSTABOX_HEADLESS:'1'}});
+ const server=createServer((_req,res)=>{res.setHeader('Content-Type','text/html');res.end('<!doctype html>');});await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise<void>(resolve=>server.close(()=>resolve())));
+ const address=server.address();if(!address||typeof address==='string')throw Error('server');
+ const browser=await chromium.launch({executablePath:chromiumPath,headless:true,chromiumSandbox:true,env:{...process.env,INSTABOX_HEADLESS:'1'}});
  try{const page=await browser.newPage();await page.goto(`http://127.0.0.1:${address.port}`);
   // tsx preserves nested function names with this harmless serialization helper.
   await page.addScriptTag({content:'globalThis.__name=(fn)=>fn;'});
@@ -44,5 +47,5 @@ test('two native workers fence stale selection writes including an ABA change',a
    }finally{first.terminate();second.terminate();URL.revokeObjectURL(url);}
   },bundle.outputFiles[0].text);
   assert.deepEqual(result,{won:true,stale:false,away:true,back:true,staleABA:false,late:false,revision:3,selection:['bravo'],locks:true});
- }finally{await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+ }finally{await browser.close();}
 });

@@ -3,6 +3,7 @@ html {
   color: var(--pulso-foreground);
   -webkit-text-size-adjust: 100%;
   scrollbar-gutter: stable;
+  scroll-padding-block-end: calc(var(--nav-height, 0px) + var(--mini-height, 0px) + 1rem);
 }
 
 .pulso-app,
@@ -15,11 +16,14 @@ html {
 
 .pulso-app {
   max-inline-size: 68rem;
-  padding: 1.5rem max(1.5rem,env(safe-area-inset-right,0px)) 2rem max(1.5rem,env(safe-area-inset-left,0px));
+  padding-block-start: 1.5rem;
+  /* The measured fixed bars already include their safe-area padding. */
+  padding-block-end: calc(var(--nav-height, 0px) + var(--mini-height, 0px) + max(2rem, env(safe-area-inset-bottom)));
+  padding-inline: max(1.5rem, env(safe-area-inset-left)) max(1.5rem, env(safe-area-inset-right));
 }
 
 .pulso-header { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-block-end: 1.5rem; }
-.pulso-header .pulso-wordmark { font-size: 1.65rem; font-weight: 750; letter-spacing: -.06em; color: var(--pulso-accent); margin: 0; }
+.pulso-header .pulso-wordmark { font-size: 1.65rem; font-weight: 750; letter-spacing: -.06em; color: var(--pulso-accent-text); margin: 0; }
 .pulso-header h1 { flex: 1 1 18rem; font-size: clamp(1.3rem,3vw,2rem); letter-spacing: -.04em; line-height: 1.2; margin: 0; }
 .pulso-app section { border-color: var(--pulso-border); background: var(--pulso-surface); border-radius: var(--pulso-radius); }
 .pulso-app h2 { font-size: 1.35rem; line-height: 1.3; letter-spacing: -.025em; }
@@ -27,18 +31,18 @@ html {
 .pulso-app p { line-height: 1.6; }
 .pulso-app button { background: var(--pulso-surface); color: var(--pulso-foreground); border: 1px solid var(--pulso-border); border-radius: .7rem; min-block-size: 44px; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .pulso-app button:active:not(:disabled) { transform: scale(.98); }
-.pulso-app button:focus-visible,.pulso-app input:focus-visible,.pulso-app select:focus-visible,.pulso-app summary:focus-visible { outline: 3px solid var(--pulso-accent); outline-offset: 3px; }
-.pulso-app button[aria-pressed="true"] { background: var(--pulso-soft); color: var(--pulso-accent); }
-.pulso-app input,.pulso-app select,.pulso-app textarea { font-size: max(1rem,16px); color: var(--pulso-foreground); background: var(--pulso-surface); accent-color: var(--pulso-accent); }
-.pulso-app input:not([type="checkbox"]):not([type="radio"]),.pulso-app select,.pulso-app textarea { max-inline-size: 100%; min-inline-size: 0; border-color: var(--pulso-border); }
-.pulso-app progress { accent-color: var(--pulso-accent); }
+.pulso-app button:focus-visible,.pulso-app input:focus-visible,.pulso-app select:focus-visible,.pulso-app summary:focus-visible { outline: 3px solid var(--pulso-accent-text); outline-offset: 3px; }
+.pulso-app button[aria-pressed="true"] { background: var(--pulso-soft); color: var(--pulso-accent-text); }
+.pulso-app input,.pulso-app select,.pulso-app textarea { font-size: max(1rem,16px); color: var(--pulso-foreground); background: var(--pulso-surface); accent-color: var(--pulso-accent-text); }
+.pulso-app input:not([type="checkbox"]):not([type="radio"]),.pulso-app select,.pulso-app textarea { max-inline-size: 100%; min-inline-size: 0; border-color: var(--pulso-control-border); }
+.pulso-app progress { accent-color: var(--pulso-accent-text); }
 .pulso-app .tracks>li { border-color: var(--pulso-border); }
 .pulso-app .home-view__item { background: var(--pulso-canvas); border-color: var(--pulso-border); border-radius: .8rem; }
 .pulso-app .shell-nav { padding: .25rem; gap: .25rem; border-radius: .8rem; border: 1px solid var(--pulso-border); }
 .pulso-app .shell-nav button { border-color: transparent; background: transparent; }
-.pulso-app .shell-nav button[aria-current="page"] { background: var(--pulso-soft); color: var(--pulso-accent); font-weight: 650; }
+.pulso-app .shell-nav button[aria-current="page"] { background: var(--pulso-soft); color: var(--pulso-accent-text); font-weight: 650; }
 
-.pulso-app .mini-player { padding: .7rem max(1rem,env(safe-area-inset-right,0px)) .7rem max(1rem,env(safe-area-inset-left,0px)); gap: .5rem; flex-wrap: nowrap; border: 1px solid var(--pulso-border); background: var(--pulso-surface); box-shadow: 0 -.25rem 1.5rem #10244c0a; }
+.pulso-app .mini-player { gap: .5rem; flex-wrap: nowrap; border: 1px solid var(--pulso-border); background: var(--pulso-surface); box-shadow: 0 -.25rem 1.5rem #10244c0a; }
 .pulso-app .mini-player__details { display: block; flex: 1 1 auto; min-inline-size: 0; padding: .25rem 0; text-align: start; border: 0; border-radius: .3rem; background: transparent; }
 .mini-player__title,.mini-player__artist { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mini-player__title { font-size: .9rem; line-height: 1.5; font-weight: 650; }
@@ -76,12 +80,12 @@ html {
 .player-surface>ol li button:first-child { flex: 1 1 12rem; text-align: start; }
 .player-surface[data-open="true"]>.artwork-panel { margin-block: 1rem; }
 .player-surface[data-open="true"]>.artwork-panel .artwork-image,.player-surface[data-open="true"]>.artwork-panel .artwork-placeholder { inline-size: min(100%,13rem); block-size: auto; aspect-ratio: 1; object-fit: cover; border-radius: .8rem; }
-.player-surface[data-open="true"]>.artwork-panel .artwork-placeholder { min-block-size: 0; background: var(--pulso-soft); color: var(--pulso-accent); font-size: 3rem; }
+.player-surface[data-open="true"]>.artwork-panel .artwork-placeholder { min-block-size: 0; background: var(--pulso-soft); color: var(--pulso-accent-text); font-size: 3rem; }
 .player-surface[data-open="true"]>.artwork-panel>p { color: var(--pulso-muted); font-size: .8rem; }
 .pulso-visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 @media (max-width: 600px) {
-  .pulso-app { padding: 1rem max(1rem,env(safe-area-inset-right,0px)) 1.5rem max(1rem,env(safe-area-inset-left,0px)); }
+  .pulso-app { padding-block-start: 1rem; }
   .pulso-header h1 { order: 2; flex-basis: 100%; }
   .pulso-header>button { margin-inline-start: auto; }
   .pulso-app section { padding: 1rem; }
@@ -97,7 +101,7 @@ html {
   .pulso-app .mini-player { flex-wrap: wrap; }
 }
 @media (hover: hover) and (pointer: fine) {
-  .pulso-app button:hover:not(:disabled) { border-color: var(--pulso-accent); }
+  .pulso-app button:hover:not(:disabled) { border-color: var(--pulso-accent-text); }
 }
 @media (prefers-reduced-motion: reduce) {
   .pulso-app button:active:not(:disabled) { transform: none; }
@@ -105,7 +109,7 @@ html {
 }
 
 /* Music-first shell */
-.pulso-app { max-inline-size:none; margin:auto; padding-bottom:calc(var(--nav-height,0px) + var(--mini-height,0px) + 3rem); }
+.pulso-app { max-inline-size:none; margin:auto; }
 .pulso-header { max-width:76rem; margin:0 auto 1.75rem; }
 .pulso-header>button { margin-left:auto; }
 .home-view,.library-view,.settings-view,.settings-technical,[aria-label="Buscador musical"] { max-width:76rem; margin-inline:auto; }
@@ -114,34 +118,34 @@ html {
 .home-view__intro { color:var(--pulso-muted); margin:0 0 1.5rem; }
 .home-quick { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; }
 .pulso-app .home-quick button { display:flex; align-items:center; text-align:left; gap:.8rem; padding:0 .8rem 0 0; overflow:hidden; font-weight:650; min-height:64px; }
-.home-quick button>span,.home-art { display:grid; place-items:center; background:var(--pulso-soft); color:var(--pulso-accent); font-size:1.6rem; flex:none; aspect-ratio:1; width:64px; }
+.home-quick button>span,.home-art { display:grid; place-items:center; background:var(--pulso-soft); color:var(--pulso-accent-text); font-size:1.6rem; flex:none; aspect-ratio:1; width:64px; }
 .home-view section { margin-block:2rem; }
-.home-continue { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; padding:1rem; background:var(--pulso-surface); border-radius:1rem; }
-.home-continue div { flex:1; min-width:8rem; }.home-continue p { margin:.15rem 0; color:var(--pulso-muted); }
-.home-recent,.home-playlists { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:1rem; padding:0; list-style:none; }
-.home-recent button,.home-playlists button { display:grid; text-align:left; gap:.3rem; width:100%; padding:.65rem; }
-.home-recent .home-art,.home-playlists .home-art { width:100%; border-radius:.6rem; font-size:3rem; }.home-recent small,.home-playlists small { color:var(--pulso-muted); }
+
+
+:is(.home-playlists, .home-albums) { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:1rem; padding:0; list-style:none; }
+:is(.home-playlists, .home-albums) button { display:grid; text-align:left; gap:.3rem; width:100%; padding:.65rem; }
+:is(.home-playlists, .home-albums) .home-art { width:100%; border-radius:.6rem; font-size:3rem; }:is(.home-playlists, .home-albums) small { color:var(--pulso-muted); }
 .home-empty { background:var(--pulso-surface); padding:1.3rem; border-radius:1rem; }
 .library-tabs { display:flex; flex-wrap:wrap; gap:.5rem; margin:1.5rem 0; }.library-tabs button { padding:.55rem 1rem; border-radius:2rem; }
 .library-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:1rem; }
 .pulso-app .collection-card { display:grid; align-content:start; text-align:left; gap:.35rem; border:0; padding:.65rem; min-width:0; }
-.collection-card__art { display:grid; place-items:center; width:100%; aspect-ratio:1; border-radius:.7rem; background:var(--pulso-soft); color:var(--pulso-accent); font-size:3rem; }
-.collection-card .favorite-art { background:linear-gradient(135deg,#2855c8,#a4bfff); color:white; }
+.collection-card__art { display:grid; place-items:center; width:100%; aspect-ratio:1; border-radius:.7rem; background:var(--pulso-soft); color:var(--pulso-accent-text); font-size:3rem; }
+.collection-card .favorite-art { background:linear-gradient(135deg,#4a0817,#9e1b38); color:white; }
 .collection-card>span:last-child { color:var(--pulso-muted); font-size:.85rem; }.library-detail { margin-top:1rem; }.library-detail>h3 { font-size:1.8rem; }
 .create-playlist { margin-top:2rem; }.settings-view,.settings-technical { margin-block:1rem; }.settings-technical section,.settings-view section { margin-block:1rem; }
 .pulso-app .mini-player { left:1rem; right:1rem; bottom:calc(var(--nav-height,0px) + .5rem); border-radius:1rem; }
 .player-surface[data-open="true"]>.artwork-panel .artwork-image,.player-surface[data-open="true"]>.artwork-panel .artwork-placeholder { inline-size:min(100%,24rem); }
 .player-extra { margin:1rem 0; border:1px solid var(--pulso-border); border-radius:.8rem; padding:.7rem; }.player-extra summary { cursor:pointer; font-weight:650; }
 @media(min-width:1024px) {
- .pulso-app { padding-left:15rem; padding-right:2rem; }
+ .pulso-app { padding-inline: max(15rem, env(safe-area-inset-left)) max(2rem, env(safe-area-inset-right)); }
  .pulso-header .shell-nav { position:fixed; z-index:12; left:1rem; top:5rem; bottom:calc(var(--mini-height,0px) + 2rem); width:12rem; display:flex; flex-direction:column; align-items:stretch; background:var(--pulso-surface); padding:.75rem; }
  .shell-nav button { text-align:left; padding:.7rem 1rem; }
- .pulso-app .mini-player { left:0; right:0; bottom:0; border-radius:0; padding-inline:2rem; }
+ .pulso-app .mini-player { left:0; right:0; bottom:0; border-radius:0; }
  .pulso-app .mini-player__details { max-width:30%; }
  .pulso-app .mini-player__actions { margin-inline:auto; }
  .home-quick { grid-template-columns:repeat(4,minmax(0,1fr)); }
 }
-@media(max-width:600px) { .pulso-header { margin-bottom:1.2rem; }.pulso-app .mini-player { left:.75rem; right:.75rem; }.home-recent,.home-playlists { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:600px) { .pulso-header { margin-bottom:1.2rem; }.pulso-app .mini-player { left:.75rem; right:.75rem; }:is(.home-playlists, .home-albums) { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 .desktop-transport,.desktop-seek,.desktop-volume { display:none; }
 @media(min-width:1024px) {
  .pulso-app .mini-player { display:grid; grid-template-columns:minmax(12rem,1fr) minmax(14rem,1.2fr) minmax(8rem,.7fr); grid-template-rows:auto auto; column-gap:2rem; }
@@ -165,32 +169,21 @@ html {
 
 /* Cards grow with the reader's text size; their contents may shrink within a grid. */
 .pulso-app .home-quick,
-.pulso-app .home-recent,
-.pulso-app .home-playlists,
+.pulso-app :is(.home-playlists, .home-albums),
 .pulso-app .library-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
 }
 .pulso-app .home-quick { max-inline-size: 64rem; }
-.pulso-app .home-recent > li,
-.pulso-app .home-recent button,
-.pulso-app .home-playlists button,
+.pulso-app :is(.home-playlists, .home-albums) button,
 .pulso-app .collection-card { min-inline-size: 0; }
-.pulso-app .home-recent button,
-.pulso-app .home-playlists button,
+.pulso-app :is(.home-playlists, .home-albums) button,
 .pulso-app .collection-card { grid-template-columns: minmax(0, 1fr); }
 .pulso-app .home-art,
 .pulso-app .collection-card__art { min-inline-size: 0; max-inline-size: 100%; }
-.pulso-app .home-recent strong,
-.pulso-app .home-recent small,
-.pulso-app .home-playlists strong,
-.pulso-app .home-playlists small { min-inline-size: 0; overflow-wrap: anywhere; }
-.pulso-app .home-continue > div {
-  flex: 1 1 8rem;
-  min-inline-size: 0;
-  max-inline-size: 100%;
-}
-.pulso-app .home-recent,
-.pulso-app .home-playlists,
+.pulso-app :is(.home-playlists, .home-albums) strong,
+.pulso-app :is(.home-playlists, .home-albums) small { min-inline-size: 0; overflow-wrap: anywhere; }
+
+.pulso-app :is(.home-playlists, .home-albums),
 .pulso-app .library-grid {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 9rem), 1fr));
 }
@@ -210,4 +203,11 @@ html {
     gap: 0;
     overflow-wrap: normal;
   }
+}
+
+@media (max-width: 1023px) {
+  .pulso-app:not([data-player-open="true"])::after { content: ""; position: fixed; inset-inline: 0; inset-block-end: 0; block-size: calc(var(--nav-height, 0px) + var(--mini-height, 0px) + .85rem); z-index: 18; pointer-events: none; background: linear-gradient(to bottom, transparent 0%, var(--pulso-canvas) 22%, var(--pulso-canvas) 100%); }
+  .pulso-app .shell-nav { z-index: 20; }
+  .pulso-app .mini-player { z-index: 25; }
+  .pulso-app .mini-player :is(.mini-player__details, .mini-player__toggle, .mini-player__expand):focus-visible { outline-offset: -3px; }
 }

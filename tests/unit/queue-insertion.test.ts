@@ -91,7 +91,7 @@ test('queue limits are inclusive at 1000, no partial insertion and no UUID forma
 for(const state of ['paused','playing','loading','buffering','error','ended'] as State[])test(`Player insertion preserves media, listeners, error, modes and current in ${state}`,()=>{
  const {audio,player,observers}=setup();player.select(1);player.restoreModes('all',['A2','B','A1']);
  if(state==='paused')audio.event('pause');else if(state==='playing')audio.event('playing');else if(state==='buffering')audio.event('waiting');
- else if(state==='error'){audio.error={code:2};audio.event('error');}else if(state==='ended'){player.setRepeat('off');player.select(0);audio.ended=true;audio.event('ended');}
+ else if(state==='error'){audio.error={code:2};audio.event('error');audio.event('error');}else if(state==='ended'){player.setRepeat('off');player.select(0);audio.ended=true;audio.event('ended');}
  assert.equal(player.state,state);audio.currentTime=12;const before=snapshot(player,audio),observed=observers();audio.calls=[];
  let emitted=0,installed=false;player.subscribe(()=>{emitted++;assert.equal(installed,true);assert.ok(player.entries.some(e=>e.id==='X'));});
  const result=player.insertQueue(request(player),p=>{assert.equal(p.currentEntryId,before.current.id);assert.equal(player.entries,before.entries);installed=true;return true;});
@@ -114,7 +114,7 @@ test('insert before current in natural order derives current index by ID, explic
 test('vacancy insertion stays unselected and paused without source/load; first explicit Play selects zero',async()=>{
  const {audio,player}=setup([]);audio.calls=[];let emits=0;player.subscribe(()=>emits++);
  assert.equal(player.insertQueue(request(player,'next',[e('X')]),()=>true).kind,'inserted');
- assert.equal(emits,1);assert.equal(player.index,-1);assert.equal(player.current,undefined);assert.equal(player.state,'paused');assert.equal(audio.src,'');assert.deepEqual(audio.calls,[]);
+ assert.equal(emits,1);assert.equal(player.index,-1);assert.equal(Boolean(player.current),false);assert.equal(player.state,'paused');assert.equal(audio.src,'');assert.equal(audio.calls.length,0);
  assert.equal(player.insertQueue(request(player,'next',[e('Y')]),()=>true).kind,'inserted');assert.deepEqual(ids(player.entries),['Y','X']);
  await player.play();assert.equal(player.current.id,'Y');assert.equal(audio.src,e('Y').src);assert.equal(audio.calls.filter(c=>c==='play').length,1);
 });

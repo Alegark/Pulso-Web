@@ -5,13 +5,20 @@ import {bytesToHex} from '@noble/hashes/utils.js';
 import {openDatabase,request} from '../storage/database';
 import {transactionDone} from '../storage/transaction-done';
 import {validAsset,type LocalAsset,type Track} from './library';
+import {isUuid} from '../telegram/sources-protocol';
 import {ArtworkError,validateArtwork,type ArtworkFailure,type ArtworkInspection} from '../imports/artwork';
 export type {ArtworkFailure,ArtworkInspection} from '../imports/artwork';
 /** Versioned metadata entity in settings; never an audio LocalAsset or a persisted URL. */
 export type Artwork={version:1;trackId:string;assetId:string;audioSha256:string;provenance:'embedded-id3'|'embedded-mp4'|'embedded-riff-id3'|'manual';manual:boolean;updatedAt:string;revision:number}&ArtworkInspection;
 export type ArtworkRead={state:'unrecorded';revision:0}|{state:'unavailable';revision:number;failureCode:ArtworkFailure;repairToken?:string}|Artwork;
-const key=(id:string)=>`artwork:v1:${id}`;
+export const ARTWORK_PREFIX='artwork:v1:';
+const key=(id:string)=>ARTWORK_PREFIX+id;
 interface Snapshot {track:Track;asset:LocalAsset;artwork?:Artwork}
+async function readArtworkRow(trackId:string){
+ const db=await openDatabase();try{const tx=admittedTransaction(db,['tracks','settings']);const done=transactionDone(tx);
+ const [track,artwork]=await Promise.all([request<Track|undefined>(tx.objectStore('tracks').get(trackId)),request<Artwork|undefined>(tx.objectStore('settings').get(key(trackId)))]);
+ await done;return {track,artwork};}finally{closeDatabase(db);}
+}
 async function snapshot(trackId:string):Promise<Snapshot>{
  const db=await openDatabase();try{const tx=admittedTransaction(db,['tracks','assets','settings']);const done=transactionDone(tx);
  const track=await request<Track|undefined>(tx.objectStore('tracks').get(trackId));
@@ -58,15 +65,20 @@ async function unavailable(s:Snapshot,code:ArtworkFailure):Promise<ArtworkRead>{
  }catch{return {state:'unavailable',revision,failureCode:'conflict'};}
 }
 function validRecord(a:Artwork,s:Snapshot):boolean{
- return a?.version===1&&a.trackId===s.track.id&&a.assetId===s.asset.id&&a.audioSha256===s.asset.sha256&&
+ // Old records can point to a retired generation of the same audio.
+ return a?.version===1&&a.trackId===s.track.id&&(a.assetId===s.asset.id||isUuid(a.assetId))&&a.audioSha256===s.asset.sha256&&
  Number.isSafeInteger(a.revision)&&a.revision>0&&a.revision<Number.MAX_SAFE_INTEGER&&typeof a.manual==='boolean'&&a.manual===(a.provenance==='manual')&&
  ['manual','embedded-id3','embedded-mp4','embedded-riff-id3'].includes(a.provenance)&&typeof a.updatedAt==='string'&&Number.isFinite(Date.parse(a.updatedAt))&&
  ['ready','absent','not-inspected','invalid','omitted'].includes(a.state);
 }
 /** No Object URL is created: UI owns createObjectURL/revokeObjectURL and stale selection checks. */
-export async function readArtwork(trackId:string):Promise<ArtworkRead>{
+export async function readArtwork(trackId:string,allowMetadataOnly=false):Promise<ArtworkRead>{
  let revision=0;let observed:Snapshot|undefined;
  try{
+  if(allowMetadataOnly){
+   const {track,artwork}=await readArtworkRow(trackId);
+   if(track?.id===trackId&&track.assetId===null&&!artwork)return {state:'unrecorded',revision:0};
+  }
   const s=await snapshot(trackId),a=s.artwork;observed=s;if(!a)return {state:'unrecorded',revision:0};
   if(!validRecord(a,s))return unavailable(s,'conflict');
   revision=a.revision;

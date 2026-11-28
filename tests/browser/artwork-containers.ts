@@ -2,6 +2,7 @@ import {authorizeRealmFixture,initializeRealmFixture} from './realm-fixture';
 import {beginWorkerAttempt} from '../../src/storage/database-realms';
 authorizeRealmFixture();await initializeRealmFixture();
 import {parseBlob} from 'music-metadata';
+import {issuedFailure} from '../../src/errors/app-failure';
 import {AudioMetadataLimitError,ArtworkError,inspectEmbeddedArtwork,audioMetadataView,MAX_AUDIO_TABLE_ENTRIES,MAX_AUDIO_TABLE_BYTES,MAX_ID3_BYTES} from '../../src/imports/artwork';
 import {importFile} from '../../src/imports/import-file';
 import {readArtwork,setManualArtwork,type Artwork} from '../../src/library/artwork';
@@ -214,7 +215,11 @@ await check('presupuesto de tablas MP4: cap+1 y 2 MiB encoded rechazan antes del
   let reads=0;const slice=file.slice.bind(file);
   file.slice=(start=0,end=file.size,type)=>{const b=slice(start,end,type),read=b.arrayBuffer.bind(b);b.arrayBuffer=()=>{reads+=b.size;return read();};return b;};
   let rejected=false;try{await audioMetadataView(file,'audio/mp4');}catch(e){rejected=e instanceof AudioMetadataLimitError;}assert(rejected&&reads<1024,'preflight sin leer payload');
-  let message='';try{await local(file);}catch(e){message=(e as Error).message;}assert(message.includes('supera los límites de metadatos')&&!message.includes('dañado'),'error recurso accionable');
+  const operationId=crypto.randomUUID();let failure:unknown;
+  try{await importFile(file,new AbortController().signal,()=>{},{backend:'idb',operationId});}catch(error){failure=error;}
+  assert(failure instanceof Error&&failure.message.includes('supera los límites de metadatos')&&failure.message.includes('tablas de audio más pequeñas')&&!failure.message.includes('dañado'),'error recurso accionable');
+  const cause=issuedFailure(failure);
+  assert(cause?.phase==='parse'&&cause.code==='limit-exceeded'&&reads<1024&&!await readRecord('jobs',operationId),'límite perdió clasificación o creó staging');
  }
  // No count-based allocation for constant sample size. Full uint32 count cannot
  // claim more sample bytes than the file actually contains.

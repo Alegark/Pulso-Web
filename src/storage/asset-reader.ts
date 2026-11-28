@@ -1,7 +1,7 @@
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import {AppFailure,atBoundary,fail,fromKnownError,issuedFailure,makeFailure,nativeDOMName,missingAssetException,type FailureV1} from '../errors/app-failure';
-import {readRecord} from './database';
+import {admittedTransaction,closeDatabase,committed,openDatabase,readRecord,readRecordFrom,request} from './database';
 import type {LocalAsset} from '../library/library';
 export const ASSET_DIRECTORY='pulso-assets-v1';
 export const WRITER_LOCK='pulso-web:local:asset-writer';
@@ -16,7 +16,7 @@ export interface AssetReader {
   * onChunk requires integrity=true; otherwise unknown/input-invalid, no reads.
   * check may guard presence-only verification without adding OPFS byte reads.
   */
- verifyDetailed(integrity?:boolean,scan?:{check?:()=>void;onChunk?:(bytes:Uint8Array)=>void}):Promise<ReadVerificationV1>;
+ verifyDetailed(integrity?:boolean|'presence',scan?:{check?:()=>void;onChunk?:(bytes:Uint8Array)=>void}):Promise<ReadVerificationV1>;
  readRange(start:number,end:number):Promise<Uint8Array>;
  release():void;
 }
@@ -25,7 +25,7 @@ export function verificationFailure(error:unknown,backend:LocalAsset['backend'])
  return {state:f.code==='asset-missing'?'missing':['length-mismatch','digest-mismatch','local-corrupt'].includes(f.code)?'corrupt':'unknown',failure:f};
 }
 // Lock lifetime belongs to the caller, including verification failures.
-export async function openAssetReader(asset:LocalAsset,current=true,control?:{signal:AbortSignal}):Promise<AssetReader> {
+export async function openAssetReader(asset:LocalAsset,current=true,control?:{signal:AbortSignal;database?:IDBDatabase}):Promise<AssetReader> {
  let unlock:(()=>void)|undefined;
  let acquired!:()=>void, rejected!:(error:unknown)=>void;
  const ready=new Promise<void>((resolve,reject)=>{acquired=resolve;rejected=reject;});
@@ -39,9 +39,12 @@ export async function openAssetReader(asset:LocalAsset,current=true,control?:{si
  let released=false;
  const release=()=>{if(!released){released=true;unlock?.();}};
  const checkSignal=()=>{if(control?.signal.aborted)fail('open','internal','cancelled',asset.backend);};
+ // The caller owns any supplied connection. Each read still uses its own
+ // short transaction, so no transaction stays open across stream backpressure.
+ const read=<T>(store:string,key:IDBValidKey)=>control?.database?readRecordFrom<T>(control.database,store,key):readRecord<T>(store,key);
  try{
  checkSignal();
- if(current){const now=await atBoundary('read','idb',()=>readRecord<LocalAsset>('assets',asset.id));if(!now||now.revision!==asset.revision||now.backend!==asset.backend||now.storageKey!==asset.storageKey)fail('open','integrity','asset-changed',asset.backend);}
+ if(current){const now=await atBoundary('read','idb',()=>read<LocalAsset>('assets',asset.id));if(!now||now.revision!==asset.revision||now.backend!==asset.backend||now.storageKey!==asset.storageKey)fail('open','integrity','asset-changed',asset.backend);}
  checkSignal();
  let file:File|null=null;
  if(asset.backend==='opfs'){
@@ -53,21 +56,28 @@ export async function openAssetReader(asset:LocalAsset,current=true,control?:{si
  catch(error){if(nativeDOMName(error)==='NotFoundError')throw missingAssetException();throw issuedFailure(error)?error:AppFailure.create(fromKnownError(error,{phase:'open',backend:asset.backend}));}
  }
  checkSignal();
+ const readFileRange=async(start:number,end:number)=>{
+  const bytes=new Uint8Array(await file!.slice(start,end).arrayBuffer());
+  if(bytes.length!==end-start)fail('read','integrity','length-mismatch','opfs');
+  return bytes;
+ };
  const readRange=async(start:number,end:number)=>atBoundary('read',asset.backend,async()=>{
  if(released)fail('read','internal','input-invalid',asset.backend);
  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<=start||end>asset.bytes||end-start>65536)fail('read','internal','input-invalid',asset.backend);
- if(file){const bytes=new Uint8Array(await file.slice(start,end).arrayBuffer());if(bytes.length!==end-start)fail('read','integrity','length-mismatch','opfs');return bytes;}
+ if(file)return readFileRange(start,end);
  const parts:Uint8Array[]=[];let length=0;
  for(let i=Math.floor(start/65536);i<=Math.floor((end-1)/65536);i++){
- const chunk=await readRecord<unknown>('chunks',[asset.storageKey,i]);
+ const chunk=await read<unknown>('chunks',[asset.storageKey,i]);
  if(chunk===undefined)fail('read','integrity','asset-missing','idb');
  if(!(chunk instanceof Uint8Array))fail('read','integrity','local-corrupt','idb');
  if(chunk.length!==Math.min(65536,asset.bytes-i*65536))fail('read','integrity','length-mismatch','idb');
- const part=chunk.slice(Math.max(0,start-i*65536),Math.min(chunk.length,end-i*65536));parts.push(part);length+=part.length;
+ const from=Math.max(0,start-i*65536),to=Math.min(chunk.length,end-i*65536);
+ if(from===0&&to===chunk.length&&chunk.length===end-start)return chunk;
+ const part=chunk.subarray(from,to);parts.push(part);length+=part.length;
  }
  const bytes=new Uint8Array(length);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.length;}return bytes;
  });
- const verifyDetailed=async(integrity=true,scan?:{check?:()=>void;onChunk?:(bytes:Uint8Array)=>void}):Promise<ReadVerificationV1>=>{
+ const verifyDetailed=async(integrity:boolean|'presence'=true,scan?:{check?:()=>void;onChunk?:(bytes:Uint8Array)=>void}):Promise<ReadVerificationV1>=>{
  // Internal synchronous consumers only. Callback failures are not evidence of
  // missing/corrupt storage; preserve issued guards, otherwise report unknown.
  const callback=(work:()=>void)=>{try{work();}catch(error){
@@ -81,14 +91,57 @@ export async function openAssetReader(asset:LocalAsset,current=true,control?:{si
  check();
  if(released)fail('verify','internal','input-invalid',asset.backend);
  // Presence-only OPFS must never acquire a hidden byte-reading pass.
- if(!integrity&&scan?.onChunk)fail('verify','internal','input-invalid',asset.backend);
+ if(integrity!==true&&scan?.onChunk)fail('verify','internal','input-invalid',asset.backend);
  if(file&&file.size!==asset.bytes)fail('verify','integrity','length-mismatch',asset.backend);
- const hash=integrity?sha256.create():null;
- // One pass; OPFS presence-only retains its previous no-read behavior.
- if(hash||!file)for(let offset=0;offset<asset.bytes;offset+=65536){
- check();const bytes=await readRange(offset,Math.min(offset+65536,asset.bytes));check();hash?.update(bytes);
- if(scan?.onChunk){check();callback(()=>scan.onChunk!(bytes));}
+ const hash=integrity===true?sha256.create():null;
+ const consume=(bytes:Uint8Array)=>{check();hash?.update(bytes);if(scan?.onChunk)callback(()=>scan.onChunk!(bytes));};
+ if(file&&hash){
+  // An incremental consumer keeps the 64 KiB chunk contract while sharing
+  // one filesystem read for sixteen consecutive chunks.
+  const step=scan?.onChunk?1024*1024:65536;
+  for(let offset=0;offset<asset.bytes;offset+=step){
+   check();
+   const end=Math.min(offset+step,asset.bytes);
+   if(step===65536){consume(await readRange(offset,end));continue;}
+   const block=await atBoundary('read','opfs',()=>readFileRange(offset,end));
+   for(let start=0;start<block.length;start+=65536)consume(block.subarray(start,start+65536));
+  }
  }
+ if(!file)await atBoundary('verify','idb',async()=>{
+  const db=control?.database??await openDatabase();
+  const batchChunks=scan?.onChunk?16:8;
+  try{
+   if(integrity==='presence'){
+    const range=IDBKeyRange.bound([asset.storageKey,0],[asset.storageKey,asset.chunks-1]);
+    const tx=admittedTransaction(db,'chunks'),done=committed(tx);
+    const count=await request(tx.objectStore('chunks').count(range));await done;
+    if(count!==asset.chunks)fail('verify','integrity','asset-missing','idb');
+   }else for(let first=0;first<asset.chunks;first+=batchChunks){
+    check();const tx=admittedTransaction(db,'chunks'),done=committed(tx),store=tx.objectStore('chunks');
+    void done.catch(()=>{});
+    const count=Math.min(batchChunks,asset.chunks-first);
+    let parts:unknown[];
+    if(scan?.onChunk){
+     const range=IDBKeyRange.bound([asset.storageKey,first],[asset.storageKey,first+count-1]);
+     const [values,keys]=await Promise.all([request(store.getAll(range,count)),request(store.getAllKeys(range,count))]);
+     if(values.length!==count||keys.length!==count||keys.some((key,i)=>!Array.isArray(key)||key.length!==2||key[0]!==asset.storageKey||key[1]!==first+i)){
+      fail('read','integrity','asset-missing','idb');
+     }
+     parts=values;
+    }else{
+     parts=await Promise.all(Array.from({length:count},(_,i)=>request<unknown>(store.get([asset.storageKey,first+i]))));
+    }
+    await done;
+    for(let i=0;i<parts.length;i++){
+     const chunk=parts[i];
+     if(chunk===undefined)fail('verify','integrity','asset-missing','idb');
+     if(!(chunk instanceof Uint8Array))fail('verify','integrity','local-corrupt','idb');
+     if(chunk.length!==Math.min(65536,asset.bytes-(first+i)*65536))fail('verify','integrity','length-mismatch','idb');
+     consume(chunk);
+    }
+   }
+  }finally{if(!control?.database)closeDatabase(db);}
+ });
  check();
  if(hash&&bytesToHex(hash.digest())!==asset.sha256)fail('verify','integrity','digest-mismatch',asset.backend);
  check();return {state:'valid',failure:null};

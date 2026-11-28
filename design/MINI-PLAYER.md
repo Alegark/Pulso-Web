@@ -14,4 +14,4 @@ En móvil se conservan título, intérprete, Play/Pausa y abrir, con controles d
 
 La presentación está concentrada en `src/ui/mini-player.css`, importado después de las hojas generales. `MiniPlayer.tsx` conserva handlers y nombres accesibles; no se cambian el reproductor, la cola, Telegram, la pertenencia a Biblioteca ni el almacenamiento. No se crea otro Audio. La portada opcional del contrato sólo se presenta cuando el propietario la proporciona; este incremento no añade lectura de imágenes ni peticiones remotas.
 
-Las pruebas locales usan datos y audio propios en perfiles aislados, separados de la sesión y música del propietario. Evidencia y límites: `docs/evidence-mini-player-layout-web.json` y `.local/mini-player-layout/`.
+Las pruebas locales usan datos y audio propios en perfiles aislados, separados de la sesión y música del propietario. Evidencia y límites: `docs/evidence/evidence-mini-player-layout-web.json` y `.local/mini-player-layout/`.

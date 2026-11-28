@@ -29,7 +29,18 @@ export class Player {
   private listeners: [string, EventListener][] = [];
   private subscribers = new Set<(change:PlayerChange) => void>();
   private suspended = false;
-  constructor(readonly audio: Media, private admitted: () => boolean = () => true, private failureObserver?:FailureObserver) {}
+  private endedConsumed = false;
+  private restorePosition:number|null=null;
+  private retryPassiveRead = false;
+  private selectedSource:string|null=null;
+  private playRequested=false;
+  private rejectedEntries=new Set<string>();
+  get pendingRestorePosition() { return this.restorePosition; }
+  get sourceForProtection() {
+    return this.current && this.audio.src===this.selectedSource ? this.current.src : this.audio.src;
+  }
+  constructor(readonly audio: Media, private admitted: () => boolean = () => true,
+    private failureObserver?:FailureObserver, private selectionUrl:(src:string)=>string=src=>src) {}
   private observe(phase:'play'|'read') {
     let notify:((code:PlayerFailureCode)=>void)|undefined;try{notify=this.failureObserver?.(phase);}catch{/* optional observer */}
     let used=false;return (code:PlayerFailureCode)=>{if(used)return;used=true;try{notify?.(code);}catch{/* diagnostics cannot affect engine */}};
@@ -48,7 +59,14 @@ export class Player {
     if (this.inserting || !this.admitted()) return; this.suspended = false;
     ++this.revision; ++this.epoch;
     this.invalidate(); this.audio.pause(); this.entries = entries.map(e => ({...e}));
+    this.rejectedEntries.clear();
     this.index = -1; this.shuffleOrder=null; this.state = 'idle'; this.emit();
+  }
+  /** Full effective order, including playback history and the current entry. */
+  playbackOrder():readonly Readonly<Entry>[] {
+    if(!this.shuffleOrder)return [...this.entries];
+    const byId=new Map(this.entries.map(entry=>[entry.id,entry]));
+    return this.shuffleOrder.map(id=>byId.get(id)!);
   }
   structure():QueueStructure {
     return Object.freeze({queueRevision:this.revision,queueEpoch:this.epoch,
@@ -87,6 +105,10 @@ export class Player {
     this.emit();return inserted;
   }
   private invalidate() {
+    this.restorePosition=null;
+    this.retryPassiveRead=false;
+    this.selectedSource=null;
+    this.playRequested=false;
     ++this.generation;
     this.listeners.forEach(([type, fn]) => this.audio.removeEventListener(type, fn));
     this.listeners = [];
@@ -95,38 +117,84 @@ export class Player {
     if (!this.allowed) return;
     const entry = this.entries[index]; if (!entry) return;
     this.invalidate(); this.audio.pause(); this.index = index; this.error = '';this.lastFailure=null;
-    const generation = this.generation; let consumed = false; const failed=this.observe('read');
+    this.rejectedEntries.delete(entry.id);
+    const src=this.selectionUrl(entry.src);
+    this.selectedSource=src;
+    this.restorePosition=Number.isFinite(restorePosition)&&restorePosition>0?restorePosition:null;
+    this.retryPassiveRead=!autoplay;
+    const generation = this.generation; this.endedConsumed = false; const failed=this.observe('read');
     const on = (type: string, fn: () => void) => {
-      const guarded: EventListener = () => { if (this.allowed && generation === this.generation && this.audio.src === entry.src) fn(); };
+      const guarded: EventListener = () => { if (this.allowed && generation === this.generation && this.audio.src === src && !this.rejectedEntries.has(entry.id)) fn(); };
       this.listeners.push([type, guarded]); this.audio.addEventListener(type, guarded);
     };
     on('playing', () => { this.error='';this.lastFailure=null;this.state = 'playing'; this.emit(); });
-    on('pause', () => { if (this.state !== 'ended') this.state = 'paused'; this.emit(); });
+    on('pause', () => { if (this.state !== 'ended' && this.state !== 'error') this.state = 'paused'; this.emit(); });
     on('waiting', () => { this.state = 'buffering'; this.emit(); });
     on('timeupdate', () => this.emit('progress'));
-    on('loadedmetadata', () => { if (restorePosition > 0) { this.seek(restorePosition); restorePosition = 0; } if (this.state === 'loading') this.state = 'paused'; this.emit(); });
-    on('error', () => { let code:PlayerFailureCode='media-unknown';try{switch(this.audio.error?.code){case 1:code='media-aborted';break;case 2:code='media-network';break;case 3:code='media-decode';break;case 4:code='media-unsupported';break;}}catch{/* unknown */}failed(code);this.lastFailure=code; this.state = 'error'; this.error = 'No se pudo leer el audio. Puedes reintentar o elegir la siguiente pista.'; this.emit(); });
+    on('loadedmetadata', () => { const position=this.restorePosition;this.restorePosition=null;if(position!==null)this.seek(position); if (this.state === 'loading') this.state = 'paused'; this.emit(); });
+    on('error', () => {
+      let mediaError:Media['error'];try{mediaError=this.audio.error;}catch{/* unknown */}
+      // A queued event can reach the new listener on the reused audio element.
+      if(mediaError===null)return;
+      if(mediaError&&this.retryPassiveRead){
+        this.retryPassiveRead=false;
+        const position=this.restorePosition??this.audio.currentTime;
+        this.restorePosition=Number.isFinite(position)&&position>0?position:null;
+        this.state='loading';
+        this.audio.load();this.emit();return;
+      }
+      let code:PlayerFailureCode='media-unknown';
+      switch(mediaError?.code){case 1:code='media-aborted';break;case 2:code='media-network';break;case 3:code='media-decode';break;case 4:code='media-unsupported';break;}
+      failed(code);this.lastFailure=code;this.state='error';this.error='No se pudo leer el audio. Puedes reintentar o elegir la siguiente pista.';this.emit();
+    });
     on('ended', () => {
-      if (consumed || !this.audio.ended) return; consumed = true;
+      if (this.endedConsumed || !this.audio.ended) return; this.endedConsumed = true;
       if(this.repeat==='one')this.select(this.index,true);
       else if(this.following()>=0)this.select(this.following(),true);
       else { this.state = 'ended'; this.emit(); }
     });
-    this.audio.src = entry.src; this.audio.load(); this.state = 'loading'; this.emit();
+    this.audio.src = src; this.state = 'loading'; this.audio.load(); this.emit();
     if (autoplay) void this.play();
   }
-  async play() {
-    if (!this.allowed) return;
-    if (!this.current) { this.select(0, true); return; }
-    if (this.audio.ended || this.state === 'ended') { this.audio.currentTime = 0; this.select(this.index); }
-    const generation = this.generation,src=this.audio.src,failed=this.observe('play');
-    try { await this.audio.play(); if (generation !== this.generation && !this.allowed) this.audio.pause(); }
-    catch (error) { if (this.allowed && generation === this.generation && this.audio.src===src) { let denied=false;try{denied=error instanceof Error&&error.name==='NotAllowedError';}catch{/* unknown */}failed(denied?'autoplay-denied':'unknown');this.lastFailure=denied?'autoplay-denied':'unknown';this.state = 'error'; this.error = denied ? 'Toca Reproducir para continuar; el navegador requiere una interacción.' : 'El navegador no pudo abrir este audio. Prueba otra pista o vuelve a preparar la cola.'; this.emit(); } }
+  rejectLocalSource(src:string) {
+    const entry=this.current;
+    if(!this.allowed||!entry||src!==this.selectedSource||src!==this.audio.src||this.rejectedEntries.has(entry.id))return;
+    this.rejectedEntries.add(entry.id);
+    const next=this.following();
+    if(next>=0){this.select(next,this.playRequested);return;}
+    this.playRequested=false;
+    this.audio.pause();
+    this.state='error';
+    this.error='Se omitió el audio local dañado o ausente.';
+    this.emit();
   }
-  pause() { if(this.inserting)return; this.audio.pause(); this.state = 'paused'; this.emit(); }
+  async play(fromSeconds?: number) {
+    if (!this.allowed || (this.current && this.rejectedEntries.has(this.current.id))) return;
+    if (fromSeconds !== undefined) {
+      // A lyric is an explicit play-at gesture; never run the replay-at-zero path.
+      if (!this.current || !Number.isFinite(fromSeconds) || fromSeconds < 0 || !Number.isFinite(this.audio.duration) || this.audio.duration <= 0 || fromSeconds >= this.audio.duration) return;
+    }
+    if (this.current && this.state === 'error' && this.lastFailure?.startsWith('media-')) {
+      this.select(this.index, false, fromSeconds ?? this.restorePosition ?? this.audio.currentTime);
+      fromSeconds=undefined;
+    } else if (fromSeconds === undefined) {
+      if (!this.current) { this.select(this.following(), true); return; }
+      if (this.audio.ended || this.state === 'ended') {
+        const next=this.following();
+        this.select(next>=0?next:this.index);
+      }
+    }
+    this.retryPassiveRead=false;
+    this.playRequested=true;
+    const generation = this.generation,src=this.audio.src,failed=this.observe('play');
+    try { if (fromSeconds !== undefined) { this.audio.currentTime = fromSeconds; this.endedConsumed = false; } await this.audio.play(); if (generation !== this.generation && !this.allowed) this.audio.pause(); }
+    catch (error) { if (this.allowed && generation === this.generation && this.audio.src===src && !this.lastFailure?.startsWith('media-') && this.playRequested) { let denied=false;try{denied=error instanceof Error&&error.name==='NotAllowedError';}catch{/* unknown */}failed(denied?'autoplay-denied':'unknown');this.lastFailure=denied?'autoplay-denied':'unknown';this.state = 'error'; this.error = denied ? 'Toca Reproducir para continuar; el navegador requiere una interacción.' : 'El navegador no pudo abrir este audio. Prueba otra pista o vuelve a preparar la cola.'; if(denied)this.playRequested=false;this.emit(); } }
+  }
+  pause() { if(this.inserting)return; this.playRequested=false; this.audio.pause(); this.state = 'paused'; this.emit(); }
   following() {
     const order=this.shuffleOrder??this.entries.map(e=>e.id);const position=order.indexOf(this.current?.id??'');
-    const next=order[position+1]??(this.repeat==='all'?order[0]:undefined);
+    const canPlay=(id:string)=>!this.rejectedEntries.has(id);
+    const next=order.slice(position+1).find(canPlay)??(this.repeat==='all'?order.slice(0,position+1).find(canPlay):undefined);
     return this.entries.findIndex(e=>e.id===next);
   }
   next() { if (!this.allowed) return; const next=this.following();if(next>=0)this.select(next,true); }
@@ -158,11 +226,16 @@ export class Player {
     this.shuffleOrder=restored;this.emit();
   }
   moveEntry(id:string,delta:-1|1){ if (!this.allowed) return;
-    const current=this.current?.id;const i=this.entries.findIndex(e=>e.id===id);const j=i+delta;
+    const current=this.current?.id;
+    if(this.shuffleOrder){
+      const order=this.shuffleOrder,position=order.indexOf(current??''),i=order.indexOf(id),j=i+delta;
+      if(i<=position||j<=position||j>=order.length)return;
+      ++this.revision;[order[i],order[j]]=[order[j],order[i]];this.emit();return;
+    }
+    const i=this.entries.findIndex(e=>e.id===id);const j=i+delta;
     if(i<0||j<0||j>=this.entries.length)return;
     ++this.revision;
     [this.entries[i],this.entries[j]]=[this.entries[j],this.entries[i]];this.index=this.entries.findIndex(e=>e.id===current);
-    if(this.shuffleOrder){const x=this.shuffleOrder.indexOf(id);const y=x+delta;if(x>=0&&y>=0&&y<this.shuffleOrder.length)[this.shuffleOrder[x],this.shuffleOrder[y]]=[this.shuffleOrder[y],this.shuffleOrder[x]];}
     this.emit();
   }
   removeFuture(id:string){ if (!this.allowed) return;

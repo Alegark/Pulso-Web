@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {assembleBotDownloadBytes,BOT_DOWNLOAD_CHUNK_BYTES,BOT_DOWNLOAD_MAX_BYTES,BotDownloadBytesFailure} from '../../src/telegram/bot-download-bytes';
 
 const code=(expected:string)=>(error:unknown)=>error instanceof BotDownloadBytesFailure&&error.code===expected;
-test('assembles sequential chunks with exact length and incremental hash',async()=>{
+test('assembles aligned chunks with exact length and incremental hash',async()=>{
  const data=new Uint8Array(BOT_DOWNLOAD_CHUNK_BYTES+12);data.set([73,68,51]);data[data.length-1]=42;const offsets:number[]=[];
  const result=await assembleBotDownloadBytes({bytes:data.length,mime:'audio/mpeg'},async(o,n)=>{offsets.push(o);assert.equal(n,BOT_DOWNLOAD_CHUNK_BYTES);return data.slice(o,o+n);},()=>true);
  assert.deepEqual(offsets,[0,BOT_DOWNLOAD_CHUNK_BYTES]);assert.equal(result.sha256,createHash('sha256').update(data).digest('hex'));assert.deepEqual(new Uint8Array(await result.blob.arrayBuffer()),data);
@@ -36,7 +36,31 @@ test('uses a supported byte signature rather than a mismatched Telegram MIME dec
   assert.equal(result.mime,actual);assert.equal(result.blob.type,actual);assert.equal(result.sha256,createHash('sha256').update(data).digest('hex'));assert.deepEqual(new Uint8Array(await result.blob.arrayBuffer()),data);
  }
 });
-test('rejects an unsupported first signature before requesting any later file parts',async()=>{
+test('rejects an unsupported first signature within the bounded first window',async()=>{
  const data=new Uint8Array(BOT_DOWNLOAD_CHUNK_BYTES+12);data.set(new TextEncoder().encode('fLaC'));let calls=0;
- await assert.rejects(assembleBotDownloadBytes({bytes:data.length,mime:'audio/mpeg'},async(o,n)=>{calls++;return data.slice(o,o+n);},()=>true),code('header'));assert.equal(calls,1);
+ await assert.rejects(assembleBotDownloadBytes({bytes:data.length,mime:'audio/mpeg'},async(o,n)=>{calls++;return data.slice(o,o+n);},()=>true),code('header'));assert.equal(calls,2);
+});
+
+test('four in-flight parts reorder into the serial hash and never buffer beyond the window',async()=>{
+ const chunk=BOT_DOWNLOAD_CHUNK_BYTES,data=new Uint8Array(chunk*5+11);
+ data.set([73,68,51]);
+ for(let i=1;i<6;i++)data[i*chunk]=i;
+ const calls:number[]=[],release=new Map<number,()=>void>(),progress:number[]=[];
+ const run=assembleBotDownloadBytes({bytes:data.length,mime:'audio/mpeg'},(offset,limit)=>{
+  calls.push(offset);
+  return new Promise(resolve=>release.set(offset,()=>resolve(data.slice(offset,offset+limit))));
+ },()=>true,bytes=>progress.push(bytes));
+ const tick=()=>new Promise(resolve=>setImmediate(resolve));
+ await tick();assert.deepEqual(calls,[0,chunk,chunk*2,chunk*3]);
+ for(let i=3;i>0;i--)release.get(i*chunk)!();
+ await tick();assert.equal(calls.length,4);assert.deepEqual(progress,[]);
+ release.get(0)!();
+ await tick();assert.deepEqual(calls,[0,chunk,chunk*2,chunk*3,chunk*4,chunk*5]);
+ release.get(chunk*5)!();release.get(chunk*4)!();
+ const result=await run;
+ const sequential=createHash('sha256');
+ for(let i=0;i<data.length;i+=chunk)sequential.update(data.subarray(i,i+chunk));
+ assert.equal(result.sha256,sequential.digest('hex'));
+ assert.deepEqual(new Uint8Array(await result.blob.arrayBuffer()),data);
+ assert.deepEqual(progress,[chunk,chunk*2,chunk*3,chunk*4,chunk*5,data.length]);
 });

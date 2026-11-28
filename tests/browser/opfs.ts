@@ -1,16 +1,124 @@
-import {importFile,importOperation,importOperations,recoverImportOperation} from '../../src/imports/import-file';
-import {all,editTrack,createPlaylist,changePlaylist,verifiedAsset,type LocalAsset,type Track,type Playlist} from '../../src/library/library';
+import {importFileDetailed,importFile,importOperation,importOperations,recoverImportOperation} from '../../src/imports/import-file';
+import {all,editTrack,createPlaylist,changePlaylist,verifiedAsset,verifiedAssetDetailed,checkIdbAssetPresence,type LocalAsset,type Track,type Playlist} from '../../src/library/library';
 import {assetDirectory,openAssetReader} from '../../src/storage/asset-reader';
-import {readRecord,writeRecord} from '../../src/storage/database';
+import {admittedTransaction,closeDatabase,committed,openDatabase,readRecord,writeRecord} from '../../src/storage/database';
 import {createOperation,updateOperation,importIssues,retainImportIssue,assertImportsResolved,type ImportOperation} from '../../src/storage/import-operations';
+import {editDuringImport} from './import-edit-fixture';
 const results:string[]=[];
 function assert(value:unknown,message:string):asserts value{if(!value)throw new Error(message);}
 async function check(name:string,fn:()=>Promise<void>){try{await fn();results.push(`PASS ${name}`);}catch(e){results.push(`FAIL ${name}: ${e instanceof Error?e.message:String(e)}`);}document.querySelector('#results')!.textContent=results.join('\n');}
 const signal=()=>new AbortController().signal;
-function wav(seed:number){const data=new Uint8Array(196608+44);const v=new DataView(data.buffer);const text=(offset:number,s:string)=>{for(let i=0;i<s.length;i++)data[offset+i]=s.charCodeAt(i);};text(0,'RIFF');v.setUint32(4,data.length-8,true);text(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,22050,true);v.setUint32(28,44100,true);v.setUint16(32,2,true);v.setUint16(34,16,true);text(36,'data');v.setUint32(40,data.length-44,true);for(let i=44;i<data.length;i++)data[i]=(i*seed+seed)%251;return new File([data],`sintético-${seed}.wav`,{type:'audio/wav'});}
+function wav(seed:number,pcmBytes=196608){const data=new Uint8Array(pcmBytes+44);const v=new DataView(data.buffer);const text=(offset:number,s:string)=>{for(let i=0;i<s.length;i++)data[offset+i]=s.charCodeAt(i);};text(0,'RIFF');v.setUint32(4,data.length-8,true);text(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,22050,true);v.setUint32(28,44100,true);v.setUint16(32,2,true);v.setUint16(34,16,true);text(36,'data');v.setUint32(40,data.length-44,true);for(let i=44;i<data.length;i++)data[i]=(i*seed+seed)%251;return new File([data],`sintético-${seed}.wav`,{type:'audio/wav'});}
 async function rejects(fn:()=>Promise<unknown>){try{await fn();return false;}catch{return true;}}
 async function missing(key:string){try{await(await assetDirectory()).getFileHandle(key);return false;}catch(e){return e instanceof DOMException&&e.name==='NotFoundError';}}
 let originalAsset:LocalAsset;let originalTrack:Track;
+const downloadBackends:('idb'|'opfs')[]=['idb'];
+try{
+ const root=await navigator.storage.getDirectory(),key=crypto.randomUUID();
+ try{
+  const writer=await(await root.getFileHandle(key,{create:true})).createWritable();
+  await writer.close();downloadBackends.push('opfs');
+ }finally{await root.removeEntry(key).catch(()=>{});}
+}catch{/* This engine cannot open a native OPFS writer. IDB remains under test. */}
+await check(`progreso agrupado y descarte tras un corte entre checkpoints (${downloadBackends.join(', ')})`,async()=>{
+ for(const backend of downloadBackends){
+  const file=wav(51,1536*1024),operationId=crypto.randomUUID(),checkpoints:number[]=[];
+  const put=IDBObjectStore.prototype.put;
+  IDBObjectStore.prototype.put=function(...args:Parameters<IDBObjectStore['put']>){
+   const job=args[0] as ImportOperation;
+   if(this.name==='jobs'&&job.state==='writing'&&job.operationId===operationId)checkpoints.push(job.bytes);
+   return put.apply(this,args);
+  };
+  let outcome;
+  try{
+   outcome=await importFileDetailed(file,signal(),bytes=>{
+    if(bytes>=(backend==='idb'?512:1088)*1024)throw Error('corte sintético');
+   },{backend,operationId});
+  }finally{IDBObjectStore.prototype.put=put;}
+  const job=await importOperation(operationId);
+  const checkpoint=(backend==='idb'?512:1024)*1024;
+  assert(checkpoints.join()===String(checkpoint),'progreso por trozo o falsa confirmación');
+  assert(outcome.kind==='failed'&&job?.state==='uncertain'&&job.bytes===checkpoint&&!job.asset,'staging incoherente');
+  assert(await rejects(()=>recoverImportOperation(operationId,job.revision,'resume')),'publicó bytes parciales');
+  if(backend==='idb')assert(await readRecord('chunks',[job.storageKey,7]),'primer lote no era durable');
+  assert((await recoverImportOperation(operationId,job.revision,'discard')).state==='discarded','no descartó staging');
+  assert(backend==='opfs'?await missing(job.storageKey):!await readRecord('chunks',[job.storageKey,0]),'quedó staging propio');
+ }
+});
+await check('presencia en IDB usa solo claves y distingue copias ausentes',async()=>{
+ const file=wav(52,1024*1024),imported=await importFile(file,signal(),()=>{},{backend:'idb'});
+ const asset=await readRecord<LocalAsset>('assets',imported.track.assetId);assert(asset,'falta el asset');
+ const get=IDBObjectStore.prototype.get,count=IDBObjectStore.prototype.count;
+ let byteReads=0,keyCounts=0;
+ IDBObjectStore.prototype.get=function(...args:Parameters<IDBObjectStore['get']>){if(this.name==='chunks')byteReads++;return get.apply(this,args);};
+ IDBObjectStore.prototype.count=function(...args:Parameters<IDBObjectStore['count']>){if(this.name==='chunks')keyCounts++;return count.apply(this,args);};
+ try{
+  assert((await verifiedAssetDetailed(asset.id,'presence')).state==='valid','presencia');
+  assert(byteReads===0&&keyCounts===1,'se leyeron bytes para verificar presencia');
+  await writeRecord('assets',asset.id,{...asset,storageKey:crypto.randomUUID()});
+  assert((await verifiedAssetDetailed(asset.id,'presence')).state==='missing','presencia aceptó claves de otra generación');
+ }finally{
+  IDBObjectStore.prototype.get=get;IDBObjectStore.prototype.count=count;await writeRecord('assets',asset.id,asset);
+ }
+});
+await check(`SHA esperado se contrasta con la generación persistida antes de publicar (${downloadBackends.join(', ')})`,async()=>{
+ for(const backend of downloadBackends){
+  const file=wav(53,1024*1024),operationId=crypto.randomUUID();
+  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer())),b=>b.toString(16).padStart(2,'0')).join('');
+  const put=IDBObjectStore.prototype.put,write=globalThis.FileSystemWritableFileStream?.prototype.write;
+  const corrupt=(input:Uint8Array)=>{const copy=input.slice();copy[100]^=1;return copy;};
+  if(backend==='idb')IDBObjectStore.prototype.put=function(...args:Parameters<IDBObjectStore['put']>){
+   if(this.name==='chunks')args[0]=corrupt(args[0]);return put.apply(this,args);
+  };
+  else FileSystemWritableFileStream.prototype.write=function(data){return write!.call(this,corrupt(data as Uint8Array));};
+  let outcome;
+  try{outcome=await importFileDetailed(file,signal(),()=>{},{backend,operationId,expected:{sha256:digest,title:'Sintético',artist:null}});}
+  finally{IDBObjectStore.prototype.put=put;if(write)FileSystemWritableFileStream.prototype.write=write;}
+  assert(outcome.kind==='failed'&&outcome.outcome.primary?.code==='digest-mismatch','aceptó bytes alterados tras la escritura');
+  const job=await importOperation(operationId);assert(job?.asset&&!job.result,'staging ausente o publicado');
+  assert(await rejects(()=>recoverImportOperation(operationId,job.revision,'resume')),'recuperación publicó bytes alterados');
+  await recoverImportOperation(operationId,job.revision,'discard');
+ }
+});
+await check('rechaza slice corto o vacío durante la escritura sin dejar staging',async()=>{
+ for(const length of [0,17]){
+  const original=wav(61,1024*1024),file=new File([original],original.name,{type:original.type}),id=crypto.randomUUID();
+  const slice=file.slice.bind(file);
+  let injected=false;
+  file.slice=(start,end,type)=>{
+   if(!injected&&start===512*1024&&end===1024*1024){injected=true;return slice(start,start+length,type);}
+   return slice(start,end,type);
+  };
+  const result=await importFileDetailed(file,signal(),()=>{},{backend:'idb',operationId:id});
+  const job=await importOperation(id);
+  assert(injected&&result.kind==='failed'&&result.outcome.primary?.code==='length-mismatch'&&result.outcome.primary.phase==='read','el slice incompleto no se detectó al leer');
+  assert(job?.state==='discarded'&&!await readRecord('chunks',[job.storageKey,0]),'quedó staging o no se liberó el carril');
+ }
+});
+await check('la presencia por lote vuelve a detectar una copia purgada después de guardar otra',async()=>{
+ const copy=async(seed:number)=>{
+  const saved=await importFile(wav(seed),signal(),()=>{},{backend:'idb'});
+  const asset=await readRecord<LocalAsset>('assets',saved.track.assetId);assert(asset,'sin asset');
+  return asset;
+ };
+ const old=await copy(62);
+ assert((await checkIdbAssetPresence([old])).get(old.id)?.state==='valid','presencia inicial');
+ const db=await openDatabase();
+ try{
+  const tx=admittedTransaction(db,'chunks','readwrite'),done=committed(tx);
+  tx.objectStore('chunks').delete([old.storageKey,0]);await done;
+ }finally{closeDatabase(db);}
+ const latest=await copy(63);
+ const get=IDBObjectStore.prototype.get,count=IDBObjectStore.prototype.count;
+ let reads=0;const transactions=new Set<IDBTransaction>();
+ IDBObjectStore.prototype.get=function(...args:Parameters<IDBObjectStore['get']>){if(this.name==='chunks')reads++;return get.apply(this,args);};
+ IDBObjectStore.prototype.count=function(...args:Parameters<IDBObjectStore['count']>){if(this.name==='chunks')transactions.add(this.transaction);return count.apply(this,args);};
+ try{
+  const results=await checkIdbAssetPresence([old,latest]);
+  assert(results.get(old.id)?.state==='missing'&&results.get(latest.id)?.state==='valid','se reutilizó la presencia antigua');
+  assert(reads===0&&transactions.size===1,'la presencia no se resolvió en un snapshot sin payload');
+ }finally{IDBObjectStore.prototype.get=get;IDBObjectStore.prototype.count=count;}
+});
 await check('OPFS real: copia, hash incremental, reopen, rangos y dedup conserva metadata',async()=>{
  assert(typeof navigator.storage.getDirectory==='function','OPFS ausente');
  const file=wav(1);const operationId=crypto.randomUUID();const result=await importFile(file,signal(),()=>{},{operationId});originalTrack=result.track;
@@ -35,9 +143,12 @@ await check('IDB legacy sin migración; reparación OPFS missing/corrupt conserv
  let repaired=await importFile(wav(1),signal());assert(repaired.track.id===originalTrack.id&&repaired.track.title==='Corrección vigente'&&repaired.track.favorite,'missing pisó metadata');
  let current=(await verifiedAsset(originalAsset.id,true))!;const corruptKey=current.storageKey;const handle=await(await assetDirectory()).getFileHandle(corruptKey);const writer=await handle.createWritable();await writer.write(new Uint8Array(current.bytes));await writer.close();
  assert(!await verifiedAsset(current.id,true),'corrupción no detectada');
- repaired=await importFile(wav(1),signal(),bytes=>{if(bytes===wav(1).size){void readRecord<Track>('tracks',originalTrack.id).then(t=>t&&editTrack(t.id,t.revision,{album:'Edición durante copia'}));}});
+ const file=wav(1);
+ repaired=await importFile(file,signal(),async bytes=>{if(bytes===file.size)await editDuringImport(originalTrack.id,{album:'Edición durante copia'});});
  current=(await verifiedAsset(current.id,true))!;assert(current.storageKey!==corruptKey&&current.revision===originalAsset.revision+2,'revisión reparación');
- assert(!await missing(corruptKey),'borró generación anterior por reparación');assert(repaired.track.album==='Edición durante copia','pisó edición concurrente');
+ const savedTrack=await readRecord<Track>('tracks',originalTrack.id);
+ assert(!await missing(corruptKey),'borró generación anterior por reparación');
+ assert(repaired.track.album==='Edición durante copia'&&savedTrack?.album===repaired.track.album&&savedTrack.manualOverrides.album===repaired.track.album,'pisó edición concurrente');
  assert((await readRecord<Playlist>('playlists',list.id))?.entries[0].trackId===originalTrack.id,'perdió playlist');
  // IDB repair through OPFS also preserves its previous chunks.
  const chunk=await readRecord<Uint8Array>('chunks',[before.storageKey,0]);assert(chunk,'legacy bytes');const bad=chunk.slice();bad[0]^=255;await writeRecord('chunks',[before.storageKey,0],bad);
@@ -142,5 +253,5 @@ await check('jobs inválidos/legacy bloquean hasta retención expresa; snapshot 
  const circular:{self?:unknown}={};circular.self=circular;await writeRecord('jobs','malformed-cycle',circular);const cycle=(await importIssues()).find(i=>i.key==='malformed-cycle')!;assert(cycle&&!cycle.retained,'ciclo no revisable');await retainImportIssue(cycle);
  assert(await verifiedAsset(originalAsset.id,true),'perdió kept');await assertImportsResolved();
 });
-(window as unknown as {pulsoOpfs:unknown}).pulsoOpfs={passed:results.length===10&&results.every(s=>s.startsWith('PASS')),results,userAgent:navigator.userAgent};
+(window as unknown as {pulsoOpfs:unknown}).pulsoOpfs={passed:results.length===15&&results.every(s=>s.startsWith('PASS')),results,userAgent:navigator.userAgent};
 document.querySelector('#results')!.textContent+='\nCOMPLETADO';

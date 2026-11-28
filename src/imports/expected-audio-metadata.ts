@@ -1,12 +1,33 @@
 import {musicIdentityText} from '../telegram/bot-search-protocol';
-import {recordingTitleCandidate,recordingTitlesEquivalent} from '../library/recording-title';
+import {recordingTitleCandidate,recordingTitlesEquivalent,collaboratorRecordingMatch} from '../library/recording-title';
 /** Compatibility of declared file tags, never acoustic identity. */
 export interface ExpectedAudioMetadata {sha256:string;title:string;artist:string|null;recordingTitle?:string;album?:string;durationSeconds?:number}
 const normalized=musicIdentityText;
 const fullText=(s:string)=>s.normalize('NFC').trim().replace(/\s+/gu,' ').toLocaleLowerCase('es');
+/** Compare parsed audio duration before creating staging or publishing an asset.
+ * Normal recordings keep five seconds; the album-version alias keeps one. */
+export function expectedAudioDurationMismatch(expected:Pick<ExpectedAudioMetadata,'title'|'recordingTitle'|'durationSeconds'>,actual:number|undefined):boolean {
+ if(expected.durationSeconds===undefined)return false;
+ const tolerance=expected.recordingTitle&&normalized(expected.recordingTitle)!==normalized(expected.title)?1:5;
+ return !Number.isFinite(expected.durationSeconds)||expected.durationSeconds<=0||!Number.isFinite(actual)||actual!<=0||Math.abs(actual!-expected.durationSeconds)>tolerance;
+}
+/** Accept only a complete title and full performer credit, with a verified
+ * bot row supplying the expected duration and the parser supplying the actual. */
+export function verifiedCompoundAudioTitle(title:string|undefined,expected:Omit<ExpectedAudioMetadata,'sha256'>,actual:number|undefined):boolean {
+ if(!title||!expected.artist||expected.durationSeconds===undefined||expectedAudioDurationMismatch(expected,actual)||
+  expected.recordingTitle!==undefined&&normalized(expected.recordingTitle)!==normalized(expected.title))return false;
+ const parts=title.split(/\s+[–—-]\s+/u),song=normalized(expected.title),artist=normalized(expected.artist);
+ if(!song||!artist)return false;
+ return parts.slice(0,-1).some((_,i)=>{
+  const left=normalized(parts.slice(0,i+1).join(' - ')),right=normalized(parts.slice(i+1).join(' - '));
+  return left===artist&&right===song||left===song&&right===artist;
+ });
+}
 export function expectedAudioTagMismatch(tags:{title?:string;artist?:string;artists?:readonly string[];album?:string},expected:{title:string;artist:string|null;recordingTitle?:string;album?:string;durationSeconds?:number},durationSeconds?:number):'title'|'artist'|null {
+ if((expected.recordingTitle===undefined||recordingTitleCandidate(expected.recordingTitle,expected.title,expected.album,expected.durationSeconds))&&tags.title&&tags.artist&&expected.artist&&expected.durationSeconds!==undefined&&!expectedAudioDurationMismatch(expected,durationSeconds)&&collaboratorRecordingMatch(tags.title,tags.artist,expected.title,expected.artist,expected.album,expected.durationSeconds))return null;
  const contextual=expected.recordingTitle!==undefined&&expected.album!==undefined&&expected.durationSeconds!==undefined;
- if(!contextual&&(expected.recordingTitle!==undefined||expected.album!==undefined||expected.durationSeconds!==undefined))return 'title';
+ if(!contextual&&(expected.recordingTitle!==undefined||expected.album!==undefined))return 'title';
+ if(verifiedCompoundAudioTitle(tags.title,expected,durationSeconds))return null;
  const recordingAlias=contextual&&normalized(expected.recordingTitle!)!==normalized(expected.title);
  const tagAlias=!!tags.title&&normalized(tags.title)!==normalized(expected.title);
  if(recordingAlias||tagAlias){

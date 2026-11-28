@@ -21,7 +21,9 @@ test('declared collection artist may supply artwork only with a matching known a
  assert.equal(selectPlayerArtwork(data([full]),{...primary,album:null}),null);
  assert.equal(selectPlayerArtwork(data([full]),{...primary,album:'Different'}),null);
  assert.equal(selectPlayerArtwork(data([full]),{...primary,durationSeconds:110}),null);
- assert.equal(selectPlayerArtwork(data([full,{...full,collectionId:8}]),primary),null);
+ assert.ok(selectPlayerArtwork(data([full,{...full,collectionId:8}]),primary));
+ assert.ok(selectPlayerArtwork(data(Array(200).fill(full)),primary,200));
+ assert.equal(selectPlayerArtwork(data([full,{...full,collectionId:8,artworkUrl100:'https://is1-ssl.mzstatic.com/other.jpg'}]),primary),null);
  assert.equal(selectPlayerArtwork(data([full]),{...primary,editionId:7,trackId:9}),null);
 });
 test('URL allowlist and limits',()=>{

@@ -1,14 +1,17 @@
-import {catalogFetch} from './catalog-fetch'
+import type {CatalogId} from './catalog-id'
+import {musicBrainzId} from './catalog-id'
+import {MusicBrainzCatalog} from './musicbrainz-catalog'
+import {musicBrainzEnabled,catalogFetch} from './catalog-fetch'
 import {artworkUrl} from './player-artwork-provider'
 /** Public iTunes Store metadata, US market. Completeness refers to declared metadata only. */
 export type AlbumFailure = 'cancelled' | 'timeout' | 'network' | 'http' | 'rate-limited' | 'invalid' | 'incomplete' | 'too-large'
 export type AlbumStage = 'album-search' | 'artist-search' | 'artist-albums' | 'album-detail'
 export type AlbumResult<T> = { ok: true; value: T } | { ok: false; reason: AlbumFailure; stage?: AlbumStage; httpStatus?: number }
-export interface CatalogArtist { id: number; name: string }
+export interface CatalogArtist { id: CatalogId; name: string }
 export interface CatalogSongHint { releaseId:number; trackId:number; disc:number; position:number; title:string; artist:string; primaryArtist?:string; album:string; durationMs:number; artworkUrl?:string }
 export interface AlbumHint { id: number; title: string; artist: string | null; artworkUrl?: string }
-export interface AlbumEdition { id: number; title: string; artist: string; trackCount: number; releaseDate: string | null; artworkUrl?: string }
-export interface AlbumTrack { releaseId: number; trackId: number; disc: number; position: number; title: string; artist: string; durationMs: number | null; primaryArtist?: string }
+export interface AlbumEdition { id: CatalogId; title: string; artist: string; trackCount: number; releaseDate: string | null; artworkUrl?: string }
+export interface AlbumTrack { releaseId: CatalogId; trackId: CatalogId; disc: number; position: number; title: string; artist: string; durationMs: number | null; primaryArtist?: string }
 export interface AlbumDetail { edition: AlbumEdition; tracks: AlbumTrack[] }
 export interface AlbumRequest { signal: AbortSignal; current: () => boolean }
 type Row = Record<string, unknown>
@@ -28,7 +31,7 @@ function edition(row: Row): AlbumEdition | null {
   return Object.freeze({ id: row.collectionId, title: row.collectionName, artist: row.artistName, trackCount: row.trackCount, releaseDate: Object.hasOwn(row, 'releaseDate') && text(row.releaseDate) ? row.releaseDate : null, ...(artwork ? { artworkUrl: artwork } : {}) })
 }
 // Inspect descriptors before reading any value: reject accessors, exotic prototypes, cycles and large graphs.
-function bounded(value: unknown): boolean {
+export function bounded(value: unknown): boolean {
   const stack: { value: unknown; depth: number }[] = [{ value, depth: 0 }]
   const seen = new Set<object>()
   let nodes = 0
@@ -99,7 +102,7 @@ export function catalogSongsFromBatch(data:unknown):readonly CatalogSongHint[] {
  return Object.freeze([...found.values()].filter((song):song is CatalogSongHint=>song!==null));
 }
 
-/** Rejects ambiguous, missing, inconsistent or extra positions; preserves repeated track IDs. */
+/** Verifies song coverage per disc while allowing non-song catalog extras. */
 export function parseAlbumDetail(data: unknown, id: number): AlbumResult<AlbumDetail> {
   if (!bounded(data)) return fail('invalid')
   const all = rows(data)
@@ -109,36 +112,53 @@ export function parseAlbumDetail(data: unknown, id: number): AlbumResult<AlbumDe
   const e = collections.length === 1 ? edition(collection) : null
   if (!e || e.id !== id) return fail('invalid')
   const raw = all.filter(r => r.wrapperType === 'track')
-  if (raw.length !== e.trackCount || all.length !== raw.length + 1) return fail('incomplete')
-  const discs = new Map<number, { count: number; tracks: AlbumTrack[] }>()
+  if (raw.length > e.trackCount || all.length !== raw.length + 1) return fail('incomplete')
+  const discs = new Map<number, { songCount: number | null; extraCount: number | null; countsByPosition: Map<number, number>; tracks: AlbumTrack[] }>()
   let discCount = 0
   for (const r of raw) {
-    if (!owns(r, ['wrapperType', 'kind', 'collectionId', 'trackId', 'discNumber', 'discCount', 'trackNumber', 'trackCount', 'trackName', 'artistName']) || r.kind !== 'song' || r.collectionId !== id || !pos(r.trackId) || !pos(r.discNumber) || !pos(r.discCount) || r.discCount > 20 || r.discNumber > r.discCount || !pos(r.trackNumber) || !pos(r.trackCount) || r.trackCount > LIMIT || !text(r.trackName) || !text(r.artistName) || !( !Object.hasOwn(r, 'trackTimeMillis') || r.trackTimeMillis == null || (typeof r.trackTimeMillis === 'number' && Number.isSafeInteger(r.trackTimeMillis) && r.trackTimeMillis >= 0 && r.trackTimeMillis <= 86400000))) return fail('invalid')
-    if (discCount && discCount !== r.discCount) return fail('incomplete')
+    if (!owns(r, ['wrapperType', 'kind', 'collectionId', 'trackId', 'discNumber', 'discCount', 'trackNumber', 'trackCount', 'trackName', 'artistName']) || !text(r.kind) || r.collectionId !== id || !pos(r.trackId) || !pos(r.discNumber) || !pos(r.discCount) || r.discCount > 20 || r.discNumber > r.discCount || !pos(r.trackNumber) || r.trackNumber > LIMIT || !pos(r.trackCount) || r.trackCount > LIMIT || !text(r.trackName) || !text(r.artistName) || !( !Object.hasOwn(r, 'trackTimeMillis') || r.trackTimeMillis == null || (typeof r.trackTimeMillis === 'number' && Number.isSafeInteger(r.trackTimeMillis) && r.trackTimeMillis >= 0 && r.trackTimeMillis <= 86400000))) return fail('invalid')
+    if (r.trackNumber > r.trackCount || (discCount && discCount !== r.discCount)) return fail('incomplete')
     discCount = r.discCount
-    const group = discs.get(r.discNumber) ?? { count: r.trackCount, tracks: [] }
-    if (group.count !== r.trackCount) return fail('incomplete')
+    const group = discs.get(r.discNumber) ?? { songCount: null, extraCount: null, countsByPosition: new Map<number, number>(), tracks: [] }
+    if (group.countsByPosition.has(r.trackNumber)) return fail('incomplete')
+    group.countsByPosition.set(r.trackNumber, r.trackCount)
+    discs.set(r.discNumber, group)
+    if (r.kind !== 'song') {
+      if (group.extraCount !== null && group.extraCount !== r.trackCount) return fail('incomplete')
+      group.extraCount = r.trackCount
+      continue
+    }
+    if (group.songCount !== null && group.songCount !== r.trackCount) return fail('incomplete')
+    group.songCount = r.trackCount
     const primary = Object.hasOwn(collection, 'artistId') && Object.hasOwn(r, 'artistId') && pos(collection.artistId) && r.artistId === collection.artistId ? { primaryArtist: e.artist } : {}
     group.tracks.push(Object.freeze({ releaseId: id, trackId: r.trackId, disc: r.discNumber, position: r.trackNumber, title: r.trackName, artist: r.artistName, durationMs: Object.hasOwn(r, 'trackTimeMillis') && r.trackTimeMillis ? r.trackTimeMillis as number : null, ...primary }))
-    discs.set(r.discNumber, group)
   }
   if (!discCount || discs.size !== discCount) return fail('incomplete')
   const tracks: AlbumTrack[] = []
+  let declaredTotal = 0
   for (let d = 1; d <= discCount; d++) {
     const group = discs.get(d)
-    if (!group || group.tracks.length !== group.count) return fail('incomplete')
+    if (!group) return fail('incomplete')
+    const requiredCount = group.songCount ?? group.extraCount ?? 0
+    if (group.extraCount !== null && group.extraCount < requiredCount) return fail('incomplete')
+    declaredTotal += group.extraCount ?? requiredCount
+    for (let position = 1; position <= requiredCount; position++) {
+      // A row can cover this position only if it declares the same count.
+      if (group.countsByPosition.get(position) !== requiredCount) return fail('incomplete')
+    }
     group.tracks.sort((a, b) => a.position - b.position)
-    if (group.tracks.some((track, i) => track.position !== i + 1)) return fail('incomplete')
     tracks.push(...group.tracks)
   }
+  if (!tracks.length || declaredTotal > e.trackCount) return fail('incomplete')
   Object.freeze(tracks)
-  return { ok: true, value: Object.freeze({ edition: e, tracks }) }
+  return { ok: true, value: Object.freeze({ edition: Object.freeze({ ...e, trackCount: tracks.length }), tracks }) }
 }
 
 /** No network or timers until search/load is called. Caller chooses an edition explicitly. */
-export class AlbumCatalog {
+class ITunesAlbumCatalog {
   private readonly cache = new Map<string, { expires: number; value: unknown }>()
   constructor(private readonly fetcher: typeof fetch = fetch) {}
+  clearCache():void { this.cache.clear() }
   async search(title: string, artist: string | null, request: AlbumRequest): Promise<AlbumResult<AlbumEdition[]>> {
     if (!text(title) || !(artist === null || artist === '' || text(artist))) return fail('invalid')
     const query = new URLSearchParams({ term: [title, artist].filter(Boolean).join(' '), country: 'US', media: 'music', entity: 'album', limit: '20' })
@@ -177,7 +197,7 @@ export class AlbumCatalog {
       if (artists.length !== 1 || !owns(artists[0], ['artistId', 'artistName']) || artists[0].artistId !== id || !text(artists[0].artistName)) return fail('invalid')
       const albums = all.filter(row => row.wrapperType === 'collection')
       if (all.length !== albums.length + 1) return fail('invalid')
-      const ids = new Set<number>(), result: AlbumEdition[] = []
+      const ids = new Set<CatalogId>(), result: AlbumEdition[] = []
       for (const row of albums) {
         const item = edition(row)
         // Artist lookups also return associated releases credited to a different
@@ -281,4 +301,33 @@ export class AlbumCatalog {
     request.signal.removeEventListener('abort', abort)
     return result
   }
+}
+
+/** iTunes remains primary. Only an unsuccessful/empty result uses the independent
+ * same-origin backup. Cancellation never starts another provider. */
+export class AlbumCatalog extends ITunesAlbumCatalog {
+ private readonly backup:MusicBrainzCatalog;
+ constructor(fetcher:typeof fetch=fetch){super(fetcher);this.backup=new MusicBrainzCatalog(fetcher);}
+ override clearCache():void {super.clearCache();this.backup.clearCache();}
+ private async enabled(request:AlbumRequest):Promise<boolean>{try{return !request.signal.aborted&&request.current()&&await musicBrainzEnabled(request.signal)&&!request.signal.aborted&&request.current();}catch{return false;}}
+ override async search(title:string,artist:string|null,request:AlbumRequest):Promise<AlbumResult<AlbumEdition[]>>{
+  const primary=await super.search(title,artist,request);
+  if(primary.ok&&primary.value.length||!primary.ok&&primary.reason==='cancelled'||!await this.enabled(request))return primary;
+  const secondary=await this.backup.search(title,artist,request);return secondary.ok||primary.ok?secondary:primary;
+ }
+ override async searchArtists(term:string,request:AlbumRequest):Promise<AlbumResult<CatalogArtist[]>>{
+  const primary=await super.searchArtists(term,request);
+  if(primary.ok&&primary.value.length||!primary.ok&&primary.reason==='cancelled'||!await this.enabled(request))return primary;
+  const secondary=await this.backup.searchArtists(term,request);return secondary.ok||primary.ok?secondary:primary;
+ }
+ override async artistAlbums(id:CatalogId,request:AlbumRequest,name?:string):Promise<AlbumResult<AlbumEdition[]>>{
+  if(musicBrainzId(id))return this.backup.artistAlbums(id,request);
+  const primary=await super.artistAlbums(id,request);
+  if(primary.ok&&primary.value.length||!primary.ok&&primary.reason==='cancelled'||!name||!await this.enabled(request))return primary;
+  const people=await this.backup.searchArtists(name,request);
+  const exact=people.ok?people.value.filter(p=>p.name.normalize('NFKC').toLocaleLowerCase()===name.normalize('NFKC').toLocaleLowerCase()):[];
+  return exact.length===1?this.backup.artistAlbums(exact[0].id,request):primary;
+ }
+ override async load(id:CatalogId,request:AlbumRequest):Promise<AlbumResult<AlbumDetail>>{return musicBrainzId(id)?this.backup.load(id,request):super.load(id,request);}
+ async alternatives(title:string,artist:string|null,request:AlbumRequest):Promise<AlbumResult<AlbumEdition[]>>{return await this.enabled(request)?this.backup.search(title,artist,request):{ok:false,reason:'network'};}
 }

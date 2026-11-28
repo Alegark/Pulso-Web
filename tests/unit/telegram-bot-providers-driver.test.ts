@@ -86,7 +86,8 @@ test('late SDK revocation independently invalidates after cancel; first SDK caus
 test('late account flood retained; >24h absolute deadline, unknown flood blocks, no order/list bypass',async()=>{
  const gate=deferred(),s=setup(()=>gate.promise),e=s.e();const p=s.command({...e,type:'bots.validate',input:'alpha'});await tick();await s.command({operationId:e.operationId,type:'bots.cancel',targetRequestId:e.requestId});await p;gate.reject({text:'FLOOD_WAIT_172800'});await tick();
  const f=await s.command({type:'bots.validate',input:'bravo'});assert.equal(f.type==='bots.error'&&f.error,'rate-limit');assert.equal(f.type==='bots.error'&&f.retryAt,172801000);await s.order([]);s.time.jump(86400001);await s.command({type:'bots.validate',input:'bravo'});assert.equal(s.calls,1);s.driver.close();
- const t=setup(async()=>{throw {text:'FLOOD_WAIT_unknown'};});const q=await t.command({type:'bots.validate',input:'alpha'});assert.equal(q.type==='bots.error'&&q.retryBlocked,true);t.time.jump(10**12);await t.order([]);await t.command({type:'bots.validate',input:'bravo'});assert.equal(t.calls,1);t.driver.close();
+ const t=setup(async()=>{throw {text:'FLOOD_WAIT_unknown'};});const q=await t.command({type:'bots.validate',input:'alpha'});assert.equal(q.type==='bots.error'&&q.retryBlocked,true);t.time.jump(299999);await t.order([]);await t.command({type:'bots.validate',input:'bravo'});assert.equal(t.calls,1);
+ t.time.jump(1);await t.command({type:'bots.validate',input:'bravo'});assert.equal(t.calls,2);t.driver.close();
  assert.equal(botProvidersFailure(new Proxy({}, {getOwnPropertyDescriptor(){throw Error();}}),1000).error,'network');
 });
 test('offers and command IDs bounded; close/quiesce invalidates and purges',async()=>{

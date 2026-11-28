@@ -1,3 +1,5 @@
+import {emptyImportTiming,parseImportTiming,type ImportTiming} from '../diagnostics/download-timing';
+import {copyAccountCatalog} from '../accounts/library-document.mjs';
 import {recordingTitleCandidate} from '../library/recording-title';
 import type {ExpectedAudioMetadata} from './expected-audio-metadata';
 export type {ExpectedAudioMetadata} from './expected-audio-metadata';
@@ -29,8 +31,9 @@ function array(value:unknown,max:number):unknown[]|null{
  }catch{return null;}
 }
 function trackCopy(value:unknown){
- const t=optionalRecord(value,['id','assetId','title','artist','album','duration','favorite','revision','createdAt','manualOverrides'],['audioFingerprint','organizationRef','localAlbum']);if(!t)return null;
+ const t=optionalRecord(value,['id','assetId','title','artist','album','duration','favorite','revision','createdAt','manualOverrides'],['audioFingerprint','organizationRef','localAlbum','accountId','catalogChoice']);if(!t)return null;
  if(!uuid(t.id)||!uuid(t.assetId)||!text(t.title,300,1)||![t.artist,t.album].every(v=>v===null||text(v,300))||typeof t.duration!=='number'||!Number.isFinite(t.duration)||t.duration<=0||t.duration>1e9||typeof t.favorite!=='boolean'||!integer(t.revision,1)||!text(t.createdAt,64,1)||!Number.isFinite(Date.parse(t.createdAt)))return null;
+ if(t.accountId!==undefined&&!uuid(t.accountId))return null;if(t.catalogChoice!==undefined){try{if(!copyAccountCatalog(t.catalogChoice))return null;}catch{return null;}}
  const manual=optionalRecord(t.manualOverrides,[],['title','artist','album']);if(!manual||Object.entries(manual).some(([k,v])=>!(text(v,300,k==='title'?1:0)||k!=='title'&&v===null)))return null;t.manualOverrides=manual;
  if(t.audioFingerprint===undefined)delete t.audioFingerprint;
  if(Object.hasOwn(t,'audioFingerprint')&&t.audioFingerprint!==null){const f=plain(t.audioFingerprint,['algorithm','sha256','bytes']);if(!f||f.algorithm!=='sha256'||!text(f.sha256,64)||!/^[a-f0-9]{64}$/.test(f.sha256)||!integer(f.bytes,1,100*1024*1024))return null;t.audioFingerprint=f;}
@@ -58,28 +61,35 @@ export function copyImportResult(value:unknown):DetailedImportResult|null{
  if(Object.hasOwn(r,'lyricsInspection')){const i=inspectionCopy(r.lyricsInspection);if(!i)return null;r.lyricsInspection=i;}
  return r as unknown as DetailedImportResult;
 }
-export type ImportRequest={version:2;type:'import';operationId:string;file:File;libraryMode?:'cache';expected?:ExpectedAudioMetadata}|{version:2;type:'cancel';operationId:string};
+export type ImportRequest={version:2;type:'import';operationId:string;file:File;libraryMode?:'cache';expected?:ExpectedAudioMetadata;parkedOperationIds?:string[]}|{version:2;type:'cancel';operationId:string};
 export type RecoveryRequest={version:2;type:'recover';requestId:string;operationId:string;revision:number;action:'resume'|'discard'};
 const fileSize=typeof Blob==='undefined'?undefined:Object.getOwnPropertyDescriptor(Blob.prototype,'size')?.get;
 const fileName=typeof File==='undefined'?undefined:Object.getOwnPropertyDescriptor(File.prototype,'name')?.get;
 export function copyWorkerRequest(value:unknown):ImportRequest|RecoveryRequest|null{
- const h=optionalRecord(value,['version','type','operationId'],['file','expected','libraryMode','requestId','revision','action']);if(!h||h.version!==2||!uuid(h.operationId))return null;
+ const h=optionalRecord(value,['version','type','operationId'],['file','expected','libraryMode','parkedOperationIds','requestId','revision','action']);if(!h||h.version!==2||!uuid(h.operationId))return null;
  if(h.type==='cancel'){const r=plain(h,['version','type','operationId']);return r as ImportRequest|null;}
  if(h.type==='import'){
- const r=optionalRecord(h,['version','type','operationId','file'],['expected','libraryMode']);if(!r||Object.hasOwn(r,'libraryMode')&&r.libraryMode!=='cache')return null;
+ const r=optionalRecord(h,['version','type','operationId','file'],['expected','libraryMode','parkedOperationIds']);if(!r||Object.hasOwn(r,'libraryMode')&&r.libraryMode!=='cache')return null;
+ if(Object.hasOwn(r,'parkedOperationIds')){
+  const ids=array(r.parkedOperationIds,5000);
+  if(r.libraryMode!=='cache'||!ids?.length||!ids.every(uuid)||new Set(ids).size!==ids.length||ids.includes(h.operationId))return null;
+  r.parkedOperationIds=ids;
+ }
  try{if(!integer(fileSize?.call(r.file),1,100*1024*1024)||typeof fileName?.call(r.file)!=='string')return null;}catch{return null;}
- if(r.expected!==undefined){const e=optionalRecord(r.expected,['sha256','title','artist'],['recordingTitle','album','durationSeconds']);if(!e||!text(e.sha256,64,64)||! /^[a-f0-9]{64}$/.test(e.sha256)||!text(e.title,300,1)||e.artist!==null&&!text(e.artist,300,1))return null;const grouped=['recordingTitle','album','durationSeconds'].filter(k=>Object.hasOwn(e,k)).length;if(grouped!==0&&grouped!==3)return null;if(grouped===3&&(!text(e.recordingTitle,300,1)||!e.recordingTitle.trim()||!text(e.album,300,1)||!e.album.trim()||typeof e.durationSeconds!=='number'||!Number.isFinite(e.durationSeconds)||e.durationSeconds<=0||e.durationSeconds>86400||!recordingTitleCandidate(e.recordingTitle,e.title,e.album,e.durationSeconds)))return null;r.expected=e;}
+ if(r.expected!==undefined){const e=optionalRecord(r.expected,['sha256','title','artist'],['recordingTitle','album','durationSeconds']);if(!e||!text(e.sha256,64,64)||! /^[a-f0-9]{64}$/.test(e.sha256)||!text(e.title,300,1)||e.artist!==null&&!text(e.artist,300,1))return null;const duration=e.durationSeconds;if(Object.hasOwn(e,'durationSeconds')&&(typeof duration!=='number'||!Number.isFinite(duration)||duration<=0||duration>86400))return null;if((Object.hasOwn(e,'recordingTitle')||Object.hasOwn(e,'album'))&&(!text(e.recordingTitle,300,1)||!e.recordingTitle.trim()||!text(e.album,300,1)||!e.album.trim()||typeof duration!=='number'||!recordingTitleCandidate(e.recordingTitle,e.title,e.album,duration)))return null;r.expected=e;}
  return r as ImportRequest;
  }
  const r=plain(h,['version','type','operationId','requestId','revision','action']);return r&&r.type==='recover'&&uuid(r.requestId)&&integer(r.revision,1)&&member(r.action,['resume','discard'])?r as RecoveryRequest:null;
 }
-export type WorkerResponse={version:2;operationId:string;type:'progress';bytes:number}|{version:2;operationId:string;type:'complete';result:DetailedImportResult;outcome:OutcomeV1}|{version:2;operationId:string;type:'error';outcome:OutcomeV1}|{version:2;requestId:string;type:'recovered';state:'sealed'|'discarded';outcome:OutcomeV1}|{version:2;requestId:string;type:'error';outcome:OutcomeV1};
+export type WorkerResponse={version:2;operationId:string;type:'progress';bytes:number}|{version:2;operationId:string;type:'complete';result:DetailedImportResult;outcome:OutcomeV1;timing?:Readonly<ImportTiming>}|{version:2;operationId:string;type:'error';outcome:OutcomeV1;timing?:Readonly<ImportTiming>}|{version:2;requestId:string;type:'recovered';state:'sealed'|'discarded';outcome:OutcomeV1}|{version:2;requestId:string;type:'error';outcome:OutcomeV1};
 export function copyWorkerResponse(value:unknown):WorkerResponse|null{
- const h=optionalRecord(value,['version','type'],['operationId','requestId','bytes','result','outcome','state']);if(!h||h.version!==2)return null;
+ const h=optionalRecord(value,['version','type'],['operationId','requestId','bytes','result','outcome','state','timing']);if(!h||h.version!==2)return null;
  if(h.type==='progress'){const r=plain(h,['version','operationId','type','bytes']);return r&&uuid(r.operationId)&&integer(r.bytes,0,100*1024*1024)?r as WorkerResponse:null;}
  const recovery=Object.hasOwn(h,'requestId');
  const keys=h.type==='error'?['version',recovery?'requestId':'operationId','type','outcome']:recovery?['version','requestId','type','state','outcome']:['version','operationId','type','result','outcome'];
+ if(!recovery&&Object.hasOwn(h,'timing'))keys.push('timing');
  const r=plain(h,keys);if(!r||!uuid(r[recovery?'requestId':'operationId']))return null;
+ if(Object.hasOwn(r,'timing')){const timing=parseImportTiming(r.timing);if(!timing)return null;r.timing=timing;}
  const o=copyOutcomeV1(r.outcome);if(!o)return null;r.outcome=o;
  if(h.type==='error')return o.status!=='confirmed'?r as WorkerResponse:null;
  if(recovery){if(h.type!=='recovered'||!member(r.state,['sealed','discarded'])||o.status!=='confirmed'||o.writeState!==(r.state==='sealed'?'published':'not-published'))return null;}
@@ -109,7 +119,7 @@ export function createResponseGate(expected:ImportRequest|RecoveryRequest){
  return {kind:'accepted',response};
  };
 }
-/** Opt-in v2 handler. The product workers keep v1 until main is migrated together. */
+/** Handles v2 import commands in the product worker. Recovery uses its own handler. */
 export function createImportV2Handler(send:(response:WorkerResponse)=>void){
  let active:{operationId:string;controller:AbortController}|null=null;
  return async(value:unknown):Promise<boolean>=>{
@@ -119,13 +129,14 @@ export function createImportV2Handler(send:(response:WorkerResponse)=>void){
  const controller=new AbortController();active={operationId:request.operationId,controller};
  try{
  const {importFileDetailed}=await import('./import-file');
- const attempt=await importFileDetailed(request.file,controller.signal,bytes=>send({version:2,type:'progress',operationId:request.operationId,bytes}),{operationId:request.operationId,expected:request.expected,libraryMode:request.libraryMode});
+ const timing=request.expected?emptyImportTiming():undefined,observed=timing?{timing}:{};
+ const attempt=await importFileDetailed(request.file,controller.signal,bytes=>send({version:2,type:'progress',operationId:request.operationId,bytes}),{operationId:request.operationId,expected:request.expected,libraryMode:request.libraryMode,parkedOperationIds:request.parkedOperationIds},timing);
  if(attempt.kind==='confirmed'){
  const result=copyImportResult(attempt.result);
- if(result)send({version:2,type:'complete',operationId:request.operationId,result,outcome:attempt.outcome});
+ if(result)send({version:2,type:'complete',operationId:request.operationId,result,outcome:attempt.outcome,...observed});
  else send({version:2,type:'error',operationId:request.operationId,outcome:makeOutcome({...attempt.outcome,status:'uncertain',primary:attempt.outcome.primary??workerFailureOutcome('worker-protocol').primary,writeState:'published',recoveryRequired:true})});
  }
- else send({version:2,type:'error',operationId:request.operationId,outcome:attempt.outcome});
+ else send({version:2,type:'error',operationId:request.operationId,outcome:attempt.outcome,...observed});
  }finally{active=null;}
  return true;
  };

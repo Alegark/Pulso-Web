@@ -13,7 +13,7 @@ export const backendValues = Object.freeze(["idb", "opfs", "none", "unknown"] as
 export type Backend = typeof backendValues[number];
 export const transportValues = Object.freeze(["sw", "bounded-blob", "none", "unknown"] as const);
 export type Transport = typeof transportValues[number];
-export const safeCodeValues = Object.freeze(["none", "unknown", "input-invalid", "limit-exceeded", "format-unsupported", "metadata-invalid", "metadata-title-mismatch", "metadata-artist-mismatch", "audio-duration-invalid", "audio-codec-missing", "autoplay-denied", "media-aborted", "media-network", "media-decode", "media-unsupported", "media-unknown", "quota-exceeded", "storage-denied", "storage-unavailable", "database-blocked", "transaction-aborted", "asset-missing", "asset-changed", "length-mismatch", "digest-mismatch", "write-uncertain", "close-uncertain", "commit-uncertain", "cleanup-failed", "worker-failed", "worker-protocol", "transport-unavailable", "transport-timeout", "transport-incompatible", "blob-budget", "scope-changed", "owner-unavailable", "handoff-blocked", "cancelled", "conflict", "empty-selection", "retry-required", "relations-invalid", "backup-format", "backup-version", "backup-limits", "local-corrupt", "imports-unresolved", "stale-preview", "plan-expired", "invalid-choice", "fingerprint-conflict", "export-reused", "sample-fetch-failed", "download-unavailable"] as const);
+export const safeCodeValues = Object.freeze(["none", "unknown", "input-invalid", "limit-exceeded", "format-unsupported", "metadata-invalid", "metadata-title-mismatch", "metadata-artist-mismatch", "metadata-duration-mismatch", "audio-duration-invalid", "audio-codec-missing", "autoplay-denied", "media-aborted", "media-network", "media-decode", "media-unsupported", "media-unknown", "quota-exceeded", "storage-denied", "storage-unavailable", "database-blocked", "transaction-aborted", "asset-missing", "asset-changed", "length-mismatch", "digest-mismatch", "write-uncertain", "close-uncertain", "commit-uncertain", "cleanup-failed", "worker-failed", "worker-protocol", "transport-unavailable", "transport-timeout", "transport-incompatible", "blob-budget", "scope-changed", "owner-unavailable", "handoff-blocked", "cancelled", "conflict", "empty-selection", "retry-required", "relations-invalid", "backup-format", "backup-version", "backup-limits", "local-corrupt", "imports-unresolved", "stale-preview", "plan-expired", "invalid-choice", "fingerprint-conflict", "export-reused", "sample-fetch-failed", "download-unavailable"] as const);
 export type SafeCode = typeof safeCodeValues[number];
 
 export interface Result { phase: Phase; outcome: Outcome; family: Family|null; code: SafeCode; backend: Backend; transport: Transport; count: number }
@@ -90,4 +90,29 @@ export function failureText(r:Result):string {
  case 'cancelled':return 'Operación cancelada; se conservan los resultados ya confirmados.';
  default:return 'No se pudo completar la operación. Conserva tus datos y revisa su estado antes de reintentar.';
  }
+}
+
+export const songFlows=['none','direct-audio','callback-menu'] as const;
+export const songRejectionReasons=['timeout','no-compatible-row','mismatch-title','mismatch-artist','mismatch-duration',
+ 'import-tag-mismatch','import-duration-mismatch','file-too-large','file-invalid','file-unsupported','rate-limit','network','uncertain',
+ 'unsupported','needs-start','limit','conflict','identity-changed','expired','session-expired','busy','cancelled','selection-changed'] as const;
+export type SongRejection=typeof songRejectionReasons[number];
+export const songTimeKeys=['firstBotReplyMs','searchPollMs','callbackPollMs','transferMs','importMs','timeoutMs','reconnectMs','floodWaitMs','totalMs'] as const;
+const songCountKeys=['songSeq','botsTried','candidatesTried','candidatesDownloaded','candidatesRejected','timeoutCount'] as const;
+export const songTimingKeys=[...songCountKeys,'winningBotSlot','flow','rejections',...songTimeKeys] as const;
+export type SongAggregate=Record<typeof songCountKeys[number]|typeof songTimeKeys[number],number>&{
+ winningBotSlot:number|null;flow:typeof songFlows[number];rejections:Readonly<Partial<Record<SongRejection,number>>>;
+};
+export function parseSongAggregate(value:unknown):Readonly<SongAggregate>|null {
+ const row=plain(value,songTimingKeys);if(!row)return null;
+ const count=(n:unknown,max=MAX_COUNTER)=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0&&n<=max;
+ if(![...songCountKeys,...songTimeKeys].every(key=>count(row[key]))||row.songSeq===0||!count(row.botsTried,5)||
+  row.winningBotSlot!==null&&!count(row.winningBotSlot,4)||!member(row.flow,songFlows))return null;
+ if(!row.rejections||typeof row.rejections!=='object')return null;
+ let reasons:(string|symbol)[];
+ try{reasons=Reflect.ownKeys(row.rejections);}catch{return null;}
+ if(reasons.some(key=>!member(key,songRejectionReasons)))return null;
+ const rejections=plain(row.rejections,reasons as string[]);
+ if(!rejections||!Object.values(rejections).every(n=>count(n)&&n!==0))return null;
+ return Object.freeze({...row,rejections:Object.freeze(rejections)}) as Readonly<SongAggregate>;
 }

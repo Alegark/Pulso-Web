@@ -2,7 +2,7 @@
 .pulso-app { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .pulso-app .pulso-header { min-block-size: 60px; margin-block-end: 1.75rem; border-block-end: 1px solid var(--pulso-border); padding-block-end: .75rem; }
 .pulso-app .pulso-wordmark { color: var(--pulso-foreground); font-size: 2rem; font-weight: 800; letter-spacing: -.09em; }
-.pulso-wordmark::after { content: ""; display: inline-block; inline-size: .4em; block-size: .4em; margin-inline-start: .15em; border-radius: 50%; background: var(--pulso-accent); }
+.pulso-wordmark::after { content: ""; display: inline-block; inline-size: .4em; block-size: .4em; margin-inline-start: .15em; border-radius: 50%; background: var(--pulso-accent-text); }
 .pulso-app .pulso-header > button { border-color: transparent; background: transparent; font-size: .85rem; }
 .pulso-app .home-view > h2,.pulso-app .library-view > h2 { font-size: clamp(1.65rem,3.8vw,2.25rem); line-height: 1.15; letter-spacing: -.055em; margin: .5rem 0 .75rem; }
 .pulso-app .home-view__intro { font-size: .85rem; margin-block-end: 1.5rem; }
@@ -11,31 +11,35 @@
 .pulso-app .home-quick { grid-template-columns: repeat(auto-fit,minmax(min(100%,9rem),1fr)); gap: .5rem; }
 .pulso-app .home-quick button { min-block-size: 64px; padding: 3px; gap: .6rem; border-radius: .6rem; font-size: .8rem; line-height: 1.35; }
 .pulso-app .home-quick button > span { inline-size: 56px; min-inline-size: 56px; block-size: 56px; border-radius: .35rem; }
-.pulso-app .home-quick button:first-child > span { background: linear-gradient(135deg,#2444bc,#5099ad); color: #fff; }
-.pulso-app .home-continue { background: var(--pulso-soft); border: 0; padding: 1.25rem; }
-.pulso-app .home-continue > .home-art { border-radius: .6rem; }
-.pulso-app .home-recent,.pulso-app .home-playlists { gap: 1.5rem 1rem; }
-.pulso-app .home-recent > li { padding: 0; }
-.pulso-app .home-recent button,.pulso-app .home-playlists button,.pulso-app .collection-card { background: transparent; border: 0; padding: 0; border-radius: .5rem; gap: .2rem; }
+.pulso-app .home-quick button:first-child > span { background: linear-gradient(135deg,#4a0817,#9e1b38); color: #fff; }
+
+
+.pulso-app :is(.home-playlists, .home-albums) { gap: 1.5rem 1rem; }
+.pulso-app :is(.home-playlists, .home-albums) button,.pulso-app .collection-card { background: transparent; border: 0; padding: 0; border-radius: .5rem; gap: .2rem; }
 .pulso-app .home-art,.pulso-app .collection-card__art { border-radius: .5rem; }
-.pulso-app .home-recent strong,.pulso-app .home-playlists strong { font-size: .95rem; font-weight: 600; line-height: 1.4; margin-block-start: .55rem; }
-.pulso-app .home-recent small,.pulso-app .home-playlists small { font-size: .8rem; }
+.pulso-app :is(.home-playlists, .home-albums) strong { font-size: .95rem; font-weight: 600; line-height: 1.4; margin-block-start: .55rem; }
+.pulso-app :is(.home-playlists, .home-albums) small { font-size: .8rem; }
 .pulso-app .library-tabs { margin-block: 1.25rem; gap: .5rem; }
 .pulso-app .library-tabs button { border-radius: 2rem; padding-inline: .85rem; font-size: .85rem; }
 .pulso-app .library-grid { grid-template-columns: repeat(auto-fill,minmax(min(100%,9rem),1fr)); gap: 1.5rem 1rem; }
 .pulso-app .collection-card strong { font-size: .95rem; line-height: 1.4; font-weight: 600; margin-block-start: .45rem; }
 .pulso-app .collection-card > span:last-child { font-size: .8rem; line-height: 1.4; }
 .pulso-app .create-playlist { border-block-start: 1px solid var(--pulso-border); padding-block-start: 1rem; }
-.pulso-app .mini-player { padding-block: .4rem; border-radius: .8rem; box-shadow: 0 .2rem 1rem #10244c0a; }
+.pulso-app .mini-player { border-radius: .8rem; box-shadow: 0 .2rem 1rem #10244c0a; }
 .pulso-app .shell-nav { border: 0; background: var(--pulso-canvas); }
-.pulso-app .shell-nav button[aria-current="page"] { background: transparent; color: var(--pulso-accent); }
+.pulso-app .shell-nav button[aria-current="page"] { background: transparent; color: var(--pulso-accent-text); }
 /* Current route is conveyed by text weight and color; outlines remain for keyboard focus. */
 .pulso-app .shell-nav button[aria-current="page"]:not(:focus-visible) { outline: none; }
 .pulso-app .player-surface[data-open="true"] { background: var(--pulso-canvas); border: 0; }
-.pulso-app .player-surface__toolbar { display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; gap: .5rem; margin-block-end: .5rem; background: var(--pulso-canvas); }
-.pulso-app .player-surface__toolbar > span { grid-column: 2; grid-row: 1; text-align: center; color: var(--pulso-foreground); font-weight: 650; }
-.pulso-app .player-surface__toolbar > button { grid-column: 1; grid-row: 1; inline-size: 44px; block-size: 44px; min-inline-size: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; font-size: 0; }
-.pulso-app .player-surface__toolbar > button::before { content: "⌄"; display: block; font-size: 2rem; line-height: 1; }
+.pulso-app .player-surface__toolbar { display:flex; flex-direction:column; align-items:center; gap:.15rem; padding-block:.25rem .4rem; margin-block-end:.25rem; background:var(--pulso-canvas); touch-action:none; }
+.pulso-app .player-surface__grabber { inline-size:72px; min-inline-size:44px; block-size:44px; min-block-size:44px; display:grid; place-items:center; padding:0; border:0; border-radius:999px; background:transparent; cursor:pointer; }
+.pulso-app .player-surface__grabber-pill { display:block; inline-size:38px; block-size:5px; border-radius:999px; background:rgba(255,255,255,.32); transition:background-color 150ms ease, transform 150ms ease; }
+.pulso-app .player-surface__grabber:hover .player-surface__grabber-pill, .pulso-app .player-surface__grabber:active .player-surface__grabber-pill { background:rgba(255,255,255,.52); }
+.pulso-app .player-surface__toolbar > span { font-size:.78rem; font-weight:600; letter-spacing:.02em; color:var(--pulso-muted); text-align:center; }
+html[data-theme="light"] .pulso-app .player-surface__grabber-pill { background:rgba(24,13,17,.24); }
+html[data-theme="light"] .pulso-app .player-surface__grabber:hover .player-surface__grabber-pill, html[data-theme="light"] .pulso-app .player-surface__grabber:active .player-surface__grabber-pill { background:rgba(24,13,17,.42); }
+@media (prefers-color-scheme: light) { html[data-theme="system"] .pulso-app .player-surface__grabber-pill { background:rgba(24,13,17,.24); } html[data-theme="system"] .pulso-app .player-surface__grabber:hover .player-surface__grabber-pill, html[data-theme="system"] .pulso-app .player-surface__grabber:active .player-surface__grabber-pill { background:rgba(24,13,17,.42); } }
+@media (prefers-reduced-motion: reduce) { .pulso-app .player-surface__grabber-pill { transition:none; } }
 .pulso-app .np-context { margin: 0; }
 .pulso-app .np-lyrics-preview p { font-size: clamp(1.4rem,4vw,1.8rem); font-weight: 700; letter-spacing: -.035em; line-height: 1.35; margin-block: .5rem 1rem; }
 .pulso-app .np-lyrics-card > button { border: 0; background: var(--pulso-surface); }
@@ -60,5 +64,5 @@
 @media (min-width: 1024px) {
   .pulso-app .home-quick { grid-template-columns: repeat(auto-fit,minmax(min(100%,11rem),1fr)); }
   .pulso-app .shell-nav { border: 1px solid var(--pulso-border); border-radius: 1rem; background: var(--pulso-surface); }
-  .pulso-app .mini-player { min-block-size: 104px; padding-block: .5rem; border-radius: 0; }
+  .pulso-app .mini-player { min-block-size: 104px; border-radius: 0; }
 }

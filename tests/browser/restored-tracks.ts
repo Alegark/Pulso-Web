@@ -9,6 +9,7 @@ import {importOperation,importOperations,importIssues,retainImportIssue,recoverI
 import {readArtwork} from '../../src/library/artwork';
 import {readLyrics,setManualLyrics} from '../../src/library/lyrics';
 import {createLocalBatch,listLocalBatches} from '../../src/library/local-batches';
+import {editDuringImport} from './import-edit-fixture';
 const results:string[]=[];
 function assert(v:unknown,m:string):asserts v{if(!v)throw new Error(m);}
 async function check(n:string,fn:()=>Promise<void>){try{await fn();results.push(`PASS ${n}`);}catch(e){results.push(`FAIL ${n}: ${e instanceof Error?e.message:String(e)}`);}document.querySelector('#results')!.textContent=results.join('\n');}
@@ -34,11 +35,15 @@ for(const backend of ['idb','opfs'] as const){
  const file=wav(backend==='idb'?2:3),a=await restored(file),b=await restored(file),variant=await restored(wav(70));
  const wrongLength=await restored(file);wrongLength.audioFingerprint!.bytes++;await writeRecord('tracks',wrongLength.id,wrongLength);
  const p:Playlist={id:crypto.randomUUID(),name:'Actual',revision:4,organizationRef:a.organizationRef,entries:[{id:crypto.randomUUID(),trackId:b.id}]};
- const before=(await all('tracks')).length;let edit:Promise<unknown>|undefined;
- const result=await importFile(file,signal(),()=>{edit??=(async()=>{await editTrack(a.id,1,{title:'Última edición',album:'Actual',favorite:false});await writeRecord('playlists',p.id,p);})();},{backend});await edit;
+ const before=(await all('tracks')).length;
+ const result=await importFile(file,signal(),async bytes=>{
+ if(bytes!==file.size)return;
+ await editDuringImport(a.id,{title:'Última edición',album:'Actual'},false);
+ await writeRecord('playlists',p.id,p);
+ },{backend});
  const x=await readRecord<Track>('tracks',a.id),y=await readRecord<Track>('tracks',b.id);
  assert(x?.assetId&&x.assetId===y?.assetId&&x.id!==y.id,'no enlazó ambas');
- assert(x.title==='Última edición'&&!x.favorite&&x.manualOverrides.album==='Actual'&&x.organizationRef?.id===a.organizationRef?.id,'pisó cambios');
+ assert(x.title==='Última edición'&&!x.favorite&&x.manualOverrides.album==='Actual'&&x.organizationRef?.id===a.organizationRef?.id&&x.revision===a.revision+2,'pisó cambios');
  assert((await all('tracks')).length===before,'creó parser extra');assert((await readRecord<Track>('tracks',variant.id))?.assetId===null,'unió título o bytes diferentes');
  assert((await readRecord<Track>('tracks',wrongLength.id))?.assetId===null,'ignoró longitud');
  assert(JSON.stringify(await readRecord('playlists',p.id))===JSON.stringify(p),'pisó playlist');assert(await verifiedAsset(result.track.assetId,true),'bytes');

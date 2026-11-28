@@ -18,7 +18,7 @@ const rows:MusicSearchPanelProps['suggestions']=[
 function render(){
  const captured=epoch;
  const props:MusicSearchPanelProps={query:'',suggestions:[],suggestionsPending:false,resultsVisible:false,selectedSuggestionId:null,primaryProvider:null,sessionReady:false,canSearch:false,searchPending:false,results:[],uncertain:false,selectedResultId:null,
-  onQueryChange:value=>{calls.push(['query',value]);patch.query=value;patch.suggestions=value.trim()?rows:[];render();},
+  onQueryChange:value=>{calls.push(['query',value]);patch.query=value;patch.suggestions=value.trim()?rows:[];patch.resultsVisible=!!value.trim();render();},
   onSearch:()=>{calls.push(['search']);},onChooseSuggestion:(id,opener)=>{calls.push(['choose',id,opener.dataset.suggestionId]);},onCancel:()=>{calls.push(['cancel-operation']);},onSelectResult:id=>{calls.push(['result',id]);},onRetrySuggestions:()=>{calls.push(['retry']);},
   ...patch,current:()=>captured===epoch,
  };

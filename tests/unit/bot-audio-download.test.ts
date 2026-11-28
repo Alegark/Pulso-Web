@@ -17,7 +17,7 @@ async function setup(option=false,mutate?:(r:any,defaultValue:any,callbackDone:b
  const offer=await pool.handle({...env(),type:'bots.validate',input:username},ctx);assert.equal(offer?.type,'bots.validated');const ref=offer!.type==='bots.validated'?offer.offer.providerRef:'';
  await pool.handle({...env(),type:'bots.setOrder',expectedRevision:0,providerRefs:[ref]},ctx);
  const calls:any[]=[],progress:any[]=[];
- const driver=createBotSearchSdkDriver(binding,sessionId,{providers:pool,current(s){if(s.aborted)throw Error('cancelled');},getAccountCooldown:()=>null,invalidateSession(){invalidations++;},call:async(r:any,o:any)=>{
+ const driver=createBotSearchSdkDriver(binding,sessionId,{providers:pool,current(s:AbortSignal){if(s.aborted)throw Error('cancelled');},getAccountCooldown:()=>null,invalidateSession(){invalidations++;},call:async(r:any,o:any)=>{
   calls.push({r,o});let v:any;
   switch(r._){case 'contacts.resolveUsername':v=identity(username);break;case 'messages.sendMessage':v={_:'updateShortSentMessage',out:true,id:10};break;case 'messages.getHistory':v=r.limit===1?history():history([msg(option&&!callbackDone?undefined:doc())]);break;case 'messages.getMessages':v=history([msg(option&&!callbackDone?undefined:doc())]);break;case 'messages.getBotCallbackAnswer':assert.deepEqual(r.data,new Uint8Array([8,9]));callbackDone=true;v={_:'messages.botCallbackAnswer',cacheTime:0};break;case 'upload.getFile':assert.equal(o.dcId,2);assert.equal(o.kind,'download');v={_:'upload.file',bytes:bytes.slice(),mtime:0};break;default:throw Error('unexpected');}
   return mutate?await mutate(r,v,callbackDone):v;
@@ -25,7 +25,7 @@ async function setup(option=false,mutate?:(r:any,defaultValue:any,callbackDone:b
  const command={protocol:'pulso-bot-search' as const,version:1 as const,...binding,sessionId,providerRevision:1,queryId:randomUUID(),requestId:randomUUID(),type:'bot-search.search',providerRef:ref,query:wanted.title,target:wanted,consent:true};
  const response=await driver.handle(command,ctx);assert.equal(response?.type,'bot-search.result');
  const dl={...command,type:'bot-search.download',requestId:randomUUID(),rowRef:response?.type==='bot-search.result'?response.rows[0].rowRef:''};delete (dl as any).query;
- return {driver,dl,ctx,calls,progress,get invalidations(){return invalidations;},download:()=>driver.handle(dl,{...ctx,publish:r=>progress.push(r)})};
+ return {driver,dl,ctx,calls,progress,rows:response!.type==='bot-search.result'?response!.rows:[],get invalidations(){return invalidations;},download:()=>driver.handle(dl,{...ctx,publish:r=>progress.push(r)})};
 }
 test('direct audio uses private location, one sequential download, exact hash/Blob and second revalidation',async()=>{
  const s=await setup();const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.ok(parseBotSearchReply(r,s.dl as never));
@@ -40,19 +40,22 @@ test('Deezer exact artist-first album-version option carries the recording title
  const s=await setup(true,(request,value,clicked)=>{
   if(!['messages.getHistory','messages.getMessages'].includes(request._)||request.limit===1)return value;
   if(clicked){const d=doc();d.attributes[0].title=target.title+' (Album Version)';return history([msg(d)]);}
-  const m=msg();m.replyMarkup!.rows[0].buttons[0].text='1. Own Artist - Own Song (Album Version)';return history([m]);
+  const m=msg();assert.ok('replyMarkup' in m);m.replyMarkup.rows[0].buttons[0].text='1. Own Artist - Own Song (Album Version)';return history([m]);
  },undefined,{username:'deezermusicbot',target:wanted});
  try{const result=await s.download();assert.equal(result?.type,'bot-search.downloaded');assert.ok(parseBotSearchReply(result,s.dl as never));if(result?.type==='bot-search.downloaded')assert.equal(result.audio.recordingTitle,'Own Song (Album Version)');assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);}finally{s.driver.close();}
 });
 test('Deezer does not use the historical title-substring fallback for a foreign performer',async()=>{
- const s=await setup(true,(request,value)=>{if(!['messages.getHistory','messages.getMessages'].includes(request._)||request.limit===1)return value;const m=msg();m.replyMarkup!.rows[0].buttons[0].text='Own Song - Other Artist';return history([m]);},undefined,{username:'deezermusicbot'});
+ const s=await setup(true,(request,value)=>{if(!['messages.getHistory','messages.getMessages'].includes(request._)||request.limit===1)return value;const m=msg();assert.ok('replyMarkup' in m);m.replyMarkup.rows[0].buttons[0].text='Own Song - Other Artist';return history([m]);},undefined,{username:'deezermusicbot'});
  try{const result=await s.download();assert.equal(result?.type,'bot-search.error');assert.equal(s.calls.some(x=>x.r._==='messages.getBotCallbackAnswer'||x.r._==='upload.getFile'),false);}finally{s.driver.close();}
 });
 test('changed menu and foreign known peer reject before callback or bytes',async()=>{
  for(const foreign of [false,true]){const s=await setup(true,(r,v)=>r._==='messages.getMessages'?history([foreign?msg(undefined,202):{...msg(),message:'changed'}]):v);const r=await s.download();assert.equal(r?.type,'bot-search.error');assert.equal(s.calls.some(x=>['upload.getFile','messages.getBotCallbackAnswer'].includes(x.r._)),false);s.driver.close();}
 });
-test('oversize rejected before bytes; short and wrong headers never return a file',async()=>{
- for(const mode of ['size','short','header']){const s=await setup(false,(r,v)=>mode==='size'&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([msg(doc(AUDIO_FILE_MAX_BYTES+1))]):r._==='upload.getFile'?{...v,bytes:mode==='short'?bytes.slice(1):new Uint8Array(100)}:v);const r=await s.download();assert.equal(r?.type,'bot-search.error');if(r?.type==='bot-search.error')assert.equal(r.error,mode==='size'?'file-too-large':'file-invalid');if(mode==='size')assert.equal(s.calls.some(x=>x.r._==='upload.getFile'),false);s.driver.close();}
+test('short data and unsupported headers never return a file',async()=>{
+ for(const invalidBytes of [bytes.slice(1),new Uint8Array(100)]){
+  const s=await setup(false,(r,v)=>r._==='upload.getFile'?{...v,bytes:invalidBytes}:v);
+  try{const r=await s.download();assert.equal(r?.type,'bot-search.error');if(r?.type==='bot-search.error')assert.equal(r.error,'file-invalid');}finally{s.driver.close();}
+ }
 });
 test('unthreaded exact private audio can complete the chosen-song operation without a second click',async()=>{
  let baselines=0;
@@ -62,11 +65,11 @@ test('unthreaded exact private audio can complete the chosen-song operation with
   return v;
  });
  const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);s.driver.close();
- assert.equal(BOT_SEARCH_BOUNDS.downloadMs,120000);
+ assert.equal(BOT_SEARCH_BOUNDS.downloadResolveMs,120000);
 });
 test('equal exact unthreaded audio candidates use the first compatible recording automatically',async()=>{
  const s=await setup(true,(r,v,clicked)=>clicked&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([{...msg(doc()),id:13,fromId:undefined,replyTo:undefined},{...msg(doc()),id:14,fromId:undefined,replyTo:undefined}]):v);
- const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert.deepEqual(s.calls.filter(x=>x.r._==='messages.getMessages').map(x=>x.r.id[0].id),[12,13,13]);s.driver.close();
+ const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert.deepEqual(s.calls.filter(x=>x.r._==='messages.getMessages').map(x=>x.r.id[0].id),[12,13]);s.driver.close();
 });
 test('cancel preserves the file RPC lane and observes a late revocation without a second request',async()=>{
  let reject!:(e:unknown)=>void;const pending=new Promise((_,r)=>reject=r);const s=await setup(false,(r,v)=>r._==='upload.getFile'?pending:v);
@@ -90,37 +93,56 @@ test('validated document readiness is visible while the first file RPC is still 
  release({_:'upload.file',bytes,mtime:0});assert.equal((await result)?.type,'bot-search.downloaded');assert.equal(await s.driver.whenSettled(),true);
  }finally{s.driver.close();}
 });
-test('download deadline is 120 seconds and keeps the RPC lane until settlement',async()=>{
+test('a small file has an 18-second transfer deadline and keeps the RPC lane until settlement',async()=>{
  let now=0,id=0;const timers=new Map<number,{at:number;fn:()=>void}>();
- const clock={now:()=>now,setTimeout(fn:()=>void,ms:number){const key=++id;timers.set(key,{at:now+ms,fn});return key;},clearTimeout(key:number){timers.delete(key);}} as unknown as BotProvidersClock;
+ const clock={now:()=>now,setTimeout(fn:()=>void,ms:number){const key=++id;if(ms<=1000)queueMicrotask(fn);else timers.set(key,{at:now+ms,fn});return key;},clearTimeout(key:number){timers.delete(key);}} as unknown as BotProvidersClock;
  const advance=(ms:number)=>{const end=now+ms;for(;;){const due=[...timers].filter(([,t])=>t.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;};
  let finish!:(value:unknown)=>void;const pending=new Promise(resolve=>{finish=resolve;});
  const s=await setup(false,(r,v)=>r._==='upload.getFile'?pending:v,clock);let resolved=false;const result=s.download().then(value=>{resolved=true;return value;});
  while(!s.calls.some(x=>x.r._==='upload.getFile'))await new Promise(r=>setImmediate(r));
  advance(15000);await new Promise(r=>setImmediate(r));assert.equal(resolved,false);
- advance(105000);const timed=await result;assert.equal(timed?.type,'bot-search.error');if(timed?.type==='bot-search.error')assert.equal(timed.error,'timeout');
+ advance(3000);const timed=await result;assert.equal(timed?.type,'bot-search.error');if(timed?.type==='bot-search.error')assert.equal(timed.error,'timeout');
  let settled=false;void s.driver.whenSettled().then(()=>{settled=true;});await new Promise(r=>setImmediate(r));assert.equal(settled,false);
  finish({_:'upload.file',bytes,mtime:0});assert.equal(await s.driver.whenSettled(),true);s.driver.close();
 });
+test('callback and aligned media transfer have independent deadlines',async()=>{
+ let now=0;const requests:{offset:number;limit:number}[]=[];
+ const clock:BotProvidersClock={now:()=>now,setTimeout,clearTimeout};
+ const size=1024*1024+1,large=doc(size);
+ const s=await setup(true,(r,v,clicked)=>{
+  if(r._==='messages.getBotCallbackAnswer')now+=119000;
+  if(clicked&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1)return history([msg(large)]);
+  if(r._!=='upload.getFile')return v;
+  requests.push({offset:r.offset,limit:r.limit});now+=3000;
+  const part=new Uint8Array(Math.min(r.limit,size-r.offset));if(r.offset===0)part.set(bytes);
+  return {...v,bytes:part};
+ },clock);
+ try{
+  const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');
+  assert.deepEqual(requests,[{offset:0,limit:524288},{offset:524288,limit:524288},{offset:1048576,limit:524288}]);
+  if(r?.type==='bot-search.downloaded')assert.equal(r.audio.blob.size,size);
+ }finally{s.driver.close();}
+});
+
 
 
 test('callback metadata and exact rereads have separate reply budgets before verified bytes',async()=>{
  const s=await setup(true,async(r,v)=>r._==='upload.getFile'?v:{...v,incidental:'x'.repeat(8192)});
  const result=await s.download();assert.equal(result?.type,'bot-search.downloaded');
  if(result?.type==='bot-search.downloaded')assert.equal(result.audio.sha256,createHash('sha256').update(bytes).digest('hex'));
- assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getMessages').length,3);assert.equal(await s.driver.whenSettled(),true);s.driver.close();
+ assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getMessages').length,2);assert.equal(await s.driver.whenSettled(),true);s.driver.close();
 });
 
 
 test('after a callback the closest compatible duration wins before file transfer',async()=>{
  const s=await setup(true,(r,v,clicked)=>clicked&&['messages.getHistory','messages.getMessages'].includes(r._)&&r.limit!==1?history([{...msg({...doc(),attributes:[{_:'documentAttributeAudio',duration:3,title:target.title,performer:target.artist}]}),id:13},{...msg(doc()),id:14}]):v);
- const result=await s.download();assert.equal(result?.type,'bot-search.downloaded');assert.deepEqual(s.calls.filter(x=>x.r._==='messages.getMessages').map(x=>x.r.id[0].id),[12,14,14]);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);s.driver.close();
+ const result=await s.download();assert.equal(result?.type,'bot-search.downloaded');assert.deepEqual(s.calls.filter(x=>x.r._==='messages.getMessages').map(x=>x.r.id[0].id),[12,14]);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);s.driver.close();
 });
 
 test('one unrelated audio after the callback does not finish before the requested recording arrives',async()=>{
  let polls=0;
- const time:BotProvidersClock={now:()=>Date.now(),setTimeout:(fn,ms)=>setTimeout(fn,ms===BOT_SEARCH_BOUNDS.pollMs?1:ms),clearTimeout:timer=>clearTimeout(timer)};
- const unrelated={...doc(8388609),id:new Long(99,3),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
+ const time:BotProvidersClock={now:()=>Date.now(),setTimeout:(fn,ms)=>setTimeout(fn,ms<=BOT_SEARCH_BOUNDS.pollMs?1:ms),clearTimeout:timer=>clearTimeout(timer)};
+ const unrelated={...doc(),id:new Long(99,3),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
  const s=await setup(true,(r,v,clicked)=>{
   if(clicked&&r._==='messages.getHistory'&&r.limit===20){polls++;return history([{...msg(polls===1?unrelated:doc()),id:polls===1?13:14}]);}
   if(clicked&&r._==='messages.getMessages')return history([{...msg(doc()),id:14}]);
@@ -129,17 +151,17 @@ test('one unrelated audio after the callback does not finish before the requeste
  try{const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(polls,2);assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='upload.getFile').length,1);assert(s.calls.filter(x=>x.r._==='upload.getFile').every(x=>x.r.location.id.equals(new Long(11,3))));}finally{s.driver.close();}
 });
 test('unrelated audio only reaches a bounded final result without callback retry or file bytes',async()=>{
- let polls=0;
- const time:BotProvidersClock={now:()=>Date.now(),setTimeout:(fn,ms)=>setTimeout(fn,ms===BOT_SEARCH_BOUNDS.pollMs?1:ms),clearTimeout:timer=>clearTimeout(timer)};
- const unrelated={...doc(8388609),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
- const s=await setup(true,(r,v,clicked)=>{if(clicked&&r._==='messages.getHistory'&&r.limit===20){polls++;return history([{...msg(unrelated),id:13}]);}return v;},time);
- try{const r=await s.download();assert.equal(r?.type,'bot-search.result');assert.equal(polls,BOT_SEARCH_BOUNDS.downloadReads);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.some(x=>x.r._==='upload.getFile'),false);assert.equal(s.progress.some(x=>x.type==='bot-search.download-progress'),false);}finally{s.driver.close();}
+ let now=0,firstSeen=0;
+ const time:BotProvidersClock={now:()=>now,setTimeout:(fn,ms)=>setTimeout(()=>{if(ms<=1000)now+=ms;fn();},ms<=1000?1:ms),clearTimeout:timer=>clearTimeout(timer)};
+ const unrelated={...doc(),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
+ const s=await setup(true,(r,v,clicked)=>{if(clicked&&r._==='messages.getHistory'&&r.limit===20){firstSeen ||= now;return history([{...msg(unrelated),id:13}]);}return v;},time);
+ try{const r=await s.download();assert.equal(r?.type,'bot-search.result');assert.equal(now-firstSeen,4500);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.some(x=>x.r._==='upload.getFile'),false);assert.equal(s.progress.some(x=>x.type==='bot-search.download-progress'),false);}finally{s.driver.close();}
 });
 
 test('targeted search waits past an unrelated audio for the matching menu without resending',async()=>{
  let polls=0;
- const time:BotProvidersClock={now:()=>Date.now(),setTimeout:(fn,ms)=>setTimeout(fn,ms===BOT_SEARCH_BOUNDS.pollMs?1:ms),clearTimeout:timer=>clearTimeout(timer)};
- const unrelated={...doc(8388609),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
+ const time:BotProvidersClock={now:()=>Date.now(),setTimeout:(fn,ms)=>setTimeout(fn,ms<=BOT_SEARCH_BOUNDS.pollMs?1:ms),clearTimeout:timer=>clearTimeout(timer)};
+ const unrelated={...doc(),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
  const s=await setup(true,(r,v,clicked)=>{if(!clicked&&r._==='messages.getHistory'&&r.limit===20){polls++;if(polls===1)return history([{...msg(unrelated),id:11}]);}return v;},time);
  try{assert.equal(polls,2);const r=await s.download();assert.equal(r?.type,'bot-search.downloaded');assert.equal(s.calls.filter(x=>x.r._==='messages.sendMessage').length,1);assert.equal(s.calls.filter(x=>x.r._==='messages.getBotCallbackAnswer').length,1);}finally{s.driver.close();}
 });
@@ -157,3 +179,161 @@ test('audio identity and current musical metadata remain fenced despite caption 
  }
 });
 import {AUDIO_FILE_MAX_BYTES} from '../../src/storage/audio-limits';
+
+test('callback downloads the compatible alternative to a larger or unsupported exact match',async()=>{
+ for(const invalid of [doc(AUDIO_FILE_MAX_BYTES+1),{...doc(),mimeType:'audio/flac'}]){
+  const valid=doc();valid.attributes[0].duration=2;
+  const s=await setup(true,(r,v,clicked)=>{
+   if(!clicked||r.limit===1||!['messages.getHistory','messages.getMessages'].includes(r._))return v;
+   const candidates=[{...msg(invalid),id:13},{...msg(valid),id:14}];
+   return history(r._==='messages.getMessages'?candidates.filter(m=>m.id===r.id[0].id):candidates);
+  });
+  try{
+   assert.equal((await s.download())?.type,'bot-search.downloaded');
+   assert.deepEqual(s.calls.filter(r=>r.r._==='messages.getMessages').map(r=>r.r.id[0].id),[12,14]);
+  }finally{s.driver.close();}
+ }
+});
+
+for(const stop of ['rate-limit','header','short','cancelled','quarantine','transfer-timeout'] as const)test(`parallel ${stop} retains the lane until every part settles or grace expires`,async()=>{
+ const size=512*1024*6,document=doc(size);
+ const parts=new Map<number,{resolve:(v:unknown)=>void;reject:(e:unknown)=>void}>();
+ const timers=new Map<number,{at:number;fn:()=>void}>();let next=0,now=1000;
+ const clock={now:()=>now,setTimeout(fn:()=>void,ms:number){const id=++next;if(ms<=1000)queueMicrotask(fn);else timers.set(id,{at:now+ms,fn});return id;},clearTimeout(id:number){timers.delete(id);}} as unknown as BotProvidersClock;
+ const advance=(ms:number)=>{now+=ms;for(const [id,timer] of timers)if(timer.at<=now){timers.delete(id);timer.fn();}};
+ const s=await setup(false,(r,v)=>r._==='upload.getFile'?new Promise((resolve,reject)=>parts.set(r.offset,{resolve,reject})):
+  ['messages.getMessages','messages.getHistory'].includes(r._)&&r.limit!==1?history([msg(document)]):v,clock);
+ const abort=new AbortController();
+ try{
+  const download=s.driver.handle(s.dl,{...s.ctx,signal:abort.signal});
+  let replied=false,settled=false;
+  void download.then(()=>{replied=true;});
+  void s.driver.whenSettled().then(()=>{settled=true;});
+  const tick=()=>new Promise(resolve=>setImmediate(resolve));
+  await tick();assert.equal(parts.size,4);
+  const chunks=[...parts.values()];
+  const part=(length=512*1024)=>({_:'upload.file',bytes:new Uint8Array(length)});
+  if(stop==='rate-limit'||stop==='transfer-timeout')chunks[1].reject({errorMessage:'FLOOD_WAIT_4'});
+  else if(stop==='header')chunks[0].resolve(part());
+  else if(stop==='short')chunks[1].resolve(part(1));
+  else abort.abort();
+  await tick();
+  if(stop!=='cancelled'&&stop!=='quarantine'){
+   advance(2500);await tick();
+   assert.equal(settled,false);assert.equal(replied,false);assert.equal(parts.size,4);
+  }
+  for(const chunk of chunks.slice(0,3))chunk.resolve(part());
+  await tick();assert.equal(settled,false);assert.equal(parts.size,4);
+  if(stop==='transfer-timeout')advance(33000);
+  if(stop==='quarantine'||stop==='transfer-timeout')advance(BOT_SEARCH_BOUNDS.settlementMs);
+  else chunks[3].resolve(part());
+  const result=await download;
+  assert.equal(result?.type,'bot-search.error');
+  if(result?.type==='bot-search.error'){
+   assert.equal(result.error,stop==='rate-limit'||stop==='transfer-timeout'?'rate-limit':stop==='header'||stop==='short'?'file-invalid':'cancelled');
+   if(result.error==='rate-limit')assert.equal(result.retryAt,5000);
+  }
+  const quarantined=stop==='quarantine'||stop==='transfer-timeout';
+  assert.equal(await s.driver.whenSettled(),!quarantined);
+  assert.equal(s.invalidations,quarantined?1:0);
+ }finally{s.driver.close();for(const part of parts.values())part.resolve(null);}
+});
+
+for(const match of [true,false])test(match?'late callback admits a first immediate history read':'callback returns unmatched audio when a further poll would exceed the deadline',async()=>{
+ let now=0,reads=0,next=0;const timers=new Set<number>();
+ const clock={now:()=>now,setTimeout(fn:()=>void,ms:number){
+  const id=++next;timers.add(id);
+  if(ms<=1000)queueMicrotask(()=>{if(timers.delete(id)){now+=ms;fn();}});
+  return id;
+ },clearTimeout(id:number){timers.delete(id);}} as unknown as BotProvidersClock;
+ const unrelated={...doc(),attributes:[{_:'documentAttributeAudio',duration:80,title:'Own Song (Remix)',performer:'Other Artist'}]};
+ const s=await setup(true,(r,v,clicked)=>{
+  if(r._==='messages.getBotCallbackAnswer')now+=BOT_SEARCH_BOUNDS.downloadResolveMs-(match?250:500);
+  if(clicked&&r._==='messages.getHistory'&&r.limit===20){
+   reads++;if(!match)now++;
+   return history([{...msg(match?doc():unrelated),id:13}]);
+  }
+  if(clicked&&r._==='messages.getMessages')return history([{...msg(doc()),id:13}]);
+  return v;
+ },clock);
+ try{
+  const reply=await s.download();
+  assert.equal(reply?.type,match?'bot-search.downloaded':'bot-search.result');
+  assert.equal(reads,1);
+  assert.equal(await s.driver.whenSettled(),true);
+  assert.equal(s.invalidations,0);
+  if(reply?.type==='bot-search.result')assert.equal(reply.rows.length,1);
+ }finally{s.driver.close();}
+});
+
+test('callback waits beyond four reads for the first audio',async()=>{
+ let reads=0;
+ const time:BotProvidersClock={now:()=>Date.now(),setTimeout:(fn,ms)=>setTimeout(fn,ms<=1000?1:ms),clearTimeout:timer=>clearTimeout(timer)};
+ const s=await setup(true,(r,v,clicked)=>{
+  if(clicked&&r._==='messages.getHistory'&&r.limit===20)return history(++reads<20?[]:[{...msg(doc()),id:13}]);
+  if(clicked&&r._==='messages.getMessages')return history([{...msg(doc()),id:13}]);
+  return v;
+ },time);
+ try{assert.equal((await s.download())?.type,'bot-search.downloaded');assert.equal(reads,20);}
+ finally{s.driver.close();}
+});
+
+for(const expired of [false,true])test(expired?'retained menu expires at the original TTL':'same menu accepts a second option without a new search',async()=>{
+ let now=1000,clicks=0;
+ const time:BotProvidersClock={now:()=>now,setTimeout:(fn,ms)=>setTimeout(()=>{if(ms<=1000)now+=ms;fn();},ms<=1000?1:ms),clearTimeout:timer=>clearTimeout(timer)};
+ const original=msg();
+ assert.ok('replyMarkup' in original&&original.replyMarkup);
+ const markup=original.replyMarkup,menu={...original,replyMarkup:{...markup,rows:[...markup.rows,...structuredClone(markup.rows)]}};
+ const wrong={...doc(),id:new Long(88,3),attributes:[{_:'documentAttributeAudio',duration:80,title:target.title,performer:target.artist}]};
+ const first={...msg(wrong),id:13},second={...msg(doc()),id:14};
+ const s=await setup(true,(r,v)=>{
+  if(r._==='messages.getBotCallbackAnswer'){clicks++;return v;}
+  if(r._==='messages.getMessages')return history([menu,first,second]);
+  if(r._==='messages.getHistory')return r.limit===1?history(clicks?[first]:[]):history(clicks===0?[menu]:clicks===1?[first,menu]:[second,first,menu]);
+  return v;
+ },time);
+ try{
+  const firstReply=await s.driver.handle({...s.dl,callbackBudgetMs:65000},s.ctx);
+  assert.equal(firstReply?.type,'bot-search.result');assert.equal(clicks,1);
+  if(expired)now+=BOT_SEARCH_BOUNDS.resultTtlMs;
+  const alternate=await s.driver.handle({...s.dl,requestId:randomUUID(),rowRef:s.rows[1].rowRef,callbackBudgetMs:65000},s.ctx);
+  if(expired){assert.equal(alternate?.type,'bot-search.error');if(alternate?.type==='bot-search.error')assert.equal(alternate.error,'expired');}
+  else assert.equal(alternate?.type,'bot-search.downloaded');
+  assert.equal(clicks,expired?1:2);
+  assert.equal(s.calls.filter(({r})=>r._==='messages.sendMessage').length,1);
+ }finally{s.driver.close();}
+});
+
+test('duplicate document IDs retain the highest ranked copy without exposing Telegram identifiers',async()=>{
+ const duplicate=[{...msg(doc()),id:13},{...msg(doc()),id:14}];
+ const s=await setup(false,(r,v)=>r._==='messages.getHistory'&&r.limit===20?history(duplicate):v);
+ try{assert.equal(s.rows.length,1);assert.equal(s.rows[0].kind,'audio');assert.equal(Object.hasOwn(s.rows[0],'documentId'),false);}
+ finally{s.driver.close();}
+});
+
+test('callback history supplies the initial document and an edit after bytes still blocks delivery',async()=>{
+ const s=await setup(true,(r,v,clicked)=>
+  r._==='messages.getMessages'&&clicked?history([msg({...doc(),id:new Long(999,3)})]):v);
+ try{
+  const reply=await s.download();
+  assert.equal(reply?.type,'bot-search.error');
+  if(reply?.type==='bot-search.error')assert.equal(reply.error,'conflict');
+  const operations=s.calls.map(call=>call.r._);
+  assert.deepEqual(operations.slice(-3),['messages.getHistory','upload.getFile','messages.getMessages']);
+ }finally{s.driver.close();}
+});
+
+test('deletion of the exact callback audio during transfer blocks delivery with conflict',async()=>{
+ let receivedBytes=false;
+ const s=await setup(true,(request,value)=>{
+  if(request._==='upload.getFile')receivedBytes=true;
+  if(request._==='messages.getMessages'&&receivedBytes)return history([{_:'messageEmpty',id:12}]);
+  return value;
+ });
+ try{
+  const reply=await s.download();
+  assert.equal(reply?.type,'bot-search.error');
+  if(reply?.type==='bot-search.error')assert.equal(reply.error,'conflict');
+  assert.equal(receivedBytes,true);
+ }finally{s.driver.close();}
+});

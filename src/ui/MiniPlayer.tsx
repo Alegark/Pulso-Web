@@ -17,6 +17,7 @@ export interface MiniPlayerProps {
   onPause: () => void;
   onOpenPlayer: (opener: HTMLButtonElement) => void;
   artwork?: ReactNode;
+  notice?: ReactNode;
   onPrevious?: () => void; onNext?: () => void; canPrevious?: boolean; canNext?: boolean;
   position?: number; duration?: number; onSeek?: (value:number)=>void;
   volume?: number; onVolume?: (value:number)=>void;
@@ -28,6 +29,7 @@ export function MiniPlayer(props: MiniPlayerProps) {
   const clock=(seconds:number)=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
   return (
     <section className="mini-player" aria-label="Mini reproductor">
+      {props.notice}
       <button type="button" className="mini-player__details" title={[props.title,props.artist].filter(Boolean).join(' · ')} aria-label="Abrir reproductor desde título" onClick={event=>props.onOpenPlayer(event.currentTarget)}>
         {props.artwork&&<span className="mini-player__cover">{props.artwork}</span>}
         <span className="mini-player__copy"><span className="mini-player__title">{props.title}</span>
@@ -45,8 +47,9 @@ export function MiniPlayer(props: MiniPlayerProps) {
       {props.onSeek&&<label className="desktop-seek"><span className="mini-player__time" aria-hidden="true">{clock(position)}</span><span className="mini-player__range"><progress aria-hidden="true" max={duration||1} value={position}/><input aria-label="Posición desde barra" aria-valuetext={`${clock(position)} de ${clock(duration)}`} type="range" min="0" max={duration} step="0.1" value={position} disabled={!duration} onChange={event=>props.onSeek?.(Number(event.target.value))}/></span><span className="mini-player__time" aria-hidden="true">{clock(duration)}</span></label>}
       <div className="mini-player__utilities">
         {props.onVolume&&<label className="desktop-volume"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m11 5-6 4H2v6h3l6 4ZM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg><span className="mini-player__range"><progress aria-hidden="true" max="1" value={props.volume??1}/><input aria-label="Volumen" type="range" min="0" max="1" step="0.01" value={props.volume??1} onChange={event=>props.onVolume?.(Number(event.target.value))}/></span></label>}
-        <button type="button" className="mini-player__expand" aria-label="Abrir reproductor desde minirreproductor" onClick={(event) => props.onOpenPlayer(event.currentTarget)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+        <button type="button" className="mini-player__expand" aria-label="Abrir reproductor desde minirreproductor" onClick={(event) => props.onOpenPlayer(event.currentTarget)}><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4h5v5M9 20H4v-5M20 4l-6 6M4 20l6-6"/></svg></button>
       </div>
+      {duration>0&&<progress className="mini-player__mobile-progress" aria-hidden="true" max={duration} value={position}/>}
     </section>
   );
 }

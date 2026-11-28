@@ -32,6 +32,21 @@ let track:Track;let cover:Artwork;const original=tagged(pngBytes);
 await check('PNG/JPEG/WebP Canvas: firma, dimensiones, decode y SHA reales',async()=>{
  for(const mime of ['image/png','image/jpeg','image/webp']){const b=await image(mime);assert(b.type===mime,'canvas formato');const a=await validateArtwork(b);assert(a.mime===mime&&a.width===32&&a.height===24&&a.sha256.length===64,'imagen');}
 });
+await check('APIC JPEG admite MIME histórico y ceros después de EOI',async()=>{
+ const jpeg=new Uint8Array(await (await image('image/jpeg')).arrayBuffer());
+ for(const mime of ['image/jpg','image/pjpeg']){
+  const cover=await inspectEmbeddedArtwork(tagged(join(jpeg,new Uint8Array(24)),mime),'audio/mpeg');
+  assert(cover.state==='ready'&&cover.mime==='image/jpeg'&&cover.width===32,'APIC JPEG');
+ }
+ await rejects(new Blob([join(jpeg,new Uint8Array([0,1]))],{type:'image/jpeg'}),'image-structure');
+});
+await check('los metadatos importados y el nombre de archivo conservan Unicode válido al truncar',async()=>{
+ const split='A'.repeat(299)+'🎵X',fits='B'.repeat(298)+'🎵X';
+ for(const [file,expected] of [[tagged(undefined,'image/png',split),'A'.repeat(299)],[tagged(undefined,'image/png',fits),fits.slice(0,300)],[new File([tagged(undefined,'image/png','')],split+'.mp3',{type:'audio/mpeg'}),'A'.repeat(299)]] as const){
+  const result=await importLocal(file);
+  assert(result.track.title===expected,'límite Unicode del título');
+ }
+});
 await check('worker real importa ID3 Unicode y APIC PNG después del audio',async()=>{
  const worker=new Worker(new URL('../../src/imports/import.worker.ts',import.meta.url),{type:'module'});
  const realm=await beginWorkerAttempt('import',worker,()=>true);

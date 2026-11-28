@@ -1,18 +1,21 @@
+import {formatStorageMB} from '../library/storage-format';
 import { useId, useLayoutEffect, useRef } from 'react'
 import type React from 'react'
 
 export interface CollectionRemovalPanelProps {
   state: 'preparing' | 'ready' | 'working' | 'done' | 'uncertain' | 'blocked'
   title: string
+  cacheMode?: 'audio' | 'all'
   kind: 'playlist' | 'album' | 'cache'
   summary: { tracks: number; eligibleCopies: number; estimatedBytes: number; retainedShared: number } | null
+  queuedCount?: number
   accepted: boolean
   onAccepted: (value: boolean) => void
   onConfirm: () => void
   onCancel: () => void
   onClose: () => void
   current: () => boolean
-  result: { metadata: 'committed' | 'not-committed' | 'unknown'; cleanup: 'complete' | 'stopped' | 'not-started'; removed: number; skipped: number; freedBytes: number | null } | null
+  result: { metadata: 'committed' | 'not-committed' | 'unknown'; cleanup: 'complete' | 'stopped' | 'not-started'; removed: number; skipped: number; freedBytes: number | null; skipReasons?: readonly string[]; reason?: string | null } | null
   message: string | null
   canConfirm: boolean
   canCancel: boolean
@@ -20,7 +23,7 @@ export interface CollectionRemovalPanelProps {
   headingRef?: React.Ref<HTMLHeadingElement>
 }
 
-const mib = (bytes: number) => (bytes / (1024 * 1024)).toLocaleString('es', { maximumFractionDigits: 2 })
+
 
 export function CollectionRemovalPanel(props: CollectionRemovalPanelProps) {
   const headingId = useId()
@@ -39,39 +42,46 @@ export function CollectionRemovalPanel(props: CollectionRemovalPanelProps) {
   }
   const { state, summary, result } = props
   const cache = props.kind === 'cache'
+  const all = cache && props.cacheMode === 'all'
   const label = props.kind === 'playlist' ? 'playlist' : 'álbum'
-  const actionLabel = cache ? 'Limpiar caché de escucha' : `Eliminar ${label}`
+  const actionLabel = cache ? (all ? 'Limpiar toda la caché' : 'Limpiar caché de escucha') : `Eliminar ${label}`
 
   return (
     <section className="collection-removal" aria-labelledby={headingId}>
-      <h2 id={headingId} ref={props.headingRef} tabIndex={-1}>{cache ? 'Limpiar caché de escucha' : `Eliminar ${label}: ${props.title}`}</h2>
-      {cache && <p>Se retiran las copias de canciones escuchadas sin guardar. Biblioteca, favoritos, playlists y archivos en uso se conservan. Para volver a escucharlas puede ser necesaria otra descarga.</p>}
+      <h2 id={headingId} ref={props.headingRef} tabIndex={-1}>{cache ? actionLabel : `Eliminar ${label}: ${props.title}`}</h2>
+      {all && <p>Se borran canciones no guardadas, portadas en caché y búsquedas en memoria. Se conservan Biblioteca, álbumes guardados, playlists, Favoritos, portadas manuales y Telegram.</p>}
+      {cache && !all && <p>Se retiran las copias de canciones escuchadas sin guardar. Biblioteca, favoritos, playlists y archivos en uso se conservan. Para volver a escucharlas puede ser necesaria otra descarga.</p>}
       {state === 'preparing' && <p role="status">{cache ? 'Revisando la caché de escucha…' : 'Preparando la revisión de la colección…'}</p>}
       {summary && <dl className="collection-removal__summary">
         <div><dt>{cache ? 'Canciones en caché' : 'Canciones de la colección'}</dt><dd>{summary.tracks}</dd></div>
         <div><dt>Copias elegibles</dt><dd>{summary.eligibleCopies}</dd></div>
-        <div><dt>Audio estimado</dt><dd>{mib(summary.estimatedBytes)} MiB</dd></div>
-        <div><dt>Copias compartidas protegidas</dt><dd>{summary.retainedShared}</dd></div>
+        <div><dt>Audio estimado</dt><dd>{formatStorageMB(summary.estimatedBytes)}</dd></div>
+        <div><dt>Copias protegidas</dt><dd>{summary.retainedShared}</dd></div>
       </dl>}
+      {state === 'ready' && (props.queuedCount ?? 0) > 0 && <p>Al confirmar, las canciones de esta selección que estén en la cola se retirarán de la cola.</p>}
       {state === 'ready' && <label className="collection-removal__consent">
         <input type="checkbox" checked={props.accepted} onChange={(event) => guard(() => props.onAccepted(event.target.checked))} />
-        <span>{cache ? 'Eliminar las copias de escucha que no estén guardadas en Biblioteca, favoritos o playlists. Se conservan los archivos en uso.' : 'Entiendo que se eliminará esta colección y las copias que no use otra biblioteca, playlist o favorito. Algunas pueden ser las únicas copias guardadas.'}</span>
+        <span>{cache ? all ? 'Eliminar las copias de escucha no guardadas, las portadas en caché y las búsquedas en memoria. Se conservan Biblioteca, álbumes guardados, playlists, Favoritos y los archivos en uso.' : 'Eliminar las copias de escucha que no estén guardadas en Biblioteca, favoritos o playlists. Se conservan los archivos en uso.' : 'Entiendo que se eliminará esta colección y las copias que no use otra biblioteca, playlist o favorito. Algunas pueden ser las únicas copias guardadas.'}</span>
       </label>}
-      {state === 'ready' && cache && summary?.eligibleCopies === 0 && <p>No hay copias de caché que se puedan retirar en este momento.</p>}
+      {state === 'ready' && cache && !all && summary?.eligibleCopies === 0 && <p>No hay copias de caché que se puedan retirar en este momento.</p>}
       {state === 'working' && <p role="status">{cache ? 'Limpieza en curso… Puedes solicitar la cancelación.' : 'Eliminación en curso… Puedes solicitar la cancelación.'}</p>}
-      {state === 'blocked' && <p role="status">{cache ? 'La caché cambió o no se pudo comprobar. Vuelve a revisarla.' : 'La colección cambió. Vuelve a revisarla antes de intentar eliminarla.'}</p>}
+      {state === 'blocked' && !props.message && <p role="status">{cache ? 'La caché cambió o no se pudo comprobar. Vuelve a revisarla.' : 'La colección cambió. Vuelve a revisarla antes de intentar eliminarla.'}</p>}
       {state === 'uncertain' && <p role="status">{cache ? 'No se pudo confirmar la limpieza. Revisa cualquier retirada pendiente antes de volver a intentarlo.' : 'No se pudo confirmar el resultado. Revisa la colección antes de volver a intentarlo.'}</p>}
       {result && <div className="collection-removal__result">
         {cache ? <p>{result.metadata === 'committed' ? 'La biblioteca y tus playlists se conservan.' : result.metadata === 'not-committed' ? 'No se inició la limpieza de caché.' : 'No se pudo confirmar la limpieza de caché.'}</p> : result.metadata === 'committed' ? <p>La colección se eliminó.</p> : result.metadata === 'not-committed' ? <p>No se eliminó la colección.</p> : <p>No se pudo confirmar si se eliminó la colección.</p>}
         {result.freedBytes === null ? <p>No se puede confirmar el número total de copias retiradas.</p> : <p>Copias retiradas: {result.removed}. Copias conservadas o no retiradas: {result.skipped}.</p>}
-        {result.freedBytes !== null && result.skipped > 0 && <p>Las copias compartidas se conservan para sus otros usos.</p>}
-        {result.freedBytes !== null && <p>MiB de audio retirados: {mib(result.freedBytes)}</p>}
+        {result.freedBytes !== null && result.skipped > 0 && <p>Se conservan las copias vinculadas a Biblioteca, favoritos, otras playlists o la cola, y las que no se pudieron retirar con seguridad. Para retirar una copia en uso, vacía la cola y vuelve a revisar la caché de escucha en Almacenamiento.</p>}
+        {result.skipReasons?.includes('shared-saved-album') && <p>Se conservan las copias que también pertenecen a otro álbum guardado.</p>}
+        {result.skipReasons?.some(reason=>['player-current','player-prepared','source-retained','queue-pending'].includes(reason)) && <p>Hay copias protegidas por la reproducción o la cola de esta pestaña.</p>}
+        {result.skipReasons?.includes('runtime-unknown') && <p>No se pudo verificar la protección de reproducción. Espera a que terminen las operaciones y vuelve a revisar las copias.</p>}
+        {result.metadata === 'not-committed' && result.reason && <p>La colección cambió o la revisión dejó de estar vigente. Cierra y vuelve a abrir la revisión.</p>}
+        {result.freedBytes !== null && <p>Audio retirado: {formatStorageMB(result.freedBytes)}</p>}
         {result.cleanup === 'stopped' && <p>La retirada de copias se detuvo.</p>}
         {result.cleanup === 'not-started' && <p>La retirada de copias no comenzó.</p>}
       </div>}
       {props.message && <p role="status">{props.message}</p>}
       <div className="collection-removal__actions">
-        {(state === 'preparing' || state === 'ready') && <button type="button" disabled={state !== 'ready' || !props.accepted || !props.canConfirm || (cache && summary?.eligibleCopies === 0)} onClick={() => guard(props.onConfirm)}>{actionLabel}</button>}
+        {(state === 'preparing' || state === 'ready') && <button type="button" disabled={state !== 'ready' || !props.accepted || !props.canConfirm || (cache && !all && summary?.eligibleCopies === 0)} onClick={() => guard(props.onConfirm)}>{actionLabel}</button>}
         {(state === 'preparing' || state === 'ready' || state === 'working') && <button type="button" disabled={!props.canCancel} onClick={() => guard(props.onCancel)}>{state === 'working' ? 'Cancelar eliminación' : 'Cancelar'}</button>}
         {(state === 'done' || state === 'uncertain' || state === 'blocked') && <button type="button" disabled={!props.canClose} onClick={() => guard(props.onClose)}>Cerrar</button>}
       </div>

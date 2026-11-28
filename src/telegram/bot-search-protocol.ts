@@ -1,7 +1,13 @@
+import {parseNetworkTiming,type NetworkTiming} from '../diagnostics/download-timing';
+import {isBotDownloadMime} from './bot-download-bytes';
 import {AUDIO_FILE_MAX_BYTES} from '../storage/audio-limits';
 import {dataArray,dataRecord,isUuid,parseAccountBinding,utf8Bytes,type AccountBinding} from './sources-protocol';
-import {recordingTitleCandidate} from '../library/recording-title';
-export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:16,downloadReads:60,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadMs:120000});
+import {recordingTitleCandidate,collaboratorRecordingMatch} from '../library/recording-title';
+export const BOT_SEARCH_BOUNDS=Object.freeze({queryPoints:160,rows:20,keyboardRows:64,candidateRows:128,rawBytes:65536,dtoBytes:32768,timeoutMs:15000,pollMs:1000,reads:19,downloadReads:63,requestIds:256,settlementMs:2000,resultTtlMs:120000,downloadResolveMs:120000,callbackBudgetMs:65000});
+// Compared with immediate + 1 s polling, the warm-up adds at most three
+// history reads. The 15 s command deadline and ~59 s callback window remain.
+const earlyPollMs=[250,250,400,700] as const;
+export const botPollDelay=(read:number):number=>earlyPollMs[read]??BOT_SEARCH_BOUNDS.pollMs;
 // Catalogue and file metadata may differ by a few seconds. This never relaxes
 // the required title/performer/version match or the ranking by closest duration.
 export const BOT_SEARCH_DURATION_TOLERANCE_SECONDS=5;
@@ -9,7 +15,7 @@ export interface BotSearchEnvelope extends AccountBinding {readonly protocol:'pu
 export interface BotSearchTarget {readonly title:string;readonly artist:string|null;readonly album:string|null;readonly durationSeconds:number|null}
 export type BotSearchCommand=
  |(BotSearchEnvelope&{readonly type:'bot-search.search';readonly providerRef:string;readonly query:string;readonly consent:true;readonly target?:BotSearchTarget})
- |(BotSearchEnvelope&{readonly type:'bot-search.download';readonly providerRef:string;readonly rowRef:string;readonly target:BotSearchTarget;readonly consent:true})
+ |(BotSearchEnvelope&{readonly type:'bot-search.download';readonly providerRef:string;readonly rowRef:string;readonly target:BotSearchTarget;readonly consent:true;readonly callbackBudgetMs?:number})
  |(BotSearchEnvelope&{readonly type:'bot-search.cancel';readonly targetRequestId:string});
 /** Closed non-content diagnostics. No counts, query, peer or account data. */
 export const BOT_SEARCH_LIMIT_DIAGNOSTICS=Object.freeze({
@@ -20,7 +26,10 @@ export const BOT_SEARCH_LIMIT_DIAGNOSTICS=Object.freeze({
 } as const);
 export type BotSearchLimitError=keyof typeof BOT_SEARCH_LIMIT_DIAGNOSTICS;
 export function isBotSearchLimitError(value:unknown):value is BotSearchLimitError {return typeof value==='string'&&Object.hasOwn(BOT_SEARCH_LIMIT_DIAGNOSTICS,value);}
-export type BotSearchError='cancelled'|'timeout'|'busy'|'expired'|'session-expired'|'limit'|'unsupported'|'identity-changed'|'rate-limit'|'network'|'uncertain'|'needs-start'|'file-too-large'|'file-invalid'|'conflict'|BotSearchLimitError;
+export type BotSearchFileError='file-too-large'|'file-invalid'|'file-unsupported';
+export const isBotSearchFileError=(error:unknown):error is BotSearchFileError=>
+ error==='file-too-large'||error==='file-invalid'||error==='file-unsupported';
+export type BotSearchError='cancelled'|'timeout'|'busy'|'expired'|'session-expired'|'limit'|'unsupported'|'identity-changed'|'rate-limit'|'network'|'uncertain'|'needs-start'|'conflict'|BotSearchFileError|BotSearchLimitError;
 export type BotSearchDelivery='not-dispatched'|'uncertain'|'acknowledged';
 interface Row {readonly rowRef:string;readonly correlation:'reply'|'recent'}
 export type BotSearchRow=
@@ -28,14 +37,14 @@ export type BotSearchRow=
  |(Row&{readonly kind:'option';readonly label:string})
  |(Row&{readonly kind:'message';readonly text:string});
 export type BotDownloadedAudio=Readonly<{blob:Blob;bytes:number;mime:'audio/mpeg'|'audio/mp4'|'audio/wav';sha256:string;target:BotSearchTarget;recordingTitle?:string}>;
-export type BotSearchReply=
+export type BotSearchReply=(
  |(BotSearchEnvelope&{readonly type:'bot-search.provider-notice';readonly text:string})
  |(BotSearchEnvelope&{readonly type:'bot-search.download-progress';readonly bytes:number;readonly total:number})
  |(BotSearchEnvelope&{readonly type:'bot-search.downloaded';readonly audio:BotDownloadedAudio})
  |(BotSearchEnvelope&{readonly type:'bot-search.sending';readonly delivery:'uncertain'})
  |(BotSearchEnvelope&{readonly type:'bot-search.result';readonly delivery:'acknowledged';readonly rows:readonly BotSearchRow[];readonly expiresAt:number;readonly expectedTarget:BotSearchTarget|null})
  |(BotSearchEnvelope&{readonly type:'bot-search.error';readonly error:BotSearchError;readonly delivery:BotSearchDelivery;readonly retryAt:number|null;readonly retryBlocked:boolean})
- |(BotSearchEnvelope&{readonly type:'bot-search.cancelled';readonly targetRequestId:string});
+ |(BotSearchEnvelope&{readonly type:'bot-search.cancelled';readonly targetRequestId:string}))&{readonly timing?:Readonly<NetworkTiming>};
 const revision=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 const timestamp=(v:unknown):v is number=>revision(v)&&v>0&&v<=8640000000000000;
 const keys=['protocol','version','sessionId','accountRef','accountEpoch','providerRevision','queryId','requestId'] as const;
@@ -52,6 +61,16 @@ export function botSearchText(v:unknown,max=160):string|null {
  const s=Array.from(v.normalize('NFC').replace(/[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029]/gu,' ').trim()).slice(0,max).join('');return s||null;
 }
 function text(v:unknown,max=160):v is string {return typeof v==='string'&&v.length<=max*2&&utf8Bytes(v)<=max*4&&botSearchText(v,max)===v;}
+export function botSearchReportsNoResults(row:BotSearchRow):boolean {
+ return row.kind==='message'&&row.correlation==='reply'&&
+  /^(?:no (?:se )?encontraron resultados|no results found)[.!]?$/iu.test(row.text);
+}
+export function botSearchReportsNeedsStart(row:BotSearchRow):boolean {
+ if(row.kind!=='message')return false;
+ const prompt=row.text.replace(/\s+/gu,' ').replace(/^[\p{Extended_Pictographic}\uFE0F ]+|[\p{Extended_Pictographic}\uFE0F ]+$/gu,'')
+  .replace(/^(?:welcome(?: to (?:the|this) bot)?|bienvenid[oa]s?)[.!:][\p{Extended_Pictographic}\uFE0F ]+/iu,'');
+ return /^(?:(?:please )?(?:send|press|use|type) \/start(?: first| to (?:start|activate) (?:the|this) bot)?|(?:primero,? )?(?:env[ií]a|pulsa|usa|escribe) \/start(?: primero| para (?:iniciar|activar) (?:el|este) bot)?)[.!]?$/iu.test(prompt);
+}
 export function parseBotSearchTarget(raw:unknown):BotSearchTarget|null {
  const r=dataRecord(raw,['title','artist','album','durationSeconds']);
  if(!r||!text(r.title)||r.artist!==null&&!text(r.artist)||r.album!==null&&!text(r.album)||r.durationSeconds!==null&&(typeof r.durationSeconds!=='number'||!Number.isFinite(r.durationSeconds)||r.durationSeconds<0||r.durationSeconds>86400))return null;
@@ -78,7 +97,7 @@ function row(raw:unknown):BotSearchRow|null {
 export function parseBotSearchCommand(raw:unknown):BotSearchCommand|null {
  try{const r=dataRecord(raw);if(!r)return null;const e=envelope(r);if(!e)return null;let extra:string[],out:BotSearchCommand;
  if(r.type==='bot-search.search'){if(!isUuid(r.providerRef)||!isBotSearchQuery(r.query)||r.consent!==true)return null;const target=r.target===undefined?undefined:parseBotSearchTarget(r.target);if(target===null)return null;extra=['providerRef','query','consent',...(target?['target']:[])];out={...e,type:r.type,providerRef:r.providerRef,query:r.query,consent:true,...(target?{target}:{})};}
- else if(r.type==='bot-search.download'){const target=parseBotSearchTarget(r.target);if(!isUuid(r.providerRef)||!isUuid(r.rowRef)||!target||r.consent!==true)return null;extra=['providerRef','rowRef','target','consent'];out={...e,type:r.type,providerRef:r.providerRef,rowRef:r.rowRef,target,consent:true};}
+ else if(r.type==='bot-search.download'){const target=parseBotSearchTarget(r.target);if(!isUuid(r.providerRef)||!isUuid(r.rowRef)||!target||r.consent!==true)return null;const ms=r.callbackBudgetMs;if(ms!==undefined&&(!revision(ms)||ms<1||ms>BOT_SEARCH_BOUNDS.callbackBudgetMs))return null;extra=['providerRef','rowRef','target','consent',...(ms===undefined?[]:['callbackBudgetMs'])];out={...e,type:r.type,providerRef:r.providerRef,rowRef:r.rowRef,target,consent:true,...(ms===undefined?{}:{callbackBudgetMs:ms})};}
  else if(r.type==='bot-search.cancel'){if(!isUuid(r.targetRequestId))return null;extra=['targetRequestId'];out={...e,type:r.type,targetRequestId:r.targetRequestId};}else return null;
  return dataRecord(raw,[...keys,'type',...extra])&&utf8Bytes(JSON.stringify(out))<=BOT_SEARCH_BOUNDS.dtoBytes?Object.freeze(out):null;}catch{return null;}
 }
@@ -92,10 +111,13 @@ export function parseBotSearchReply(raw:unknown,expected:BotSearchEnvelope):BotS
  case 'bot-search.cancelled':if(!isUuid(r.targetRequestId))return null;extra=['targetRequestId'];out={...e,type:r.type,targetRequestId:r.targetRequestId};break;
  case 'bot-search.result':{const a=dataArray(r.rows,20);if(!a||!a.length||r.delivery!=='acknowledged'||!timestamp(r.expiresAt))return null;const rows=a.map(row);if(!rows.every((x):x is BotSearchRow=>x!==null)||new Set(rows.map(x=>x.rowRef)).size!==rows.length)return null;const expectedTarget=r.expectedTarget===null?null:parseBotSearchTarget(r.expectedTarget);if(r.expectedTarget!==null&&!expectedTarget)return null;extra=['delivery','rows','expiresAt','expectedTarget'];out={...e,type:r.type,delivery:'acknowledged',rows:Object.freeze(rows),expiresAt:r.expiresAt,expectedTarget};break;}
  case 'bot-search.error':
-  if(!(['cancelled','timeout','busy','expired','session-expired','limit','unsupported','identity-changed','rate-limit','network','uncertain','needs-start','file-too-large','file-invalid','conflict'].includes(r.error as string)||isBotSearchLimitError(r.error))||!['not-dispatched','uncertain','acknowledged'].includes(r.delivery as string)||r.retryAt!==null&&!timestamp(r.retryAt)||typeof r.retryBlocked!=='boolean'||(r.error==='rate-limit'?(r.retryBlocked!==(r.retryAt===null)):(r.retryAt!==null||r.retryBlocked)))return null;
+  if(!(['cancelled','timeout','busy','expired','session-expired','limit','unsupported','identity-changed','rate-limit','network','uncertain','needs-start','conflict'].includes(r.error as string)||isBotSearchFileError(r.error)||isBotSearchLimitError(r.error))||!['not-dispatched','uncertain','acknowledged'].includes(r.delivery as string)||r.retryAt!==null&&!timestamp(r.retryAt)||typeof r.retryBlocked!=='boolean'||(r.error==='rate-limit'?(r.retryBlocked!==(r.retryAt===null)):(r.retryAt!==null||r.retryBlocked)))return null;
   extra=['error','delivery','retryAt','retryBlocked'];out={...e,type:r.type,error:r.error as BotSearchError,delivery:r.delivery as BotSearchDelivery,retryAt:r.retryAt as number|null,retryBlocked:r.retryBlocked};break;
  default:return null;
  }
+ const timing=Object.hasOwn(r,'timing')?parseNetworkTiming(r.timing):undefined;
+ if(timing===null||timing&&!['bot-search.result','bot-search.error','bot-search.downloaded'].includes(out.type))return null;
+ if(timing){extra.push('timing');out={...out,timing};}
  return dataRecord(raw,[...keys,'type',...extra])&&utf8Bytes(JSON.stringify(out))<=BOT_SEARCH_BOUNDS.dtoBytes?Object.freeze(out):null;}catch{return null;}
 }
 
@@ -115,6 +137,37 @@ export function parseBotDownloadedAudio(raw:unknown):BotDownloadedAudio|null {
 // Presentation normalization; never acoustic identity or a substitute for worker peer/epoch checks.
 export const musicIdentityText=(s:string)=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 
+/** A zero Telegram duration is not evidence of a zero-length recording.
+ * Permit byte inspection only for an exact title/full credit with a positive
+ * catalogue duration and album; the importer must verify the actual duration. */
+export function canCheckBotDurationFromFile(row:Extract<BotSearchRow,{kind:'audio'}>,target:BotSearchTarget):boolean {
+ return row.durationSeconds===0&&target.durationSeconds!==null&&target.durationSeconds>0&&!!target.album?.trim()&&!!row.title&&musicIdentityText(row.title)===musicIdentityText(target.title)&&!!target.artist&&!!row.performer&&musicIdentityText(row.performer)===musicIdentityText(target.artist);
+}
+
+export type BotAudioMismatchField='title-version'|'artist'|'duration';
+/** Closed local observation only: no metadata values, ids or acoustic claims.
+ * Title/version stay combined because the catalogue supplies one title string. */
+export function botAudioMismatchFields(row:Extract<BotSearchRow,{kind:'audio'}>,target:BotSearchTarget):readonly BotAudioMismatchField[] {
+ const fields:BotAudioMismatchField[]=[];
+ const collaborators=!!row.title&&!!row.performer&&!!target.artist&&collaboratorRecordingMatch(row.title,row.performer,target.title,target.artist,target.album,target.durationSeconds);
+ if(!collaborators&&(!row.title||!recordingTitleCandidate(row.title,target.title,target.album,target.durationSeconds)))fields.push('title-version');
+ if(!collaborators&&(!target.artist||!row.performer||musicIdentityText(row.performer)!==musicIdentityText(target.artist)))fields.push('artist');
+ const tolerance=collaborators||row.title&&musicIdentityText(row.title)===musicIdentityText(target.title)?BOT_SEARCH_DURATION_TOLERANCE_SECONDS:1;
+ if(target.durationSeconds!==null&&!canCheckBotDurationFromFile(row,target)&&Math.abs(target.durationSeconds-row.durationSeconds)>tolerance)fields.push('duration');
+ return fields;
+}
+
+const optionNumber=/^\s*(?:#\d{1,3}\s+|\d{1,3}\s*[.)]\s*)/u;
+const leadingDuration=/^\s*•\s*(\d{1,2}):([0-5]\d)\s*•\s*/u;
+const optionDuration=/\s*(?:\((\d{1,2}):([0-5]\d)\)|\[(\d{1,2}):([0-5]\d)\])\s*$/u;
+const matchesOptionLabel=(label:string,target:BotSearchTarget,artist:string,allowCollaborators=true)=>label.split(/\s+[–—−-]\s+/u).some((_,i,parts)=>{
+ if(i>=parts.length-1)return false;
+ const left=parts.slice(0,i+1).join(' - '),right=parts.slice(i+1).join(' - ');
+ return recordingTitleCandidate(left,target.title,target.album,target.durationSeconds)&&musicIdentityText(right)===artist||
+  musicIdentityText(left)===artist&&recordingTitleCandidate(right,target.title,target.album,target.durationSeconds)||
+  allowCollaborators&&!!target.artist&&(collaboratorRecordingMatch(left,right,target.title,target.artist,target.album,target.durationSeconds)||collaboratorRecordingMatch(right,left,target.title,target.artist,target.album,target.durationSeconds));
+ });
+
 /** Rank compatible recordings, then keep the bot's order for an equal score.
  * Only presentation decoration is ignored; title, performer and version words
  * still have to match. Raw callback data never contributes to the score. */
@@ -124,24 +177,35 @@ export function matchingSongRows(rows:readonly BotSearchRow[],target:BotSearchTa
  const score=(row:BotSearchRow):number=>{
   const correlation=row.correlation==='reply'?1:0;
   if(row.kind==='audio'){
-   if(!row.title||!row.performer||!recordingTitleCandidate(row.title,target.title,target.album,target.durationSeconds)||musicIdentityText(row.performer)!==artist)return 0;
-   const delta=target.durationSeconds===null?0:Math.abs(target.durationSeconds-row.durationSeconds);
-   const tolerance=musicIdentityText(row.title)===title?BOT_SEARCH_DURATION_TOLERANCE_SECONDS:1;
-   return delta<=tolerance?4000-Math.round(delta*100)+correlation:0;
+   if(row.bytes>AUDIO_FILE_MAX_BYTES||!isBotDownloadMime(row.mimeType)||!row.title||!row.performer)return 0;
+   const exact=recordingTitleCandidate(row.title,target.title,target.album,target.durationSeconds)&&musicIdentityText(row.performer)===artist;
+   const collaborators=collaboratorRecordingMatch(row.title,row.performer,target.title,target.artist!,target.album,target.durationSeconds);
+   if(!exact&&!collaborators)return 0;
+   const fileCheck=canCheckBotDurationFromFile(row,target);
+   const delta=target.durationSeconds===null||fileCheck?0:Math.abs(target.durationSeconds-row.durationSeconds);
+   const tolerance=collaborators||musicIdentityText(row.title)===title?BOT_SEARCH_DURATION_TOLERANCE_SECONDS:1;
+   return delta<=tolerance?(fileCheck?3000:exact?4000:2800)-Math.round(delta*100)+correlation:0;
   }
   if(row.kind!=='option')return 0;
-  const matches=(label:string)=>label.split(/\s+[–—−-]\s+/u).some((_,i,parts)=>{
-   if(i>=parts.length-1)return false;
-   const left=parts.slice(0,i+1).join(' - '),right=parts.slice(i+1).join(' - ');
-   return recordingTitleCandidate(left,target.title,target.album,target.durationSeconds)&&musicIdentityText(right)===artist||
-    musicIdentityText(left)===artist&&recordingTitleCandidate(right,target.title,target.album,target.durationSeconds);
-  });
-  if(matches(row.label))return 2000+correlation;
+  if(matchesOptionLabel(row.label,target,artist,false))return 2000+correlation;
+  if(matchesOptionLabel(row.label,target,artist))return 1800+correlation;
   // Numbered results and an optional displayed duration are formatting only.
   // Do not strip live/remix/cover/version text or words from the performer.
-  const clean=row.label.replace(/^\s*(?:#\d{1,3}\s+|\d{1,3}\s*[.)]\s*)/u,'').replace(/\s*[[(]\d{1,2}:[0-5]\d[)\]]\s*$/u,'');
-  return matches(clean)?1900+correlation:0;
+  const clean=row.label.replace(leadingDuration,'').replace(optionNumber,'').replace(/\s*[[(]\d{1,2}:[0-5]\d[)\]]\s*$/u,'');
+  return matchesOptionLabel(clean,target,artist,false)?1900+correlation:matchesOptionLabel(clean,target,artist)?1700+correlation:0;
  };
  return rows.map((row,index)=>({row,index,score:score(row)})).filter(v=>v.score>0)
   .sort((a,b)=>b.score-a.score||a.index-b.index).map(v=>v.row);
+}
+
+/** A displayed duration can disqualify a button. Audio identity is checked independently. */
+export function botOptionDurationMismatch(row:BotSearchRow,target:BotSearchTarget):boolean {
+ if(row.kind!=='option'||!target.durationSeconds||!target.artist)return false;
+ const leading=leadingDuration.exec(row.label);
+ if(leading&&Math.abs(60*Number(leading[1])+Number(leading[2])-target.durationSeconds)>7)return matchesOptionLabel(row.label.replace(leadingDuration,'').replace(optionNumber,''),target,musicIdentityText(target.artist));
+ const duration=optionDuration.exec(row.label);
+ if(!duration||Math.abs(60*Number(duration[1]??duration[3])+Number(duration[2]??duration[4])-target.durationSeconds)<=7)return false;
+ const artist=musicIdentityText(target.artist),label=row.label.replace(optionNumber,'');
+ return !matchesOptionLabel(row.label,target,artist)&&!matchesOptionLabel(label,target,artist)&&
+  matchesOptionLabel(label.replace(optionDuration,''),target,artist);
 }

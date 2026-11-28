@@ -321,5 +321,5 @@ export function createLocalCopyProtection(host:{getPlayer():ProtectionPlayer;cap
   return Object.freeze({kind:'reserved',reservation:handle});
  }
  function invalidateScope(){++epoch;active=new Map();for(const b of bundles)b.retired=true;changed();}
- return Object.freeze({beginPreparation,beginInsertion,observePlayer,getReadonlySnapshot,capture,inspect,reserve,hasReservation,canPrepare,invalidateScope,releaseUnused});
+ return Object.freeze({beginPreparation,beginInsertion,observePlayer,getReadonlySnapshot,capture,inspect,reserve,hasReservation,canPrepare,invalidateScope,releaseUnused,hasPendingPreparation:()=>pending.size>0});
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   ORGANIZATION_LIMITS as L, OrganizationFormatError, parseOrganization,
   serializeOrganization, validateOrganization,
-  type OrganizationExport, type OrganizationRef, type OrganizationTrack,
+  type OrganizationExport, type OrganizationExportV1, type OrganizationRef, type OrganizationTrack,
 } from '../../src/library/organization-format';
 
 const id = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
@@ -13,7 +13,7 @@ const track = (n = 2): OrganizationTrack => ({
   ref: ref(n), title: 'Canción', artist: null, album: null, duration: 1.25,
   createdAt: '2026-10-31T00:00:00.000Z', manualOverrides: {}, audio: null,
 });
-function fixture(): OrganizationExport {
+function fixture(): OrganizationExportV1 {
   return {
     format: 'pulso-web-organization', version: 1, exportId: id(3), libraryId,
     exportedAt: '2026-10-31T00:00:00Z', tracks: [track()], favorites: [ref(2)],
@@ -23,7 +23,7 @@ function fixture(): OrganizationExport {
 function rejects(run: () => unknown, code: string) {
   assert.throws(run, (error: unknown) => error instanceof OrganizationFormatError && error.code === code);
 }
-function bad(change: (dto: OrganizationExport) => void, code = 'format') {
+function bad(change: (dto: OrganizationExportV1) => void, code = 'format') {
   const dto = fixture(); change(dto); rejects(() => validateOrganization(dto), code);
 }
 
@@ -170,11 +170,16 @@ test('all favorites and entries must refer to present tracks with unique scoped 
   bad(d => { d.favorites.push(ref(2)); }, 'relations');
   bad(d => { d.tracks.push(track()); }, 'relations');
   bad(d => { d.playlists.push(structuredClone(d.playlists[0])); }, 'relations');
-  bad(d => { d.playlists[0].entries.push({ id: id(6), track: ref(2) }); }, 'relations');
   bad(d => { d.tracks.push(track(6)); d.playlists[0].entries.push({ id: id(5), track: ref(6) }); }, 'relations');
   const dto = fixture();
   dto.playlists.push({ ref: ref(9), name: 'Otro', entries: [{ id: id(5), track: ref(2) }] });
   assert.doesNotThrow(() => validateOrganization(dto)); // Entry IDs scoped to playlist.
+});
+
+test('organization backup roundtrips distinct playlist occurrences of the same track', () => {
+  const dto = fixture();
+  dto.playlists[0].entries.push({ id: id(6), track: ref(2) });
+  assert.deepEqual(parseOrganization(serializeOrganization(dto)), dto);
 });
 
 test('required fields, primitive types, sparse/executable arrays fail closed', () => {

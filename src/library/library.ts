@@ -1,4 +1,5 @@
 import type {LocalAlbumMetadataV1} from './album-metadata';
+import {activeLibraryAccount} from '../accounts/library-local';
 import {admittedTransaction,closeDatabase,assertDatabaseUse} from '../storage/database';
 import {openAssetReader,verificationFailure,WRITER_LOCK} from '../storage/asset-reader';
 import {fromKnownError,makeFailure,type FailureV1} from '../errors/app-failure';
@@ -10,8 +11,8 @@ export function validAudioFingerprint(value:unknown):value is AudioFingerprint {
  if(!value||typeof value!=='object')return false;const f=value as AudioFingerprint;
  return f.algorithm==='sha256'&&typeof f.sha256==='string'&&/^[a-f0-9]{64}$/.test(f.sha256)&&Number.isSafeInteger(f.bytes)&&f.bytes>=1&&f.bytes<=100*1024*1024;
 }
-export interface Track {localAlbum?:LocalAlbumMetadataV1;id:string;assetId:string|null;audioFingerprint?:AudioFingerprint|null;organizationRef?:OrganizationRef;title:string;artist:string|null;album:string|null;duration:number;favorite:boolean;revision:number;createdAt:string;manualOverrides:Partial<{title:string;artist:string|null;album:string|null}>}
-export interface Playlist {organizationRef?:OrganizationRef;id:string;name:string;entries:{id:string;trackId:string}[];revision:number}
+export interface Track {catalogRelease?:import('./catalog-release').CatalogRelease;catalogChoice?:import('./selected-song').SongChoice;accountId?:string;localAlbum?:LocalAlbumMetadataV1;id:string;assetId:string|null;audioFingerprint?:AudioFingerprint|null;organizationRef?:OrganizationRef;title:string;artist:string|null;album:string|null;duration:number;favorite:boolean;revision:number;createdAt:string;manualOverrides:Partial<{title:string;artist:string|null;album:string|null}>}
+export interface Playlist {accountId?:string;organizationRef?:OrganizationRef;id:string;name:string;entries:{id:string;trackId:string}[];revision:number}
 interface AssetFields {id:string;namespace:'local';storageKey:string;bytes:number;sha256:string;mime:string;chunks:number;state:'complete';revision:number;chunkSize:number;retention:'kept'}
 export type LocalAsset=AssetFields & ({backend:'idb'}|{backend:'opfs'});
 export function validAsset(a: unknown): a is LocalAsset {
@@ -37,7 +38,8 @@ export async function editTrack(id:string, revision:number, patch:Partial<Pick<T
 export async function createPlaylist(name:string,current:()=>boolean=()=>true):Promise<Playlist> {
  if(!current())throw new Error('La operación ya no está vigente.');
  name=name.trim();if(!name||name.length>100)throw new Error('Escribe un nombre de 1 a 100 caracteres.');
- const playlist:Playlist={id:crypto.randomUUID(),name,entries:[],revision:1};
+ const accountId=await activeLibraryAccount();if(!current())throw new Error('La operación ya no está vigente.');
+ const playlist:Playlist={id:crypto.randomUUID(),name,entries:[],revision:1,...(accountId?{accountId}:{})};
  return navigator.locks.request(WRITER_LOCK,async()=>{if(!current())throw new Error('La operación ya no está vigente.');const db=await openDatabase();try{if(!current())throw new Error('La operación ya no está vigente.');const tx=admittedTransaction(db,'playlists','readwrite');const done=committed(tx);tx.objectStore('playlists').add(playlist,playlist.id);await done;return playlist;}finally{closeDatabase(db);}});
 }
 export async function changePlaylist(id:string, revision:number, action:{type:'rename';name:string}|{type:'add';trackId:string}|{type:'remove';entryId:string}|{type:'move';entryId:string;delta:-1|1}|{type:'delete'},current:()=>boolean=()=>true) {
@@ -78,7 +80,7 @@ function manifestAsset(value:unknown):LocalAsset|null {
   return validAsset(copy)?copy:null;
  }catch{return null;}
 }
-export async function verifiedAssetDetailed(id:string,integrity=false):Promise<VerifiedAssetResult> {
+export async function verifiedAssetDetailed(id:string,integrity:boolean|'presence'=false):Promise<VerifiedAssetResult> {
  let record:unknown;
  try{record=await readRecord<unknown>('assets',id);}
  catch(error){return {state:'unknown',asset:null,failure:fromKnownError(error,{phase:'read',backend:'idb'})};}
@@ -99,4 +101,37 @@ export async function verifiedAssetDetailed(id:string,integrity=false):Promise<V
 }
 export async function verifiedAsset(id:string,integrity=false):Promise<LocalAsset|null> {
  const result=await verifiedAssetDetailed(id,integrity);return result.state==='valid'?result.asset:null;
+}
+
+/** Compare IDB manifests and count their keys in one readonly snapshot. */
+export async function checkIdbAssetPresence(assets:readonly LocalAsset[]):Promise<Map<string,VerifiedAssetResult>>{
+ const results=new Map<string,VerifiedAssetResult>();
+ if(!assets.length)return results;
+ try{
+  const db=await openDatabase();try{
+   const tx=admittedTransaction(db,['assets','chunks']),done=committed(tx);
+   const manifests=tx.objectStore('assets'),chunks=tx.objectStore('chunks');
+   await Promise.all(assets.map(async asset=>{
+    const [record,count]=await Promise.all([
+     request(manifests.get(asset.id)),
+     request(chunks.count(IDBKeyRange.bound([asset.storageKey,0],[asset.storageKey,asset.chunks-1]))),
+    ]);
+    const current=manifestAsset(record);
+    if(record===undefined){
+     results.set(asset.id,{state:'missing',asset:null,failure:makeFailure('verify','integrity','asset-missing','idb')});
+    }else if(!current||current.id!==asset.id){
+     results.set(asset.id,{state:'corrupt',asset:null,failure:makeFailure('verify','integrity','local-corrupt','idb')});
+    }else if(current.backend!==asset.backend||current.storageKey!==asset.storageKey||current.revision!==asset.revision||current.bytes!==asset.bytes){
+     results.set(asset.id,{state:'unknown',asset:null,failure:makeFailure('verify','integrity','asset-changed','idb')});
+    }else if(count!==asset.chunks){
+     results.set(asset.id,{state:'missing',asset:null,failure:makeFailure('verify','integrity','asset-missing','idb')});
+    }else results.set(asset.id,{state:'valid',asset:current,failure:null});
+   }));
+   await done;assertDatabaseUse('read');
+  }finally{closeDatabase(db);}
+ }catch(error){
+  const failure=fromKnownError(error,{phase:'verify',backend:'idb'});
+  for(const asset of assets)results.set(asset.id,{state:'unknown',asset:null,failure});
+ }
+ return results;
 }

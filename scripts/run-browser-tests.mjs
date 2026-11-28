@@ -1,7 +1,14 @@
 import {createServer} from 'node:http';
 import {readFile, realpath, stat} from 'node:fs/promises';
 import {extname, resolve, sep} from 'node:path';
-import {chromium} from 'playwright-core';
+import {chromium, webkit} from 'playwright-core';
+import {chromiumPath, chromiumSkipReason} from './chromium-path.mjs';
+
+// The compiled shell suite owns its synthetic SDK, loopback server and teardown.
+if (process.argv.length === 3 && process.argv[2] === 'download-autoheal') {
+  await import('../tests/integration/check-playlist-resume-main.mjs');
+  process.exit(process.exitCode ?? 0);
+}
 
 const cases = {
   'metadata-rescan': ['metadata-rescan.html','pulsoMetadataRescan'],
@@ -59,10 +66,16 @@ const cases = {
 const mime = {'.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.wasm':'application/wasm', '.mp3':'audio/mpeg', '.m4a':'audio/mp4', '.wav':'audio/wav', '.json':'application/json', '.svg':'image/svg+xml', '.png':'image/png'};
 const selected = process.argv.slice(2);
 let server, browser;
-const report = {passed: false, environment:'Chromium Linux headless with sandbox; ephemeral loopback; no iPhone evidence', cases: []};
+const engine = process.env.PULSO_BROWSER_ENGINE || 'chromium';
+const report = {passed: false, environment:engine+' headless; ephemeral loopback; no iPhone evidence', cases: []};
 try {
   if (selected.some(name => !Object.hasOwn(cases, name)) || new Set(selected).size !== selected.length) throw new Error('Argumentos válidos: library blob blob-opfs storage sdk opfs artwork artwork-containers local-batches lyrics embedded-lyrics restored-tracks organization lrclib (sin duplicados)');
-  const root = await realpath(resolve(selected.length===1&&selected[0]==='metadata-rescan'?'.local/metadata-rescan-r71/build':selected.length===1&&selected[0]==='album-source'?'.local/album-source-r66/build':selected.length===1&&selected[0]==='lrclib'?'.local/lrclib-r57/build':'.local/browser-tests'));
+  if (!['chromium', 'webkit'].includes(engine)) throw new Error('Motor de navegador inválido');
+  if (engine === 'chromium' && !chromiumPath) {
+    console.log(JSON.stringify({...report, skipped: true, reason: chromiumSkipReason}));
+    process.exit(0);
+  }
+  const root = await realpath(resolve(process.env.PULSO_BROWSER_BUILD_DIR || (selected.length===1&&selected[0]==='metadata-rescan'?'.local/metadata-rescan-r71/build':selected.length===1&&selected[0]==='album-source'?'.local/album-source-r66/build':selected.length===1&&selected[0]==='lrclib'?'.local/lrclib-r57/build':'.local/browser-tests')));
   server = createServer(async (req, res) => {
     try {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405).end(); return; }
@@ -76,7 +89,9 @@ try {
     } catch { res.writeHead(404).end(); }
   });
   await new Promise((resolveListen, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolveListen); });
-  browser = await chromium.launch({executablePath: '/usr/bin/chromium', headless: true, chromiumSandbox: true});
+  const options = {headless: true, env: {...process.env, INSTABOX_HEADLESS: '1'}};
+  browser = engine === 'webkit' ? await webkit.launch(options)
+    : await chromium.launch({...options, executablePath: chromiumPath, chromiumSandbox: true});
   report.browserVersion = browser.version();
   for (const name of selected.length ? selected : Object.keys(cases)) {
     const [pageName, globalName] = cases[name];

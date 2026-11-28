@@ -1,4 +1,6 @@
-import {expectedAudioTagMismatch,type ExpectedAudioMetadata} from './expected-audio-metadata';
+import {elapsedMs,type ImportTiming} from '../diagnostics/download-timing';
+import {expectedAudioTagMismatch,expectedAudioDurationMismatch,verifiedCompoundAudioTitle,type ExpectedAudioMetadata} from './expected-audio-metadata';
+import {activeLibraryAccount} from '../accounts/library-local';
 import {extractLocalAlbumMetadata,type Mp4AlbumTag} from './album-metadata';
 import {assertDatabaseUse} from '../storage/database';
 import {admittedTransaction,closeDatabase} from '../storage/database';
@@ -7,29 +9,32 @@ import {Attempt,type ImportAttemptResult,type DetailedImportResult} from './impo
 import {storeEmbeddedLyrics,LyricsError,type LyricsFailure,type EmbeddedLyricsStoreResult} from '../library/lyrics';
 import {inspectEmbeddedLyrics,type EmbeddedLyricsFailure} from './lyrics';
 import {storeEmbeddedArtwork} from '../library/artwork';
-import {AudioMetadataLimitError,ArtworkError,audioMetadataView,MAX_AUDIO_TABLE_ENTRIES,MAX_ID3_BYTES,inspectEmbeddedArtwork,type ArtworkFailure} from './artwork';
+import {AUDIO_METADATA_LIMIT_MESSAGE,AudioMetadataLimitError,ArtworkError,audioMetadataView,MAX_AUDIO_TABLE_ENTRIES,MAX_ID3_BYTES,inspectEmbeddedArtwork,type ArtworkFailure} from './artwork';
 import {transactionDone} from '../storage/transaction-done';
 import {parseBlob} from 'music-metadata';
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import {openDatabase,readRecord,request} from '../storage/database';
-import {all,validAsset,type LinkedTrack,type LocalAsset} from '../library/library';
+import {all,validAsset,verifiedAssetDetailed,type LinkedTrack,type LocalAsset} from '../library/library';
 import {ASSET_DIRECTORY,openAssetReader,WRITER_LOCK} from '../storage/asset-reader';
 import {assertImportsResolved,validImportOperation,deduplicateOperation,cleanupOperation,createOperation,importOperation,publishOperation,updateOperation,type ImportOperation,type ImportResult} from '../storage/import-operations';
 export {importOperations,importOperation,recoverImportOperation,importIssues,retainImportIssue} from '../storage/import-operations';
 export type ImportLyricsWarning=EmbeddedLyricsFailure|LyricsFailure;
-export interface ImportOptions {libraryMode?:'cache';backend?:'idb'|'opfs'|'auto';operationId?:string;expected?:ExpectedAudioMetadata}
-const CHUNK=65536;
+export interface ImportOptions {libraryMode?:'cache';backend?:'idb'|'opfs'|'auto';operationId?:string;expected?:ExpectedAudioMetadata;parkedOperationIds?:readonly string[]}
+type ImportPhase='analysisMs'|'writeMs'|'verifyMs'|'metadataMs';
+type MarkTiming=(phase:ImportPhase|null)=>void;
+const CHUNK=65536,IDB_BATCH=512*1024,OPFS_CHECKPOINT=1024*1024;
 async function writeDirectory(){return atBoundary('open','opfs',async()=>{assertDatabaseUse('write');const root=await navigator.storage.getDirectory();assertDatabaseUse('write');return root.getDirectoryHandle(ASSET_DIRECTORY,{create:true});});}
 /** Owns WRITER_LOCK internally, including recovery gating and final outcome resolution. */
-async function importFileCore(file:File,signal:AbortSignal,progress:(bytes:number)=>void=()=>{},options:ImportOptions={},attempt:Attempt):Promise<ImportResult & {artworkWarning?:ArtworkFailure;lyricsWarning?:ImportLyricsWarning;lyricsInspection?:EmbeddedLyricsStoreResult}> {
+async function importFileCore(file:File,signal:AbortSignal,progress:(bytes:number)=>void=()=>{},options:ImportOptions,attempt:Attempt,mark:MarkTiming,timing?:ImportTiming):Promise<ImportResult & {artworkWarning?:ArtworkFailure;lyricsWarning?:ImportLyricsWarning;lyricsInspection?:EmbeddedLyricsStoreResult}> {
  if(options.libraryMode!==undefined&&options.libraryMode!=='cache')fail('validate','internal','input-invalid','none');
  const operationId=options.operationId??crypto.randomUUID();
  const {result,inspect}=await navigator.locks.request(WRITER_LOCK,async()=>{
   const prior=options.operationId?await importOperation(options.operationId):undefined;
-  return {result:await performImport(file,signal,progress,{...options,operationId},attempt),inspect:!prior};
+  return {result:await performImport(file,signal,progress,{...options,operationId},attempt,mark,timing),inspect:!prior};
  });
  if(!inspect||signal.aborted)return result;
+ mark('metadataMs');
  try{assertDatabaseUse('publish');}catch{return result;}
  let outcome:ImportResult & {artworkWarning?:ArtworkFailure;lyricsWarning?:ImportLyricsWarning;lyricsInspection?:EmbeddedLyricsStoreResult}=result;
  // Audio outcome is already confirmed. Optional metadata failures must never enter audio cleanup.
@@ -58,13 +63,15 @@ async function importFileCore(file:File,signal:AbortSignal,progress:(bytes:numbe
  }catch(error){outcome={...outcome,lyricsWarning:optionalCode(error,LyricsError,lyricsCodes,'storage')};}
  return outcome;
 }
-async function performImport(file:File,signal:AbortSignal,progress:(bytes:number)=>void,options:ImportOptions,attempt:Attempt):Promise<ImportResult & {artworkWarning?:ArtworkFailure}>{
+async function performImport(file:File,signal:AbortSignal,progress:(bytes:number)=>void,options:ImportOptions,attempt:Attempt,mark:MarkTiming,timing?:ImportTiming):Promise<ImportResult & {artworkWarning?:ArtworkFailure}>{
+ mark('analysisMs');
+ const accountId=await activeLibraryAccount();checkCancelled(signal);
  if(options.libraryMode!==undefined&&options.libraryMode!=='cache')fail('validate','internal','input-invalid','none');
  const operationId=options.operationId??crypto.randomUUID();
  if(!/^[a-f0-9-]{36}$/.test(operationId))fail('validate','internal','input-invalid','none');
  const prior=await importOperation(operationId);
  if(prior){if((prior.state==='sealed'||prior.state==='discarded')&&prior.result)return prior.result;fail('reconcile','write-uncertain','imports-unresolved','idb');}
- await assertImportsResolved();
+ await assertImportsResolved(accountId&&options.libraryMode==='cache'&&options.parkedOperationIds?{accountId,operationIds:options.parkedOperationIds}:undefined);
  checkCancelled(signal); if(!file.size||file.size>100*1024*1024)fail('validate','internal','limit-exceeded','none');
  const header=new Uint8Array(await atBoundary('read','none',()=>file.slice(0,16).arrayBuffer()));const ascii=(a:number,b:number)=>new TextDecoder().decode(header.slice(a,b));
  const mime=ascii(0,3)==='ID3'||(header[0]===255&&(header[1]&0xe0)===0xe0)?'audio/mpeg':ascii(4,8)==='ftyp'?'audio/mp4':ascii(0,4)==='RIFF'&&ascii(8,12)==='WAVE'?'audio/wav':null;
@@ -82,48 +89,109 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
   try{metadata=await parseBlob(await atBoundary('read','none',()=>metadataView(file,mime,true,omitted)),parserOptions);}
   catch(error){if(isMetadataLimit(error))fail('parse','internal','limit-exceeded','none');if(issuedFailure(error)||nativeDOMName(error))throw AppFailure.create(fromKnownError(error,{phase:'parse',backend:'none'}));throw AppFailure.create(fromKnownError(error,{phase:'parse',backend:'none'}));}
  }
+ if(options.expected&&expectedAudioDurationMismatch(options.expected,metadata.format.duration))fail('parse','integrity','metadata-duration-mismatch','none');
  const tagMismatch=options.expected?expectedAudioTagMismatch(metadata.common,options.expected,metadata.format.duration):null;
  if(tagMismatch)fail('parse','integrity',tagMismatch==='title'?'metadata-title-mismatch':'metadata-artist-mismatch','none');
  checkCancelled(signal); const duration=metadata.format.duration;
  if(!duration||!Number.isFinite(duration)||duration<=0)fail('parse','integrity','audio-duration-invalid','none');
  if(!metadata.format.codec)fail('parse','integrity','audio-codec-missing','none');
- // Capability selection happens before creating staging. Runtime OPFS failures never switch backend.
+ // A directory capability can fail in the worker even when its methods exist.
+ // Choose a fallback only before ownership, staging or bytes have been written.
  const available=typeof navigator.storage?.getDirectory==='function'&&typeof FileSystemFileHandle!=='undefined'&&typeof FileSystemFileHandle.prototype.createWritable==='function';
- const backend=options.backend==='idb'?'idb':available?'opfs':'idb';attempt.backend=backend;attempt.closeState=backend==='opfs'?'not-attempted':'not-applicable';
+ let backend:'opfs'|'idb'=options.backend==='idb'?'idb':available?'opfs':'idb';
  if(options.backend==='opfs'&&!available)fail('open','storage-unavailable','storage-unavailable','opfs');
- let job:ImportOperation={version:1,operationId,owner:crypto.randomUUID(),revision:1,state:'writing',backend,storageKey:crypto.randomUUID(),bytes:0,expectedBytes:file.size,...(options.libraryMode==='cache'?{libraryMode:'cache' as const}:{})};
- // Resolve a key collision before recording ownership, so cleanup can never claim an old file.
- assertDatabaseUse('write');const directory=backend==='opfs'?await writeDirectory():undefined;assertDatabaseUse('write');
- if(directory)try{await directory.getFileHandle(job.storageKey);fail('open','internal','conflict','opfs');}catch(error){if(nativeDOMName(error)!=='NotFoundError')throw AppFailure.create(fromKnownError(error,{phase:'open',backend:'opfs'}));}
- 
- let writer:FileSystemWritableFileStream|undefined;let closeAttempted=false;let closed=false;
+ const storageKey=crypto.randomUUID();
+ let directory:FileSystemDirectoryHandle|undefined;
+ if(backend==='opfs'){
+  try{
+   directory=await writeDirectory();
+   try{await directory.getFileHandle(storageKey);fail('open','internal','conflict','opfs');}
+   catch(error){if(nativeDOMName(error)!=='NotFoundError')throw AppFailure.create(fromKnownError(error,{phase:'open',backend:'opfs'}));}
+  }catch(error){
+   if(options.backend==='opfs'||issuedFailure(error)?.code==='conflict')throw error;
+   checkCancelled(signal);
+   directory=undefined;backend='idb';
+  }
+ }
+ if(timing)timing.backend=backend;
+ mark('writeMs');
+ attempt.backend=backend;attempt.closeState=backend==='opfs'?'not-attempted':'not-applicable';
+ checkCancelled(signal);
+ let job:ImportOperation={version:1,operationId,owner:crypto.randomUUID(),revision:1,state:'writing',backend,storageKey,bytes:0,expectedBytes:file.size,...(accountId?{accountId}:{}),...(options.libraryMode==='cache'?{libraryMode:'cache' as const}:{})};
+
+ let writer:FileSystemWritableFileStream|undefined;let closeAttempted=false;let closed=false;let badExpectedInput=false;
  try{
  attempt.started=true;await createOperation(job);
  if(directory)writer=await atBoundary('open','opfs',async()=>{assertDatabaseUse('write');const handle=await directory.getFileHandle(job.storageKey,{create:true});assertDatabaseUse('write');return handle.createWritable();});
- const hash=sha256.create();let count=0;
- for(let offset=0;offset<file.size;offset+=CHUNK){
- checkCancelled(signal); const bytes=new Uint8Array(await atBoundary('read','none',()=>file.slice(offset,offset+CHUNK).arrayBuffer()));hash.update(bytes);
- if(writer){await atBoundary('write','opfs',()=>{assertDatabaseUse('write');return writer!.write(bytes);});job=await updateOperation(job,{bytes:offset+bytes.length});}
- else{
- await atBoundary('write','idb',async()=>{const db=await openDatabase();try{const tx=admittedTransaction(db,['chunks','jobs'],'readwrite');const done=transactionDone(tx);
- try{const current=await request<ImportOperation|undefined>(tx.objectStore('jobs').get(operationId));
- if(!validImportOperation(current,operationId)||JSON.stringify(current)!==JSON.stringify(job)||current.owner!==job.owner||current.revision!==job.revision||current.state!=='writing'){fail('write','internal','conflict','idb');}
- tx.objectStore('chunks').put(bytes,[job.storageKey,count]);const next={...job,bytes:offset+bytes.length,revision:job.revision+1};tx.objectStore('jobs').put(next,operationId);await done;job=next;
- }catch(error){try{tx.abort();}catch{/* settled */}await done.catch(()=>{});throw error;}
- }finally{closeDatabase(db);}});
+ // A writing job has no publishable manifest. A discarded job removes its
+ // entire owned generation, including any bytes beyond its last checkpoint.
+ const hash=options.expected?null:sha256.create();let count=0;
+ const db=writer?undefined:await atBoundary('open','idb',openDatabase);
+ try{
+ for(let offset=0;offset<file.size;){
+  checkCancelled(signal);
+  const size=writer?CHUNK:IDB_BATCH;
+  const bytes=new Uint8Array(await atBoundary('read','none',()=>file.slice(offset,offset+size).arrayBuffer()));
+  if(bytes.length!==Math.min(size,file.size-offset))fail('read','integrity','length-mismatch',backend);
+  checkCancelled(signal);hash?.update(bytes);
+  offset+=bytes.length;
+  if(writer){
+   await atBoundary('write','opfs',()=>{assertDatabaseUse('write');return writer!.write(bytes);});
+   if(offset===file.size||offset-job.bytes>=OPFS_CHECKPOINT)job=await updateOperation(job,{bytes:offset});
+   count++;
+  }else{
+   await atBoundary('write','idb',async()=>{const tx=admittedTransaction(db!,['chunks','jobs'],'readwrite');const done=transactionDone(tx);
+    try{const current=await request<ImportOperation|undefined>(tx.objectStore('jobs').get(operationId));
+     checkCancelled(signal);
+     if(!validImportOperation(current,operationId)||JSON.stringify(current)!==JSON.stringify(job)||current.owner!==job.owner||current.revision!==job.revision||current.state!=='writing')fail('write','internal','conflict','idb');
+     const chunks=tx.objectStore('chunks');
+     for(let at=0;at<bytes.length;at+=CHUNK)chunks.put(bytes.slice(at,at+CHUNK),[job.storageKey,count++]);
+     const next={...job,bytes:offset,revision:job.revision+1};tx.objectStore('jobs').put(next,operationId);await done;job=next;
+    }catch(error){try{tx.abort();}catch{/* settled */}await done.catch(()=>{});throw error;}
+   });
+  }
+  await atBoundary('transport','none',()=>progress(offset));
  }
- count++;await atBoundary('transport','none',()=>progress(offset+bytes.length));
+ }finally{if(db)closeDatabase(db);}
+ // The reopened generation is verified against this digest before the job
+ // reaches ready, including after recovering an interrupted verification.
+ const digest=hash?bytesToHex(hash.digest()):options.expected!.sha256;
+ const candidates=await atBoundary('read','idb',()=>all<LocalAsset>('assets'));
+ let existing:LocalAsset|undefined;
+ for(const candidate of candidates.filter(a=>validAsset(a)&&a.sha256===digest&&a.bytes===file.size)){
+  checkCancelled(signal);
+  const checked=await verifiedAssetDetailed(candidate.id,true);
+  if(checked.state==='unknown')throw AppFailure.create(checked.failure);
+  if(checked.state==='valid'){existing=candidate;break;}
+  // A missing generation may be repaired in place. Preserve published corrupt bytes
+  // and their references by staging the replacement under a different asset identity.
+  if(checked.state==='missing')existing??=candidate;
  }
- const digest=bytesToHex(hash.digest());
- if(options.expected&&digest!==options.expected.sha256)fail('verify','integrity','digest-mismatch',backend);
- const candidates=await atBoundary('read','idb',()=>all<LocalAsset>('assets'));const existing=candidates.find(a=>validAsset(a)&&a.sha256===digest&&a.bytes===file.size);
- const text=(s:string|undefined)=>s?.trim().slice(0,300)||null;
+ const truncate=(s:string)=>s.slice(0,300).replace(/[\uD800-\uDFFF]/gu,'');
+ const text=(s:string|undefined)=>s?truncate(s.trim())||null:null;
  const asset:LocalAsset={id:existing?.id??crypto.randomUUID(),namespace:'local',storageKey:job.storageKey,bytes:file.size,sha256:digest,mime,chunks:count,state:'complete',revision:(existing?.revision??0)+1,backend,chunkSize:CHUNK,retention:'kept'};
  const localAlbum=extractLocalAlbumMetadata(metadata.native,mime,albumTags,retried?'not-inspected':metadataWarning?(metadataWarning==='tag-size'?'omitted':metadataWarning==='tag-unsupported'?'not-inspected':'invalid'):null);
- const track:LinkedTrack={localAlbum,id:crypto.randomUUID(),assetId:asset.id,audioFingerprint:{algorithm:'sha256',sha256:digest,bytes:file.size},title:text(metadata.common.title)||file.name.replace(/\.[^.]+$/,'').slice(0,300)||'Sin título',artist:text(metadata.common.artist),album:text(metadata.common.album),duration,favorite:false,revision:1,createdAt:new Date().toISOString(),manualOverrides:{}};
+ const canonical=options.expected&&verifiedCompoundAudioTitle(metadata.common.title,options.expected,duration)?options.expected:null;
+ const track:LinkedTrack={...(accountId?{accountId}:{}),localAlbum,id:crypto.randomUUID(),assetId:asset.id,audioFingerprint:{algorithm:'sha256',sha256:digest,bytes:file.size},title:canonical?.title||text(metadata.common.title)||truncate(file.name.replace(/\.[^.]+$/,''))||'Sin título',artist:canonical?.artist??text(metadata.common.artist),album:text(metadata.common.album),duration,favorite:false,revision:1,createdAt:new Date().toISOString(),manualOverrides:{}};
  job=await updateOperation(job,{state:'verifying',asset,track,expectedAssetRevision:existing?.revision??0});
  if(writer){assertDatabaseUse('write');closeAttempted=true;attempt.closeState='unknown';await atBoundary('close','opfs',()=>writer!.close());closed=true;attempt.closeState='acknowledged';}
- const reader=await openAssetReader(asset,false);try{const verified=await reader.verifyDetailed();if(verified.state!=='valid')throw AppFailure.create(verified.failure);}finally{reader.release();}
+ mark('verifyMs');
+ const reader=await openAssetReader(asset,false);
+ try{
+  const verified=await reader.verifyDetailed();
+  if(verified.state!=='valid'){
+   // Distinguish a definitive input rejection from an uncertain storage
+   // failure. Only the exceptional mismatch path hashes the source again.
+   if(options.expected&&verified.failure.code==='digest-mismatch'){
+    const source=sha256.create();
+    for(let offset=0;offset<file.size;offset+=IDB_BATCH){
+     checkCancelled(signal);source.update(new Uint8Array(await atBoundary('read','none',()=>file.slice(offset,offset+IDB_BATCH).arrayBuffer())));
+    }
+    badExpectedInput=bytesToHex(source.digest())!==digest;
+   }
+   throw AppFailure.create(verified.failure);
+  }
+ }finally{reader.release();}
  job=await updateOperation(job,{state:'ready'});checkCancelled(signal); 
  const duplicate=await deduplicateOperation(job,signal);if(duplicate?.result)return outcome(duplicate.result);
  checkCancelled(signal); job=await updateOperation(job,{state:'publishing'});
@@ -140,7 +208,7 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
  if(current?.state==='sealed'&&current.result)return current.result;
  if(current?.state==='discarded'&&current.result)return current.result;
  if(current?.result&&current.state==='cleanup')attempt.pendingPublication=true;
- let uncertain=abortFailed||closeAttempted&&!closed||current?.state==='publishing'||current?.state==='verifying'||attempt.primary?.phase==='transport'||current?.state==='cleanup'&&!!current.result;
+ let uncertain=abortFailed||closeAttempted&&!closed||current?.state==='publishing'||current?.state==='verifying'&&!badExpectedInput||attempt.primary?.phase==='transport'||current?.state==='cleanup'&&!!current.result;
  if(current&&!uncertain){
  try{if(current.state!=='cleanup')current=await updateOperation(current,{state:'cleanup',cause:attempt.primary?.code==='cancelled'?'cancelled':attempt.primary?.code==='quota-exceeded'?'quota':'copy-failed'});await cleanupOperation(current);}
  catch(cleanup){attempt.secondary('cleanup',fromKnownError(cleanup,{phase:'cleanup',backend:current.backend}));uncertain=true;}
@@ -153,15 +221,17 @@ async function performImport(file:File,signal:AbortSignal,progress:(bytes:number
 }
 function checkCancelled(signal:AbortSignal){assertDatabaseUse('write');if(signal.aborted)fail('validate','cancelled','cancelled','none');}
 /** Public detailed API: one copy algorithm, one writer lock, optional metadata after durable audio. */
-export async function importFileDetailed(file:File,signal:AbortSignal,progress:(bytes:number)=>void=()=>{},options:ImportOptions={}):Promise<ImportAttemptResult>{
+export async function importFileDetailed(file:File,signal:AbortSignal,progress:(bytes:number)=>void=()=>{},options:ImportOptions={},timing?:ImportTiming):Promise<ImportAttemptResult>{
  const attempt=new Attempt();
+ let phase:ImportPhase|null=null,started=0;
+ const mark:MarkTiming=next=>{if(!timing)return;if(phase)timing[phase]+=elapsedMs(started);phase=next;started=performance.now();};
  try{
- const result=await importFileCore(file,signal,progress,options,attempt);
+ const result=await importFileCore(file,signal,progress,options,attempt,mark,timing);
  return {kind:'confirmed',result,outcome:attempt.confirmed()};
  }catch(error){
  attempt.failure(fromKnownError(error,{phase:null,backend:attempt.backend,cancelRequested:signal.aborted}));
  return {kind:'failed',outcome:attempt.outcome(attempt.started?'unknown':attempt.cleaned?'not-published':'not-started')};
- }
+ }finally{mark(null);}
 }
 /** Legacy surface uses the same core; only fixed safe messages cross a failed attempt. */
 export async function importFile(file:File,signal:AbortSignal,progress:(bytes:number)=>void=()=>{},options:ImportOptions={}):Promise<DetailedImportResult>{
@@ -171,7 +241,9 @@ export async function importFile(file:File,signal:AbortSignal,progress:(bytes:nu
  if(result.outcome.recoveryRequired)throw new Error('Resultado incierto. Se conservan los bytes; revisa y recupera la operación antes de importar.');
  if(f.code==='quota-exceeded')throw new DOMException('No hay espacio suficiente. Se conserva tu biblioteca.','QuotaExceededError');
  if(f.code==='cancelled')throw new DOMException('Importación cancelada; se conservan los archivos ya publicados.','AbortError');
- throw AppFailure.create(f);
+ const error=AppFailure.create(f);
+ if(f.phase==='parse'&&f.code==='limit-exceeded')error.message=AUDIO_METADATA_LIMIT_MESSAGE;
+ throw error;
 }
 
 async function metadataView(...args:Parameters<typeof audioMetadataView>){

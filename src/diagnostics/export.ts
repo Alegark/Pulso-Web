@@ -1,13 +1,14 @@
-import {eventKeys,MAX_BYTES,plain,validEvent,type DiagnosticEvent} from './contract';
+import {downloadTimingKeys,parseDownloadTiming} from './download-timing';
+import {eventKeys,MAX_BYTES,parseSongAggregate,plain,songTimingKeys,validEvent,type DiagnosticEvent} from './contract';
 import {isSessionSnapshot,type SessionSnapshot} from './session';
 export const capabilityFields=['indexedDbApi','webLocksApi','broadcastChannelApi','opfsApi','serviceWorkerApi','storageEstimateApi','storageOperation','observedBackend','observedTransport'] as const;
 export type CapabilityField=typeof capabilityFields[number];
 export type Capabilities=Readonly<Record<CapabilityField,string>>;
 export const limitValues={mode:'local',sdk:'not-integrated',browserEvidence:'partial',physicalEvidence:'pending'} as const;
 export const limitFields=Object.keys(limitValues) as (keyof typeof limitValues)[];
-export const fieldSets={errors:eventKeys,capabilities:capabilityFields,limits:limitFields};
+export const fieldSets={errors:eventKeys,capabilities:capabilityFields,limits:limitFields,downloads:downloadTimingKeys,songs:songTimingKeys};
 export type Dataset=keyof typeof fieldSets;
-export type Selection=Record<Dataset,readonly string[]>;
+export type Selection=Record<'errors'|'capabilities'|'limits',readonly string[]>&Partial<Record<'downloads'|'songs',readonly string[]>>;
 export interface Review { readonly json:string; readonly bytes:number }
 const reviews=new WeakMap<Review,string>();
 function selected(value:unknown,allowed:readonly string[]):string[] {
@@ -24,12 +25,12 @@ function capabilityValue(key:string,value:unknown){
 /** Synchronous bounded projection. Serialize only fresh closed primitive DTOs. */
 export function projectReview(snapshot:SessionSnapshot,selection:Selection,capabilities:Capabilities):Review {
  if(!isSessionSnapshot(snapshot))throw Error('unissued-snapshot');
- const s=plain(selection,['errors','capabilities','limits']);if(!s)throw Error('invalid-selection');
- const fields={errors:selected(s.errors,eventKeys),capabilities:selected(s.capabilities,capabilityFields),limits:selected(s.limits,limitFields)};
+ const s=plain(selection,['errors','capabilities','limits',...(['downloads','songs'].filter(key=>Object.hasOwn(selection,key)))]);if(!s)throw Error('invalid-selection');
+ const fields={errors:selected(s.errors,eventKeys),capabilities:selected(s.capabilities,capabilityFields),limits:selected(s.limits,limitFields),downloads:selected(Object.hasOwn(s,'downloads')?s.downloads:[],downloadTimingKeys),songs:selected(Object.hasOwn(s,'songs')?s.songs:[],songTimingKeys)};
  if(!Object.values(fields).some(a=>a.length))throw Error('empty-selection');
  const datasets:Record<string,unknown>=Object.create(null);
  if(fields.errors.length){
-  const state=plain(snapshot,['enabled','revision','events','droppedRecords','rejectedRecords']);
+  const state=plain(snapshot,['enabled','revision','events','downloads','songs','droppedRecords','rejectedRecords']);
   if(!state||!Array.isArray(state.events)||state.events.length>100)throw Error('invalid-snapshot');
   const rows:Record<string,unknown>[]=[];
   for(let i=0;i<state.events.length;i++){
@@ -41,6 +42,18 @@ export function projectReview(snapshot:SessionSnapshot,selection:Selection,capab
  }
  if(fields.capabilities.length){const c=plain(capabilities,capabilityFields);if(!c)throw Error('invalid-capabilities');const row:Record<string,string>=Object.create(null);for(const key of fields.capabilities)row[key]=capabilityValue(key,c[key]);datasets.capabilities=row;}
  if(fields.limits.length){const row:Record<string,string>=Object.create(null);for(const key of fields.limits)row[key]=limitValues[key as keyof typeof limitValues];datasets.limits=row;}
+ if(fields.downloads.length){
+  datasets.downloads=snapshot.downloads.map(value=>{
+   const row=parseDownloadTiming(value);if(!row)throw Error('invalid-download-timing');
+   return Object.fromEntries(fields.downloads.map(key=>[key,row[key as keyof typeof row]]));
+  });
+ }
+ if(fields.songs.length){
+  datasets.songs=snapshot.songs.map(value=>{
+   const row=parseSongAggregate(value);if(!row)throw Error('invalid-song-timing');
+   return Object.fromEntries(fields.songs.map(key=>[key,row[key as keyof typeof row]]));
+  });
+ }
  const json=JSON.stringify({format:'pulso-web-diagnostics',version:1,datasets},null,2),bytes=new TextEncoder().encode(json).byteLength;
  if(bytes>MAX_BYTES)throw Error('projection-limit');
  const review=Object.freeze({json,bytes});reviews.set(review,json);return review;

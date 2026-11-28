@@ -4,9 +4,11 @@ import {createServer} from 'node:http';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {resolve,extname,sep} from 'node:path';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 
 const base=resolve('.local/design-responsive'),out=resolve(base,'build');
 await mkdir(base,{recursive:true});
+execFileSync(process.execPath,['design/scripts/build-mobile.mjs'],{stdio:'inherit'});
 const files=['src/ui/PlayerSurface.tsx','src/ui/MiniPlayer.tsx','src/ui/design-tokens.css','src/ui/responsive-shell.css','design/scripts/build-mobile.mjs','design/prototypes/player-mobile.html','design/prototypes/player-phone.html','tests/integration/design-responsive.html','tests/integration/design-responsive.tsx'];
 const hashes={};for(const path of files)hashes[path]=createHash('sha256').update(await readFile(path)).digest('hex');
 await build({configFile:false,logLevel:'error',build:{outDir:out,emptyOutDir:true,rolldownOptions:{input:'tests/integration/design-responsive.html'}}});

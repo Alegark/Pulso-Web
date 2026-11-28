@@ -1,6 +1,7 @@
+import type {NetworkTiming} from '../diagnostics/download-timing';
 /// <reference lib="webworker" />
 import {hasSavedTelegramSession,clearSavedTelegramSession} from './saved-session';
-import {parseSessionCommand,sessionFailure,type SessionCommand,type SessionReply,type Delivery} from './session-protocol';
+import {parseConnectionCommand,parseSessionCommand,sessionFailure,type SessionCommand,type SessionReply,type Delivery} from './session-protocol';
 import {decodeTelegramApiIdentity,API_IDENTITY_INPUT_BYTES} from './api-identity';
 import {parseAccountBinding,parseSourcesCommand,type SourcesCommand} from './sources-protocol';
 import type {SourcesDriver} from './sources-driver';
@@ -10,8 +11,9 @@ import type {BotProvidersDriver} from './bot-providers-driver';
 import type {BotProvidersBridgeReply} from './bot-providers-bridge-protocol';
 import {copyBotSearchEnvelope,parseBotSearchCommand,parseBotSearchReply,type BotSearchCommand,type BotSearchReply} from './bot-search-protocol';
 import type {BotSearchDriver} from './bot-search-driver';
-import type {BotSearchBridgeReply} from './bot-search-bridge-protocol';
+import {isBotSearchCancelReply,type BotSearchBridgeReply} from './bot-search-bridge-protocol';
 import type {QrLoginChallenge} from './qr-login-protocol';
+import {cooldownDeadline} from './rpc-failure';
 declare const self:DedicatedWorkerGlobalScope;
 let session='',phase:SessionReply['phase']='disconnected',active=false,phone='';
 let codeDelivery:Delivery|null=null;
@@ -21,33 +23,40 @@ const abort=new AbortController();
 let sources:SourcesDriver|undefined,page:Promise<void>|null=null,control=false;
 let bots:BotProvidersDriver|undefined,botFlight:Promise<void>|null=null,botControl:Promise<void>|null=null;
 let search:BotSearchDriver|undefined,searchFlight:Promise<void>|null=null,searchControl:Promise<void>|null=null,searchCancelled=false;
-let retryAt:number|null=null,retryBlocked=false;
-const remoteAllowed=()=>!retryBlocked&&(retryAt===null||Date.now()>=retryAt);
-function observeRemote(reply:{type:string;retryAt?:number|null;retryBlocked?:boolean}){if(reply.type!=='bots.error'&&reply.type!=='sources.error'&&reply.type!=='bot-search.error')return;retryBlocked ||=!!reply.retryBlocked;if(reply.retryAt!=null)retryAt=Math.max(retryAt??0,reply.retryAt);}
+let retryAt:number|null=null;
+const remoteAllowed=()=>retryAt===null||Date.now()>=retryAt;
+function observeRemote(wait:{retryAt?:number|null;retryBlocked?:boolean}){
+ const until=cooldownDeadline(wait);
+ if(until)retryAt=Math.max(retryAt??0,until);
+}
 /** Optional only for historic synthetic SDK fixtures. Production factory implements this accessor. */
-function refreshCooldown(){const cooldown=client?.getAccountCooldown?.();if(cooldown){retryBlocked ||=cooldown.retryBlocked;if(cooldown.retryAt!==null)retryAt=Math.max(retryAt??0,cooldown.retryAt);}}
+function refreshCooldown(){const cooldown=client?.getAccountCooldown?.();if(cooldown)observeRemote(cooldown);}
 function closeLocal(){qrChallenge=null;abort.abort();search?.close();bots?.close();sources?.close();void client?.close().catch(()=>{});self.close();}
 async function searchCommand(command:BotSearchCommand){
- if(!client||phase!=='connected'||active||command.sessionId!==session||command.type!=='bot-search.cancel'&&(searchFlight||searchControl||botFlight||botControl||page||control)||command.type==='bot-search.cancel'&&(!search||!searchFlight||searchControl)){closeLocal();return;}
+ if(!client||phase!=='connected'||active||command.sessionId!==session||command.type!=='bot-search.cancel'&&(searchFlight||searchControl||botFlight||botControl||page||control)||command.type==='bot-search.cancel'&&searchControl){closeLocal();return;}
  const driver=client,binding=parseAccountBinding(driver.getAccountBinding());
  if(!binding||command.accountRef!==binding.accountRef||command.accountEpoch!==binding.accountEpoch){closeLocal();return;}
  const current=()=>!abort.signal.aborted&&client===driver&&driver.getAccountBinding()?.accountRef===binding.accountRef&&driver.getAccountBinding()?.accountEpoch===binding.accountEpoch;
+ const post=(reply:BotSearchReply,sessionClosed:boolean)=>self.postMessage({protocol:'pulso-bot-search',version:1,reply,sessionClosed,retryAt,retryBlocked:false} satisfies BotSearchBridgeReply);
+ if(command.type==='bot-search.cancel'&&(!search||!searchFlight)){
+  post({...copyBotSearchEnvelope(command),type:'bot-search.error',error:'expired',delivery:'not-dispatched',retryAt:null,retryBlocked:false},false);return;
+ }
  let core:BotSearchDriver|undefined;try{core=search??=driver.createBotSearch?.(session);}catch{closeLocal();return;}
- const post=(reply:BotSearchReply,sessionClosed:boolean)=>self.postMessage({protocol:'pulso-bot-search',version:1,reply,sessionClosed,retryAt,retryBlocked} satisfies BotSearchBridgeReply);
  let terminal=false,sending=false,notice=false;
  const run=async()=>{try{
-  refreshCooldown();let reply:BotSearchReply|null;
-  if(command.type!=='bot-search.cancel'&&(!core||!remoteAllowed()))reply={...copyBotSearchEnvelope(command),type:'bot-search.error',error:core?'rate-limit':'unsupported',delivery:'not-dispatched',retryAt:core?retryAt:null,retryBlocked:core?retryBlocked:false};
-  else reply=await core!.handle(command,{signal:abort.signal,current,publish:raw=>{
+  refreshCooldown();let reply:BotSearchReply|null,timing:NetworkTiming|undefined;
+  if(command.type!=='bot-search.cancel'&&(!core||!remoteAllowed()))reply={...copyBotSearchEnvelope(command),type:'bot-search.error',error:core?'rate-limit':'unsupported',delivery:'not-dispatched',retryAt:core?retryAt:null,retryBlocked:false};
+  else reply=await core!.handle(command,{signal:abort.signal,current,timing:value=>{timing=value;},publish:raw=>{
    if(terminal)return;const progress=parseBotSearchReply(raw,command);if(!progress||!['bot-search.sending','bot-search.download-progress','bot-search.provider-notice'].includes(progress.type)||command.type==='bot-search.cancel'||!current()){closeLocal();return;}
    if(progress.type==='bot-search.provider-notice'){if(command.type!=='bot-search.download'){closeLocal();return;}if(notice||searchCancelled)return;notice=true;}
    if(progress.type==='bot-search.sending'){if(sending)return;sending=true;}post(progress,false);
   }});
   const settled=command.type!=='bot-search.cancel'&&core?await core.whenSettled():true;
-  if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&(reply.type!=='bot-search.cancelled'||reply.targetRequestId!==command.targetRequestId)){closeLocal();return;}observeRemote(reply);refreshCooldown();
-  const sessionClosed=!settled||!current()||!driver.getAccountBinding();post(reply,sessionClosed);if(sessionClosed)closeLocal();
+  if(abort.signal.aborted)return;terminal=true;if(!reply||!parseBotSearchReply(reply,command)||command.type!=='bot-search.cancel'&&!['bot-search.error','bot-search.result','bot-search.downloaded'].includes(reply.type)||command.type==='bot-search.cancel'&&!isBotSearchCancelReply(reply,command)){closeLocal();return;}if('retryAt' in reply)observeRemote(reply);refreshCooldown();
+  if(reply.type==='bot-search.cancelled')searchCancelled=true;
+  const sessionClosed=!settled||!current()||!driver.getAccountBinding();const timed=timing&&{...reply,timing};post(timed&&parseBotSearchReply(timed,command)?timed:reply,sessionClosed);if(sessionClosed)closeLocal();
  }catch{closeLocal();}};
- if(command.type==='bot-search.cancel'){searchCancelled=true;const flight=run();searchControl=flight;try{await flight;}finally{if(searchControl===flight)searchControl=null;}}
+ if(command.type==='bot-search.cancel'){const flight=run();searchControl=flight;try{await flight;}finally{if(searchControl===flight)searchControl=null;}}
  else{searchCancelled=false;const flight=run();searchFlight=flight;try{await flight;}finally{if(searchFlight===flight)searchFlight=null;}}
 }
 async function botCommand(command:BotProvidersCommand){
@@ -57,11 +66,11 @@ async function botCommand(command:BotProvidersCommand){
  const current=()=>!abort.signal.aborted&&client===driver&&driver.getAccountBinding()?.accountRef===binding.accountRef&&driver.getAccountBinding()?.accountEpoch===binding.accountEpoch;
  const core=bots??=driver.createBotProviders(session);
  const run=async()=>{try{
-  refreshCooldown();let reply:BotProvidersReply|null=command.type==='bots.validate'&&!remoteAllowed()?{...copyBotEnvelope(command),type:'bots.error',error:'rate-limit',retryAt,retryBlocked}:await core.handle(command,{signal:abort.signal,current});
+  refreshCooldown();let reply:BotProvidersReply|null=command.type==='bots.validate'&&!remoteAllowed()?{...copyBotEnvelope(command),type:'bots.error',error:'rate-limit',retryAt,retryBlocked:false}:await core.handle(command,{signal:abort.signal,current});
   // Cancel ACK is control only. Terminal validation publication waits for the actual SDK settlement.
   const settled=command.type==='bots.validate'?await core.whenSettled():true;
-  if(abort.signal.aborted)return;if(!reply){closeLocal();return;}observeRemote(reply);refreshCooldown();
-  if(reply.type==='bots.error')reply={...reply,retryAt,retryBlocked};
+  if(abort.signal.aborted)return;if(!reply){closeLocal();return;}if('retryAt' in reply)observeRemote(reply);refreshCooldown();
+  if(reply.type==='bots.error')reply={...reply,retryAt,retryBlocked:false};
   const sessionClosed=!settled||!current()||!driver.getAccountBinding();
   self.postMessage({protocol:'pulso-bot-providers',version:1,reply,sessionClosed} satisfies BotProvidersBridgeReply);
   if(sessionClosed)closeLocal();
@@ -75,10 +84,10 @@ async function sourceCommand(command:SourcesCommand){
  if(!binding||command.accountRef!==binding.accountRef||command.accountEpoch!==binding.accountEpoch){closeLocal();return;}
  const current=()=>!abort.signal.aborted&&client===driver&&driver.getAccountBinding()?.accountRef===binding?.accountRef&&driver.getAccountBinding()?.accountEpoch===binding?.accountEpoch;
  const run=async()=>{
-  try{refreshCooldown();let reply=command.type==='sources.page'&&!remoteAllowed()?{protocol:'pulso-sources' as const,version:1 as const,sessionId:command.sessionId,accountRef:command.accountRef,accountEpoch:command.accountEpoch,listEpoch:command.listEpoch,operationId:command.operationId,requestId:command.requestId,type:'sources.error' as const,error:'rate-limit' as const,retryAt,retryBlocked}:await core.handle(command,{signal:abort.signal,current});
+  try{refreshCooldown();let reply=command.type==='sources.page'&&!remoteAllowed()?{protocol:'pulso-sources' as const,version:1 as const,sessionId:command.sessionId,accountRef:command.accountRef,accountEpoch:command.accountEpoch,listEpoch:command.listEpoch,operationId:command.operationId,requestId:command.requestId,type:'sources.error' as const,error:'rate-limit' as const,retryAt,retryBlocked:false}:await core.handle(command,{signal:abort.signal,current});
    const settled=command.type==='sources.page'?await core.whenSettled():true;
    if(abort.signal.aborted)return;if(!reply){closeLocal();return;}
-   observeRemote(reply);refreshCooldown();if(reply.type==='sources.error')reply={...reply,retryAt,retryBlocked};const sessionClosed=!settled||!current()||!driver.getAccountBinding();
+   if('retryAt' in reply)observeRemote(reply);refreshCooldown();if(reply.type==='sources.error'&&reply.error==='rate-limit')reply={...reply,retryAt,retryBlocked:false};const sessionClosed=!settled||!current()||!driver.getAccountBinding();
    self.postMessage({protocol:'pulso-sources',version:1,reply,sessionClosed,saved:sessionClosed?null:core.getSaved()} satisfies SourcesBridgeReply);
    if(sessionClosed)closeLocal();
   }catch{closeLocal();}
@@ -100,11 +109,19 @@ async function open(){
  const {openTemporaryTelegram}=await import('./temporary-sdk');client=await openTemporaryTelegram(identity,abort.signal);return client;
 }
 function reply(command:SessionCommand,error:SessionReply['error']=null,waitUntil:number|null=null,delivery:Delivery|null=phase==='code'?codeDelivery:null){
- const offered=phase==='code'&&!retryBlocked?client?.getCodeResend?.():null;
+ const vaultGeneration=phase==='connected'?client?.getVaultGeneration?.():null;
+ const offered=phase==='code'?client?.getCodeResend?.():null;
  const codeResend=offered?{delivery:offered.delivery,availableAt:Math.max(offered.availableAt,retryAt??0)}:null;
- self.postMessage({version:2,session,request:command.request,phase,error,retryAt:waitUntil,delivery,binding:phase==='connected'?parseAccountBinding(client!.getAccountBinding()):null,saved:phase==='connected'?parseSaved(sources!.getSaved()):null,...(phase==='code'?{codeResend}:{}),...(phase==='qr'&&qrChallenge?{qr:qrChallenge}:{}),...(phase==='connected'&&bots?{bots:bots.getSnapshot()!.providers}:{})} satisfies SessionReply);
+ self.postMessage({version:2,session,request:command.request,phase,error,retryAt:waitUntil,delivery,binding:phase==='connected'?parseAccountBinding(client!.getAccountBinding()):null,saved:phase==='connected'?parseSaved(sources!.getSaved()):null,...(vaultGeneration?{vaultGeneration}:{}),...(phase==='code'?{codeResend}:{}),...(phase==='qr'&&qrChallenge?{qr:qrChallenge}:{}),...(phase==='connected'&&bots?{bots:bots.getSnapshot()!.providers}:{})} satisfies SessionReply);
 }
 self.onmessage=event=>{
+ if(event.data?.protocol==='pulso-telegram-connection'){
+  const connection=parseConnectionCommand(event.data);
+  if(!connection||connection.session!==session||!client||phase!=='connected'){closeLocal();return;}
+  if(connection.type==='warm')client.warmConnection?.();
+  else if(!active&&!searchFlight&&!searchControl&&!botFlight&&!botControl&&!page&&!control)void client.suspendConnection?.().catch(closeLocal);
+  return;
+ }
  if(event.data?.protocol==='pulso-bot-search'){const command=parseBotSearchCommand(event.data);if(!command){closeLocal();return;}void searchCommand(command);return;}
  if(event.data?.protocol==='pulso-bot-providers'){const bot=parseBotProvidersCommand(event.data);if(!bot){closeLocal();return;}void botCommand(bot);return;}
  if(event.data?.protocol==='pulso-sources'){const source=parseSourcesCommand(event.data);if(!source){closeLocal();return;}void sourceCommand(source);return;}
@@ -113,6 +130,7 @@ self.onmessage=event=>{
  if(['begin','qr-begin','restore','forget'].includes(command.type)&&phase!=='disconnected'||(command.type==='code'||command.type==='resend')&&phase!=='code'||command.type==='qr-check'&&phase!=='qr'||command.type==='password'&&phase!=='password'||command.type==='logout'&&phase!=='connected'){closeLocal();return;}
  active=true;
  void (async()=>{
+  let confirmingAuth=false;
   try{
    if(command.type==='forget'){await clearSavedTelegramSession();if(abort.signal.aborted)return;phase='disconnected';reply(command);self.close();return;}
    if(command.type==='restore'){
@@ -121,7 +139,8 @@ self.onmessage=event=>{
     if(!await ready.restore(abort.signal)){phase='disconnected';reply(command);closeLocal();return;}
    }else if(command.type==='logout'){
     // Forget this authorization even if remote quiescence cannot be confirmed.
-    await client!.forgetSavedAuthorization?.(abort.signal);
+    try{await client!.connectForLogout?.();}
+    finally{await client!.forgetSavedAuthorization?.(abort.signal);}
     if(search){const settled=await search.quiesce();if(searchFlight)await searchFlight;if(searchControl)await searchControl;if(abort.signal.aborted)return;if(!settled||!client?.getAccountBinding()){phase='error';reply(command,'logout-unconfirmed');closeLocal();return;}}
     if(bots){const settled=await bots.quiesce();if(botFlight)await botFlight;if(botControl)await botControl;if(!settled||!client?.getAccountBinding()){phase='error';reply(command,'logout-unconfirmed');closeLocal();return;}}
     if(page){const settled=await sources!.quiesce();await page;if(!settled||!client?.getAccountBinding()){phase='error';reply(command,'logout-unconfirmed');closeLocal();return;}}
@@ -147,18 +166,25 @@ self.onmessage=event=>{
     if(Date.now()<offered.availableAt){reply(command,'rate-limit',offered.availableAt);return;}
     codeDelivery=await client.resendCode(abort.signal);if(abort.signal.aborted)return;
     phase='code';reply(command);return;
-   }else if(command.type==='code')await client!.code(phone,command.value,abort.signal);
-   else if(command.type==='password')await client!.password(command.value,abort.signal);
+   }else if(command.type==='code'||command.type==='password'){
+    refreshCooldown();if(!remoteAllowed()){reply(command,'rate-limit',retryAt);return;}
+    confirmingAuth=true;
+    if(command.type==='code')await client!.code(phone,command.value,abort.signal);
+    else await client!.password(command.value,abort.signal);
+    confirmingAuth=false;
+   }
    if(!parseAccountBinding(client!.getAccountBinding())){phase='error';reply(command,'protocol');closeLocal();return;}
    sources=client!.createSources(session);if(!parseSaved(sources.getSaved())){phase='error';reply(command,'protocol');closeLocal();return;}
+   await client!.prepareBotProviders?.(session,abort.signal);if(abort.signal.aborted)return;
    bots=client!.createBotProviders?.(session);if(bots&&!bots.getSnapshot())throw Error('session-storage');
    phase='connected';phone='';qrChallenge=null;reply(command);
   }catch(error){
    const safe=sessionFailure(error);
+   if(safe.error==='rate-limit'){observeRemote({retryAt:safe.retryAt,retryBlocked:safe.retryAt===null});safe.retryAt=retryAt;}
    if(safe.passwordNeeded&&['code','begin','qr-begin','qr-check'].includes(command.type)){qrChallenge=null;phase='password';reply(command);return;}
-   if(command.type==='qr-check'&&safe.error==='rate-limit'&&qrChallenge){retryBlocked ||=safe.retryAt===null;if(safe.retryAt!==null)retryAt=Math.max(retryAt??0,safe.retryAt);phase='qr';reply(command,safe.error,safe.retryAt);return;}
-   const retryable=command.type==='code'&&safe.error==='code-invalid'||command.type==='password'&&safe.error==='password-invalid'||(command.type==='code'||command.type==='resend'||command.type==='password')&&safe.error==='rate-limit';
-   if(retryable){if(safe.error==='rate-limit'){retryBlocked ||=safe.retryAt===null;if(safe.retryAt!==null)retryAt=Math.max(retryAt??0,safe.retryAt);}phase=command.type==='password'?'password':'code';reply(command,safe.error,safe.retryAt);return;}
+   if(command.type==='qr-check'&&safe.error==='rate-limit'&&qrChallenge){phase='qr';reply(command,safe.error,safe.retryAt);return;}
+   const retryable=confirmingAuth&&(safe.error==='network'||safe.error==='timeout')||command.type==='code'&&safe.error==='code-invalid'||command.type==='password'&&safe.error==='password-invalid'||(command.type==='code'||command.type==='resend'||command.type==='password')&&safe.error==='rate-limit';
+   if(retryable){phase=command.type==='password'?'password':'code';reply(command,safe.error,safe.retryAt);return;}
    phase='error';phone='';reply(command,command.type==='logout'&&safe.error!=='session-storage'?'logout-unconfirmed':safe.error,safe.retryAt);
    abort.abort();await client?.close().catch(()=>{});self.close();
   }finally{active=false;}

@@ -464,3 +464,569 @@ Root integra resumen y botón Configuración→Almacenamiento→Limpiar caché d
 Main/worker/import/audio reales con una fábrica SDK sintética: caso único PASS descarga1send+1callback→reselect0RPC→pausa/vaciado explícitos→limpieza1archivoausente→reobtención1send+1callback mismoTrackID/unasset/membershipfalse→Agregar true sinRPC ycache0. Casos previos del arnés (idle con revisión abierta y espera de fetch sin cambiar consulta) conservados; ningún cambio de producto para aprobarlos.171SHA intactos, errores/CSP/externos0/cleanuptrue/Engram15readonly antes/después. Recibos .local/listening-cache-browser y .local/cache-reacquisition; no sumar matrices ni afirmar Telegram real.
 
 Producción Chromium154/WebKit27.2desktop con audio propio/metadatos sintéticos y update9709→e549 PASS; diez style-src-attr históricosWebKit sin otros errores. Archivo fuente3708/171 exacto, avisos y ausencia identidad privada PASS. Entrega privadae549c4c517300a6e,38archivos exactos y294assets/entradas previas intactos, HTTPSlauncher/main/worker/SW/configprivadano-store PASS. D1/rootdist/Git preservados (rootmain/MiniPlayer/index visual distinto excluido). Sin cuenta real/deleción real, nuevas consultasTelegram/costos/servicios/commit/push. No garantía de disco físicamente recuperado/borrado seguro; iPhone/offlineprivado/background/P0global pendientes. Docs y evidencia pública sin datos privados. ODD se sincroniza al cerrar testers y se verifica en otra invocación contra15archivos completos/bytes/SHA.
+
+## Duración cero de Telegram: reproducción y reparación local · 2026-11-17
+
+A petición del propietario se probaron tres pistas de La Vida Era Más Corta, de Milo j (15 pistas, dos discos), en la app pública b34ea1aee33c6357. El propietario conectó Telegram en la pestaña autorizada, sin compartir códigos. Se añadieron KD y Deezer desde las sugerencias. Abrir el álbum generó cero comandos musicales.
+
+Llora Llora reprodujo D02: KD devolvió título y crédito completo coincidentes, pero duración cero frente a los 243,587 segundos del catálogo. No se leyeron bytes; el respaldo terminó D01. Bajo De La Piel y Niño dieron también cero con KD, pero Deezer descargó y reprodujo ambas. Se verificaron independientemente las dos copias OPFS por longitud y SHA en RAM y se añadieron explícitamente a Biblioteca. Los contadores son comandos del worker, no todo RPC. No se guardaron audio, hashes musicales, chats, credenciales ni datos personales. El observador se retiró y el audio quedó pausado con la sesión conservada.
+
+La reparación permite inspección con duración Telegram cero sólo con título normalizado exacto, artista completo y contexto positivo de álbum/duración. Una duración conocida compatible mantiene prioridad. El importador comprueba la duración real antes de staging: cinco segundos de tolerancia normal y uno para el alias Album Version. Se conserva el resto de las comprobaciones de identidad. Main transporta el contexto existente también para títulos ordinarios; no hay migración de base. Se integra el diagnóstico cerrado D02 anterior sin aceptar variantes de créditos no admitidas.
+
+Candidato: 766/766 unitarias, lint, build Cloudflare y dry-run PASS. Chromium pasó 9/9 grupos y WebKit de escritorio 4/4 con SDK TESTONLY. Incluye cero Telegram con archivo propio de 45,046 segundos aceptado y cero Telegram con archivo de 65 frente a 45 esperados rechazado antes de staging sin otra consulta, además de reutilización, multidisco, navegación, pausa y FLOOD. Chromium: cero CSP; WebKit: 48 avisos style-src-attr del baseline exacto, cero extras. Los 278 inputs de fuente, candidato y build coinciden.
+
+Negativos preservados: arnés anterior 6/9 por single y textos históricos; primer candidato con 9/9 acciones y timeout de inicialización Engram al cerrar la auditoría; repetición completa PASS. Los errores de ruta al preparar fixtures se corrigieron antes del freeze aceptado. Detalle en docs/ALBUM-DOWNLOAD-DURATION.md, docs/evidence-album-zero-duration-web.json y .local/album-current-investigation/. Siguen pendientes publicación y aceptación real reparada, lote real de quince pistas, iPhone y P0 global. No se atribuye identidad acústica.
+
+
+## Publicación del candidato · 2026-11-17
+
+Publicado por MCP oficial Cloudflare en Workers Free / USD 0, deployment `fd1d19643b7a4f75bc9dfd06d7e99573`. Entry `/releases/4f6976956f305019.html`; Worker exacto 303826 bytes, SHA-256 `ba1385a54b291151f15b62ecd51c30fa9697c6fa00ac67b19fe4d1d742d41165`. Readback: 151 rutas estáticas bytes/SHA, latest y service worker correctos; siete bindings existentes por nombre/tipo preservados sin leer valores secretos; workers.dev activo y previews desactivadas. `account-config` devuelve enabled/google true y perfil anónimo 401. La aceptación real reparada de Llora Llora queda pendiente para root; no se afirma lote real de quince pistas, iPhone ni cierre de P0-W.
+
+
+## Aceptación pública real de duración cero y lote parcial · 2026-11-17
+
+Sobre la entrega 4f6976956f305019, Llora Llora descargó de KD, guardó y reprodujo 3.943.218 bytes con duración real243,623 frente a243,587 del catálogo: una búsqueda/una descarga del worker. Reselección y Add explícito no añadieron comandos ni copia. La sesión de cuenta y Telegram se conservó al actualizar y al recargar.
+
+Primer lote: dos reutilizadas y Gil descargada; Ama De Mi Sol rechazó título interno antes de staging. La comparación manual con Deezer primero sí guardó/reprodujo Ama. Continuación con orden temporal Deezer→KD: cinco reutilizadas, ocho descargas nuevas, dos fallidas, cero sin intentar/revisión; **13/15**, no álbum completo. MmmM terminó D01/D02 por candidato incompatible en título/versión/tolerancia; Luciérnagas D01 sin opción vinculable al crédito completo. No se relajó matching ni se guardaron candidatos rechazados.
+
+Continuación:16search/9download/0cancel del worker; total observado tras reparación20/13/0, no todo RPC. Audio previo permaneció pausado; native play observado0 con contador instalado después del inicio. Trece fichas/assets distintos,72.706.469bytes, longitud/SHA íntegros verificados enRAM sin devolver/guardar audio ni hashes musicales. Orden KD→Deezer restaurado. Tras recargar:13copias, cuenta/Telegram/bots restaurados y reproducción de Ama con posición avanzada sin nuevos comandos. Observador final instalado tras carga y retirado; pestaña abierta/pausada. Endpoint account-profile autenticado503 pendiente independienteT21. Evidencia docs/evidence-album-zero-duration-web.json y .local/album-current-investigation/real-after.json. Identidad por metadatos, no acústica; iPhone/P0global pendientes. No nuevo build/despliegue para este recibo documental.
+
+## 2026-11-17 · Acceso y respuesta al retirar playlist/álbum
+
+Petición del propietario: poder eliminar ambas colecciones, retirar bytes exclusivos y conservar una copia compartida por otras playlists o Biblioteca/álbumes, con indicador descargada independiente de pertenencia. La reproducción nativa inicial sobre main vigente sí permitió eliminar playlist y retirar dos copias exclusivas; no se reprodujo el fallo concreto del navegador del propietario. La revisión del código identificó acceso doblemente anidado y un rechazo de admisión silencioso: `canOrganize` permite mostrar un botón cuando `start` todavía exige Activity idle. Ahora ambas acciones aparecen directamente en el detalle, antes de Opciones; la negativa de admisión abre un aviso cerrable sin adquirir Activity, leer datos ni activar gate. Se mantienen vista previa, consentimiento y CAS. Un run existente no se sustituye. El panel deja de atribuir todos los skipped a copias compartidas, distingue protección de cola/reproducción cuando la razón la confirma, y explica vaciar cola y revisar caché. No se modificó el core de referencias, favoritos, archivos ni eliminación física.
+
+Matriz propia Chromium nativo con WAV sintéticos e IDB/OPFS: una selección de 8/8 PASS, `.local/test-evidence/collection-current-LbLV9j/report.json`. Cada backend cubre álbum→playlist, playlist→álbum, playlist→playlist y protección por cola; verifica primera retirada exclusiva, conservación compartida, última retirada, manifiestos/chunks/OPFS y recarga. El inspector real `readSongCopyStatus` conserva available aun con inLibrary false; lookup devuelve mismo Track sin jobs nuevos. Busy bloqueado se comprueba con fábrica real sin gate/lecturas. Focal separado IDB álbum→playlist PASS en `collection-current-5DRjKY/report.json`: hash de todos los chunks intacto, Activity ajena continúa viva y badges reales de detalle de catálogo `Descargada` sin `En Biblioteca`, luego `Sin descarga` tras la retirada final. NO sumar ambos recibos como una sola matriz ni atribuir badges visuales OPFS/playlist→álbum a ese focal. Main construido en ambos: SHA256 d250cf385eafc37349c6efd1809109e982e42d6e9992bd989c1ef4e652d4fc80. Datos/metadata de catálogo y cuenta son TESTONLY; sin Telegram, cuentas reales, iPhone ni aceptación P0.
+
+Intentos del arnés separados: una navegación cerró un details ya abierto; otro hash comparó sólo el primer chunk antes de corregirse a todos; un control negativo por transformación no alcanzó ejecución por anchor del arnés y no se presenta como RED de producto. Typecheck inicial PASS; lint de cierre encontró cambios ajenos concurrentes en library-download.ts (progress requerido ausente) y LibraryDownloadController.tsx (bots-protocol inexistente). No atribuir aceptación integrada al árbol posterior de cuentas, que cambió durante el trabajo. Por nueva instrucción del propietario se cierra este alcance sin Git/publicación ni ampliar matrices y se continúa investigación separada de agrupación de álbumes.
+
+Teardown real en finally cerró contextos y navegador, retiró builds/HTML propios bajo `.local/tmp/collection-current-*` y cerró loopback en todos los intentos. Último focal retiró 4.902.356 bytes de build propios; libre /data antes 4.748.816.384 y después 4.733.456.384 bytes, delta de volumen afectado por trabajo concurrente, no se declara recuperación neta de ese delta. No quedan carpetas temporales propias; se conservan sólo reportes pequeños, hashes y este apéndice para explicar resultados y fallos del arnés. Recibo de cierre `.local/test-evidence/collection-removal-close.json`. Sin tocar biblioteca real ni Engram ajeno; sync oficial y lectura independiente posteriores deben verificar contenido/bytes/SHA.
+
+## Descargas de una playlist al cambiar de pantalla o recargar · 2026-11-19
+
+En el lote de Biblioteca, un guardado fallido de forma definitiva salía del bucle con el mismo texto que un guardado incierto. También se capturaba al iniciar el lote un permiso que un bloqueo transitorio de mutación podía invalidar para todas las canciones siguientes. Se corrigieron esas dos rutas del código. La causa exacta del caso físico de iPhone con dos copias reutilizadas y la tercera sin confirmar sigue desconocida.
+
+El lote espera las operaciones transitorias entre canciones dentro de la misma cuenta y pestaña. Cambiar de ruta o una señal de ocultación por sí solos no lo cancelan. Si hay pagehide, la entrega activa se cancela conservando el cursor. Después de recargar se ofrece «Continuar descarga de Biblioteca» como acción explícita. Un fallo definitivo conserva las copias anteriores y permite avanzar. Si el guardado es incierto, se guarda el ID de su operación antes de publicar. La reanudación comprueba el recibo nativo y sus bytes y vincula la copia a la ficha original, sin mandar otra petición a Telegram. Si no hay recibo bajo el bloqueo de escritura o la operación se descartó de forma definitiva, se puede intentar esa pista al continuar. Si el resultado sigue incierto, la revisión de Almacenamiento conserva autoridad. Una entrega remota incierta se omite al continuar; el lote sigue sujeto a la admisión del bot.
+
+La selección, cursor y operación se guardan por cuenta en el dispositivo. «Descartar selección pendiente» libera la selección aunque falte una ficha y conserva por separado la marca de la pista incierta. Un lote de otra cuenta no la lee. Cada ejecución renueva su ID, y un proceso antiguo pierde capacidad de actualizar o retirar el cursor de su sucesor. Detener no inicia otra pista ni reanuda automáticamente. No se conserva audio, texto de búsquedas, datos de bot ni sesión en el cursor.
+
+Pruebas locales: lint, diff check, suite compartida 806/806 y 7/7 focales del lote. La matriz final Chromium/WebKit 16/16 usa controlador y navegador reales, señal visibilitychange sintética, recarga real y datos/transportes de prueba. Verificó navegación, reanudación por gesto, recibo sellado IDB nativo con audio sintético recuperado sin otra copia, separación de cuentas y descarte de selección con una ficha ausente. Los intentos anteriores fallaron por dependencias CommonJS del servidor de pruebas y por importación automática OPFS en WebKit de escritorio; la verificación de recibos usa IDB en ambos motores. Evidencia agregada .local/test-evidence/account-library-1i8bzV/report.json. El teardown cerró servidores/perfiles de prueba y retiró caché temporal. Se retiró el log unitario después de conservar los recuentos. Sin Telegram real, publicación de este delta ni iPhone físico verificados en esta unidad.
+
+### Publicación de reanudación de descargas · 2026-11-19
+
+Cloudflare Workers Free, USD 0, sirve `/releases/bed8f65288828366.html` desde `402994426eb6c7e32bf0d968dcc9f36c8dc6fada`, sobre la base pública `c246dab`. Versión 46 `27280203-cf68-4a5e-b917-7257d1005974`, deployment `4dcedb95-2295-4a2e-ad22-8a6450b48553` al 100 %. Worker idéntico a v45 (327.216 bytes y SHA-256 `b3df88c87f8db7c9c901d845366af57c924aaa4d90560e7d1209af6c93394fe9`), siete bindings y configuración conservados. Se conservaron 200 inmutables y se subieron siete archivos.
+
+El candidato integrado pasó lint, 807 unitarias, 60 de servidor, 10 Python y typecheck de tests. El build exacto y Wrangler dry-run pasaron. El runner de cuenta confirmó 16/16 casos en Chromium/WebKit con datos sintéticos, incluido descarte de ficha ausente, recarga y vinculación por recibo. La regresión Spotify/Álbumes pasó en ambos motores. HTTPS confirmó 229/229 rutas por bytes/SHA-256, entrada previa disponible, 41 pistas públicas de Spotify y los controles de ambas mejoras en el módulo servido. Chromium público anónimo comprobó el requisito de cuenta. La prueba pública autenticada y la suspensión en iPhone físico siguen pendientes.
+
+Recibos agregados, manifiesto y registro de limpieza en `.local/test-evidence/download-notices-delivery/`. Manifiesto SHA-256 `f23b03d6a428cc2fa807828bec4176918884fdf7b840053367d824c8f35102b9`.
+
+### Revisar y reintentar una canción · 2026-11-19
+
+El aviso del lote y las opciones de la canción en la playlist abren la misma revisión. Se comprueban primero el archivo de la ficha y, si existe, el recibo de la operación de guardado. Una copia vinculada sólo se reutiliza al comprobar el contenido, tamaño y huella. Una descarga anterior de red sin confirmación queda marcada por cuenta y canción, incluso cuando el lote continúa con las siguientes. Las marcas v1 conservan su forma y se leen tras recargar. Cada reintento requiere una acción de la persona y sólo modifica la marca revisada. Cuando Telegram aún está resolviendo una operación, se conserva la espera de su sesión.
+
+El mensaje por datos insuficientes o sin coincidencia aconseja corregir identificación en las opciones de la playlist o usar Buscar. La edición de título y artista conserva la ficha y su organización. La próxima búsqueda usa la corrección manual. Un guardado incierto ofrece revisión en Almacenamiento. La recuperación existente sólo puede limpiar un parcial cuya propiedad se haya comprobado. Conservar un registro previo mantiene sus archivos y, cuando se haya confirmado el registro retenido, permite liberar la respuesta pendiente correspondiente. Al autorizar «Conservar archivos y reintentar» con una copia vinculada inutilizable, se reverifica bajo el bloqueo de escritura y se desvincula exclusivamente esa referencia de cuenta. Se mantienen la ficha, las entradas de playlist, el manifiesto persistido y las demás referencias. Si una descarga coincide por hash con una generación corrupta, el importador valida los bytes antes de deduplicar y guarda la copia nueva con una identidad distinta cuando corresponde.
+
+Chromium y WebKit de escritorio obtuvieron 20/20 pruebas locales. Se usaron opciones de canción y aviso del lote reales, recarga de navegador, IDB nativo y transporte sintético. Se verificó una sola consulta por autorización, el uso del título corregido, retención de un registro ambiguo y conservación de los archivos y de una ficha que compartía una copia corrupta. El caso con el mismo hash guardó una generación nueva en la ficha original. El teardown cerró perfiles y servidor del runner y retiró el workspace. El reporte agregado se conserva en `.local/test-evidence/account-library-NHd5sY/report.json`. La prueba con Telegram real y la aceptación física de iPhone siguen pendientes.
+
+### Publicación del reintento por canción · 2026-11-19
+
+Cloudflare Workers Free, USD 0, sirve `/releases/360c83bb0aff68e7.html` desde `ac89e5a7aab297d313d429eabc9576527bc78f49`, sobre la base pública v47. Versión 48 `d8853b60-c345-4aeb-8af0-4835380eb8c2`, deployment `718db1f5-2069-4348-8e05-b9a023441fdf` al 100 %. Los 13 bindings, límites, Turnstile y configuración de v47 se conservaron. El Worker coincidió por bytes y SHA-256 con v47. Retención versionada sin retiradas. Se subieron nueve archivos.
+
+El candidato exacto pasó 807 unitarias, 73 de servidor, 10 Python, lint, tipos de tests, build Cloudflare y Wrangler dry-run. Chromium/WebKit pasaron 20/20 casos locales, incluido reintentar sólo la pista tras revisar una copia vinculada no válida y conservar referencias ajenas. HTTPS confirmó 237/237 rutas, cuatro navegaciones desde entradas previas y las acciones «Reintentar esta canción» y «Revisar descarga» en el módulo publicado. Chromium público anónimo confirmó el acceso obligatorio. Continúan pendientes la verificación autenticada con Telegram real y el iPhone físico.
+
+El manifiesto autoritativo de 240 archivos se promovió con fecha MCP `2026-11-19T01:50:51.180Z` a `.local/test-evidence/track-retry-delivery/site-manifest.json`, SHA-256 `604c69c64e75b3817184b4c8ea12ad67ac8d7c352159c7c61f8d73e1e290c01d`. Los recibos agregados y la limpieza se registran en ese directorio.
+
+### Descargar la playlist completa y recuperar pistas automáticamente · 2026-11-19
+
+«Descargar playlist completa» usa las entradas guardadas en su orden aunque la vista tenga un filtro. El aviso del lote permite detenerlo y muestra las copias confirmadas. El lote comprueba y reutiliza la copia válida de cada ficha. Si se interrumpe un guardado, verifica el recibo exacto y recupera los bytes ya preparados cuando se validan. Si el parcial falló, utiliza el recuperador de Almacenamiento para retirar únicamente la generación temporal del caché cuya operación y propiedad se verifican en esa cuenta. Se conservan archivos publicados, compartidos, personales y recibos ambiguos. Si una copia vinculada tiene bytes ausentes o corruptos de forma comprobable, se puede desvincular exclusivamente la ficha afectada para intentar una sustitución y conservar el archivo anterior y las otras referencias. Los registros de cuenta sin audio pueden tener duración desconocida y toman la duración comprobada al vincularse.
+
+Cada pista dispone como máximo de dos escrituras. Si una escritura falla de forma transitoria y se comprueba que no publicó, puede usar una vez el mismo archivo recibido y validado, sin otra entrega de Telegram. Para un audio que falló, se intenta otra fila compatible del mismo bot o se usan los bots configurados que quedan. Se excluyen la fila ya probada y los bytes ya rechazados. El cursor y el historial acotado de huellas preservan el presupuesto tras recargar. El historial contiene hashes y conserva la lectura de marcadores v1 anteriores. Al continuar, un parcial verificado se resuelve antes de usar una opción distinta. Las pistas posteriores siguen si se agotan las alternativas de una canción y el resumen indica descarga parcial. Si Telegram mantiene una entrega incierta o Almacenamiento impide verificar la operación, se conserva el progreso y se espera a que el servicio vuelva a admitir operaciones. Durante la descarga automática no se requieren botones por canción.
+
+El runner Chromium/WebKit de Biblioteca usa IndexedDB, generadores WAV sintéticos y transporte Telegram simulado. Verificó dos primeras copias reutilizadas, tercero con respuesta de guardado perdida y parcial propio, alternativas de otro bot y de otro resultado del mismo bot, copia de bytes idénticos excluida, fallo transitorio reescrito sin entrega adicional, cuarta pista sin gesto tras agotar alternativas, y recarga real con el parcial de la tercera pendiente. El runner de la app compilada comprobó la entrada desde la playlist con ambas cuentas de prueba en Chromium/WebKit. Las pruebas no usan Telegram real. Sigue pendiente la aceptación física en iPhone.
+
+### Publicación de la recuperación automática de playlists · 2026-11-19
+
+Cloudflare Workers Free, USD 0, sirve `/releases/62527cca789200d1.html` desde `71a95d37e561d825d07d28c6ed5cf818429c2ef6`, sobre la base pública v48. Versión 49 `f6b9435c-5da3-44cc-841c-286124a30549`, deployment `ce095199-3d82-408e-9fac-0bd6347dbdf6` al 100 %. El Worker, los 13 bindings, los límites y Turnstile coincidieron con v48. Retención versionada de dos publicaciones previas y del conjunto heredado, cero retiradas. Se subieron nueve archivos.
+
+El candidato exacto pasó 807 unitarias, 73 de servidor, 10 Python, lint, tipos, build Cloudflare y Wrangler dry-run. Chromium/WebKit verificaron 30/30 casos con transporte sintético. Un solo botón inicia el lote, puede usar otra fila compatible del mismo bot y sigue con una cuarta pista después de procesar la tercera. Se verificó también la recuperación tras recargar y un segundo guardado transitorio sin otra entrega de Telegram. La app compilada pasó 6/6. HTTPS confirmó 242/242 rutas, cinco entradas previas que abren la versión actual y el estado «Probando otra opción para esta canción…» en el módulo servido. Chromium público anónimo confirmó el requisito de inicio de sesión. La prueba con Telegram real y el iPhone físico sigue pendiente.
+
+El manifiesto vigente de 245 archivos se promovió con fecha MCP `2026-11-19T02:17:27.585Z` a `.local/test-evidence/playlist-auto-retry-delivery/site-manifest.json`, SHA-256 `4a3cb263d335b78145ecf4b85cc7c3d2d0ccc5e33fd1f640e743572cd4146de7`. Recibos y limpieza en ese directorio.
+
+### Progreso de descargas en su pantalla · 2026-11-19
+
+El progreso aparece dentro del detalle de Biblioteca y en Configuración → Almacenamiento → Gestionar descargas. Se retiraron el icono flotante y el aviso fijo. En Inicio o Buscar la descarga sigue su curso sin controles de lote visibles. El detalle muestra desde la primera comprobación el estado, las canciones confirmadas y «Detener descarga de Biblioteca». El botón de iniciar deja su espacio a Detener o Continuar mientras hay una selección activa o pendiente. Se conservan las opciones de revisión por canción. El detalle opcional carga las filas al abrirse y un fallo de una sola canción muestra su causa de inmediato. «Descartar selección pendiente» queda disponible en Almacenamiento. Los avisos de canciones y álbumes en sus propias fichas continúan disponibles.
+
+Chromium/WebKit de escritorio: 30/30 en el runner de biblioteca y lotes, 8/8 main compilado y 8/8 de progreso y diseño. Se verificaron la navegación móvil a 320 px, texto ampliado en la prueba visual, progreso desde la primera comprobación, descarga continua al cambiar de ruta, continuación tras recargar y una sola acción primaria. Durante la navegación del main no hubo llamadas a Telegram. Los negativos iniciales detectaron la ausencia de aviso al comprobar la primera copia, un selector que buscaba una acción oculta en el detalle móvil y el cableado de Descartar. También se comprobó la causa de fallo de una canción con su lista de detalles cerrada.
+
+Recibos locales .local/test-evidence/account-library-pMe0wz/report.json, .local/test-evidence/account-library-main-QgMnZa/report.json y .local/test-evidence/download-feedback-JEwtGQ/report.json. El build aislado, las dependencias de prueba y los perfiles efímeros se retiraron. La limpieza final del build recuperó 4.861.952 bytes observados en /data. Pendientes la prueba en iPhone físico y el recorrido con Telegram real en esta unidad.
+
+### Continuar mientras Telegram se inicializa · 2026-11-19
+
+La app compilada de v49 mostró «Conecta Telegram» al pulsar Continuar mientras la sesión guardada se estaba restaurando. El gesto terminaba antes de que el cliente entregara la lista de bots. La interfaz distingue una sesión en preparación, una sesión conectada sin bot compatible y un bloqueo de la pestaña o del almacenamiento. Conserva el gesto de Continuar durante la restauración y admite el lote al llegar el cliente y sus bots, siempre que la cuenta y la selección sigan vigentes. Al reanudar, revisa también los recibos de filas anteriores que quedaron pendientes y sólo libera una marca cuando se confirma su resultado.
+
+El controlador espera un carril de Telegram aún ocupado o un plazo finito de FloodWait de hasta 60 segundos y vuelve a comprobar la autorización antes de enviar. Una lectura directa de audio inválida que no envió un mensaje a Telegram es un fallo definitivo de esa opción. El lote puede probar una opción compatible siguiente y pasar a otra canción tras agotarlas. Un resultado remoto incierto o una espera sin plazo conserva el cursor y mantiene el bloqueo existente. No se repite una entrega que pueda seguir activa.
+
+WebKit de escritorio devolvía un error del worker en fase de apertura de OPFS antes de iniciar la escritura, aun cuando anunciaba los métodos requeridos. El modo automático elige IndexedDB si no pudo abrir la capacidad de OPFS antes del recibo de propiedad y del parcial. Una colisión, OPFS explícito o una escritura ya iniciada siguen su recuperación prevista.
+
+El runner `node tests/integration/check-playlist-resume-main.mjs` compila el shell real conectado a `TelegramPanel`, el cliente, el worker, los protocolos y los controladores de Telegram y almacenamiento sin reemplazarlos. Sólo usa un SDK sintético y una cuenta fixture local. Comprobó una pulsación, dos copias ya verificadas, petición de la cuarta canción y vínculo IDB de su copia después del fallo de la tercera. Incluye restauración demorada, Telegram ya autenticado, espera finita y descarte de un parcial nativo atribuido al recibo. La prueba de Telegram real y el iPhone físico sigue pendiente.
+
+### Publicación del progreso contextual y la reanudación · 2026-11-19
+
+Cloudflare Workers Free, USD 0, sirve `/releases/7e98694a928b640e.html` desde `83edcf887ab5ff2e6168e588938b58b3a0261d0d`, sobre v49. Versión 50 `788b6dc1-b5cf-45d3-bc37-2c58a860c6a0`, deployment `5183744c-8076-4446-b7b0-1ce5adbc5c26` al 100 %. Worker, límites, Turnstile y los 13 bindings se mantuvieron exactos. Se retuvieron tres publicaciones previas y el conjunto heredado, sin retirar rutas. Se subieron nueve archivos.
+
+En el candidato exacto pasaron 807 unitarias, 73 de servidor, 10 Python, lint, tipos, build y dry-run. Chromium/WebKit pasaron 8/8 en el shell compilado con cliente, worker y driver reales y SDK/cuenta sintéticos; la cuarta pista quedó enlazada en los ocho casos. Pasaron 8/8 de progreso contextual, 30/30 de Biblioteca y 8/8 del site compilado. En el shell servido localmente, el botón pudo desplazarse, leerse completo y recibir interacción a 320 px con texto al 200 %. La estrechez observada en el fixture con contenedores anidados no se reprodujo en ese control del shell. Se conserva una captura sintética WebKit del botón desplazado y los resultados de ambos motores. El fallback automático de OPFS a IndexedDB cuando la apertura falla antes de escribir se verificó en el escenario WebKit del runner.
+
+HTTPS verificó 247/247 rutas estáticas, seis navegaciones de entradas previas y las acciones de espera y continuación en el módulo publicado. Chromium público anónimo comprobó el requisito de cuenta. Siguen pendientes Telegram real e iPhone físico. El manifiesto vigente de 250 archivos se promovió con fecha MCP `2026-11-19T03:55:48.647Z` a `.local/test-evidence/playlist-recovery-ui-delivery/site-manifest.json`, SHA-256 `6cf7bc976292b974d3f759facf76a559c507b0468cf21eb7c77bbba18d8bf1db`. Recibos y limpieza en el mismo directorio.
+
+### Ventana flotante y recuperación por canción publicadas · 2026-11-19
+
+Cloudflare Workers Free, USD 0, sirve [la entrada pública](https://pulso-web.pruebassoftware.workers.dev/releases/4e40ed99fc572945.html) de `bca9a093b9cf8ead601b5bfffb2fef6e8c7d557d`. La versión 51 `516329c4-8467-488d-b590-03b1d059a9b6` quedó al 100 % en el deployment `dce085cc-3153-45e7-bda0-4c07d4a0b699`. Se conservaron los 13 bindings, incluidos CATALOG, los cuatro límites, Turnstile y secretos. El cambio del Worker compilado se limita a admitir referencias repetidas a una canción con IDs de entrada distintos. Se retuvieron cuatro publicaciones anteriores y el conjunto heredado, con cero rutas retiradas. Cloudflare solicitó 11 archivos.
+
+La ventana arrastrable se muestra durante las descargas y se oculta al terminar. Playlist, álbum y Favoritos agrupan Reproducir, Aleatorio, Descargar y ⋯ en la cabecera. El lote descarta un audio inválido, prueba otra coincidencia u otro bot y espera las pausas de Telegram. Muestra «No existe en tus bots» si se confirma que ninguno la tiene y sigue con las canciones restantes. La validación de cuenta y respaldo preserva las entradas repetidas.
+
+Local. La evidencia previa registra tipos de app y pruebas, lint, 817 unitarias, 73 de servidor, 10 Python y build. El candidato exacto desde `git archive` repitió las 73 de servidor, build Cloudflare y Wrangler dry-run. Chromium y WebKit locales pasaron 10/10 casos en `check-playlist-full-download-main.mjs`, con 30/30 entradas tres veces por motor, recarga y continuación, y 9/10 con una canción inexistente. Pasaron además 22 casos de reanudación, 8 de progreso y 30 de Biblioteca de cuenta. Persisten fallos idénticos a v50 en minirreproductor al 200 %, álbum y el runner general (`library`, `opfs`, `artwork*`).
+
+HTTPS y navegador público. `latest.json` apunta a la nueva entrada. Coincidieron bytes y SHA-256 en 254/254 rutas estáticas públicas. Dos metadatos de despliegue quedan excluidos y `account-config.json` se verificó por separado con la configuración Turnstile y CSP. Chromium 154 y WebKit 27.2 abrieron la entrada, confirmaron la ausencia de ventana en reposo y verificaron los cuatro botones en una playlist sintética. La cuenta y los endpoints de prueba se simularon sólo dentro del navegador. WebKit emitió advertencias de viewport y de estilos inline bajo CSP. La comprobación en iPhone físico con Telegram real sigue pendiente.
+
+El manifiesto autoritativo de 257 archivos se promovió con fecha MCP `2026-11-19T23:56:45.869Z` a `.local/test-evidence/download-dock-release/site-manifest.json`, SHA-256 `41dcfaaf13543cefc5af3d00ce46bfff79de031cc2e2fea6203e53ed0ee0ca8e`. Allí quedan los recibos de despliegue, lectura, navegador y limpieza. Se retiraron ambos snapshots aislados, compilaciones, perfiles y temporales del candidato.
+
+### Reanudación desde un checkpoint antiguo publicada · 2026-11-20
+
+El propietario observó en iPhone que «Continuar descarga» saltaba pistas sin copia anteriores al cursor y mostraba «Procesada anteriormente sin copia». El incremento `91132a2f903b688eb7a75b162f724578dba670c6` reconcilia primero el recibo pendiente, reutiliza copias verificadas y aplica la recuperación automática a todas las pistas sin copia. En álbumes, permite reintentar tras resolverse una interrupción de red.
+
+**Local.** Pasaron tipos de aplicación y pruebas, lint, build y 821/821 unitarias en la validación previa. El snapshot exacto desde `git archive` pasó 73/73 de Cloudflare, build, dry-run de Wrangler y simulación de retención.
+
+**Navegador local.** En Chromium 154 y WebKit 27.2 pasaron por motor 4/4 de descarga completa, 11/11 de reanudación, 4/4 de progreso y 15/15 de biblioteca de cuenta. Con un checkpoint antiguo, un toque guardó 9 de 10 canciones con SHA verificado. Sólo la ausente mostró «No existe en tus bots». Evidencia sintética en `.local/test-evidence/playlist-stale-checkpoint/summary.json`.
+
+**Cloudflare y navegador público.** Workers Free, USD 0, sirve [la v52](https://pulso-web.pruebassoftware.workers.dev/releases/17532d32a861e539.html). Versión `70d3e14a-5202-4ae2-bd70-5bbaa042dd4a`, deployment `6c20b481-8b46-49b3-8db0-23a7596b2a7b` al 100 %. El MCP oficial confirmó el mismo Worker, los 13 bindings y la configuración de v51. Se conservaron cinco publicaciones previas y el conjunto heredado, sin retirar rutas. Se subieron siete archivos. `latest.json` apunta a la nueva entrada y coincidieron bytes y SHA-256 en 257/257 rutas estáticas públicas. Chromium 154 y WebKit 27.2 cargaron la entrada pública y comprobaron que la ventana de descargas estaba oculta en reposo en contextos anónimo y de cuenta sintética. Los perfiles se cerraron al terminar.
+
+**iPhone físico.** Pendiente reproducir la continuación corregida con Telegram real. P0-W permanece abierto.
+
+El manifiesto autoritativo de 260 archivos se promovió con fecha MCP `2026-11-20T00:59:38.040Z` a `.local/test-evidence/stale-checkpoint-release/site-manifest.json`, SHA-256 `a0e1de5e633b0d4ad9d3d8643c583ff8f0e7ba798992fa8aea5e565d873328c4`. Se conservan ahí los recibos y resultados compactos de la publicación.
+
+### Esperas de Telegram durante una descarga de Biblioteca · 2026-11-20
+
+Las colecciones mantienen la canción en curso cuando Telegram limita la cuenta, se interrumpe la conexión o caduca un intento durante la suspensión. El checkpoint conserva el plazo absoluto de Telegram, incluso si se vuelve a pulsar Continuar. Un FLOOD sin plazo espera cinco minutos desde su observación. Las esperas superiores a quince minutos y las sesiones que necesitan autenticación dejan la selección pendiente. La reconexión automática usa la autorización guardada, comprueba que siga siendo la misma y conserva la selección de bots.
+
+La ventana muestra la espera mientras el lote está activo. Los avisos de colecciones usan una etiqueta distinta de álbumes, con progreso limitado a un aviso cada quince segundos, aviso de pausa y resumen final. Si el lote termina oculto, el resumen se entrega una vez al volver a la página. Los avisos requieren el permiso y la preferencia vigentes. La suspensión y las notificaciones de la PWA instalada siguen pendientes de comprobación en iPhone físico.
+
+Una búsqueda ambigua se contrasta con los demás bots de la pista antes de considerar interrumpido el canal. Un bot incompatible o sin respuesta no bloquea los siguientes. Al retomar una espera real, el lote conserva los resultados ya resueltos de esa pista. Una consulta manual y su liquidación conservan su turno sin consumir el presupuesto de reconexión ni el tiempo de búsqueda de la pista.
+
+### Esperas de Telegram y avisos de descarga publicados · 2026-11-20
+
+Cloudflare Workers Free, USD 0, sirve [la v53](https://pulso-web.pruebassoftware.workers.dev/releases/bb6e6f58a11c4a27.html) desde `cf0ed8ae32f5f1dd307e00a2e74385d9896e45a0`. Versión `d841df9c-b46b-4e2e-8b84-394c74e554dc`, deployment `51844697-ede3-4c56-be60-1d90a4ba2f19` al 100 %. Se conservaron el Worker por SHA-256, los 13 bindings, los límites, Turnstile y los secretos. El freeze retuvo seis publicaciones previas y el conjunto heredado, con cero retiradas. Cloudflare solicitó ocho archivos. [PR #13](https://github.com/Alegark/Pulso-Web/pull/13), apilada sobre #12.
+
+Pasaron 827 unitarias, 73 de servidor, 10 de Python, tipos de aplicación y pruebas, lint, builds y dry-run de Wrangler. Chromium y WebKit pasaron 10/10 recorridos cada uno con Telegram sintético, incluidos bot silencioso, bot incompatible y búsqueda manual. Siguen pendientes la reconexión tras segundo plano y los avisos en el iPhone físico con Telegram real, la regresión de pruebas de Chromium desde `ac89e5a` y los fallos del entorno WebKit/WPE. P0-W continúa abierto.
+
+`latest.json` y la entrada actual respondieron HTTP 200. Las 261 rutas estáticas verificadas coincidieron por bytes y SHA-256. Las 47 entradas anteriores, incluida `/releases/17532d32a861e539.html`, devolvieron el HTML del bundle actual con cabeceras de navegación. `/account-config.json` conservó `turnstileSiteKey`, la CSP mantuvo `challenges.cloudflare.com` y la biblioteca anónima respondió 401. En la primera lectura un asset devolvió 404. La segunda lectura completa confirmó sus bytes y los del resto del candidato.
+
+El manifiesto autoritativo de 264 archivos y 58.892 bytes se promovió con fecha MCP `2026-11-20T22:38:59.901Z` a `.local/test-evidence/playlist-telegram-wait-release/site-manifest.json`, SHA-256 `ceba86af245801cedcc5e990f481312d7b6932224d7a35826c961e0d7fddb29c`. Los recibos compactos se conservan en el mismo directorio.
+
+### Comprobar la versión antes de descargar · 2026-11-21
+
+Una descarga solicita `latest.json` con un plazo de tres segundos. Si encuentra otro bundle, espera las operaciones protegidas, pausa el audio, guarda la cola y navega a la entrada publicada. La intención en `sessionStorage` caduca a los 90 segundos y sólo se consume una vez, en la misma cuenta y en el bundle de destino. Una selección pendiente usa su checkpoint existente. La reanudación guarda las copias sin iniciar audio. Si falla la comprobación, la descarga sigue en la versión cargada.
+
+La comprobación inicial empieza al abrir la app y omite la espera de inactividad si puede navegar con seguridad. Configuración muestra el identificador del HTML cargado, incluso cuando el service worker conserva en la barra una URL de otra versión. El control de intentos por sesión y la activación normal del service worker siguen vigentes.
+
+La espera de actualización tiene un máximo de diez segundos desde que se solicita la descarga. Si caduca o la versión ya se intentó abrir en esa sesión, Pulso libera la solicitud para descargar con la versión cargada y avisa en la ventana de descargas. «Detener» cancela la solicitud mientras espera. «Recargar app» conserva la opción de forzar el cambio de versión.
+
+### Actualización antes de descargar publicada · 2026-11-21
+
+Cloudflare Workers Free, USD 0, sirve [la v54](https://pulso-web.pruebassoftware.workers.dev/releases/b770a9a7981c0008.html) desde `8531692054269e7f901ddbcb3503e39ea2f3ccf9`. El MCP oficial confirmó la versión `ea75fb13-44b3-47b3-aa63-793474fd81ca` al 100 % en el deployment `a89fdfcd-6643-4378-8bd5-ddd49e2168ee`. Coincidieron el SHA-256 del Worker, los 13 bindings, los límites y la configuración de ejecución. Turnstile y los secretos se conservaron. El freeze retuvo siete publicaciones anteriores y el conjunto heredado, sin retirar rutas. Cloudflare solicitó siete archivos. [PR #14](https://github.com/Alegark/Pulso-Web/pull/14), apilada sobre #13.
+
+Pasaron 839 unitarias, 73 de servidor y 10 de Python, tipos de aplicación y pruebas, lint, builds y dry-run de Wrangler. La matriz local con Telegram sintético pasó 56/56 casos, 28 en Chromium y 28 en WebKit, incluidos los ocho modos de actualización en cada motor.
+
+`latest.json` apuntó a la entrada nueva, que redirigió con HTTP 307 a la ruta sin `.html` y respondió HTTP 200 con el meta `pulso-release` igual a `b770a9a7981c0008`. Las 264 rutas estáticas públicas coincidieron por bytes y SHA-256. Las 48 entradas históricas, incluidas v53 y v52, abrieron el bundle v54 con cabeceras de navegación. `/account-config.json` conservó `turnstileSiteKey`, la CSP mantuvo `challenges.cloudflare.com` en `script-src` y `frame-src`, y perfil y biblioteca anónimos respondieron HTTP 401.
+
+El manifiesto autoritativo de 267 archivos y 60517 bytes se promovió con fecha MCP `2026-11-21T00:54:42.911Z` a `.local/test-evidence/update-before-download-release/site-manifest.json`, SHA-256 `4101ec6f607d6535879ac94d08a4559cb542994df12af831a3763ca9b22d5f56`. Los recibos compactos se conservan en ese directorio.
+
+Continúa pendiente comprobar en iPhone físico el salto desde la caché histórica y reanudar la playlist de 72 canciones con Telegram real. Una instancia que sigue ejecutando v51 requiere una recarga manual. Siguen clasificadas aparte la regresión de Chromium desde `ac89e5a` y la limitación del entorno WPE. P0-W sigue abierto.
+
+### Descargas de colección en segundo plano y al reabrir · 2026-11-21
+
+En v54, ocultar la página invalidaba la operación de Telegram incluso si JavaScript seguía activo. También podía perderse un audio ya recibido, y un relanzamiento dejaba el checkpoint accesible únicamente desde el detalle de Biblioteca.
+
+La visibilidad sirve para reconocer fallos que cruzan una suspensión. Mientras la página ejecuta JavaScript, la descarga continúa con la sesión y los bots capturados. La recuperación espera que se libere la operación anterior, conserva el plazo de Telegram y permite hasta cuatro restauraciones escalonadas ante fallos transitorios. El checkpoint conserva título, copias confirmadas y un máximo de tres reanudaciones automáticas consecutivas sin progreso. La pestaña con control vuelve a leer el ID antes de reclamarlo, después de pasar por la comprobación de versión. La reanudación solo guarda. Los checkpoints antiguos y las pausas que requieren intervención quedan en modo manual, igual que tras «Detener».
+
+Al salir con `pagehide`, Pulso aborta el lote y conserva el checkpoint. Inicio, Buscar y Biblioteca comparten «Continuar» en la ventana flotante. La pestaña propietaria publica el resultado aunque la página siga oculta y limpia avisos de progreso huérfanos de la cuenta activa. Siguen pendientes la suspensión real, los avisos en iPhone físico y Telegram real. P0-W continúa abierto.
+
+Pasaron tipos de aplicación y tests, lint, 847 unitarias, 73 de servidor, 10 de Python, build y dry-run de Wrangler. El shell compilado pasó 22/22 recorridos focales con Telegram sintético (11 por motor, frente a 10/10 compartidos en `559e4db`). Ambos motores verificaron cuatro assets con SHA-256 exacto, sin consultas ni lecturas duplicadas al ocultar la página. Pasaron también el reintento del traspaso y arranque en 8/8, Biblioteca de cuenta en 38/38 y la recarga de la playlist de 30 pistas en 2/2.
+
+La batería general en Chromium dio 11/16 frente a 12/16 en `559e4db`. Coincidieron los fallos de `library`, `opfs`, `artwork` y `artwork-containers`. El timeout adicional de `organization` pasó en aislamiento en ambas versiones. WebKit/WPE dio 4/16 en ambas versiones, con los mismos 12 grupos fallidos y los mismos timeouts de `metadata-rescan` y `blob-opfs`.
+
+#### Correcciones tras la revisión de la PR #15
+
+Al despertar, el reloj de reconexión vuelve a empezar sin consumir intentos. Cada espera de 5, 10, 20 y 40 segundos se mide después de que termine el intento anterior. Solo cuenta una restauración admitida. Una respuesta definitiva del bot conserva su clasificación y el guardado vuelve a verificar la autoridad sobre los bytes.
+
+La ventana plegada conserva y anuncia el motivo de una pausa, incluso tras una recarga. «Continuar» explica cuando falta control o se debe reabrir Almacenamiento. Un traspaso de canción o álbum conserva prioridad desde que se consume su intención hasta que se resuelve su admisión. Una ocupación transitoria permite volver a intentar el arranque automático. La pestaña propietaria limpia avisos huérfanos marcados como progreso aunque arranque sin checkpoint.
+
+Pasaron tipos, lint, 854/854 unitarias, 73/73 de servidor, 10/10 de Python, build y Wrangler dry-run. Chromium y WebKit pasaron 38/38 recorridos focales (19 por motor), 18/18 complementarios y 38/38 de Biblioteca de cuenta. El head previo `8289b726` reprodujo los seis defectos cubiertos por las pruebas de navegador en cada motor y falló 6 de las 9 unitarias focales, que pasaron 9/9 con la corrección. La suspensión, reconexión y avisos con iPhone físico y Telegram real siguen pendientes.
+
+#### Correcciones tras la segunda revisión de la PR #15
+
+El límite de 60 segundos de inactividad se aplica también cuando Telegram deniega la admisión de forma persistente o el carril sigue ocupado. Una suspensión reinicia ese plazo. Una restauración admitida conserva su propio plazo y los escalones de reintento.
+
+La reserva de un traspaso de álbum se libera si se abandona su vista, se cancela la carga, hay un fallo de catálogo o el respaldo resuelve una edición distinta. La edición de respaldo queda disponible para una acción manual. Una playlist pendiente puede retomarse al siguiente despertar.
+
+Validación local con Telegram sintético. Tipos de app y tests, lint, 856/856 unitarias, 73/73 de servidor, 10/10 de Python, build y Wrangler dry-run pasaron. La matriz pasó 83/84 en la corrida conjunta y 84/84 contando la repetición aislada de `update-resume` tras un timeout al abrir el fixture de Chromium. En `e0e8789a` fallaron las dos unitarias nuevas y los cuatro recorridos nuevos de navegador (dos por motor). Siguen pendientes la suspensión real y la aceptación de Telegram y avisos en iPhone físico.
+
+### Continuidad de descargas en segundo plano publicada · 2026-11-21
+
+Cloudflare Workers Free, USD 0, sirve [la v55](https://pulso-web.pruebassoftware.workers.dev/releases/9ac1427f5ecba95c.html) desde `8683e084195a6db5eda5539e3adc97e122710dd1`. El MCP oficial confirmó la versión `05b785fb-0848-4090-b103-8b1d43e991e4` al 100 % en el despliegue `18d96528-f8de-45a3-98a8-46cd82c3cd43`. Coincidieron el SHA-256 del Worker, los 13 bindings, los límites y la configuración de ejecución. Se conservaron Turnstile y los secretos. El freeze retuvo ocho publicaciones anteriores y el inventario heredado, con cero rutas retiradas. Cloudflare solicitó 8 archivos. [PR #15](https://github.com/Alegark/Pulso-Web/pull/15), apilada sobre #14.
+
+Las descargas de playlists y colecciones siguen mientras JavaScript esté activo y conservan los audios que llegan con Pulso oculto. Tras una suspensión, Telegram reconecta con esperas de 5, 10, 20 y 40 segundos desde el final del intento anterior y la descarga se pausa si transcurren 60 segundos sin conexión. Tras recarga, descarte de iOS o `pagehide`, una descarga pendiente se retoma en modo solo guardar, con un máximo de tres intentos consecutivos sin progreso. «Detener» impide la reanudación automática. La ventana muestra el motivo y un solo botón «Continuar» desde cualquier pantalla. El aviso final llega con Pulso oculto y el aviso de pausa indica que se abra Pulso para continuar.
+
+Pasaron 856 unitarias, 73 de servidor, 10 de Python, tipos de aplicación y pruebas, lint, builds y dry-run de Wrangler. Pasaron 84/84 casos enfocados con Telegram sintético, en ejecuciones separadas de Chromium y WebKit.
+
+HTTPS confirmó `latest.json`, HTTP 307 a la ruta sin `.html` y HTTP 200 con el meta `pulso-release` igual a `9ac1427f5ecba95c`. Coincidieron bytes y SHA-256 en 268 rutas estáticas públicas. Las 49 entradas históricas, incluidas v54, v53 y v52, abrieron el bundle actual con cabeceras de navegación. Se conservaron `turnstileSiteKey` y `challenges.cloudflare.com` en la CSP. Perfil y biblioteca anónimos devolvieron HTTP 401.
+
+El manifiesto autoritativo de 271 archivos y 62304 bytes se promovió con fecha MCP `2026-11-21T22:56:38.441Z` a `.local/test-evidence/background-resume-release/site-manifest.json`, SHA-256 `27b408a39acdde68a44e512ec0c748cfb18b366c93c5a4a4f4012bef05b2d90b`. Los recibos compactos se conservan en el mismo directorio. P0-W sigue abierto.
+
+- Aceptación en iPhone físico con Telegram real. Comprobar segundo plano con y sin música, recarga y avisos.
+- Límite de iOS. Al salir sin música, la app se congela y la descarga sigue al volver.
+- Regresión de Chromium desde `ac89e5a` en `artwork`, `artwork-containers`, `opfs` y `library`.
+- Fallos del entorno WPE de WebKit en la batería general.
+- Riesgo residual menor. Si cambia el cliente de Telegram o la revisión de bots mientras un álbum traspasado por la actualización carga sus metadatos, Pulso libera el traspaso y el usuario tiene que volver a pulsar el álbum.
+
+### Menor latencia por canción · 2026-11-22
+
+La v55 pedía cada parte por separado, esperaba un segundo antes de descargar y sondeaba el bot cada segundo. La importación actualizaba el journal por cada 64 KiB y volvía a leer los bytes de copias IDB al refrescar la biblioteca.
+
+Pulso mantiene hasta cuatro partes de 512 KiB en vuelo y entrega los bytes ordenados al Blob y al hash. Si falla o se cancela una parte, el carril espera las llamadas despachadas y aplica la cuarentena si vence el plazo de liquidación. La descarga sucede inmediatamente tras la búsqueda. Se conserva el espaciado entre búsquedas. El sondeo usa 250, 250, 400, 700 y luego 1000 ms, con topes de 19 y 63 lecturas y los plazos de comando anteriores. El worker reutiliza la resolución por sesión, referencia y revisión, y valida la identidad en cada comando y la huella del documento tras recibirlo.
+
+El journal confirma cada MiB en OPFS y cada lote de 512 KiB en IDB. Pulso reabre la generación y verifica su SHA-256 antes de publicarla. Al actualizar la biblioteca se reutiliza la disponibilidad de las generaciones conocidas. Las nuevas comprobaciones de presencia IDB cuentan claves sin leer los fragmentos. Diagnóstico de sesión conserva hasta 50 intentos en RAM, sin contenido ni identificadores.
+
+**Benchmark de loopback.** `PLAYLIST_FULL_MODE=benchmark INSTABOX_HEADLESS=1 node tests/integration/check-playlist-full-download-main.mjs`. Para la base, usar el código de producción de `7632d3b` con el mismo runner, `playlist-full-download-sdk.ts` y `playlist-benchmark-audio.mjs`. Playlist de dos MP3 distintos de 8.388.372 bytes, 200 ms por RPC, menú y callback con el mismo retardo sintético. Media en segundos por canción desde el inicio hasta confirmación en la ventana, con SHA verificado después en ambos assets.
+
+| Motor | Almacenamiento observado | Bot | v55 | Candidato |
+|---|---|---:|---:|---:|
+| Chromium 154 | OPFS | 400 ms | 17,308 | 8,300 |
+| Chromium 154 | OPFS | 1.200 ms | 14,250 | 9,552 |
+| Chromium 154 | IDB forzado | 400 ms | 20,346 | 7,550 |
+| Chromium 154 | IDB forzado | 1.200 ms | 21,250 | 9,440 |
+| WebKit 27.2 | IDB automático | 400 ms | 25,744 | 6,041 |
+| WebKit 27.2 | IDB automático | 1.200 ms | 21,455 | 8,498 |
+| WebKit 27.2 | IDB forzado | 400 ms | 19,450 | 6,450 |
+| WebKit 27.2 | IDB forzado | 1.200 ms | 22,690 | 7,903 |
+
+El entorno WPE no abrió un escritor OPFS. Los tiempos incluyen la variación del entorno de escritorio y no acreditan latencia ni memoria en iPhone. Pasaron tipos de app y tests, lint, 863 unitarias, 73 de servidor, 10 de Python, build y Wrangler dry-run. Pasaron las tres pruebas focales de almacenamiento en cada motor, con OPFS e IDB en Chromium y con IDB en WebKit. En la batería general Chromium dio 10/16 frente a 8/16 de la base y WebKit 4/16 en ambas. Los seis grupos fallidos de Chromium en el candidato también fallaron en la base. WebKit falló en los mismos doce grupos.
+
+**Descarga, reanudación y actualización.** La base pasó 84/84. El candidato pasó 82/84 en la matriz completa y 2/2 en la repetición focal. El escenario de búsqueda manual usaba el segundo eliminado para tomar el carril. Ahora la prueba admite la búsqueda manual al liquidar la anterior y verifica que el lote espere sin reconectar, retome la pista y confirme las copias. Con ese escenario pasaron ambos motores en ambas versiones. También pasaron 2 pruebas de worker sintético y 10 casos de liquidación con el SDK instalado.
+
+**Pendientes.** Aceptación de latencia y memoria en iPhone físico y con Telegram real. Evaluar updates MTProto como señal, solapar la importación con la búsqueda siguiente, revisar `inactivityTimeout` y reutilizar el import worker. Publicación en Cloudflare tras revisión. P0-W continúa abierto.
+
+#### Correcciones tras la revisión de la PR #16
+
+El importador rechaza un fragmento corto o vacío como `length-mismatch` antes de escribirlo. Tras importar se comprueba la presencia de todas las copias. OPFS comprueba el tamaño e IDB cuenta claves y compara los manifiestos en una sola transacción de lectura. Cada asset comparte el resultado entre sus pistas. El worker omite la medición si añadirla excedería el presupuesto del mensaje.
+
+Si una búsqueda manual toma el carril al liquidarse la búsqueda de una colección, el lote espera y vuelve a consultar el mismo bot una vez. Un error de parte detiene el despacho y conserva el plazo de transferencia para liquidar lo que ya está en vuelo. La cancelación real y el vencimiento siguen aplicando la gracia de cuarentena. Tres errores de peer invalidan la identidad en caché sin cambiar su clasificación. Si el ACK llega cerca del límite de búsqueda, cabe un primer sondeo inmediato.
+
+Pasaron 870 unitarias, 73 de servidor, 10 de Python, tipos de app y tests, lint, build y Wrangler dry-run. En Chromium y WebKit pasaron las comprobaciones focales de almacenamiento, purga tras importar, carril manual y cancelación. Contra `cca6016` fallaron las regresiones de slice corto, presencia tras purga, presupuesto del mensaje y carril manual, además de las ocho comprobaciones focales del driver.
+
+La matriz de reanudación, actualización y descargas pasó 84/84, 42 por motor. El caso manual volvió al bot 101 en Chromium y WebKit.
+
+**Repetición del benchmark.** Misma fixture, tamaño, retardos y SHA verificado. Nueva medición de la base `7632d3b` y el candidato corregido. Media en segundos por canción.
+
+| Motor y backend observado | Bot 400 ms, v55 → candidato | Bot 1.200 ms, v55 → candidato |
+|---|---:|---:|
+| Chromium OPFS | 11,199 → 4,958 | 11,804 → 8,736 |
+| Chromium IDB forzado | 11,304 → 3,903 | 18,645 → 8,461 |
+| WebKit IDB automático | 26,551 → 6,689 | 21,449 → 8,514 |
+| WebKit IDB forzado | 21,493 → 6,601 | 17,245 → 7,059 |
+
+WPE volvió a usar IDB. Siguen pendientes iPhone físico, Telegram real y publicación tras revisión.
+
+#### Segunda revisión de la PR #16
+
+La colección vuelve a buscar en el mismo bot una sola vez si una operación manual reemplaza su selección, incluso cuando esa operación ya terminó o se limpió. Conserva la espera del carril y sus comprobaciones de autoridad. El sondeo después del callback hace una primera lectura inmediata si el plazo restante es menor o igual al primer intervalo. Si ya observó un audio incompatible y no cabe otro sondeo, entrega el resultado observado sin esperar a que venza el temporizador.
+
+Contra `d3334cb` fallaron los dos casos unitarios del callback tardío y la variante de búsqueda manual ya liquidada en ambos motores. Con la corrección pasaron los cuatro. En Chromium y WebKit, la variante vuelve al bot 101. Se conserva la evidencia del benchmark anterior porque la ruta de transferencia de bytes permanece igual. Siguen pendientes iPhone físico, Telegram real y publicación tras revisión.
+
+Validación del candidato corregido. Tipos de app y tests, lint, 872 unitarias, 73 de servidor, 10 de Python de servidor, build y Wrangler dry-run pasaron. La matriz enfocada pasó 86/86, 43 en Chromium y 43 en WebKit.
+
+### Descargas de canciones más rápidas publicadas · 2026-11-22
+
+Cloudflare Workers Free, USD 0, sirve [v56](https://pulso-web.pruebassoftware.workers.dev/releases/a6a68cf5ce5f4fc7.html) desde `f68f36f637ca4af8ef9eefaa5a5d31f6e2c34f81`, sobre v55. El MCP oficial confirmó la versión `8d074ab6-2184-4cb8-8305-aa2e250f9b5a` al 100 % en el despliegue `e4676450-4f86-43e6-b199-c0cf8f62ce64` a las `2026-11-22T10:15:31.118Z`. Coincidieron los bytes y el SHA-256 del Worker, los 13 bindings, los límites y la configuración de ejecución. Se conservaron Turnstile y los secretos. El freeze retuvo 9 publicaciones anteriores y el inventario heredado, sin retirar rutas. Cloudflare solicitó 13 archivos. [PR #16](https://github.com/Alegark/Pulso-Web/pull/16), apilada sobre #15.
+
+En el benchmark sintético ya registrado, con MP3 de 8 MiB y 200 ms por RPC, el tiempo medio por canción bajó entre un 26 % y un 75 % frente a v55.
+
+Pasaron 872 pruebas unitarias, 73 de servidor, 10 de Python, tipos de app y pruebas, lint, build, simulación de Wrangler y 86/86 casos enfocados con Telegram sintético, 43 en Chromium y 43 en WebKit.
+
+HTTPS confirmó `latest.json`, el HTTP 307 a la ruta sin `.html`, el HTTP 200 y el meta `pulso-release` con valor `a6a68cf5ce5f4fc7`. Coincidieron bytes y SHA-256 en 277/277 rutas estáticas públicas, incluido `sw.js`. Las 50 entradas históricas, incluidas v55, v54 y v53, sirvieron el bundle actual con cabeceras de navegación. Se conservaron `turnstileSiteKey` y `challenges.cloudflare.com` en la CSP. Perfil y biblioteca anónimos devolvieron HTTP 401.
+
+El manifiesto autoritativo de 280 archivos y 64962 bytes se promovió a `.local/test-evidence/faster-downloads-release/site-manifest.json`, SHA-256 `f0087b3147053882f5ca4b5bfba07503bbf3c6017d12b53e484f08720d7bec14`, con fecha MCP `2026-11-22T10:15:31.118Z`. Los recibos compactos quedan en el mismo directorio. P0-W sigue abierto.
+
+- Medir latencia y memoria en iPhone físico con Telegram real.
+- Verificar OPFS en WebKit. WPE no pudo abrir un escritor OPFS y el benchmark usó IndexedDB.
+- Evaluar updates MTProto como señal para despertar, solapar la importación con la búsqueda de la siguiente canción, revisar `inactivityTimeout` y reutilizar el import worker.
+- Investigar las regresiones de Chromium desde `ac89e5a` en `artwork`, `artwork-containers`, `opfs` y `library`.
+- Resolver los fallos del entorno WPE en la batería general.
+
+### Menor espera por bot y por opción · 2026-11-22
+
+En la v56, una opción incompatible podía mantener el sondeo del callback durante unos 60 segundos y la siguiente opción requería otra consulta. También se empezaba cada canción por el mismo bot. En una comprobación externa con Telegram real en Chromium, un archivo M4A compatible tardó 12 s y se rechazó por `metadata-title-mismatch`. La etiqueta de título reunía el artista y el título correctos, el campo de artista identificaba a quien subió el archivo y la duración analizada coincidía. En otro caso el respaldo guardó una canción en 21 s. El límite común permitía gastar casi todo el tiempo en transferir y rechazar varios archivos del primer bot.
+
+El sondeo conserva la espera inicial y, tras detectar audio incompatible, acepta hasta cuatro lecturas adicionales por si llega el correcto. Una segunda opción usa el menú original mientras siga vigente. Pulso revalida peer, huella y correlación, descarta botones con duración explícita fuera de ±7 s y deduplica documentos. Se asignan hasta 65 s de resolución de callbacks por bot y se reservan hasta 30 s por bot de respaldo dentro del presupuesto remoto de 180 s. La importación atómica y la liquidación de un carril ajeno se contabilizan en el diagnóstico y preservan esa reserva. Dos rechazos de etiquetas o duración en una canción hacen pasar al siguiente bot. Dos fallos seguidos degradan temporalmente al bot si hay otro que ya guardó una copia. La salud vive en la sesión, el orden elegido se conserva y el bot degradado vuelve a tener su turno al vencer cinco minutos o si el resto no consigue guardar la canción.
+
+El importador acepta títulos de etiqueta con el artista completo y el título esperado, en ambos órdenes y con los separadores acordados, si Telegram ya entregó una fila compatible y la duración analizada coincide. Usa los metadatos esperados para la ficha en ese caso. El diagnóstico conserva un agregado por canción en RAM, con posiciones anónimas y motivos enumerados. El dock diferencia consulta, preparación, transferencia, rechazo, cambio de bot y guardado y conserva los avisos de espera y reconexión.
+
+**Telegram sintético en loopback.** Tiempo de pared en segundos desde la activación de la descarga hasta que el dock confirmó la copia o el fin de la operación. Base `826ec06` y candidato con las mismas fixtures. Se verificó el SHA-256 de cada copia.
+
+| Escenario | Chromium v56 → candidato | WebKit v56 → candidato |
+| --- | ---: | ---: |
+| Callback con audio de otra duración | 68,912 → 5,997 | 67,808 → 7,405 |
+| Intervalo entre esos dos callbacks | 62,797 → 3,681 | 61,701 → 3,783 |
+| Menú tras recibir bytes inválidos | 4,206 → 3,514 | 3,458 → 4,109 |
+| M4A con título compuesto | 9,309 sin copia → 2,571 guardada | 11,180 sin copia → 5,613 guardada |
+| M4A con etiquetas de otra canción | 9,808 → 5,992 | 16,705 → 11,203 |
+
+En el bot mudo, los seis tiempos por canción fueron 21,201 / 16,806 / 17,594 / 16,796 / 17,687 / 18,011 s en Chromium base y 17,399 / 17,707 / 1,983 / 2,620 / 1,901 / 1,297 s en el candidato. En WebKit fueron 18,971 / 22,420 / 16,786 / 20,206 / 18,884 / 18,111 s en base y 18,403 / 18,297 / 2,488 / 2,121 / 1,781 / 1,296 s en el candidato. En ambos motores se consultó directamente al respaldo desde la tercera canción. Los dos escenarios de menú pasaron de dos envíos a uno. El título compuesto se guardó en el primer callback y el título ajeno se descartó dos veces antes de guardar desde el respaldo, frente a tres rechazos en v56. La prueba del dock observó la consulta, la preparación, el progreso de bytes, el rechazo, el cambio de bot y el guardado.
+
+Pasaron tipos de aplicación y pruebas, lint, 883 pruebas unitarias, 73 de servidor, 10 de Python, build de producción y Wrangler dry-run. Pasaron los diez escenarios sintéticos del candidato en Chromium y WebKit. Las repeticiones aisladas permitieron medir los casos que habían sufrido vencimientos bajo carga concurrente.
+
+La matriz enfocada de descarga, reanudación y actualización pasó 86/86 en ambos árboles, 43 por motor. En la base se completó WebKit con una repetición de los 32 casos restantes tras interrumpirse la primera corrida. En la batería general, base y candidato pasaron 12/16 en Chromium 154 y 4/16 en WebKit 27.2, con los mismos fallos en ambos árboles. Chromium mantuvo los cuatro fallos conocidos en `artwork`, `artwork-containers`, `opfs` y `library`. En WPE permanecieron los 12 grupos fallidos de la base.
+
+**Pendientes.** Confirmar latencia, memoria y diagnóstico en iPhone físico con Telegram real. Evaluar validación temprana de etiquetas con una vista acotada del prefijo. El parser actual necesita una vista coherente del archivo y un M4A puede tener `moov` al final. Hasta verificar ese recorrido, la validación de duración y etiquetas se hace sobre el archivo completo. Evaluar modo inline, consultas en paralelo o cambios de coincidencia después de observar los datos del diagnóstico. Publicación tras revisión. P0-W sigue abierto.
+
+#### Revisión de la PR #17
+
+Se reprodujeron los ocho hallazgos contra `fc8fa20`. Las pruebas separaron el vencimiento durante la búsqueda y la descarga, y el desfase del temporizador se comprobó tanto en búsqueda interactiva como en una colección. También se reprodujeron la vuelta al mismo bot tras agotar el callback de un álbum, el filtro aplicado a parte del título o del artista, la identidad vacía en etiquetas compuestas, el doble diagnóstico de duración y el aviso de metadatos repetido. La gracia anterior terminaba a los 2,35 s en el caso de audio temprano.
+
+Pulso ahora distingue las duraciones añadidas a una opción de las que forman parte de su identidad. Un corte por presupuesto mantiene el resultado como pendiente de confirmar y deja probar el respaldo. Los plazos internos usan un reloj monotónico y el temporizador marca el vencimiento antes de cancelar el RPC. Agotar el callback de un álbum ya no repite la búsqueda. La gracia concede hasta 4,5 s desde el primer audio incompatible y conserva el límite total de lecturas. El dock anuncia el motivo que corresponde a la opción que acaba de fallar.
+
+**Repetición de los diez escenarios sintéticos.** Tiempo de pared en segundos. En Chromium y WebKit se verificó el SHA-256 de las copias y se conservó un solo envío por menú.
+
+| Escenario | Chromium | WebKit |
+| --- | ---: | ---: |
+| Canción cuyo primer callback entregó audio incompatible | 7,395 | 7,177 |
+| Intervalo entre esos dos callbacks | 5,051 | 5,023 |
+| Menú con una primera opción inválida | 3,900 | 3,878 |
+| M4A con título compuesto guardado al primer intento | 3,807 | 7,798 |
+| M4A con etiquetas ajenas guardado desde el respaldo tras dos rechazos | 5,016 | 7,312 |
+| Bot mudo, canciones 3 a 6 | 1,892–2,392 | 0,928–2,083 |
+
+El respaldo se consultó directamente desde la tercera canción en ambos motores. La ventana más larga elevó el intervalo entre callbacks frente a la primera entrega y conservó el objetivo de menos de 8 s. Siguen pendientes la aceptación en iPhone físico con Telegram real y la inspección temprana de etiquetas antes de descargar el archivo completo.
+
+Pasaron tipos de aplicación y pruebas, lint, 892 unitarias, 73 de servidor, 10 de Python, build y Wrangler dry-run. Pasó la matriz enfocada completa con 86/86, 43 en Chromium y 43 en WebKit.
+
+#### Segunda revisión de la PR #17
+
+Contra `ef4bee3` fallaron cinco casos unitarios y el escenario de colección en Chromium. Tras guardar la primera canción, el callback agotado provocó una segunda restauración de la sesión y dejó pendientes las tres restantes. Las unitarias reprodujeron también el reenvío del álbum con 4 s de presupuesto de callback todavía disponibles, la clasificación incorrecta de un vencimiento después de una discrepancia y el mensaje de metadatos que sobrevivía a un reintento de audio directo.
+
+Si el canal está sano y algún bot respondió, agotar el presupuesto marca esa canción con «Telegram no respondió a tiempo» y deja continuar la colección. Se conserva la salud aprendida en la sesión. Un callback con timeout confirmado cede el turno aunque quede presupuesto. Un corte después de encontrar una opción compatible mantiene el resultado por confirmar también en álbum y búsqueda interactiva. Cada candidato consume el aviso anterior, incluido el audio directo.
+
+El escenario nuevo usa el temporizador real con un presupuesto de callback reducido a 1,5 s solo en ese build de prueba. En Chromium y WebKit guardó las canciones primera y cuarta, dejó las otras dos con el aviso individual, hizo cero reconexiones y fue directo al respaldo en la cuarta. La colección terminó en 11,917 s en Chromium y 18,507 s en WebKit. Se verificó el SHA-256 de las dos copias.
+
+Los diez escenarios anteriores también pasaron. Tiempos de pared en segundos para esta revisión.
+
+| Escenario | Chromium | WebKit |
+| --- | ---: | ---: |
+| Canción cuyo primer callback entregó audio incompatible | 6,599 | 8,291 |
+| Intervalo entre esos dos callbacks | 5,016 | 5,201 |
+| Menú con una primera opción inválida | 4,400 | 2,693 |
+| M4A con título compuesto guardado al primer intento | 3,390 | 2,923 |
+| M4A con etiquetas ajenas guardado desde el respaldo | 5,882 | 8,110 |
+| Bot mudo, canciones 3 a 6 | 0,909–1,595 | 1,186–2,307 |
+
+Pasaron tipos de app y pruebas, lint, 896 unitarias, 73 de servidor, 10 de Python, build y Wrangler dry-run. Siguen pendientes la comprobación con iPhone físico y Telegram real y la inspección temprana de etiquetas. La publicación queda para revisión.
+
+La matriz enfocada de descarga, reanudación y actualización volvió a pasar 86/86, con 43 casos por motor.
+
+
+### Menor espera de los bots publicada · 2026-11-22
+
+Cloudflare Workers Free, USD 0, sirve [v57](https://pulso-web.pruebassoftware.workers.dev/releases/4857dea3d67edfcc.html), versión `add9ff6f-fdf8-48dc-aa8c-761952494d95`, despliegue `b5157899-13ec-479c-a8c4-fccabcd32d91` al 100 % desde `2026-11-22T13:07:35.589Z` según el MCP oficial. Se verificaron los bytes y SHA-256 del Worker, los 13 bindings, los límites y la configuración de ejecución. Se conservaron Turnstile y los secretos. El freeze retuvo 10 publicaciones anteriores y el inventario heredado, sin retirar rutas. Cloudflare solicitó 13 archivos. [PR #17](https://github.com/Alegark/Pulso-Web/pull/17), apilada sobre #16. Commit de producto publicado: `bf7d8a1a3924ffd3e2a36474e9a89860a66f707a`.
+
+Pasaron los tipos de la app y de las pruebas, lint, 896 pruebas unitarias, 73 de servidor, 10 de Python, build de producción y simulación de Wrangler. Pasaron 86/86 casos enfocados y 12/12 escenarios sintéticos, 43 y 6 por motor en Chromium y WebKit.
+
+HTTPS confirmó `latest.json`, el HTTP 307 hacia la ruta sin `.html`, el HTTP 200 y el meta `pulso-release` con valor `4857dea3d67edfcc`. Coincidieron bytes y SHA-256 de 285/285 rutas estáticas, incluido `sw.js`. Las 51 entradas históricas, incluidas v56, v55 y v54, sirvieron el bundle actual con cabeceras de navegación. Se conservaron `turnstileSiteKey` y `challenges.cloudflare.com` en la CSP. Perfil y biblioteca anónimos devolvieron HTTP 401.
+
+El manifiesto autoritativo de 288 archivos y 67415 bytes quedó en `.local/test-evidence/bot-turnaround-release/site-manifest.json`, SHA-256 `8bdffe5247c7d0a131cfdb4bd0b7b6c158bf11e47d987b9751903910a8681859`, con fecha MCP `2026-11-22T13:07:35.589Z`. Los recibos compactos quedan en el mismo directorio. P0-W sigue abierto.
+
+- Medir el comportamiento en iPhone físico con Telegram real.
+- Inspeccionar etiquetas antes de descargar el archivo completo, incluidos M4A con el átomo `moov` al final.
+- Evaluar modo inline, consultas en paralelo y relajar la coincidencia según lo que muestre el diagnóstico real.
+- Investigar el HTTP 503 observado con sesión iniciada en `/api/account-profile` y `/api/account-library`.
+- Investigar la regresión desde `ac89e5a` en Chromium para `artwork`, `artwork-containers`, `opfs` y `library`.
+- Resolver el fallo del entorno WPE de WebKit en la batería general.
+
+### Álbumes de iTunes con videos y extras publicados · 2026-11-23
+
+Cloudflare Workers Free, USD 0, sirve [v58](https://pulso-web.pruebassoftware.workers.dev/releases/9a6348b7f4ade06d.html), versión `69b2d84d-991b-4b18-b47a-db799ea6d27e`, despliegue `45917b70-09ae-4f13-9854-c0e703bd4ec9` al 100 % desde `2026-11-23T16:38:27.515Z` según el MCP oficial. Coincidieron los bytes y el SHA-256 del Worker, los 13 bindings, los límites y la configuración de ejecución. Se conservaron Turnstile y los secretos. El freeze retuvo 11 publicaciones anteriores y el inventario heredado. Se retiraron 0 rutas. Cloudflare solicitó 7 archivos. [PR #18](https://github.com/Alegark/Pulso-Web/pull/18), apilada sobre #17. Commit de producto publicado: `38dd3c6f3d28956c615f8d880fcc70cb28ae46c3`.
+
+El detalle de iTunes acepta videos y extras cuando se puede verificar la cobertura de las canciones por disco. Muestra sólo las canciones ordenadas y avisa cuando el catálogo entrega una lista incompleta o incoherente. En iTunes US, Femme Fatale Vol. 2 devolvió 20 canciones y Weezer (Deluxe Edition) devolvió 24 con el parser publicado. Ambas consultas fueron GET anónimos, separados por al menos 3,1 s.
+
+Pasaron los tipos de aplicación y pruebas, lint, 915 pruebas unitarias, 73 de servidor, 10 de Python, build de producción y simulación de Wrangler. En Chromium y WebKit pasaron 86/86 casos de descarga y reanudación, 12/12 escenarios de Telegram sintético y 12/12 casos de página de álbum, con 43, 6 y 6 por motor.
+
+HTTPS confirmó `latest.json`, el HTTP 307 hacia la ruta sin `.html`, el HTTP 200 y el meta `pulso-release` con valor `9a6348b7f4ade06d`. Coincidieron bytes y SHA-256 de 288/288 rutas estáticas, incluido `sw.js`. Las 52 entradas históricas, incluidas v57, v56 y v55, sirvieron el bundle actual con cabeceras de navegación. Se conservaron `turnstileSiteKey` y `challenges.cloudflare.com` en la CSP. Perfil y biblioteca anónimos devolvieron HTTP 401.
+
+El manifiesto autoritativo de 291 archivos y 69040 bytes quedó en `.local/test-evidence/album-catalog-extras-release/site-manifest.json`, SHA-256 `b5afeef132c3a6efc5bf869c5476ffc53f29a716445fbac05ab8388272047832`, con fecha MCP `2026-11-23T16:38:27.515Z`. Los recibos compactos quedan en el mismo directorio. P0-W sigue abierto.
+
+- Medir el comportamiento y verificar la aceptación de álbumes en iPhone físico. Sigue pendiente la aceptación con Telegram real.
+- Revisar el filtro por conteo del respaldo de MusicBrainz cuando el catálogo de iTunes incluye extras en su total.
+- Resolver los videos intercalados cuyos conteos contradicen los de las canciones. La versión publicada rechaza esas respuestas como incompletas.
+- Inspeccionar etiquetas antes de descargar el archivo completo, incluidos M4A con el átomo `moov` al final.
+- Evaluar modo inline, consultas en paralelo y cambios de coincidencia según el diagnóstico real.
+- Investigar el HTTP 503 observado con sesión iniciada en `/api/account-profile` y `/api/account-library`.
+- Investigar la regresión desde `ac89e5a` en Chromium para `artwork`, `artwork-containers`, `opfs` y `library`.
+- Resolver el fallo del entorno WPE de WebKit en la batería general.
+
+## 2026-11-24 · Cola de descargas de álbumes y playlists
+
+La cola FIFO conserva por cuenta la identidad de cada colección y su selección validada. El coordinador ejecuta el álbum con su ficha guardada aunque se abandone la página. Cada inicio pasa por la comprobación de versión, la autoridad de pestaña, la disponibilidad de Almacenamiento y Telegram con bots configurados. Las inspecciones de copias se actualizan al liquidar un trabajo. Los cambios de la lista de espera no reinician esas inspecciones.
+
+El dock muestra «En cola · posición N» y permite retirar una colección pendiente. Volver a pulsar el control de la colección abre un diálogo modal con foco inicial en conservarla. Al detener una playlist con otra colección en espera, el checkpoint se libera después de conservar su posible recibo por pista; las copias verificadas quedan en Biblioteca. Conservar un checkpoint sin otro trabajo en espera mantiene la continuación manual anterior. Tras recargar, el checkpoint automático de la playlist tiene prioridad sobre la cola.
+
+En la app compilada con Telegram sintético, Chromium y WebKit verificaron el flujo de la playlist A de 30 entradas, el álbum B y la retirada de C. B terminó con dos huellas verificadas también al cancelar A y al recargar con B en cola. La playlist completa, la pista ausente y el checkpoint antiguo pasaron en ambos motores. La expectativa de tres búsquedas en el fixture de recarga fallaba también en `7d41d25` porque dos fragmentos solicitados juntos consumían las dos inyecciones de fallo antes de reiniciar. El fixture separa ahora la interrupción de la conexión anterior y el fallo 503 de la transferencia restaurada. La variante corregida terminó con 30/30 en ambos motores. La cancelación conservó la copia que A acababa de publicar y B terminó automáticamente.
+
+Pasaron la suite del dock, los siete casos focales de `check-playlist-resume-main` en cada motor, 929 unitarias, 73 de servidor, 10 de Python, tipos, lint y build de producción. La reanudación de álbum tras actualizar espera a que el bundle de destino pueda capturar la autoridad de Almacenamiento y conserva la intención durante esa espera. La evidencia local se guarda en `.local/test-evidence/album-tap-save-queue/summary.json`. La aceptación con Telegram real y un iPhone físico queda pendiente.
+
+## 2026-11-24 · Revisión independiente de la PR 20
+
+La cabeza de la cola espera a que Telegram y sus bots estén disponibles y Almacenamiento pueda admitir la colección. Para una playlist deben estar cargadas todas las pistas de la selección. Una admisión diferida conserva la entrada persistente. La comprobación de versión reserva el inicio frente a otros gestos, reanudaciones y traspasos. Una canción suelta conserva su reserva hasta que termina de usar Telegram y Almacenamiento, incluidas las pausas entre consultas y descargas.
+
+«Cancelar descarga» liquida y descarta el checkpoint de la playlist aunque la cola esté vacía. Conserva las copias verificadas y el marcador de cualquier operación pendiente de revisar. «Detener» deja el checkpoint para continuar. Pulsar el control de esa misma playlist pausada abre el dock con su progreso y no añade un duplicado.
+
+Los cuatro casos de alta prioridad fallaron en `af313ac` y pasaron en Chromium y WebKit con la corrección. `queue-admission` observó la pérdida de la entrada durante el bloqueo de Almacenamiento. `queue-song-save` reprodujo la pérdida del audio al coincidir con el guardado de metadatos. `queue-song-order` detectó consultas de álbum durante la pausa de la canción. `queue-cancel-empty` detectó el checkpoint que seguía bloqueando la cola.
+
+En los dos motores se verificaron 30/30 entradas con un toque y tras recargar, 9/10 con la pista ausente y con el checkpoint antiguo, además de las variantes de cancelación y recarga con otra colección en espera. `check-playlist-resume-main` pasó 43 casos por motor. WebKit completó sus nueve casos finales en una segunda invocación tras el tiempo límite de la primera. Pasaron 929 unitarias, 73 pruebas de servidor, 10 pruebas Python, tipos, lint y build. La evidencia queda en `.local/test-evidence/album-tap-save-queue-fixes/`. Continúa pendiente la aceptación con Telegram real e iPhone físico.
+
+## 2026-11-24 · Segunda revisión de la PR 20
+
+En `be59473` la adquisición de álbum devolvía éxito por el solo hecho de arrancar. Detener durante la comprobación de versión dejaba el trabajo elegible. Un `retryAt` recibido con el despachador ocupado podía quedarse sin temporizador ni nueva evaluación. En Chromium, las excepciones persistentes de checkpoint y de lectura de álbum provocaron respectivamente 24 y 13 consultas de versión en la ventana de prueba. Con la corrección se observó una consulta por fallo y otra después del reintento solicitado.
+
+Las colecciones tienen cuatro resultados. Completar el recorrido o cancelar explícitamente liquida la entrada. Interrumpir o diferir conserva el trabajo. La playlist también conserva su entrada al reclamar el checkpoint y «Detener» deja su continuación manual. El despachador comprueba con el mismo predicado la autoridad efectiva, la cabeza persistida, el checkpoint, el traspaso, las operaciones en curso, la red y los requisitos de Biblioteca y Telegram. La liberación de la reserva, los cambios de sesión y el vencimiento de Telegram despiertan el despacho. Un fallo persistente se pausa por ID y se puede reintentar desde el dock.
+
+Volver a abrir el progreso de una playlist pausada conserva su checkpoint. Retirarla descarta ese checkpoint y protege el recibo pendiente. Una selección en cola con pistas ausentes deja de bloquear a las demás y muestra el motivo. El álbum relee la ficha guardada al despachar. La retirada externa sin ficha cede el turno. El detalle registra la inspección completa tras verificar la vigencia del inspector en toda la lista. El dock usa el título de la primera colección cuando sólo hay espera y sólo marca una descarga completa cuando su total es positivo.
+
+Chromium y WebKit pasaron los 13 casos de la segunda revisión, incluidos el corte real del cliente de Telegram sintético tras guardar la primera pista del álbum y su reconexión. El álbum conservó su puesto y reutilizó la misma copia, con huellas verificadas y un solo registro por pista. Las pruebas cubrieron la cancelación con un marcador de guardado, tocar y retirar la playlist pausada, retirar y volver a guardar el álbum antes del despacho, su retirada externa y la reserva durante la resolución de un single. En cada motor pasaron los 13 escenarios de playlist y toques, con 30/30 entradas en la descarga con un toque y tras recargar, y 9/10 en los casos de pista ausente y checkpoint antiguo. Pasaron los 43 casos de reanudación por motor, los cinco casos del dock por motor y los grupos 59–66 de Biblioteca en Chromium y 60–66 en WebKit.
+
+La interfaz obtuvo 11/12 por motor tanto en el candidato como en `7d41d25`. En el caso de texto al 200 % y movimiento reducido, el botón del minirreproductor quedó fuera del viewport en ambas revisiones. WebKit emitió los mismos dos avisos de `ResizeObserver`. Pasaron 930 unitarias, 73 pruebas de servidor, 10 de Python, tipos de app y pruebas, lint y build local. La evidencia compacta queda en `.local/test-evidence/album-tap-save-queue-fixes-2/`. La aceptación física con Telegram real sigue pendiente.
+
+## 2026-11-25 · Tercera revisión de la PR 20
+
+En `e88739d` los tres fallos aislados de bot conservaron el álbum y el siguiente trabajo bloqueados en cola. En la playlist, el timeout aislado activó reconexiones y los rechazos por incompatibilidad o límite produjeron una clasificación de archivo inválido. En `7d41d25` la playlist ya podía entrar en espera de Telegram cuando todos los bots eran inconcluyentes, aunque el transporte siguiera disponible.
+
+| Hallazgo confirmado | Corrección | Prueba |
+| --- | --- | --- |
+| 1. Un fallo puntual de bot podía interrumpir un álbum o hacer que una playlist intentara reconectar con Telegram sano | La adquisición separa los rechazos de cada bot de un corte de red, sesión o flood. Agota las alternativas de la pista, informa «No existe en tus bots» cuando corresponde y sigue. La playlist conserva la espera automática cuando se interrumpe Telegram. | `queue-album-bot-{timeout,unsupported,limit}`, `queue-playlist-bot-{timeout,unsupported,limit}`, `queue-album-interruption` y `queue-retry-at` |
+| 2. Cancelar la consulta local podía dejar la pista marcada como incierta | La vigencia se comprueba antes de marcar una consulta local fallida. La interrupción de red deja la pista elegible al reanudar. Los recibos de guardado que pueden seguir pendientes se protegen. | Unitaria `aborting a lookup leaves that album track eligible after resume` |
+| 3. Revisar y reintentar una canción cedía el turno en la comprobación de versión | La revisión reserva la admisión antes de esperar. La cola difiere el inicio mientras hay otra comprobación y vuelve a evaluarlo cuando se libera. | `queue-review-admission`, `queue-version-busy` |
+| 4. Una playlist válida podía salir de la cola mientras se cargaba la cuenta nueva | La cola espera el primer snapshot de Biblioteca de la cuenta activa antes de descartar pistas ausentes. | `queue-before-library-refresh`, `queue-missing-track` |
+| 5. Un traspaso de álbum vencido durante la lectura dejaba la cola en pausa manual | El despachador vuelve a comprobar versión por el flujo habitual y conserva el turno. | `queue-album-expired-update` |
+| 6. El dock podía conservar el botón de reintento después de liberar la pausa | Al limpiar la pausa se actualiza el dock. | `queue-album-clear-retry` |
+| 7. El detalle podía inspeccionar copias durante el despacho | La reserva impide iniciar la inspección e invalida la que estuviera en curso. | `queue-inspection` |
+| 8. La suspensión y el cambio de cuenta usaban el ámbito de vista, el desmontaje dejaba activo el comprobador y un fallo al cancelar pausaba la cola | Se usa la cuenta del álbum, el desmontaje cancela la comprobación de versión y la cancelación liquida la entrada aunque falle la operación. | `queue-resumed-album-pagehide`, `queue-unmount-update`, `queue-cancel-exception` |
+| 9. Un checkpoint inválido podía bloquear la cola y una actualización desde Biblioteca abría Buscar | Con otra colección en espera, se descarta el checkpoint de pistas retiradas y se conserva el recibo pendiente. El traspaso del álbum guarda el origen Biblioteca. | `queue-missing-paused-track`, `queue-album-library-update` |
+
+En Chromium sobre `e88739d` fallaron los seis recorridos de álbum y playlist con `timeout`, `unsupported` y `limit`, además de las dos carreras de revisión y primer refresco. También falló la unitaria de cancelación durante la consulta local. Tras la corrección, Chromium y WebKit probaron los tres bots en cada lote, mantuvieron Telegram conectado, marcaron la segunda pista como ausente y verificaron por SHA-256 las copias de la primera, la tercera y la primera pista de la colección siguiente.
+
+Pasaron 17 escenarios de la tercera revisión y 27 casos de playlist por motor, incluidas tres repeticiones de 30/30 con un toque, 30/30 tras recargar y 9/10 con la pista ausente o el checkpoint antiguo. El barrido en activo pasó en el candidato y el bloqueo histórico se reprodujo en `7d41d25`. Pasaron 43 escenarios de reanudación por motor. Chromium completó el caso de suspensión en una segunda pasada, tras acotar el reintento a una operación que agotó su plazo total mientras la página dormía. Los timeouts de un bot siguen cediendo a otro proveedor o a la siguiente pista. El dock pasó cinco casos por motor. Biblioteca pasó 8/8 en Chromium y 7/7 en WebKit. Se verificaron ocho casos de benchmark y los dos timeouts de callback.
+
+Interfaz obtuvo 11/12 por motor tanto en el candidato como en `7d41d25`. A 200 % y con movimiento reducido, el control del minirreproductor queda fuera del viewport. WebKit emitió en ambos los mismos dos avisos de `ResizeObserver`. La batería local pasó tipos de app y pruebas, lint, 931 unitarias, 73 pruebas de servidor, 10 de Python y build. Los resultados, los intentos de arnés y la limpieza quedan en `.local/test-evidence/album-tap-save-queue-fixes-3/`. La revisión usa cuenta, Telegram y audio sintéticos en loopback. Cloudflare quedó sin despliegue. La aceptación con Telegram real e iPhone físico permanece pendiente.
+
+## 2026-11-25 · Cuarta revisión de la PR 20
+
+En `b5ed3a8`, el acuse incierto de Telegram podía acabar como ausencia si se perdía la respuesta del envío o como archivo inválido si se perdía la del callback. Una suspensión inferior al presupuesto de 180 s también podía dar por terminado el bot. La clasificación común de `ordered-bot-acquisition.ts` comprueba alcance de la operación, suspensión, disponibilidad, entrega y código antes de completar el bot. Una entrega incierta, un timeout antes del despacho, un fallo de red, una sesión vencida o un flood dejan pendiente la misma pista. Tras una suspensión con resultado inconcluso se renueva Telegram y se conserva el bot que estaba intentando la pista.
+
+Un timeout con acuse permite pasar al siguiente bot tras un solo intento. Si el lote agota las alternativas, conserva «Telegram no respondió a tiempo» para una pista con timeout, «No existe en tus bots» para ausencia o rechazo explícito del proveedor y «Ningún bot entregó un archivo válido» para una selección o un archivo incompatible. Un `unsupported` antes del despacho en selección tiene el mismo trato que en búsqueda. Se mantienen las opciones válidas de un menú y se intenta renovar una selección desplazada dentro de su cota.
+
+El álbum en cola usa la misma espera y reconexión acotada que la playlist. Sigue en la pista pendiente, revalida la sesión y conserva las copias verificadas durante la espera. Si Telegram sigue sin responder tras agotar la espera, el usuario conserva el trabajo en la cola. La reanudación persistente de la playlist espera la comprobación de versión en curso y vuelve a evaluar el checkpoint cuando se libera.
+
+La matriz describe 31 escenarios sobre ambos puntos de entrada. Se comparó el recorrido sin cola con `7d41d25`. Dieciséis escenarios conservan el comportamiento observable, incluidos los casos en que la suspensión cambió la señal interna pero sigue renovando y reintentando el mismo bot. Las 15 diferencias intencionadas interrumpen el lote antes al perder el canal, distinguen el timeout con acuse, identifican un rechazo o vacío del proveedor y evitan convertir cancelaciones inconclusas en archivos inválidos. El detalle por fila queda en la subsección «Cuarta revisión» de la PR 20 y en `.local/test-evidence/album-tap-save-queue-fixes-4/equivalencia-base.json`.
+
+Se verificaron 46 variantes funcionales de playlist, cola y toques por motor, tres ejecuciones de 30/30 con un toque y una de 30/30 tras recarga, además de 9/10 con la pista ausente y con el checkpoint antiguo. WebKit expuso una carrera en la espera de `queue-inspection`; la prueba espera las dos filas y pasó al repetirla en ambos motores. `tap-baseline` reprodujo el bloqueo táctil anterior en `7d41d25` en ambos motores. Pasaron 46 casos de reanudación, cinco del dock y el timeout de callback por motor. Los cinco escenarios de adquisición y los cuatro de rendimiento por motor también pasaron. Biblioteca pasó los grupos 59–66 en Chromium y 60–66 en WebKit. Interfaz reprodujo en el candidato y en `7d41d25` el mismo fallo del botón del minirreproductor al 200 % con movimiento reducido, con 11/12 por motor, y los mismos dos avisos de `ResizeObserver` en WebKit.
+
+Pasaron 993 unitarias, incluidas tres con Chromium ejecutadas por separado, 73 pruebas de servidor, 10 de Python, tipos de app y pruebas, lint y build. Se conservaron informes compactos, causas y huellas en `.local/test-evidence/album-tap-save-queue-fixes-4/`. Se eliminaron fuentes de comparación, builds, perfiles y contenido sintético de prueba. Se recuperaron 105.586.688 bytes de compilaciones antiguas del proyecto cotejadas con sus manifiestos, conservando los informes, las fuentes y el audio. Cloudflare quedó sin despliegue. La aceptación con Telegram real y un iPhone físico sigue pendiente.
+
+## 2026-11-25 · Quinta revisión de la PR 20
+
+El propietario retomó la revisión el 25 de noviembre. La rama parte de `f13b770` e incorpora `6dfe522` con las notas de aceptación física y trabajo pendiente. El informe independiente se conserva fuera de Git en `.local/research/pr20-review-5-2026-11-25/report.md` del proyecto original.
+
+| Hallazgo | Causa y corrección | Prueba de regresión |
+| --- | --- | --- |
+| H1 | El despachador exigía que siguiera vigente el worker inicial para pausar un álbum. La pausa se asocia al ID del trabajo en cola y a la cuenta. Agotada la espera de Telegram, deja disponible «Reintentar descarga en cola» y conserva las copias comprobadas. | `queue-album-reconnect-exhausted` ejecuta `runAlbumDownload({queued:true})`, `acquireAlbum` y `collectionTelegramWait` con el cliente real y RPC sintéticas. La base vuelve a despachar tras cinco búsquedas de la pista pendiente. El caso comprueba también otra reconexión, cambio de revisión de bots, reintento manual y conservación de la primera copia. `queue-album-clear-retry` verifica la pausa con `storageStopped`. H1 falla en la base y pasa en Chromium y WebKit. |
+| Tope de relanzamientos | Un trabajo diferido por pérdida de admisión podía volver a entrar al despachador con cada despertar. El presupuesto es de un relanzamiento automático por ID. Se rearma con un reintento manual o al observar pérdida y recuperación de red. | `queue-dispatch-relaunch-cap` falla en la base. Cuenta dos admisiones por ciclo, comprueba la pausa tras otro despertar o cambio de bots y recupera la descarga al pedir reintentar. Pasa en Chromium y WebKit. |
+| H2 | La transferencia de un audio directo conservaba `not-dispatched`. El driver reconoce la entrega del mensaje de audio verificado antes de iniciar la transferencia. El timeout pasa a la fila 5 y cede el turno al siguiente bot. | `ordered-bot-driver.test.ts` encadena el driver real y `acquireFromOrderedBots` por `downloadSong`. El plazo de 18 s produce un timeout sin acuse y una pausa en la base. En el candidato, el segundo bot guarda la pista. El fixture de la fila 5 usa selección de menú para el caso de transferencia tras acuse de callback. |
+| H3 | Una admisión denegada en selección y un `expired` ajeno en búsqueda podían cerrar el bot. Sólo la respuesta propia aporta su código. Un rechazo de admisión inconcluso conserva la pista, y el vencimiento de la selección tiene el tratamiento de la fila 9. | Dos casos con salida del driver fallan en la base y pasan en el candidato. La admisión queda pendiente en el mismo bot y una respuesta ajena vencida no completa ningún proveedor. |
+| H4 | El menú retenido heredaba el fallo de la opción anterior. La clasificación antes de admitir la opción vuelve a considerar la suspensión y la colección conserva las opciones ya rechazadas por posición del proveedor y candidato. | Dos casos con `file-invalid` y `file-too-large` fallan en la base. Tras recrear el driver y rotar los identificadores, el candidato vuelve al mismo bot y ejecuta la segunda opción. |
+| M8 | Un conflicto después del acuse entraba en la recuperación de Telegram. El conflicto confirmado termina ese bot y cede al siguiente. | Un callback real en el driver de prueba recibe acuse y su documento desaparece antes de la lectura. La base detiene la adquisición en el primer bot y el candidato guarda con el segundo. |
+| M9 | Ausencia, inicio pendiente, límite y formatos incompatibles compartían mensaje. La ausencia exige una respuesta explícita de todos los bots. El lote conserva el motivo de los rechazos y sigue con la pista siguiente. | El driver emite la proyección real para `/start`, límite de historial, rechazo por incompatibilidad y Ogg. Los cuatro casos fallan en la base y pasan en el candidato. El control de ausencia pasa en ambas revisiones. Los lotes de álbum y playlist comprueban el aviso y la continuidad. |
+
+### Local
+
+La suite del driver obtiene 1/11 en `f13b770` y 11/11 en el candidato. Los diez fallos son las reproducciones de H2–H4, M8 y M9. El control de ausencia pasa en ambos árboles. `npm run test:unit` pasa 1.000/1.000, incluidas las tres pruebas con Chromium. `npm run typecheck`, `npm run typecheck:tests`, `npm run lint` y `npm run build` pasan. La primera ejecución de las unitarias con Chromium usó una ruta de perfil demasiado larga para el socket Unix. Con la ruta temporal por descriptor pasan las tres pruebas nativas.
+
+### Navegador
+
+Los casos se ejecutan con cuenta, RPC y audio sintéticos, en loopback. `tap-baseline` obtuvo 2/2 sobre el código de `7d41d25` con el arnés de la PR y reprodujo el bloqueo táctil histórico. La comparación de interfaz obtuvo 11/12 por motor en `7d41d25` y el candidato. En ambos, el botón del minirreproductor queda fuera del viewport al 200 % con movimiento reducido. WebKit emite los mismos dos avisos de `ResizeObserver`. Los dos árboles se construyeron desde inventarios verificados por SHA-256.
+
+La matriz de reanudación completa registra 46/46 en Chromium y 46/46 en WebKit. Chromium repitió con éxito `update-priority-album` y `bot-unsupported` después de tiempos de espera en la primera ejecución concurrente. Cada motor completó tres descargas de 30/30 con un toque, 30/30 tras recarga y 9/10 tanto con la pista ausente como con el checkpoint antiguo.
+
+La matriz funcional da 50/50 en Chromium 154.0.8037.57 y 50/50 en WebKit 27.2. Cada total contiene los 46 casos de la ronda 4 y cuatro adicionales de álbum agotado, tope de relanzamientos e inicio pendiente en álbum y playlist. En el arnés anterior, el barrido táctil de `queue` retenía una RPC de la primera pista más de 18 s. La traza de WebKit muestra el timeout antes de consultar los otros dos bots y quedaron 28/30 entradas porque la primera pista figuraba dos veces. El barrido ahora retiene el primer guardado local con la descarga activa. Ambos motores verificaron 30/30, las dos copias del álbum y la retirada de la tercera colección. La pausa se mide contando las admisiones del despachador por tipo, ya que el shell también puede consultar la versión al volver a primer plano. Sólo la prueba de agotamiento acorta las esperas de reconexión.
+
+Se eliminaron compilaciones, snapshots de referencia, perfiles de navegador, datos sintéticos, cachés temporales y capturas auxiliares. La suma de rutas medidas fue de al menos 132.743.168 bytes. El espacio libre de `/data` se midió antes y después, con 7.660.589.056 bytes al inicio y 7.618.273.280 tras las pruebas y la limpieza de los artefactos medidos. Los resultados, tiempos, causas y huellas quedan en `.local/test-evidence/pr20-r5/`.
+
+### iPhone físico
+
+Las 16 pruebas permanecen NO EJECUTADAS. La aceptación con Telegram real y un iPhone físico queda pendiente, igual que la siguiente revisión independiente, la decisión de publicar y la fusión de la PR.
+
+## 2026-11-25 · Sexta revisión de la PR 20
+
+La revisión independiente de `e21639c` detectó regresiones en menús de bots y en recuperación de álbumes en cola. Se verificó el candidato `885f00f` contra `e21639c` para las regresiones y contra `7d41d25` (v59) para los toques y la interfaz. Las pruebas de navegador usaron loopback, Telegram sintético y los drivers del producto.
+
+| Hallazgo | Causa y corrección | Prueba de regresión |
+| --- | --- | --- |
+| R1 | El MIME incompatible se clasificaba como rechazo del protocolo y descartaba el menú. `file-unsupported` pertenece a la fila 7 de la clasificación, conserva las opciones, cede a los demás bots si se agotan y no penaliza al proveedor. El aviso de compatibilidad se descarta si llegó un audio compatible que falló por otro motivo. La búsqueda individual conserva el menú cuando hay alternativas con el mismo presupuesto de callbacks que los lotes para ese menú. | `ordered-bot-driver.test.ts` comprueba Ogg y FLAC seguidos de WAV, un menú agotado, un audio válido rechazado durante el guardado, la salud tras tres consultas y la búsqueda individual. `turnaround/unsupported-format` comprueba el menú por el driver, el worker y la sesión reales. |
+| R2 | La pausa de la cabeza dependía de haber observado `offline`. La transición a primer plano, la restauración de página o un evento `online` permiten retomar por cuenta e ID. El evento se registra desde el comienzo de la adquisición para cubrir la llegada anterior al asentamiento. Las notificaciones internas de Telegram no rearman la pausa. | Los casos `queue-album-reconnect-foreground`, `queue-album-reconnect-online` y `queue-album-reconnect-online-before-settle` comprueban la recuperación y el avance de la siguiente colección. `queue-album-reconnect-exhausted` comprueba que el álbum queda pausado mientras sigue en primer plano sin un evento de recuperación. `queue-album-clear-retry` comprueba la recuperación de red y el almacenamiento. |
+| #3 | El contador cobraba cualquier pérdida de disponibilidad. Sólo cuenta relanzamientos consecutivos cuando el trabajo ya está listo para otro intento. Se rearma al arrancar la descarga, al observar un bloqueo externo, al volver al primer plano, al recuperar red o al reintentar. Si se agota, el dock muestra que el trabajo sigue en cola y conserva el motivo hasta que se retoma. | `queue-dispatch-normal-deferrals` fuerza dos diferimientos en la versión y uno al leer el álbum. Los tres se recuperan solos. `queue-dispatch-relaunch-cap` fuerza dos intentos inmediatos sin avance, comprueba que el aviso sigue visible después de cinco segundos y verifica que el primer plano rearma la admisión. |
+| #4 | `USER_IS_BLOCKED` parecía una entrega de resultado incierto y el texto sólo reconocía dos respuestas literales con `replyTo`. La negativa explícita de RPC y las peticiones cerradas de `/start` en mensajes correlacionados se clasifican como `needs-start`. Se intenta el siguiente proveedor y se conserva el aviso de M9 si se agotan. | `ordered-bot-driver.test.ts` recorre la negativa RPC, mensajes recientes, bienvenida multilínea, variante española con emoji y un control con `/start` dentro del título de una canción. La búsqueda individual también cede al siguiente bot tras la negativa RPC. |
+| Observaciones menores | Un resultado mixto en búsqueda individual omite la afirmación de ausencia global. La pausa de álbum conserva el motivo concreto en el dock e identifica «Reintentar descarga en cola». Si el navegador está offline, el motivo sigue visible y el botón vuelve cuando hay red para admitirlo. El conflicto posterior a una transferencia interactiva conserva el tratamiento de entrega incierta, igual que un conflicto de callback después del acuse. | La búsqueda individual mezcla una ausencia explícita con un inicio pendiente mediante el driver real. Las pruebas de cola comprueban el aviso persistente, el reintento y las copias ya guardadas. |
+
+### Regresiones sobre la base de revisión
+
+En `e21639c` fallan 12 de los 24 casos del driver. En el candidato pasan los 24. El control que menciona `/start` en un título y las pruebas anteriores pasan en las dos revisiones. En Chromium, las cinco pruebas nuevas de cola fallan en `e21639c` porque la cabeza sigue pausada después del evento o porque el aviso de relanzamientos caduca. Esas cinco pasan en Chromium y WebKit sobre el candidato. En la prueba de formato con el cliente de sesión real, la base ejecuta sólo la opción 1 y consulta a otro bot. El candidato ejecuta las opciones 1 y 2 en el mismo bot y guarda la copia en ambos motores.
+
+### Local
+
+`npm run test:unit` pasó 1.013/1.013. El conjunto focalizado del driver y la adquisición pasó 118/118. Pasaron `npm run typecheck`, `npm run typecheck:tests`, `npm run lint` y `npm run build`. Pasaron además 73/73 pruebas de servidor y 10/10 de Python. El build se ejecutó con el árbol exacto del candidato y produjo el manifiesto y el service worker.
+
+### Navegador
+
+- Matriz funcional de playlist, cola y toques, 54/54 en Chromium 154.0.8037.57 y 54/54 en WebKit 27.2. Por motor, seis variantes principales y 48 de cola y toques. Las copias verificadas fueron 30/30 en cada una de las tres descargas de un toque, 30/30 tras recarga y 9/10 en cada caso de pista ausente y de checkpoint antiguo.
+- Matriz de reanudación, 46/46 por motor. En la primera corrida Chromium obtuvo 45/46 por un agotamiento del tiempo de espera en `notifications-off`. La repetición focalizada pasó. WebKit pasó 46/46 en la primera corrida.
+- `turnaround/unsupported-format`, 2/2 en el candidato. `tap-baseline`, 2/2 sólo sobre `7d41d25`, reproduciendo el bloqueo de toque histórico.
+- Interfaz, 11/12 por motor en `7d41d25` y el candidato. Ambas corridas del arnés salieron con código 1 por el mismo botón del minirreproductor fuera del viewport al 200 % con movimiento reducido. Ambas conservan los dos avisos de `ResizeObserver` y los 24 de CSP en WebKit. Los inventarios SHA-256 verificaron 311 archivos en v59 y 312 en el candidato antes y después de las pruebas.
+
+Las primeras corridas concurrentes tuvieron tiempos de espera en la reproducción de `full`, en la espera de reconexión de WebKit y en la interfaz de la base. Se amplió el plazo para que el arnés observe la pausa de álbum y se repitieron las matrices. Una corrida focalizada de WebKit pasó sus siete casos de cola pero salió con código 1 al combinar `turnaround` con los otros modos, porque el arnés activa su instrumentación mediante un selector exclusivo. Ejecutado por separado, el caso de formato pasó en ambos motores. Las causas y los resultados originales se conservan en `.local/test-evidence/pr20-r6/`, junto al resumen y sus huellas.
+
+Se retiraron snapshots, builds, perfiles, datos sintéticos, cachés y capturas auxiliares. Se recuperaron al menos 121.085.952 bytes medidos y `.local/tmp/` quedó vacío. El espacio disponible en `/data` fue 7.595.147.264 bytes antes de las pruebas y 7.588.220.928 después de limpiar. Se conservaron cerca de 1 MiB de informes y logs para reproducir las comprobaciones.
+
+### iPhone físico
+
+Las 16 pruebas de aceptación permanecen NO EJECUTADAS. Quedan pendientes la verificación en iPhone con Telegram real, la revisión independiente siguiente y la decisión del propietario sobre publicación y fusión.
+
+## 2026-11-25 · Séptima revisión de la PR 20
+
+La revisión partió de `9b03e62`. El candidato `0a235b0` limita el cambio de producto a `src/telegram/bot-search-driver.ts`, `src/telegram/session-client.ts` y `src/library/ordered-bot-acquisition.ts`. Las pruebas nuevas de `tests/unit/ordered-bot-driver.test.ts` conectan el `TelegramSessionClient` y el driver reales por un puente de prueba que publica el progreso y espera la señal de asentamiento. El transporte de prueba y las RPC son sintéticos.
+
+| Hallazgo | Causa, cambio y razón | Prueba sobre la base y el candidato |
+| --- | --- | --- |
+| R3 | Después de publicar `bot-search.sending`, el driver retrocedía de `uncertain` a `not-dispatched` al recibir `USER_IS_BLOCKED`. El driver conserva el estado de entrega publicado y devuelve `needs-start`. La adquisición considera concluyente ese rechazo explícito cuando pertenece a la operación vigente. Así distingue la certeza del rechazo RPC del acuse del bot y mantiene la comprobación de cuarentena del cliente. Un canal caído, una operación ajena y los demás resultados de entrega incierta conservan sus guardas. | Cuatro casos fallan en `9b03e62` con `error: 'protocol'`. En el candidato, se prueba el bot 2 tanto si el rechazo ocurre en la búsqueda como si ocurre en el callback. La sesión sigue conectada y se guarda la copia si el siguiente bot tiene la canción. Si ese bot tampoco la tiene, se muestra el aviso de M9. La prueba de regresión de entrega para otros errores sigue comprobando la cuarentena. |
+| R4 | El presupuesto de callback necesario para reutilizar opciones de R1 volvía a publicar el menú también después de descargar correctamente una canción individual. El cliente conserva la capacidad de reutilizar el menú tras un rechazo de archivo y sólo repone el menú después de una descarga correcta cuando la adquisición necesita validar o guardar la copia mediante `accept`. Así vuelve a quedar sin opciones ni temporizador visible tras el éxito individual, como en v59. El protocolo entre cliente y worker conserva el mismo formato. | Dos pruebas con el cliente y driver reales fallan en `9b03e62` con `expired` al avanzar 120.001 ms. Una descarga tiene éxito al primer callback. La otra recibe Ogg y usa la segunda opción del mismo menú, con una tercera todavía disponible. Ambas completan la descarga y conservan `error: null` y `expiresAt: null` en el candidato. |
+| #3 menor | Sigue abierto. Una transición a primer plano durante una pista anterior puede permitir una ronda adicional de recuperación cuando una pista posterior falla. Distinguirlas con fiabilidad requiere que la adquisición del álbum comunique el comienzo de la interrupción al controlador de cola a través de `album-acquisition.ts` y `album-download.ts`. Usar el mensaje del dock como señal mezclaría esperas y fallos distintos. Se conserva el límite actual de una sola ronda adicional. | La observación de la revisión se verificó por lectura. Se ejecutaron los casos de la ronda anterior para asegurar la pausa sin bucle, la recuperación por eventos y la transición `online` justo antes del asentamiento. |
+
+### Verificación local
+
+Las seis pruebas nuevas fallaron sobre un snapshot de `9b03e62` y pasaron en `0a235b0`. Obtuvieron 219/219 las pruebas focalizadas, 1.019/1.019 `npm run test:unit`, 73/73 las pruebas de servidor y 10/10 las de Python. Pasaron `npm run typecheck`, `npm run typecheck:tests`, `npm run lint` y `npm run build`. La compilación utilizó el árbol exacto del candidato y se verificaron el manifiesto de versión y el service worker.
+
+### Navegador
+
+- Chromium 154.0.8037.57 y WebKit 27.2 obtuvieron 54/54 en la matriz funcional. Cada motor pasó seis variantes principales de playlist y 48 variantes de cola y toques. La primera corrida de cola en WebKit salió con código 1 y 47/48 por un error de control de acceso en la API de Biblioteca simulada durante `queue-resumed-album-pagehide`. En esa prueba no hubo RPC de Telegram. Pasaron la repetición focalizada y la repetición completa de la cola con 48/48 y código cero, sin cambiar producto ni arnés.
+- La matriz de reanudación pasó 46/46 por motor en la primera ejecución. `turnaround/unsupported-format` conservó los callbacks 1 y 2 del mismo menú en ambos motores, con 2/2. `tap-baseline` reprodujo el defecto histórico con 2/2 sólo sobre `7d41d25`.
+- Interfaz dio 11/12 por motor tanto en `7d41d25` como en `0a235b0`. El botón del minirreproductor al 200 % con movimiento reducido quedó fuera del viewport y el arnés salió con código 1 en ambos árboles. Se repitieron los dos avisos de `ResizeObserver` y los 24 de CSP de WebKit. Los inventarios SHA-256 verificaron 311 archivos de v59 y 312 del candidato antes y después de las pruebas.
+
+### Limpieza e iPhone
+
+Se retiraron snapshots, builds, cachés, perfiles de navegador, datos sintéticos y 67 capturas auxiliares. Las rutas medidas recuperaron al menos 60.039.168 bytes. `/data` tenía 7.309.606.912 bytes libres al inicio y 7.303.114.752 tras la limpieza. `.local/tmp/` quedó vacío. `.local/test-evidence/pr20-r7/` conserva resúmenes, causas y huellas. Las 16 pruebas físicas en iPhone siguen NO EJECUTADAS. La PR queda pendiente de revisión independiente y de las decisiones de publicación y fusión.
+
+La octava ronda y la matriz de requisitos de la PR 20 se registran en [T24 · Cola de colecciones y descargas de la PR 20](T24-cola-colecciones.md).

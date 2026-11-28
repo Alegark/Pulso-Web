@@ -1,7 +1,8 @@
 import {resolveLocalAlbumMetadata} from './album-metadata';
+import {albumEditionId,catalogChoiceOrder,displayTrackAlbum,searchedITunesRelease,trackCatalogRelease} from './catalog-release';
 import type {Track} from './library';
 
-export type MetadataProvenance = 'manual' | 'tags';
+export type MetadataProvenance = 'manual' | 'tags' | 'catalog';
 
 /** A disposable local view, never a Track/Asset/QueueEntry or verified artist/album ID. */
 export interface LibraryGroup {
@@ -38,42 +39,103 @@ function identity(value: string | null): string | null {
  return value === null || value.trim() === '' ? null : value.normalize('NFC');
 }
 
+// Presentation equivalence is confined to the disposable album view. Artist browsing
+// and stored labels retain their existing contract; no punctuation/accent/fuzzy match.
+function albumIdentity(value: string | null): string | null {
+ return identity(value)?.trim().replace(/\s+/gu, ' ').toLowerCase().normalize('NFC') ?? null;
+}
+
+function albumKeys(tracks: readonly Track[], sources: ReturnType<typeof resolveLocalAlbumMetadata>[]): string[] {
+ const releases=tracks.map(trackCatalogRelease);
+ const bridges=new Map<number,Set<string>>();
+ for(const release of releases){
+  if(release?.source!=='spotify'||!release.itunesReleaseId)continue;
+  const key=JSON.stringify(['album-catalog','spotify',release.releaseId]);
+  const editions=bridges.get(release.itunesReleaseId);
+  if(editions)editions.add(key);else bridges.set(release.itunesReleaseId,new Set([key]));
+ }
+ const crossed=tracks.map(track=>{
+  const id=searchedITunesRelease(track);
+  const editions=id===null?undefined:bridges.get(id);
+  return editions?.size===1?[...editions][0]:null;
+ });
+ const bases = tracks.map((track, index) => {
+  const release=releases[index];
+  if(crossed[index])return crossed[index];
+  if(release?.source==='itunes'){
+   const editions=bridges.get(release.releaseId);
+   if(editions?.size===1)return [...editions][0];
+  }
+  if(release)return JSON.stringify(['album-catalog',release.source,release.releaseId]);
+  const editionId=albumEditionId(track);
+  if(editionId!==null)return JSON.stringify(['album-catalog',typeof editionId==='number'?'itunes':'musicbrainz',editionId]);
+  const album = albumIdentity(track.album);
+  const source = sources[index];
+  const credit = source.albumArtist.state === 'known' ? source.albumArtist.value : track.artist;
+  return JSON.stringify(['album-local-v2', album, album === null ? null : albumIdentity(credit)]);
+ });
+ // Unknown compilation may join one compatible declaration, never bridge true/false.
+ // Scan first so neither partition nor key depends on encounter order.
+ const declarations = new Map<string, Set<boolean>>();
+ tracks.forEach((track, index) => {
+  const flag = sources[index].compilation;
+  if (albumIdentity(track.album) === null || flag.state !== 'known') return;
+  let values = declarations.get(bases[index]);
+  if (!values) declarations.set(bases[index], values = new Set());
+  values.add(flag.value);
+ });
+ return bases.map((base, index) => {
+  if (crossed[index]||releases[index]||albumEditionId(tracks[index])!==null||albumIdentity(tracks[index].album) === null) return base;
+  const flag = sources[index].compilation;
+  const values = declarations.get(base);
+  const compilation = flag.state === 'known' ? flag.value : values?.size === 1 ? [...values][0] : null;
+  return JSON.stringify([base, compilation]);
+ });
+}
+
 function addUnique<T>(values: T[], value: T): void {
  if (!values.includes(value)) values.push(value);
 }
 
 function fieldEvidence(track: Track, field: 'artist' | 'album'): MetadataProvenance | null {
  if (Object.prototype.hasOwnProperty.call(track.manualOverrides, field)) return 'manual';
+ if(field==='album'&&(trackCatalogRelease(track)||albumEditionId(track)!==null))return 'catalog';
  return identity(track[field]) === null ? null : 'tags';
 }
 
 function groupTracks(tracks: readonly Track[], kind: LibraryGroup['kind']): LibraryGroup[] {
  const groups = new Map<string, MutableGroup>();
- for (const track of tracks) {
+ const sources = tracks.map(resolveLocalAlbumMetadata);
+ const keys = kind === 'album' ? albumKeys(tracks, sources) : [];
+ for (const [index, track] of tracks.entries()) {
   const artist = identity(track.artist);
-  const album = identity(track.album);
+  const effectiveAlbum=displayTrackAlbum(track);
+  const album = identity(effectiveAlbum);
   const unknown = (kind === 'artist' ? artist : album) === null;
   // JSON tuples are unambiguous even with delimiters, quotes or literal bucket labels.
   // All missing albums share an explicit bucket, rather than implying an album entity.
-  const source=resolveLocalAlbumMetadata(track);
-  const albumArtist=source.albumArtist.state==='known'?source.albumArtist.value:null;
-  const key = JSON.stringify(kind === 'artist' ? ['artist', artist]
-   : album!==null&&albumArtist!==null ? ['album-local-v1',album,'albumArtist',albumArtist.normalize('NFC'),source.compilation.state==='known'?source.compilation.value:null]
-   : ['album', album, album === null ? null : artist]);
+  const source=sources[index];
+  const albumArtist=source.albumArtist.state==='known'?source.albumArtist.value:trackCatalogRelease(track)?.artist??null;
+  const key = kind === 'artist' ? JSON.stringify(['artist', artist]) : keys[index];
   let group = groups.get(key);
   if (!group) {
    group = {
     key, kind, unknown, completeness: 'unknown',
     label: unknown ? (kind === 'artist' ? 'Artista desconocido' : 'Sin álbum (agrupación local)')
-     : (kind === 'artist' ? track.artist! : track.album!),
+     : (kind === 'artist' ? track.artist! : effectiveAlbum!),
     artist: kind === 'album' && !unknown ? albumArtist??(artist!==null?track.artist:null) : null,
     ...(kind==='album'&&!unknown&&source.albumArtist.state==='known'?{criterion:'albumArtist' as const,albumArtistSource:source.albumArtist}:{}),
     labels: [], artistLabels: [], trackIds: [], provenance: [], evidence: {artist: [], album: []},
    };
    groups.set(key, group);
   }
+  if (kind === 'album' && !unknown && source.albumArtist.state === 'known' && !group.albumArtistSource) {
+   group.criterion = 'albumArtist';
+   group.albumArtistSource = source.albumArtist;
+   group.artist = source.albumArtist.value;
+  }
   group.trackIds.push(track.id);
-  if (!unknown) addUnique(group.labels, (kind === 'artist' ? track.artist : track.album)!);
+  if (!unknown) addUnique(group.labels, (kind === 'artist' ? track.artist : effectiveAlbum)!);
   if (artist !== null) addUnique(group.artistLabels, track.artist!);
   for (const field of kind === 'artist' ? ['artist'] as const : ['artist', 'album'] as const) {
    const provenance = fieldEvidence(track, field);
@@ -91,7 +153,7 @@ export function groupArtists(tracks: readonly Track[]): LibraryGroup[] {
  return groupTracks(tracks, 'artist');
 }
 
-/** Provisional grouping by exact NFC album title + available artist, with no completeness inference. */
+/** Provisional presentation-equivalent title/credit groups, with no completeness inference. */
 export function groupAlbums(tracks: readonly Track[]): LibraryGroup[] {
  return groupTracks(tracks, 'album');
 }
@@ -112,7 +174,7 @@ export function getGroupTracks(tracks: readonly Track[], group: LibraryGroup): T
 
 /** Apply only within an explicitly selected album, before pagination/queue snapshot. */
 export function orderAlbumRows<R extends {track:Track}>(rows:readonly R[]):R[] {
- const ordinal=(t:Track,field:'disc'|'track')=>{const s=resolveLocalAlbumMetadata(t)[field];return s.state==='known'?s.value.current:null;};
+ const ordinal=(t:Track,field:'disc'|'track')=>{const s=resolveLocalAlbumMetadata(t)[field];return s.state==='known'?s.value.current:catalogChoiceOrder(t)?.[field]??null;};
  const compare=(a:number|null,b:number|null)=>a===b?0:a===null?1:b===null?-1:a-b;
  return rows.map((row,index)=>({row,index,disc:ordinal(row.track,'disc'),track:ordinal(row.track,'track')})).sort((a,b)=>compare(a.disc,b.disc)||compare(a.track,b.track)||a.index-b.index).map(x=>x.row);
 }

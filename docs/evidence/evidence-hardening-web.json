@@ -1,0 +1,189 @@
+{
+  "sourceCommit": "fd26b739bcdbef1b405b561aa58777e1076036fd",
+  "plan": "Workers Free / Turnstile Free / USD 0",
+  "previous": {
+    "deployment": "4dcedb95-2295-4a2e-ad22-8a6450b48553",
+    "version": "27280203-cf68-4a5e-b917-7257d1005974",
+    "entry": "/releases/bed8f65288828366.html",
+    "manifestSha256": "f23b03d6a428cc2fa807828bec4176918884fdf7b840053367d824c8f35102b9",
+    "legacyPublishedAt": "2026-11-19T01:01:19.783Z",
+    "namespaceCollisions": []
+  },
+  "mcp": {
+    "status": "PASS",
+    "deployment": "f3ca9150-c8ac-4063-9609-9e52b3b67b75",
+    "createdAt": "2026-11-19T01:11:54.388Z",
+    "version": "468a2c88-a01d-4e2d-a14d-796ccedc7710",
+    "versionNumber": 47,
+    "percentage": 100,
+    "bindings": [
+      {
+        "name": "ASSETS",
+        "type": "assets"
+      },
+      {
+        "name": "CATALOG",
+        "type": "durable_object_namespace",
+        "class_name": "CatalogCoordinator",
+        "namespace_id": "746ddaa2739347e6a8ad334ea8e95ace"
+      },
+      {
+        "name": "PULSO_ACCOUNT_WRITE_LIMIT",
+        "type": "ratelimit",
+        "namespace_id": "21803",
+        "simple": {
+          "limit": 60,
+          "period": 60
+        }
+      },
+      {
+        "name": "PULSO_AUTH_ATTEMPT_LIMIT",
+        "type": "ratelimit",
+        "namespace_id": "21802",
+        "simple": {
+          "limit": 20,
+          "period": 60
+        }
+      },
+      {
+        "name": "PULSO_AUTH_COOKIE_SECRET",
+        "type": "secret_text"
+      },
+      {
+        "name": "PULSO_AUTH_EMAIL_LIMIT",
+        "type": "ratelimit",
+        "namespace_id": "21801",
+        "simple": {
+          "limit": 5,
+          "period": 60
+        }
+      },
+      {
+        "name": "PULSO_AUTH_GOOGLE_ENABLED",
+        "type": "secret_text"
+      },
+      {
+        "name": "PULSO_NEON_AUTH_URL",
+        "type": "secret_text"
+      },
+      {
+        "name": "PULSO_NEON_DATA_API_URL",
+        "type": "secret_text"
+      },
+      {
+        "name": "PULSO_SPOTIFY_LIMIT",
+        "type": "ratelimit",
+        "namespace_id": "21804",
+        "simple": {
+          "limit": 120,
+          "period": 60
+        }
+      },
+      {
+        "name": "PULSO_TURNSTILE_SECRET",
+        "type": "secret_text"
+      },
+      {
+        "name": "PULSO_TURNSTILE_SITE_KEY",
+        "type": "plain_text"
+      },
+      {
+        "name": "TELEGRAM_API_IDENTITY",
+        "type": "secret_text"
+      }
+    ],
+    "module": {
+      "bytes": 331080,
+      "sha256": "37aaab85af325cf1c5d7001b9693d5ba4044eb0228d56f3e8ed1ad685e4e9850"
+    },
+    "turnstile": {
+      "active": true,
+      "sitekey": "0x4AAAAAAGH8FZVVHXNQrlQ9",
+      "mode": "managed",
+      "clearance": "no_clearance"
+    }
+  },
+  "https": {
+    "status": "PASS",
+    "entry": "/releases/1754e5aa15118f2a.html",
+    "root": 200,
+    "serviceWorker": 200,
+    "manifestFiles": 235,
+    "publicFilesPassed": 232,
+    "exclusions": [
+      ".assetsignore",
+      "_headers",
+      "account-config.json"
+    ],
+    "navigations": [
+      "/releases/bed8f65288828366",
+      "/releases/734a7031cc9996ea",
+      "/releases/b837a1c9ee817b34"
+    ],
+    "anonymous": {
+      "/api/account-profile": 401,
+      "/api/account-library": 401
+    },
+    "turnstileSiteKey": "0x4AAAAAAGH8FZVVHXNQrlQ9",
+    "scriptAndFrameCsp": true,
+    "rateLimit": [
+      {
+        "status": 400,
+        "code": "TURNSTILE_REQUIRED"
+      },
+      {
+        "status": 400,
+        "code": "TURNSTILE_REQUIRED"
+      },
+      {
+        "status": 400,
+        "code": "TURNSTILE_REQUIRED"
+      },
+      {
+        "status": 400,
+        "code": "TURNSTILE_REQUIRED"
+      },
+      {
+        "status": 400,
+        "code": "TURNSTILE_REQUIRED"
+      },
+      {
+        "status": 400,
+        "code": "TURNSTILE_REQUIRED"
+      },
+      {
+        "status": 429,
+        "code": "RATE_LIMITED",
+        "retryAfter": "60"
+      }
+    ]
+  },
+  "freeze": {
+    "asOf": "2026-11-19T01:11:03.099Z",
+    "currentEntry": "/releases/1754e5aa15118f2a.html",
+    "retainedPublications": 0,
+    "legacyRetained": true,
+    "copiedFiles": 182,
+    "totalFiles": 235,
+    "retiredFiles": 0,
+    "retiredBytes": 0,
+    "retired": []
+  },
+  "publishedManifest": {
+    "path": ".local/test-evidence/hardening-delivery/site-manifest.json",
+    "sha256": "48d297af9e1f2fb974e25fa2f155a4e66004a088606bbc924e2c376a4eba78f3",
+    "bytes": 47291
+  },
+  "cleanup": {
+    "removed": true,
+    "candidateBytesRemoved": 91434864,
+    "freeBeforeBuild": 4043669504,
+    "freeBeforeCleanup": 3945406464,
+    "freeAfterCleanup": 4042121216,
+    "freeDeltaDuringCleanup": 96714752
+  },
+  "pending": [
+    "Aceptación física en iPhone",
+    "Verificación pública de una retirada real"
+  ]
+}

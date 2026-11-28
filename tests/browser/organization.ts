@@ -10,6 +10,8 @@ import {transactionDone} from '../../src/storage/transaction-done';
 import {WRITER_LOCK} from '../../src/storage/asset-reader';
 import {Player} from '../../src/playback/player';
 import {importFile} from '../../src/imports/import-file';
+import {ACTIVE_LIBRARY_ACCOUNT} from '../../src/accounts/library-local';
+import {libraryMembershipKey,makeLibraryMembership} from '../../src/library/library-membership';
 const params=new URLSearchParams(location.search);
 if(params.has('inspect')){
  parent.postMessage({organizationInspection:await inspectOrganizationApply(params.get('inspect')!)},location.origin);
@@ -53,6 +55,68 @@ if(params.has('inspect')){
   b.tracks.forEach(t=>t.audio={algorithm:'sha256',sha256:'a'.repeat(64),bytes:100});const plan=await previewOrganization(blob(b));await applyOrganization(plan.planId);
   const tracks=await all<Track>('tracks'),lists=await all<Playlist>('playlists');assert(tracks.length===3&&lists.length===2,'merged identities');const restored=tracks.find(x=>x.organizationRef?.id===t.id)!;assert(restored.id!==t.id&&restored.assetId===null,'collision not remapped');assert(lists.find(x=>x.organizationRef?.id===p.id)?.entries[0].trackId===restored.id,'remap relationship');
  });
+ await check('restoring across accounts preserves the original track, asset, membership and playlist',async()=>{
+  const accountA=id(),accountB=id();
+  await writeRecord('settings',ACTIVE_LIBRARY_ACCOUNT,accountA);
+  const {track}=await importFile(wav(),new AbortController().signal,()=>{},{backend:'idb'});
+  const list:Playlist={id:id(),accountId:accountA,name:'Cuenta A',entries:[{id:id(),trackId:track.id}],revision:1};
+  await writeRecord('playlists',list.id,list);
+  const key=libraryMembershipKey(track.id),member=makeLibraryMembership(track.id,false);
+  await writeRecord('settings',key,member);
+  const saved=await exportOrganization(),before=await state();
+  await writeRecord('settings',ACTIVE_LIBRARY_ACCOUNT,accountB);
+  const plan=await previewOrganization(saved);
+  assert(plan.counts.newTracks===1&&plan.counts.newPlaylists===1,'preview conflated accounts');
+  await applyOrganization(plan.planId);
+  const after=await state(),restored=after.tracks.find(t=>t.accountId===accountB),restoredList=after.playlists.find(p=>p.accountId===accountB);
+  assert(JSON.stringify(await readRecord('tracks',track.id))===JSON.stringify(track),'original track overwritten');
+  assert(JSON.stringify(await readRecord('playlists',list.id))===JSON.stringify(list),'original playlist overwritten');
+  assert(JSON.stringify(await readRecord('settings',key))===JSON.stringify(member),'original membership overwritten');
+  assert(restored&&restored.id!==track.id&&restored.assetId===null,'restored track identity or download');
+  assert(restoredList&&restoredList.id!==list.id&&restoredList.entries[0].trackId===restored.id,'restored playlist links');
+  assert(JSON.stringify(after.assets)===JSON.stringify(before.assets)&&await verifiedAsset(track.assetId,true),'original bytes changed');
+ });
+ await check('an occupied foreign key after preview rolls back all new rows and the receipt',async()=>{
+  const active=id(),foreign=id();
+  await writeRecord('settings',ACTIVE_LIBRARY_ACCOUNT,active);
+  const b=backup(),plan=await previewOrganization(blob(b)),key=b.playlists[0].ref.id;
+  const list:Playlist={id:key,accountId:foreign,name:'Otra cuenta',entries:[],revision:1};
+  await writeRecord('playlists',key,list);
+  const before=await state();
+  await error(()=>applyOrganization(plan.planId),'storage');
+  assert(JSON.stringify(before)===JSON.stringify(await state()),'collision changed entities');
+  assert((await inspectOrganizationApply(plan.operationId)).state==='not-committed','collision committed receipt');
+ });
+ for(const seedMemberships of [false,true])await check(`organization limits count only active rows (memberships: ${seedMemberships})`,async()=>{
+  const active=id(),foreign=id();
+  const db=await openDatabase();
+  try{
+   const tx=db.transaction(['tracks','settings'],'readwrite'),done=transactionDone(tx);
+   for(const accountId of [active,foreign])for(let i=0;i<3000;i++){
+    const track:Track={id:id(),accountId,assetId:null,title:`Pista ${i}`,artist:null,album:null,duration:1,favorite:false,revision:1,createdAt:'2026-10-31T00:00:00.000Z',manualOverrides:{}};
+    if(!seedMemberships||accountId===active)tx.objectStore('tracks').add(track,track.id);
+    if(seedMemberships)tx.objectStore('settings').add(makeLibraryMembership(track.id,true),libraryMembershipKey(track.id));
+   }
+   tx.objectStore('settings').put(active,ACTIVE_LIBRARY_ACCOUNT);
+   await done;
+  }finally{db.close();}
+  const saved=await exportOrganization();
+  assert(parseOrganization(await saved.text()).tracks.length===3000,'wrong export count');
+  const plan=await previewOrganization(saved);
+  assert(plan.counts.tracks===3000&&plan.counts.newTracks===0,'wrong preview count');
+  await applyOrganization(plan.planId);
+ });
+ await check('a Spotify placeholder of unknown duration round-trips with a v3 backup',async()=>{
+  const {t,p}=await seed();
+  await writeRecord('tracks',t.id,{...t,duration:0,catalogChoice:{id:'spotify:0000000000000000000000',source:'spotify',title:t.title,artist:t.artist,album:null,duration:null}});
+  const saved=await exportOrganization(),b=parseOrganization(await saved.text());
+  assert(b.version===3&&b.tracks[0].duration===0&&b.tracks[0].inLibrary,'placeholder export');
+  await reset();
+  await applyOrganization((await previewOrganization(saved)).planId);
+  const restored=await readRecord<Track>('tracks',t.id);
+  assert(restored?.duration===0&&restored.assetId===null,'placeholder restore');
+  assert((await readRecord<Playlist>('playlists',p.id))?.entries[0].trackId===t.id,'playlist restore');
+ });
  await check('same reference with different known fingerprint blocks even use-backup',async()=>{
   const b=backup(1);b.tracks[0].audio={algorithm:'sha256',sha256:'a'.repeat(64),bytes:10};await applyOrganization((await previewOrganization(blob(b))).planId);
   const changed={...b,exportId:id(),tracks:b.tracks.map(t=>({...t,title:'Cambio',audio:{algorithm:'sha256' as const,sha256:'b'.repeat(64),bytes:10}}))};
@@ -77,7 +141,7 @@ if(params.has('inspect')){
   const {t}=await seed();await writeRecord('tracks',t.id,{...t,title:''});await error(exportOrganization,'local-corrupt');await writeRecord('tracks',t.id,t);const p=(await all<Playlist>('playlists'))[0];await writeRecord('playlists',p.id,{...p,entries:[{id:id(),trackId:id()}]});await error(()=>previewOrganization(blob(backup())),'local-corrupt');
  });
  await check('malformed/future/secret fields/invalid relations and fatal UTF8 rejected before IDB',async()=>{
-  const before=await state();await error(()=>previewOrganization(new Blob(['{'])),'format');await error(()=>previewOrganization(raw({...backup(),version:2})),'version');await error(()=>previewOrganization(raw({...backup(),session:'secret'})),'format');const b=backup();b.playlists[0].entries[0].track=ref();await error(()=>previewOrganization(raw(b)),'relations');await error(()=>previewOrganization(new Blob([new Uint8Array([0xff,0xfe])])),'format');assert(JSON.stringify(before)===JSON.stringify(await state()),'invalid input mutated');
+  const before=await state();await error(()=>previewOrganization(new Blob(['{'])),'format');await error(()=>previewOrganization(raw({...backup(),version:4})),'version');await error(()=>previewOrganization(raw({...backup(),session:'secret'})),'format');const b=backup();b.playlists[0].entries[0].track=ref();await error(()=>previewOrganization(raw(b)),'relations');await error(()=>previewOrganization(new Blob([new Uint8Array([0xff,0xfe])])),'format');assert(JSON.stringify(before)===JSON.stringify(await state()),'invalid input mutated');
  });
  await check('8 MiB checked before read; hostile names remain inert text; closed DTO fields',async()=>{
   const huge=new Blob([new Uint8Array(8*1024*1024+1)]);huge.arrayBuffer=()=>{throw new Error('should not read');};await error(()=>previewOrganization(huge),'limits');
@@ -95,19 +159,30 @@ if(params.has('inspect')){
   await writeRecord('jobs','unresolved',{operationId:id(),state:'uncertain'});await error(()=>applyOrganization(p.planId),'imports-unresolved');assert(!(await all('tracks')).length,'gate wrote');
  });
  for(const mode of ['sync-quota','async-quota','sync-abort','async-abort'] as const)await check(`${mode}: all entity writes plus receipt roll back together`,async()=>{
-  const p=await previewOrganization(blob(backup(3))),before=await state(),put=IDBObjectStore.prototype.put;let writes=0;
-  IDBObjectStore.prototype.put=function(...args:Parameters<IDBObjectStore['put']>){if(this.name==='tracks'&&++writes===2){
+  const p=await previewOrganization(blob(backup(3))),before=await state(),{put,add}=IDBObjectStore.prototype;let writes=0;
+  function fault(this:IDBObjectStore){if(this.name==='tracks'&&++writes===2){
    if(mode==='sync-quota')throw new DOMException('injected','QuotaExceededError');
-   const tx=this.transaction;if(mode==='async-quota')Object.defineProperty(tx,'error',{value:new DOMException('injected','QuotaExceededError')});
-   if(mode.startsWith('async'))queueMicrotask(()=>tx.abort());else tx.abort();
-  }return put.apply(this,args);};
-  try{await error(()=>applyOrganization(p.planId),mode.includes('quota')?'quota':'storage');}finally{IDBObjectStore.prototype.put=put;}
+   if(mode==='async-abort')queueMicrotask(()=>this.transaction.abort());
+   if(mode==='sync-abort')this.transaction.abort();
+  }}
+  IDBObjectStore.prototype.put=function(...args){fault.call(this);return put.apply(this,args);};
+  IDBObjectStore.prototype.add=function(...args){
+   fault.call(this);const result=add.apply(this,args);
+   // Fault the final acknowledgement so no pending request raises AbortError first.
+   if(mode==='async-quota'&&this.name==='settings'&&String(args[1]).startsWith('organization-backup:v1:receipt:')){
+    result.addEventListener('success',()=>{Object.defineProperty(this.transaction,'error',{value:new DOMException('injected','QuotaExceededError')});this.transaction.abort();});
+   }
+   return result;
+  };
+  try{await error(()=>applyOrganization(p.planId),mode.includes('quota')?'quota':'storage');}finally{Object.assign(IDBObjectStore.prototype,{put,add});}
   assert(JSON.stringify(before)===JSON.stringify(await state()),'partial entities');assert((await freshInspect(p.operationId)).state==='not-committed','receipt without entities');
  });
  await check('cancel before and during writes rolls back; successful retry same plan commits',async()=>{
   const p=await previewOrganization(blob(backup())),c=new AbortController();c.abort();await error(()=>applyOrganization(p.planId,c.signal),'cancelled');
-  const running=new AbortController(),put=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(...args:Parameters<IDBObjectStore['put']>){const r=put.apply(this,args);if(this.name==='tracks')running.abort();return r;};
-  try{await error(()=>applyOrganization(p.planId,running.signal),'cancelled');}finally{IDBObjectStore.prototype.put=put;}
+  const running=new AbortController(),{put,add}=IDBObjectStore.prototype;
+  IDBObjectStore.prototype.put=function(...args){const r=put.apply(this,args);if(this.name==='tracks')r.addEventListener('success',()=>running.abort());return r;};
+  IDBObjectStore.prototype.add=function(...args){const r=add.apply(this,args);if(this.name==='tracks')r.addEventListener('success',()=>running.abort());return r;};
+  try{await error(()=>applyOrganization(p.planId,running.signal),'cancelled');}finally{Object.assign(IDBObjectStore.prototype,{put,add});}
   assert(!(await all('tracks')).length&&(await inspectOrganizationApply(p.operationId)).state==='not-committed','cancel partial');await applyOrganization(p.planId);assert((await all('tracks')).length===2,'retry');
  });
  // Replaces only acknowledgement delivery, after the REAL IDB commit/abort event.
@@ -193,7 +268,7 @@ if(params.has('inspect')){
   await seed();await writeRecord('settings','artwork',new Blob([new Uint8Array(1024*1024)]));
   const getAll=IDBObjectStore.prototype.getAll, cursor=IDBObjectStore.prototype.openCursor;
   IDBObjectStore.prototype.getAll=function(...args:Parameters<IDBObjectStore['getAll']>){assert(this.name!=='settings','settings getAll');return getAll.apply(this,args);};
-  IDBObjectStore.prototype.openCursor=function(...args:Parameters<IDBObjectStore['openCursor']>){if(this.name==='settings')assert(args[0] instanceof IDBKeyRange && String(args[0].lower).startsWith('organization-backup:v1:'),'unbounded settings cursor');return cursor.apply(this,args);};
+  IDBObjectStore.prototype.openCursor=function(...args:Parameters<IDBObjectStore['openCursor']>){if(this.name==='settings')assert(args[0] instanceof IDBKeyRange && (String(args[0].lower).startsWith('organization-backup:v1:')||JSON.stringify(args[0].lower)==='["library-membership",1]'),'unbounded settings cursor');return cursor.apply(this,args);};
   try{const b=await exportOrganization();await previewOrganization(b);}finally{IDBObjectStore.prototype.getAll=getAll;IDBObjectStore.prototype.openCursor=cursor;}
  });
  await check('use-backup preserves real kept manifest, bytes, active engine and A/B/A queue',async()=>{

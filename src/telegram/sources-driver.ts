@@ -1,9 +1,11 @@
+import {classifyTelegramFailure,cooldownDeadline} from './rpc-failure';
 import type {tl} from '@mtcute/core';
 import {SOURCES_BOUNDS as B,copyEnvelope,isUuid,parseAccountBinding,parseSourcesCommand,parseSourcesReply,utf8Bytes,type AccountBinding,type Envelope,type Folder,type SourceRow,type SourcesError,type SourcesReply} from './sources-protocol';
 import {projectSourcesPage,ProjectionLimit,type PageAnchor,type ProjectedCandidate} from './sources-page';
 /** Worker-private, deliberately no generic call/resolve/search capability. */
 export interface DialogsRequest {readonly folderId:0|1;readonly excludePinned:boolean;readonly offsetId:number;readonly offsetDate:number;readonly offsetPeer:tl.TypeInputPeer;readonly limit:25}
-export interface SourcesDependency {getDialogs(request:DialogsRequest,signal:AbortSignal):Promise<unknown>;invalidateSession():void}
+export interface SourcesDependency {
+ getAccountCooldown?():{retryAt:number|null;retryBlocked:boolean}|null;getDialogs(request:DialogsRequest,signal:AbortSignal):Promise<unknown>;invalidateSession():void}
 export interface SourcesContext {readonly signal:AbortSignal;readonly current:()=>boolean}
 export interface SourcesDriver {
  getSaved():SourceRow|null;
@@ -20,18 +22,9 @@ interface Failure {error:SourcesError;retryAt:number|null;retryBlocked:boolean}
 const failure=(error:SourcesError):Failure=>({error,retryAt:null,retryBlocked:false});
 /** Reads only own data fields of an error, including SDK RpcError's normalized text/seconds. */
 export function sourcesFailure(error:unknown,now:number):Failure {
- const field=(key:string):unknown=>error&&typeof error==='object'?Object.getOwnPropertyDescriptor(error,key)?.value:undefined;
- const text=field('text')??field('errorMessage')??field('message');
- if(typeof text!=='string'||text.length>512)return failure('network');
- if(/^FLOOD_(?:PREMIUM_)?WAIT(?:_|$)/.test(text)){
-  const match=/_(\d+)$/.exec(text);const seconds=match?Number(match[1]):field('seconds');
-  const until=typeof seconds==='number'&&Number.isSafeInteger(seconds)&&seconds>=0?now+Math.max(1,seconds)*1000:NaN;
-  const retryAt=Number.isSafeInteger(until)&&until>now&&until<=8640000000000000?until:null;
-  return {error:'rate-limit',retryAt,retryBlocked:retryAt===null};
- }
- if(/^(AUTH_KEY_UNREGISTERED|SESSION_REVOKED|SESSION_EXPIRED|USER_DEACTIVATED|USER_DEACTIVATED_BAN)$/.test(text))return failure('session-expired');
- if(/^(CHANNEL_PRIVATE|CHAT_FORBIDDEN|USER_BANNED_IN_CHANNEL|CHAT_ADMIN_REQUIRED)$/.test(text))return failure('access');
- return failure('network');
+ const {error:kind,retryAt,retryBlocked}=classifyTelegramFailure(error,now);
+ if(kind==='rate-limit')return {error:kind,retryAt,retryBlocked};
+ return failure(kind==='access'||kind==='session-expired'?kind:'network');
 }
 /** Construct only after actual auth User validation. No IO occurs until an explicit page command.
  * The caller must supply its original non-reviving authority capture in context.current.
@@ -98,6 +91,8 @@ export function createSourcesDriver(bindingInput:AccountBinding,sessionId:string
     selected=Object.freeze(command.peerRefs.slice());return Object.freeze({...e,type:'sources.selected',revision:++revision,peerRefs:selected});
    }
    if(command.type==='sources.clear'){selected=Object.freeze([]);return Object.freeze({...e,type:'sources.cleared',revision:++revision});}
+   const shared=dependency.getAccountCooldown?.();
+   if(shared)return response(e,{error:'rate-limit',...shared});
    if(cooldown&&(cooldown.retryBlocked||(cooldown.retryAt!==null&&cooldown.retryAt>time.now())))return response(e,cooldown);
    cooldown=null;
    let anchor:PageAnchor|null=null;
@@ -121,7 +116,7 @@ export function createSourcesDriver(bindingInput:AccountBinding,sessionId:string
     const cause=sourcesFailure(error,time.now());if(!f.cause)f.cause=cause;
     // Session lifecycle is independent of the first visible cause of this attempt.
     if(cause.error==='session-expired')invalidate();
-    else if(!closed&&cause.error==='rate-limit')cooldown=cause;
+    else if(!closed&&cause.error==='rate-limit')cooldown={...cause,retryAt:cooldownDeadline(cause,time.now()),retryBlocked:false};
     return f.cause;
    };
    // The RPC promise remains observed after cancellation. No second RPC before settlement.

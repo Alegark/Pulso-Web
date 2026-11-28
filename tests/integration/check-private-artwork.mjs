@@ -98,7 +98,7 @@ try{
  const shellSource=await page.evaluate(()=>window.pulsoPrivate.audio[0].src);
  const navigation=page.getByRole('navigation',{name:'Principal',exact:true});
  await navigation.getByRole('button',{name:'Inicio',exact:true}).click();
- await page.getByRole('heading',{name:'Añadidas recientemente',exact:true}).waitFor();
+ assert.equal(await page.locator('.home-recent, #home-recent-heading').count(),0);
  const homeOpen=page.locator('.home-view').getByRole('button',{name:'Abrir reproductor',exact:true});
  await homeOpen.click();
  await page.waitForFunction(()=>document.activeElement===document.querySelector('#player h2'));

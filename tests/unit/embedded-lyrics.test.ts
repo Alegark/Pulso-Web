@@ -7,7 +7,7 @@ const join=(...parts:Uint8Array[])=>{const b=new Uint8Array(parts.reduce((n,p)=>
 const sync=(n:number)=>new Uint8Array([n>>>21&127,n>>>14&127,n>>>7&127,n&127]);
 const n32=(n:number)=>{const b=new Uint8Array(4);new DataView(b.buffer).setUint32(0,n);return b;};
 const frame=(id:string,b:Uint8Array)=>join(utf(id),sync(b.length),new Uint8Array(2),b);
-const tag=(b:Uint8Array)=>new Blob([utf('ID3'),new Uint8Array([4,0,0]),sync(b.length),b]);
+const tag=(b:Uint8Array<ArrayBuffer>)=>new Blob([utf('ID3'),new Uint8Array([4,0,0]),sync(b.length),b]);
 const inspect=(b:Blob)=>inspectEmbeddedLyrics(b,'audio/mpeg');
 test('empty UTF16 descriptor, explicit BOM text and surrogate validation',async()=>{
  const prefix=join(new Uint8Array([1]),utf('spa'),new Uint8Array(2));

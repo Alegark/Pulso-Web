@@ -1,19 +1,22 @@
-import {useLayoutEffect, useRef, useState, type ReactNode, type Ref} from 'react';
+import {BackButton} from './BackButton';
+import {useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref} from 'react';
 import './now-playing.css';
 
-type View = 'player' | 'lyrics' | 'queue';
+export type PlayerView = 'player' | 'lyrics' | 'queue';
 type Repeat = 'off' | 'one' | 'all';
 
 /** All musical state and operations belong to the caller; this component owns only its view. */
 export interface NowPlayingViewProps {
   open: boolean;
+  view?: PlayerView;
+  onViewChange?: (view:PlayerView)=>void;
   headingRef: Ref<HTMLHeadingElement>;
   title: string;
   artist: string;
   album?: string | null;
   artwork: ReactNode;
   lyrics: ReactNode;
-  queue: ReactNode;
+  queue: ReactNode | (()=>ReactNode);
   lyricsPreview?: ReactNode;
   status?: ReactNode;
   trackId: string | null;
@@ -65,8 +68,11 @@ export function NowPlayingView(props:NowPlayingViewProps) {
   useLayoutEffect(()=>{committed.current=props;return()=>{committed.current=null;};});
   let expired=false;
   const active=()=>{if(expired)return false;if(committed.current!==props||!props.current()){expired=true;return false;}return true;};
-  const [view,setView] = useState<View>('player');
-  const previousView = useRef<View>('player');
+  const [localView,setLocalView] = useState<PlayerView>('player');
+  const view=props.view??localView;
+  const setView=props.onViewChange??setLocalView;
+  const queue=useMemo(()=>props.open&&view==='queue'&&(typeof props.queue==='function'?props.queue():props.queue),[props.open,view,props.queue]);
+  const previousView = useRef<PlayerView>('player');
   const detailHeading = useRef<HTMLHeadingElement>(null);
   const opener = useRef<HTMLElement|null>(null);
   const savedScroll = useRef(0);
@@ -81,7 +87,7 @@ export function NowPlayingView(props:NowPlayingViewProps) {
     else if (previousView.current!=='player') { if(surface) surface.scrollTop=savedScroll.current; if(opener.current?.isConnected) opener.current.focus({preventScroll:true}); }
     previousView.current=view;
   },[view,props.open]);
-  function openView(next:Exclude<View,'player'>, source:HTMLButtonElement) {
+  function openView(next:Exclude<PlayerView,'player'>, source:HTMLButtonElement) {
     if (!active()) return;
     opener.current=source;
     savedScroll.current=root.current?.closest<HTMLElement>('.player-surface')?.scrollTop??0;
@@ -99,19 +105,19 @@ export function NowPlayingView(props:NowPlayingViewProps) {
     </div>;
   }
   return <div ref={root} className="now-playing-view" data-view={view}>
+    <div className="pulso-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{props.status}</div>
+    <div className="pulso-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{props.favoriteStatus}</div>
     <div className="np-main" hidden={view!=='player'}>
       <div className="np-visual"><div className="np-context">{props.album&&<strong>{props.album}</strong>}</div><div className="np-art">{props.artwork}</div></div>
       <div className="np-body"><div className="np-info"><div><h2 ref={props.headingRef} tabIndex={-1}>{props.title}</h2><p>{props.artist}</p></div><button key={props.trackId} type="button" className="np-favorite" aria-label={props.favorite?'Quitar canción actual de Favoritos':'Añadir canción actual a Favoritos'} title={props.favorite?'Quitar de Favoritos':'Añadir a Favoritos'} aria-pressed={props.favorite} disabled={!props.trackId||!props.canOrganize||props.favoritePending} onClick={()=>{if(active()&&props.canOrganize&&!props.favoritePending)props.onFavorite();}}><span className="np-favorite__icon np-favorite__plus"><Icon name="plus"/></span><span className="np-favorite__icon np-favorite__check"><Icon name="check"/></span></button></div>
-        {props.status&&<div className="np-status" role="status">{props.status}</div>}
-        <div className="np-status" role="status" aria-live="polite">{props.favoriteStatus}</div>
         <div className="np-seek"><input type="range" aria-label="Posición de reproducción" min="0" max={duration} step="0.1" value={position} disabled={!props.canSeek||!duration} onChange={event=>props.onSeek(Number(event.target.value))}/><div><span>{clock(position)}</span><span>−{clock(duration-position)}</span></div></div>
         {transport()}
         <div className="np-secondary"><button type="button" onClick={event=>openView('lyrics',event.currentTarget)}><Icon name="lyrics"/>Letra</button><button type="button" onClick={event=>openView('queue',event.currentTarget)}><Icon name="queue"/>Cola</button></div>
-        <div className="np-lyrics-card"><div className="np-lyrics-card__heading"><h3>Vista previa de la letra</h3></div><div className="np-lyrics-preview">{props.lyricsPreview??<p>Abre la letra para ver el contenido disponible de esta canción.</p>}</div><button type="button" onClick={event=>openView('lyrics',event.currentTarget)}>Mostrar letra</button></div>
+        <div className="np-lyrics-card"><div className="np-lyrics-card__heading"><h3>Vista previa de la letra</h3></div><div className="np-lyrics-preview">{props.lyricsPreview}</div><button type="button" onClick={event=>openView('lyrics',event.currentTarget)}>Mostrar letra</button></div>
       </div>
     </div>
-    <div className="np-detail" hidden={view==='player'}><button type="button" className="np-back" onClick={()=>setView('player')}>← Volver al reproductor</button><h2 ref={detailHeading} tabIndex={-1}>{view==='lyrics'?'Letra':'Cola de reproducción'}</h2><p className="np-detail-track">{props.title} · {props.artist}</p>
-      <div hidden={view!=='lyrics'} className="np-lyrics-content">{props.lyrics}</div><div hidden={view!=='queue'} className="np-queue-content">{props.queue}</div>
+    <div className="np-detail" hidden={view==='player'}><BackButton className="np-back" onClick={()=>setView('player')}>Volver al reproductor</BackButton><h2 ref={detailHeading} tabIndex={-1}>{view==='lyrics'?'Letra':'Cola de reproducción'}</h2><p className="np-detail-track">{props.title} · {props.artist}</p>
+      <div hidden={view!=='lyrics'} className="np-lyrics-content">{props.lyrics}</div><div hidden={view!=='queue'} className="np-queue-content">{queue}</div>
       {(view==='lyrics'||view==='queue')&&transport()}
     </div>
   </div>;

@@ -21,6 +21,7 @@ export type MusicSuggestionsSearchOptions = {signal?:AbortSignal;current:()=>boo
 export type MusicSuggestionsClient = {
  search(query:string,options:MusicSuggestionsSearchOptions):Promise<MusicSuggestionsResult>;
  getRateState():MusicSuggestionsRateState;
+ clearCache():void;
  /** Permanently closes this instance, cancels publication and clears RAM cache. */
  close():void;
 };
@@ -86,6 +87,7 @@ export function createMusicSuggestionsClient(deps:MusicSuggestionsDependencies={
   const hit=cache.get(q);
   if(hit&&now()-hit.at>=0&&now()-hit.at<300000){cache.delete(q);cache.set(q,hit);return current()?{state:'ready',tracks:hit.tracks,groups:deriveMusicSuggestionGroups(hit.tracks),cached:true}:{state:'cancelled'};}
   if(hit)cache.delete(q);
+  if(globalThis.navigator?.onLine===false)return {state:'unavailable',reason:'network'};
   if(active)return {state:'busy'};
   if(blocked||now()<nextAt)return {state:'rate-limited',retryAt:blocked?null:nextAt};
   const controller=new AbortController();let reader:ReadableStreamDefaultReader<Uint8Array>|undefined,response:Response|undefined;
@@ -136,5 +138,5 @@ export function createMusicSuggestionsClient(deps:MusicSuggestionsDependencies={
   try{return await Promise.race([work,terminalPromise]);}
   finally{clearTimeout(timer);options.signal?.removeEventListener('abort',abort);}
  }
- return {search,getRateState,close(){if(closed)return;closed=true;epoch++;cache.clear();active?.cancel({state:'closed'});}};
+ return {search,getRateState,clearCache(){cache.clear();},close(){if(closed)return;closed=true;epoch++;cache.clear();active?.cancel({state:'closed'});}};
 }

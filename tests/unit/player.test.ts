@@ -21,6 +21,35 @@ test('el progreso no cambia la cola y callbacks de otra selección no actualizan
 test('cola conserva ocurrencias A/B/A y seleccionar no reproduce por defecto', () => {
  const {audio,player} = setup(); player.select(0); assert.equal(audio.plays,0); assert.notEqual(player.entries[0].id,player.entries[2].id);
 });
+test('salta audio local inválido sin revivir avisos de una selección anterior',()=>{
+ const audio=new Fake();
+ let selection=0;
+ const player=new Player(audio,()=>true,undefined,src=>src+'?selection='+ ++selection);
+ player.setQueue(entries);
+ player.select(0,true);
+ const rejected=audio.src;
+ assert.equal(player.sourceForProtection,entries[0].src);
+ player.rejectLocalSource(rejected);
+ assert.equal(player.current.id,'q1');
+ assert.equal(audio.plays,2);
+ player.next();
+ assert.equal(player.current.id,'q2');
+ player.rejectLocalSource(rejected);
+ assert.equal(player.current.id,'q2');
+ assert.equal(audio.plays,3);
+});
+test('descarta una pasada de pistas inválidas con repetición y mantiene pausada la restauración',()=>{
+ const {audio,player}=setup();
+ player.select(0);
+ player.setRepeat('all');
+ for(const id of ['q0','q1','q2']){
+  assert.equal(player.current.id,id);
+  player.rejectLocalSource(audio.src);
+ }
+ assert.equal(player.state,'error');
+ assert.equal(player.following(),-1);
+ assert.equal(audio.plays,0);
+});
 test('ended duplicado avanza una vez y callback de generación antigua no avanza', () => {
  const {audio,player} = setup();
  const captured: EventListener[] = []; const original = audio.addEventListener.bind(audio);
@@ -79,9 +108,14 @@ test('safe failure callback reports current NotAllowed and numeric media codes o
  const audio=new Fake(),seen:unknown[]=[];Object.assign(audio,{error:{code:2}});
  const player=new Player(audio,()=>true,phase=>code=>seen.push({phase,code}));player.setQueue(entries);player.select(0);
  for(let i=0;i<20;i++)audio.dispatchEvent(new Event('timeupdate'));assert.equal(seen.length,0);
- audio.dispatchEvent(new Event('error'));audio.dispatchEvent(new Event('error'));assert.deepEqual(seen,[{phase:'read',code:'media-network'}]);
+ audio.dispatchEvent(new Event('error'));assert.equal(seen.length,0);
+ audio.dispatchEvent(new Event('error'));assert.deepEqual(seen,[{phase:'read',code:'media-network'}]);
  audio.rejection=Promise.reject(new DOMException('private canary','NotAllowedError'));await player.play();assert.deepEqual(seen[1],{phase:'play',code:'autoplay-denied'});
- for(const [n,code]of [[1,'media-aborted'],[3,'media-decode'],[4,'media-unsupported'],[99,'media-unknown']] as const){player.select(0);Object.assign(audio,{error:{code:n}});audio.dispatchEvent(new Event('error'));assert.equal((seen.at(-1) as {code:string}).code,code);}
+ for(const [n,code]of [[1,'media-aborted'],[3,'media-decode'],[4,'media-unsupported'],[99,'media-unknown']] as const){
+  player.select(0);Object.assign(audio,{error:{code:n}});
+  audio.dispatchEvent(new Event('error'));audio.dispatchEvent(new Event('error'));
+  assert.equal((seen.at(-1) as {code:string}).code,code);
+ }
 });
 test('failure observer/notifier throws do not interfere; old/current-source and admission guards',async()=>{
  const audio=new Fake();let allowed=true,calls=0;const captured:EventListener[]=[];const add=audio.addEventListener.bind(audio);
@@ -98,4 +132,67 @@ test('autoplay rejection is distinguishable from other playback failures and cle
  const {player,audio}=setup();player.select(0);audio.rejection=Promise.reject(new DOMException('TESTONLY','NotAllowedError'));await player.play();assert.equal(player.lastFailure,'autoplay-denied');
  audio.rejection=null;audio.dispatchEvent(new Event('playing'));assert.equal(player.lastFailure,null);assert.equal(player.error,'');assert.equal(player.state,'playing');
  audio.rejection=Promise.reject(new Error('TESTONLY'));await player.play();assert.equal(player.lastFailure,'unknown');
+});
+
+test('choosing a timed lyric plays from its timestamp, including paused and ended media, without replacing the source',async()=>{
+ const {audio,player}=setup();player.select(2);audio.currentTime=4;audio.ended=true;audio.dispatchEvent(new Event('ended'));
+ const generation=player.generation,epoch=player.queueEpoch,revision=player.queueRevision,src=audio.src;
+ await player.play(1.5);assert.equal(audio.currentTime,1.5);assert.equal(audio.plays,1);assert.equal(audio.src,src);
+ assert.equal(player.generation,generation);assert.equal(player.queueEpoch,epoch);assert.equal(player.queueRevision,revision);
+ audio.dispatchEvent(new Event('playing'));audio.ended=true;audio.dispatchEvent(new Event('ended'));assert.equal(player.state,'ended','a new explicit lyric play must admit its next ended event');
+ audio.ended=false;player.pause();await player.play(2.5);assert.equal(audio.currentTime,2.5);assert.equal(audio.plays,2);
+});
+
+test('lyric playback rejects invalid positions and missing metadata, and still obeys playback admission',async()=>{
+ let admitted=true;const audio=new Fake(),player=new Player(audio,()=>admitted);player.setQueue(entries);player.select(0);
+ for(const position of [NaN,Infinity,-1,4,5])await player.play(position);assert.equal(audio.plays,0);assert.equal(audio.currentTime,0);
+ audio.duration=NaN;await player.play(1);assert.equal(audio.plays,0);audio.duration=4;
+ admitted=false;await player.play(1);assert.equal(audio.plays,0);assert.equal(audio.currentTime,0);
+ admitted=true;player.suspend();await player.play(1);assert.equal(audio.plays,0);
+});
+
+test('native seek rejection is reported without an unhandled lyric playback rejection',async()=>{
+ const {audio,player}=setup();player.select(0);Object.defineProperty(audio,'currentTime',{get:()=>0,set:()=>{throw new DOMException('Own test','InvalidStateError')}});
+ await player.play(1);assert.equal(audio.plays,0);assert.equal(player.state,'error');assert.equal(player.lastFailure,'unknown');
+});
+
+test('Play recarga el medio fallido y restaura su posición sin cambiar la entrada',async()=>{
+ const {audio,player}=setup();player.select(1);audio.currentTime=2.5;const generation=player.generation;
+ audio.dispatchEvent(new Event('error'));audio.dispatchEvent(new Event('pause'));await player.play();
+ assert.equal(player.generation,generation+1);assert.equal(player.current.id,'q1');assert.equal(audio.plays,1);
+ audio.dispatchEvent(new Event('loadedmetadata'));assert.equal(audio.currentTime,2.5);
+});
+
+test('el orden efectivo aleatorio mueve solo las pistas futuras y conserva el orden base',()=>{
+ const {player}=setup();player.setQueue([...entries,{...entries[1],id:'q3'}]);
+ player.restoreModes('off',['q1','q2','q3','q0']);player.select(2);
+ const generation=player.generation,revision=player.queueRevision;
+ player.moveEntry('q3',-1);player.moveEntry('q1',1);player.moveEntry('q2',1);
+ assert.equal(player.queueRevision,revision);
+ player.moveEntry('q0',-1);
+ assert.deepEqual(player.playbackOrder().map(e=>e.id),['q1','q2','q0','q3']);
+ assert.equal(player.queueRevision,revision+1);
+ assert.deepEqual(player.entries.map(e=>e.id),['q0','q1','q2','q3']);
+ assert.equal(player.generation,generation);
+ player.next();assert.equal(player.current.id,'q0');
+});
+test('Play sin selección empieza por la primera ocurrencia en aleatorio',async()=>{
+ const {player}=setup();player.setShuffle(true,()=>0);assert.equal(player.shuffleOrder?.[0],'q1');
+ await player.play();assert.equal(player.current.id,'q1');
+});
+test('Play avanza desde ended si se insertó a continuación en aleatorio',async()=>{
+ const {audio,player}=setup();player.restoreModes('off',['q2','q1','q0']);player.select(0);
+ audio.ended=true;audio.dispatchEvent(new Event('ended'));assert.equal(player.state,'ended');
+ const added={...entries[1],id:'next'};
+ const inserted=player.insertQueue({intentId:'test-next',placement:'next',entries:[added],afterEntryId:'q0',expectedQueueRevision:player.queueRevision,expectedQueueEpoch:player.queueEpoch},()=>true);
+ assert.equal(inserted.kind,'inserted');await player.play();assert.equal(player.current.id,'next');assert.equal(audio.plays,1);
+});
+
+test('la posición restaurada permanece disponible hasta cargar metadatos y se limpia al cambiar de selección',async()=>{
+ const {audio,player}=setup();player.select(1,false,3);
+ assert.equal(audio.currentTime,0);assert.equal(player.pendingRestorePosition,3);
+ audio.dispatchEvent(new Event('error'));await player.play();assert.equal(player.pendingRestorePosition,3);
+ audio.dispatchEvent(new Event('loadedmetadata'));assert.equal(player.pendingRestorePosition,null);assert.equal(audio.currentTime,3);
+ player.select(0,false,2);player.select(2);assert.equal(player.pendingRestorePosition,null);
+ player.select(0,false,2);player.suspend();assert.equal(player.pendingRestorePosition,null);
 });

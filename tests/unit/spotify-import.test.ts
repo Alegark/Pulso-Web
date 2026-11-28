@@ -1,0 +1,3 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {spotifyPlaylistId} from '../../src/playlists/spotify-import';
+const id='a'.repeat(22);
+test('Spotify URL allowlist removes tracking',()=>{assert.equal(spotifyPlaylistId(`https://open.spotify.com/playlist/${id}?si=tracking#hash`),id);for(const value of [`http://open.spotify.com/playlist/${id}`,`https://open.spotify.com.evil/playlist/${id}`,`https://user@open.spotify.com/playlist/${id}`,`https://open.spotify.com/track/${id}`,`https://open.spotify.com/playlist/${id}/x`,'spotify:playlist:'+id,'not url'])assert.equal(spotifyPlaylistId(value),null);});

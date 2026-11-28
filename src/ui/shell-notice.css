@@ -1,0 +1,4 @@
+.shell-notice { grid-column: 1 / -1; flex: 1 0 100%; display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.shell-notice:has(p:empty) { position: absolute; width: 1px; height: 1px; overflow: hidden; }
+.shell-notice p { flex: 1; margin: 0; font-size: .875rem; }
+.pulso-app .shell-notice button { flex: none; min-width: 44px; min-height: 44px; padding: 0; }
