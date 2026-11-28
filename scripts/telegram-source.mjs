@@ -22,7 +22,10 @@ for(const key of ['GIT_DIR','GIT_WORK_TREE','GIT_COMMON_DIR','GIT_INDEX_FILE','G
 const git=(args,options={})=>execFileSync('git',args,{env:gitEnvironment,stdio:'pipe',maxBuffer:8*1024*1024,...options});
 
 function writeSourceArchive(out){
- const project=git(['rev-parse','--show-toplevel'],{cwd:root,encoding:'utf8'}).trimEnd();
+ // Git prints C:/x on Windows while resolve() yields C:\x: compare normalized paths, or a plain
+ // Windows checkout looks like a release snapshot and refuses to build.
+ const reported=git(['rev-parse','--show-toplevel'],{cwd:root,encoding:'utf8'}).trimEnd();
+ const project=process.platform==='win32'&&resolve(reported).toLowerCase()===root.toLowerCase()?root:reported;
  const head=git(['rev-parse','HEAD'],{cwd:project,encoding:'utf8'}).trim();
  const tracked=git(['ls-tree','-rz',head,'--',...sourcePaths],{cwd:project});
  const dirty=git(['--no-optional-locks','status','--porcelain','--untracked-files=no','--',...sourcePaths],{cwd:project}).length>0;

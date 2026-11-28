@@ -49,14 +49,22 @@ try {
  server=await preview({configFile:false,build:{outDir},preview:{host:'127.0.0.1',port:0}});
  const origin='http://127.0.0.1:'+server.httpServer.address().port;
  for(const [engine,launcher] of [['chromium',chromium],['webkit',webkit]]){
-  const context=await launcher.launchPersistentContext(resolve(ws.dir,engine+'-profile'),{
-   headless:true,viewport:{width:390,height:844},...(engine==='chromium'?{executablePath:'/usr/bin/chromium'}:{serviceWorkers:'block'})
-  });
+  const browser=await launcher.launch({headless:true,...(engine==='chromium'?{executablePath:'/usr/bin/chromium'}:{})});
+  const context=await browser.newContext({viewport:{width:390,height:844},...(engine==='webkit'?{serviceWorkers:'block'}:{})});
   try {
    let mode='success',requests=0,appleCalls=0;
    await context.route('**/*',async route=>{
     const u=new URL(route.request().url());
     const response={headers:{'access-control-allow-origin':origin}};
+    if(u.hostname==='itunes.apple.com'&&u.pathname==='/lookup'&&u.searchParams.get('id')==='21')return route.fulfill({...response,json:{resultCount:3,results:[
+     {wrapperType:'collection',collectionType:'Album',collectionId:21,collectionName:sharedAlbum,artistName:pending.artists,trackCount:2,artworkUrl100:appleImage},
+     {wrapperType:'track',kind:'song',collectionId:21,trackId:41,discNumber:1,discCount:1,trackNumber:1,trackCount:2,trackName:'Canción anterior',artistName:pending.artists,trackTimeMillis:3000},
+     {wrapperType:'track',kind:'song',collectionId:21,trackId:43,discNumber:1,discCount:1,trackNumber:2,trackCount:2,trackName:pending.title,artistName:pending.artists,trackTimeMillis:3000},
+    ]}});
+    if(u.hostname==='itunes.apple.com'&&u.pathname==='/lookup'&&u.searchParams.get('id')==='22')return route.fulfill({...response,json:{resultCount:2,results:[
+     {wrapperType:'collection',collectionType:'Album',collectionId:22,collectionName:appleAlbum,artistName:local.artists,trackCount:1,artworkUrl100:appleImage},
+     {wrapperType:'track',kind:'song',collectionId:22,trackId:42,discNumber:1,discCount:1,trackNumber:1,trackCount:1,trackName:local.title,artistName:local.artists,trackTimeMillis:local.durationMs},
+    ]}});
     if(u.hostname==='itunes.apple.com'&&u.pathname==='/search'){
      appleCalls++;
      const term=u.searchParams.get('term')??'';
@@ -108,8 +116,8 @@ try {
    page.on('pageerror',error=>report.errors.push(publicData?error.name:error.message));
    page.setDefaultTimeout(12000);
    const button=name=>page.getByRole('button',{name,exact:true});
-   const settings=()=>button('Configuración').click();
-   const openImport=id=>page.getByLabel('Enlace de la playlist de Spotify').fill(base+'playlist/'+id+'?si=discard');
+   const settings=async()=>{await button('Configuración').click();await button('Conexiones').click();};
+   const openImport=id=>page.getByLabel('Enlace de la playlist',{exact:true}).fill(base+'playlist/'+id+'?si=discard');
    const submit=()=>button('Importar playlist').click();
    const result=()=>page.locator('.spotify-import__result');
    const stored=()=>page.evaluate(async()=>{
@@ -185,8 +193,10 @@ try {
    assert.deepEqual(songs.map(song=>saved.membership[song.id]),[false,undefined,false,false]);
    await button('Abrir en Biblioteca').click();await page.getByRole('heading',{name:fixture.name}).waitFor();
    assert.deepEqual(await page.locator('.library-detail .tracks > li strong').allTextContents(),[pending.title,local.title,unknown.title,sameTags.title]);
+   await button('Opciones de playlist').click();
    try{await page.getByText('4/4 revisadas · 3 con álbum · 3 con portada',{exact:true}).waitFor({timeout:30000});}
-   catch(e){report.catalogDiagnostic={status:await page.locator('.playlist-catalog').innerText(),appleCalls,sources:Object.values((await stored()).releases).map(t=>t.source)};throw e;}
+   catch(e){report.catalogDiagnostic={status:await page.locator('.track-actions-menu[open] [role=status]').innerText().catch(()=>''),appleCalls,sources:Object.values((await stored()).releases).map(t=>t.source)};throw e;}
+   await button('Cerrar opciones de colección').click();
    await page.waitForFunction(()=>[...document.querySelectorAll('.library-detail .tracks > li .collection-track-art img')].filter(i=>i.naturalWidth>0).length===3);
    const enriched=await stored();
    const enrichedRows=list.entries.map(({trackId})=>enriched.tracks.find(t=>t.id===trackId));
@@ -242,6 +252,8 @@ try {
    try{await existingAlbum.getByText('2 canciones',{exact:false}).waitFor();}
    catch(error){report.membershipDiagnostic={explicitSaved:(await stored()).membership[songs[0].id],cards:await cards.allTextContents()};throw error;}
    await existingAlbum.click();
+   await button('Opciones del álbum').waitFor({timeout:30000});
+   await button('Opciones del álbum').click();
    await button('Retirar álbum').click();
    const albumRemoval=page.locator('.collection-removal');
    await albumRemoval.getByText('Canciones de la colección').waitFor();
@@ -260,6 +272,7 @@ try {
     }finally{db.close();}
    },{account,trackId:songs[0].id});
    assert.equal((await stored()).releases[songs[0].id],undefined);
+   await button('Opciones de playlist').click();
    await button('Actualizar álbumes y portadas de Spotify').click();
    await page.getByText('4/4 revisadas · 3 con álbum · 3 con portada',{exact:true}).waitFor({timeout:30000});
    assert.equal((await stored()).releases[songs[0].id].source,'spotify');
@@ -284,7 +297,8 @@ try {
     assert.ok(actual.every(track=>track.assetId===null&&after.membership[track.id]===false));
     assert.equal(after.assets,saved.assets);
     await button('Abrir en Biblioteca').click();
-    await page.waitForFunction(()=>document.querySelector('.playlist-catalog [role=status]')?.textContent.includes('4 con álbum'),null,{timeout:30000});
+    await button('Opciones de playlist').click();
+    await page.getByText(/4\/4 revisadas · 4 con álbum/, {exact:false}).waitFor({timeout:30000});
     await page.waitForFunction(()=>[...document.querySelectorAll('.library-detail .tracks > li .collection-track-art img')].filter(i=>i.naturalWidth>0).length>=4);
     const withArtwork=await stored();
     const first=created.entries.slice(0,4).map(({trackId})=>withArtwork.tracks.find(track=>track.id===trackId));
@@ -298,6 +312,8 @@ try {
    assert.equal(await cards.count(),2);
    const savedSingle=cards.filter({hasText:appleAlbum});
    await savedSingle.click();
+   await button('Opciones del álbum').waitFor({timeout:30000});
+   await button('Opciones del álbum').click();
    await button('Retirar álbum').click();
    await albumRemoval.getByRole('checkbox').check();
    await albumRemoval.getByRole('button',{name:'Eliminar álbum'}).click();
@@ -312,6 +328,7 @@ try {
     await button('Escuchar '+local.title).first().click();
     await page.waitForFunction(()=>window.fixtureAudio.some(audio=>!audio.paused&&audio.currentTime>0));
    }
+   await button('Opciones de playlist').click();
    await button('Eliminar playlist').click();
    const removal=page.locator('.collection-removal');
    await removal.getByRole('checkbox').check();
@@ -322,7 +339,7 @@ try {
    assert.equal(removed.assets,saved.assets);
    report.cases.push({engine,deletion:'PASS',enrichedRowsParticipated:true,albumAndPlaylistRemoval:true,sharedAudioRetained:true});
    assert.ok(requests>=4);
-  }finally{await context.close();}
+  }finally{await context.close();await browser.close();}
  }
  assert.deepEqual(report.errors,[]);report.status='PASS';
 }catch(error){

@@ -23,7 +23,8 @@
       "/api/account-library",
       "/api/spotify-playlist/*",
       "/api/spotify-track/*",
-      "/telegram-config.json"
+      "/telegram-config.json",
+      "/api/youtube-playlist"
     ]
   },
   "durable_objects": {

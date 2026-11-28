@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Piloto local de audio de Pulso Web",
   "scripts": {
+    "dev": "vite",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "test:unit": "tsx --test tests/unit/*.test.ts tests/unit/*.test.tsx",
@@ -18,7 +19,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "dependencies": {
     "@better-auth-ui/core": "1.7.34",
     "@better-auth-ui/locales": "1.7.34",

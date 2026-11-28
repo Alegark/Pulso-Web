@@ -8,7 +8,7 @@
 
 ## Muestra navegable · 2026-11-09
 
-[Abrir Inicio, Buscar, Biblioteca, playlists, álbum y artista](prototypes/app-demo.html).
+Abrir Inicio, Buscar, Biblioteca, playlists, álbum y artista en el HTML generado `prototypes/app-demo.html`.
 Documento autónomo para teléfono o escritorio. Navegación real dentro de la
 muestra, búsqueda por categorías, favoritos, añadir/quitar álbum y reproductor
 persistente con un sonido original de 8 segundos. Catálogo y tiempos ficticios;
@@ -38,7 +38,7 @@ pantalla global de todas las canciones. Se puede buscar dentro de Biblioteca,
 ordenar por nombre y alternar cuadrícula/lista. Favoritos permanece incluso vacía
 y no se puede eliminar ni renombrar.
 
-**Reproductor y letra:** [abrir la revisión del reproductor](prototypes/player-lyrics-preview.html).
+**Reproductor y letra:** revisión del reproductor en el HTML generado `prototypes/player-lyrics-preview.html`.
 Portada grande, indicador **+ / gancho azul** junto a título/intérprete,
 posición y controles de anterior, Play/Pausa, siguiente, aleatorio, repetición
 del tono y cola. El gancho sólo significa añadida a Favoritos; no descarga.
@@ -50,7 +50,7 @@ desde la tercera: letra no disponible, con reproducción intacta. Sin proveedore
 de letras ni traducciones conectados. Este preview abre pausado; para probar en
 Safari directamente usar `app-demo.html` y expandir el minirreproductor.
 
-**Escritorio:** [abrir la vista web de 1366px](prototypes/desktop-preview.html).
+**Escritorio:** vista web de 1366px en el HTML generado `prototypes/desktop-preview.html`.
 Desde1024px hay lateral persistente con playlists, búsqueda superior y barra
 inferior de ancho completo: título/intérprete, transporte central, posición,
 volumen y accesos directos a Letra/Cola. El player ampliado usa dos columnas.
@@ -58,7 +58,7 @@ El preview muestra un viewport real de1366px reducido para caber en el hilo;
 `app-demo.html` se adapta al ancho real del navegador. En teléfono conserva el
 mini sobre la navegación inferior. No inicia otro audio al cambiar de ancho.
 
-**Móvil, siguiente revisión:** [abrir la muestra de teléfono](prototypes/mobile-preview.html).
+**Móvil, siguiente revisión:** muestra de teléfono en el HTML generado `prototypes/mobile-preview.html`.
 Inicio ofrece accesos rápidos a tus colecciones. Buscar tiene una barra compacta
 y entradas a álbumes, artistas, playlists y Favoritos. Los tres destinos siguen
 en la navegación inferior, con mini flotante y controles de44px. En cada fila,
@@ -76,17 +76,20 @@ no ejecuta el build normal ni escribe `dist`. `app-preview.html` es el contenedo
 de presentación de 840px de alto, abierto inicialmente en Biblioteca; para probar
 Safari usar `app-demo.html` directo.
 
+## Artefactos HTML generados
+
+Estos siete HTML son salidas de compilación ignoradas por Git; los scripts y las fuentes de diseño permanecen versionados. `node design/scripts/build-app-demo.mjs` genera `app-demo.html`, `app-preview.html`, `desktop-preview.html`, `mobile-preview.html` y `player-lyrics-preview.html` en `design/prototypes/`. `node design/scripts/build-mobile.mjs` genera `player-mobile.html` y `player-phone.html` en ese directorio. Ejecuta el builder correspondiente antes de abrir una muestra. Las comprobaciones de escritorio y pantallas generan la primera familia; la comprobación responsive genera la segunda.
+
 ## Exploración anterior del reproductor
 
-Para abrir la muestra directamente en un teléfono, usar
-[player-phone.html](prototypes/player-phone.html). Esta versión usa el espacio
+Para abrir la muestra directamente en un teléfono, genera `prototypes/player-phone.html`. Esta versión usa el espacio
 visible del navegador, sin un marco de altura fija. La muestra anterior y la
 vista incrustada también están corregidas. Regeneración reproducible:
 `node design/scripts/build-mobile.mjs`.
 
 [Abrir el prototipo del reproductor](prototypes/player-directions.html).
 
-[Abrir la vista móvil interactiva](prototypes/player-mobile.html): muestra en
+La vista móvil interactiva generada `prototypes/player-mobile.html` es una muestra en
 un viewport real de hasta 390px, incluso al verla en escritorio. Su altura se
 ajusta al espacio visible en vez de fijarse a una pantalla de escritorio. Los botones
 Álbum/Reproductor cambian la vista y el selector interior conserva las tres
@@ -132,7 +135,7 @@ del producto con pantalla bloqueada.
 
 ## Interfaz del producto integrada · 2026-11-09
 
-La presentación de Inicio, Buscar, Biblioteca, colecciones, ajustes y reproductor ya se conecta a los datos reales de la aplicación. Las muestras anteriores siguen siendo independientes y conservan sus datos ficticios. Véase [contrato y validación del producto](../docs/UI-INTEGRATION.md). La integración no cambia la semántica de Biblioteca, Favoritos o copias de escucha. iPhone físico sigue pendiente.
+La presentación de Inicio, Buscar, Biblioteca, colecciones, ajustes y reproductor ya se conecta a los datos reales de la aplicación. Las muestras anteriores siguen siendo independientes y conservan sus datos ficticios. Véase [contrato y validación del producto](../docs/architecture/UI-INTEGRATION.md). La integración no cambia la semántica de Biblioteca, Favoritos o copias de escucha. iPhone físico sigue pendiente.
 
 
 ## Revisión global de la app funcional · 2026-11-13
