@@ -17,7 +17,7 @@ export interface YoutubeImportResult {playlist:Playlist;created:number;reused:nu
 const songKey=(title:string,artist:string|null)=>artist?JSON.stringify([musicCatalogKey(title),musicCatalogKey(artist)]):null;
 const text=(value:unknown,max:number)=>typeof value==='string'&&value.length<=max&&!/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value)?value.trim():'';
 
-export async function importYoutubePlaylist(data:YoutubeImportInput,accountId:string,current:()=>boolean):Promise<YoutubeImportResult> {
+export async function importYoutubePlaylist(data:YoutubeImportInput,accountId:string,current:()=>boolean,isAvailable:(trackId:string)=>boolean=()=>false):Promise<YoutubeImportResult> {
  const check=()=>{if(!current())throw Error('La importación ya no está vigente.');};
  check();
  if(!/^[A-Za-z0-9_-]{10,64}$/.test(data.listId))throw Error('Enlace de YouTube inválido.');
@@ -31,16 +31,28 @@ export async function importYoutubePlaylist(data:YoutubeImportInput,accountId:st
    try{
     const tracks=tx.objectStore('tracks'),playlists=tx.objectStore('playlists'),settings=tx.objectStore('settings');
     const listKey=['youtube-playlist',1,accountId,data.listId];
-    const [active,rows,lists,previousListId]=await Promise.all([
+    const aliasRange=IDBKeyRange.bound(
+     ['youtube-track',1,accountId,''],
+     ['youtube-track',1,accountId,'\uffff'],
+    );
+    const [active,rows,lists,previousListId,aliasKeys,aliasValues]=await Promise.all([
      request(settings.get(ACTIVE_LIBRARY_ACCOUNT)),
      request<Track[]>(tracks.getAll()),
      request<Playlist[]>(playlists.getAll()),
      request<string|undefined>(settings.get(listKey)),
+     request<IDBValidKey[]>(settings.getAllKeys(aliasRange)),
+     request<unknown[]>(settings.getAll(aliasRange)),
     ]);
     check();
     if(!libraryUuid(accountId)||active!==accountId)throw Error('La cuenta de Pulso ha cambiado.');
     const owned=rows.filter(track=>track.accountId===accountId);
     const byId=new Map(owned.map(track=>[track.id,track]));
+    const aliases=new Map<string,string>();
+    for(let index=0;index<aliasKeys.length;index++){
+     const key=aliasKeys[index],value=aliasValues[index];
+     if(Array.isArray(key)&&key.length===4&&key[0]==='youtube-track'&&key[1]===1&&key[2]===accountId&&
+      typeof key[3]==='string'&&typeof value==='string')aliases.set(key[3],value);
+    }
     const bySong=new Map<string,Track[]>();
     for(const track of owned){
      const key=songKey(track.manualOverrides?.title??track.title,'artist' in (track.manualOverrides??{})?track.manualOverrides.artist??null:track.artist);
@@ -48,7 +60,7 @@ export async function importYoutubePlaylist(data:YoutubeImportInput,accountId:st
      const group=bySong.get(key);if(group)group.push(track);else bySong.set(key,[track]);
     }
     // Prefer a copy that is already on this device when the same song exists more than once.
-    const pick=(group:Track[])=>group.find(track=>track.assetId)??(group.length===1?group[0]:undefined);
+    const pick=(group:Track[])=>group.find(track=>isAvailable(track.id))??group.find(track=>track.assetId)??(group.length===1?group[0]:undefined);
     const entries:Playlist['entries']=[],seen=new Set<string>(),used=new Set<string>(),newTracks:Track[]=[];
     let reused=0,repeated=0;
     for(const song of data.songs){
@@ -58,8 +70,7 @@ export async function importYoutubePlaylist(data:YoutubeImportInput,accountId:st
      if(seen.has(key)){repeated++;continue;}
      seen.add(key);
      const aliasKey=['youtube-track',1,accountId,key];
-     const alias=await request<string|undefined>(settings.get(aliasKey));
-     check();
+     const alias=aliases.get(key);
      let track=(alias?byId.get(alias):undefined)??pick(bySong.get(key)??[]);
      if(track&&used.has(track.id))track=undefined;
      if(track)reused++;

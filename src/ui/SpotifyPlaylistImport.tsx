@@ -5,18 +5,21 @@ import type {YoutubeImportInput,YoutubeImportResult} from '../playlists/youtube-
 import './spotify-playlist-import.css';
 
 type PlaylistData=Awaited<ReturnType<typeof readSpotifyPlaylist>>;
-export type YoutubeImportSummary=YoutubeImportResult&{available:number;downloading:number;ignored:number;truncated:boolean};
+export type YoutubeImportSummary=YoutubeImportResult&{available:number;missingTrackIds:readonly string[];ignored:number;truncated:boolean};
 
-export function SpotifyPlaylistImport({canImport,onImport,onImportYoutube,onOpen}:{
+export function SpotifyPlaylistImport({canImport,canDownload,onImport,onImportYoutube,onDownloadMissing,onOpen}:{
  canImport:boolean;
+ canDownload:boolean;
  onImport(data:PlaylistData,current:()=>boolean):Promise<(SpotifyImportResult&{available:number})|null>;
- /** YouTube lists are saved as a playlist and their missing songs start downloading right away. */
+ /** YouTube lists are saved without requesting any downloads. */
  onImportYoutube?(data:YoutubeImportInput,current:()=>boolean):Promise<Omit<YoutubeImportSummary,'ignored'|'truncated'>|null>;
+ onDownloadMissing?(trackIds:readonly string[],playlistName:string):void;
  onOpen(id:string):void;
 }){
  const [input,setInput]=useState(''),[status,setStatus]=useState(''),[loading,setLoading]=useState(false);
  const [result,setResult]=useState<(SpotifyImportResult&{available:number})|null>(null);
  const [youtube,setYoutube]=useState<YoutubeImportSummary|null>(null);
+ const [downloadRequested,setDownloadRequested]=useState(false);
  const active=useRef<AbortController|null>(null);
  useEffect(()=>()=>active.current?.abort(),[]);
  async function submitYoutube(listId:string,controller:AbortController,current:()=>boolean){
@@ -39,7 +42,7 @@ export function SpotifyPlaylistImport({canImport,onImport,onImportYoutube,onOpen
   const controller=new AbortController();
   active.current=controller;
   const current=()=>active.current===controller&&!controller.signal.aborted;
-  setLoading(true);setResult(null);setYoutube(null);
+  setLoading(true);setResult(null);setYoutube(null);setDownloadRequested(false);
   try{
    if(youtubeId){await submitYoutube(youtubeId,controller,current);return;}
    setStatus('Leyendo playlist de Spotify…');
@@ -60,11 +63,11 @@ export function SpotifyPlaylistImport({canImport,onImport,onImportYoutube,onOpen
   <h3 id="spotify-import-heading">{onImportYoutube?'Importar playlist de Spotify o YouTube':'Importar playlist de Spotify'}</h3>
   <div className="settings-group__body">
    <p>{onImportYoutube
-    ?'Copia el enlace de una playlist pública (Spotify: Compartir → Copiar enlace; YouTube: el enlace con «list=»). Se guarda en Biblioteca; con YouTube, las canciones que falten empiezan a descargarse solas.'
+   ?'Copia el enlace de una playlist pública (Spotify: Compartir → Copiar enlace; YouTube: el enlace con «list=») o pega un ID de playlist de YouTube. Se guarda en Biblioteca; las descargas de YouTube son opcionales y manuales.'
     :'En Spotify, abre tu playlist pública y elige Compartir → Copiar enlace. Pégalo aquí para guardarla en Biblioteca sin iniciar sesión en Spotify.'}</p>
    <form onSubmit={event=>{event.preventDefault();void submit();}}>
     <label htmlFor="spotify-playlist-url">Enlace de la playlist</label>
-    <input id="spotify-playlist-url" type="url" value={input} onChange={event=>{setInput(event.target.value);setStatus('');setResult(null);setYoutube(null);}}
+    <input id="spotify-playlist-url" type="text" inputMode="url" value={input} onChange={event=>{setInput(event.target.value);setStatus('');setResult(null);setYoutube(null);setDownloadRequested(false);}}
      placeholder={onImportYoutube?'https://open.spotify.com/playlist/… o https://www.youtube.com/playlist?list=…':'https://open.spotify.com/playlist/…'} autoComplete="off" autoCapitalize="none" spellCheck={false} enterKeyHint="go" disabled={loading} required/>
     <button type="submit" disabled={loading||!canImport}>Importar playlist</button>
    </form>
@@ -80,13 +83,16 @@ export function SpotifyPlaylistImport({canImport,onImport,onImportYoutube,onOpen
    </div>}
    {youtube&&<div className="spotify-import__result">
     <h4>{youtube.playlist.name}</h4>
-    <p>{youtube.playlist.entries.length} canciones · {youtube.available} ya {youtube.available===1?'descargada':'descargadas'} en este dispositivo{youtube.updated?' · lista actualizada':''}.</p>
-    {youtube.downloading>0
-     ?<p>Descargando {youtube.downloading} en segundo plano, una tras otra. Si una falla, se salta y sigue con la siguiente. Puedes abrir la playlist y escuchar las que ya estén.</p>
-     :<p>No falta ninguna: todas están en este dispositivo.</p>}
-    {(youtube.repeated>0||youtube.ignored>0)&&<p>{youtube.repeated} {youtube.repeated===1?'repetida':'repetidas'} · {youtube.ignored} {youtube.ignored===1?'video que no parece canción':'videos que no parecen canciones'}.</p>}
-    {youtube.truncated&&<p>Se leyeron las primeras 1500 entradas de YouTube.</p>}
-    <button type="button" onClick={()=>onOpen(youtube.playlist.id)}>Abrir playlist</button>
+    <p>{youtube.playlist.entries.length} canciones · {youtube.reused} {youtube.reused===1?'ficha reutilizada':'fichas reutilizadas'} · {youtube.available} {youtube.available===1?'con copia local':'con copias locales'} · {youtube.missingTrackIds.length} pendientes de copia local{youtube.updated?' · lista actualizada':''}.</p>
+    {youtube.missingTrackIds.length>0
+     ?<p>Puedes abrir la playlist y escuchar las copias disponibles, o solicitar las descargas pendientes.</p>
+     :<p>Todas las canciones tienen una copia local disponible.</p>}
+    {(youtube.repeated>0||youtube.ignored>0)&&<p>{youtube.repeated} {youtube.repeated===1?'entrada repetida':'entradas repetidas'} · {youtube.ignored} {youtube.ignored===1?'video ignorado':'videos ignorados'}.</p>}
+    {youtube.truncated&&<p>Se leyeron las primeras 1500 entradas de YouTube; puede haber más canciones en la playlist.</p>}
+    <button type="button" onClick={()=>onOpen(youtube.playlist.id)}>Abrir en Biblioteca</button>
+    {youtube.missingTrackIds.length>0&&onDownloadMissing&&<button className="spotify-import__download-missing" type="button" disabled={!canDownload||downloadRequested}
+     onClick={()=>{if(canDownload&&!downloadRequested){onDownloadMissing(youtube.missingTrackIds,youtube.playlist.name);setDownloadRequested(true);}}}>
+     {downloadRequested?'Descargas solicitadas':`Descargar faltantes (${youtube.missingTrackIds.length})`}</button>}
    </div>}
   </div>
  </section>;

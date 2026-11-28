@@ -13,9 +13,23 @@ const {positionals: [command], values: arg} = parseArgs({
   allowPositionals: true,
   options: Object.fromEntries([
     'source', 'work', 'previous-manifest', 'previous-sha256', 'previous-receipt', 'origin',
-    'worker-module', 'mcp-client', 'deployment', 'version', 'as-of',
+    'worker-module', 'mcp-client', 'deployment', 'version', 'as-of', 'expected-added-rules', 'expected-added-secrets',
   ].map(name => [name, {type: 'string'}])),
 });
+function csv(name,pattern){
+  if (!Object.hasOwn(arg,name)) return [];
+  const rows=arg[name].split(',').map(value=>value.trim());
+  assert.ok(rows.length&&rows.every(value=>value&&pattern.test(value))&&new Set(rows).size===rows.length,
+    `--${name} debe ser una lista explícita, válida y sin duplicados`);
+  return rows;
+}
+const addedRules=csv('expected-added-rules',/^\/[A-Za-z0-9_./*-]+$/);
+const addedSecrets=csv('expected-added-secrets',/^[A-Z][A-Z0-9_]{0,127}$/);
+function assertExpectedRules(actual,prior){
+  const expected=[...prior,...addedRules];
+  assert.equal(new Set(expected).size,expected.length,'Una regla añadida ya existe en prior.rules');
+  assert.deepEqual(actual,expected,'Reglas distintas de prior.rules más las añadidas declaradas');
+}
 const json = (path) => readFile(path, 'utf8').then(JSON.parse);
 const save = (path, value) => writeFile(path, JSON.stringify(value, null, 2) + '\n', {mode: 0o600, flag: 'wx'});
 async function saveVerified(path, value) {
@@ -78,11 +92,11 @@ const readModule = name => `async () => {
   return {module:body.slice(endHeaders+4,end)};
 }`;
 
-function checkLive(state, config, origin) {
+function checkLive(state, config, origin, rules=config.assets.run_worker_first) {
   const {settings, subdomain, domain, version, deployment, secrets} = state;
   const runtime = version.resources.script_runtime;
-  assert.deepEqual(runtime.assets.raw_run_worker_first, config.assets.run_worker_first);
-  assert.deepEqual(runtime.assets.static_routing.user_worker, config.assets.run_worker_first);
+  assert.deepEqual(runtime.assets.raw_run_worker_first, rules);
+  assert.deepEqual(runtime.assets.static_routing.user_worker, rules);
   assert.equal(runtime.assets.not_found_handling, config.assets.not_found_handling);
   assert.equal(settings.compatibility_date, config.compatibility_date);
   assert.deepEqual(settings.compatibility_flags ?? [], config.compatibility_flags ?? []);
@@ -95,15 +109,35 @@ function checkLive(state, config, origin) {
   assert.deepEqual(ordered(version.resources.bindings), ordered(settings.bindings));
 }
 
-async function checkBefore(state, origin, previous, prior, config) {
-  assert.equal(state.deployment.id, arg.deployment, 'Cambió el despliegue activo');
-  assert.equal(state.version.id, arg.version, 'Cambió la versión activa');
+async function checkBefore(state, origin, previous, prior, config, baseline=null) {
+  const expected=baseline??{deployment:arg.deployment,version:arg.version};
+  assert.equal(state.deployment.id, expected.deployment, 'Cambió el despliegue activo');
+  assert.equal(state.version.id, expected.version, 'Cambió la versión activa');
   assert.deepEqual(await pointer(origin), {version:1, entry:previous.currentEntry});
-  assert.deepEqual(config.assets.run_worker_first, prior.rules, 'Reglas distintas del recibo anterior');
-  const count = Array.isArray(prior.bindings) ? prior.bindings.length : prior.bindings;
+  assertExpectedRules(config.assets.run_worker_first,prior.rules);
+  const allowedBindings=Array.isArray(prior.bindings)?ordered([...prior.bindings,...addedSecrets.map(name=>({name,type:'secret_text'}))]):null;
+  const count = allowedBindings?.length ?? prior.bindings+addedSecrets.length;
   assert.equal(state.settings.bindings.length, count, 'Cambió el número de bindings');
-  if (Array.isArray(prior.bindings)) assert.deepEqual(ordered(names(state.settings.bindings)), ordered(prior.bindings));
-  checkLive(state, config, origin);
+  if (allowedBindings)assert.deepEqual(ordered(names(state.settings.bindings)),allowedBindings);
+  else assert.equal(addedSecrets.length,0,'Los secretos nuevos requieren prior.bindings con nombres y tipos');
+  checkLive(state, config, origin, prior.rules);
+}
+
+function expectedBindings(prior){
+  assert.ok(Array.isArray(prior.bindings), 'La transición explícita requiere prior.bindings con nombres y tipos');
+  const extra=addedSecrets.map(name=>({name,type:'secret_text'}));
+  const rows=ordered([...prior.bindings,...extra]);
+  assert.equal(new Set(rows.map(row=>row.name)).size,rows.length,'Un secreto añadido ya existe en prior.bindings');
+  return rows;
+}
+
+function expectedRuntimeSnapshot(before,config,prior){
+  const snapshot=structuredClone(runtimeSnapshot(before));
+  snapshot.runtime.assets.raw_run_worker_first=config.assets.run_worker_first;
+  snapshot.runtime.assets.static_routing.user_worker=config.assets.run_worker_first;
+  if(Array.isArray(prior.bindings))assert.deepEqual(ordered(names(before.settings.bindings)),ordered([...prior.bindings,...addedSecrets.map(name=>({name,type:'secret_text'}))]));
+  else assert.equal(before.settings.bindings.length,prior.bindings+addedSecrets.length);
+  return snapshot;
 }
 
 async function assetsFor(site, frozen) {
@@ -285,7 +319,7 @@ async function publicVerify(origin, frozen, turnstileKey) {
   assert.equal(account.status, 200);
   assert.ok(turnstileKey && (await account.json()).turnstileSiteKey === turnstileKey, 'Turnstile no coincide con el binding');
   const anonymous = {};
-  for (const path of ['/api/account-profile', '/api/account-library']) {
+  for (const path of ['/api/account-profile', '/api/account-library','/api/youtube-playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf']) {
     const res = await publicFetch(origin, path);
     assert.equal(res.status, 401, path);
     anonymous[path] = res.status;
@@ -296,9 +330,14 @@ async function publicVerify(origin, frozen, turnstileKey) {
     currentNavigation:'PASS', turnstile:{csp:true, siteKeyMatches:true}, anonymous};
 }
 
-async function verifyDeployment({config, execute, read, origin, frozen, work, freeze, put}) {
+async function verifyDeployment({config, execute, read, origin, frozen, work, freeze, put, prior}) {
   const after = await read();
   checkLive(after, config, origin);
+  if(Array.isArray(prior.bindings)){
+    const expected=expectedBindings(prior);
+    assert.deepEqual(ordered(names(after.settings.bindings)),expected,'Bindings finales distintos de prior más secretos declarados');
+    assert.deepEqual(ordered(names(after.secrets)),expected.filter(binding=>binding.type==='secret_text'),'Secretos finales distintos de los declarados');
+  }
   assert.notEqual(after.deployment.id, arg.deployment, 'El despliegue anterior sigue activo');
   // El PUT devuelve el ID de la versión sin guiones en el campo deployment_id.
   assert.equal(after.version.id.replaceAll('-', ''), put.versionReference.replaceAll('-', ''));
@@ -335,6 +374,8 @@ async function main() {
   assert.equal(previousSha, arg['previous-sha256'], 'SHA-256 del manifiesto anterior distinto del recibo');
   assert.equal(prior.deployment, arg.deployment);
   assert.equal(prior.version, arg.version);
+  assertExpectedRules(config.assets.run_worker_first,prior.rules);
+  if(addedSecrets.length)expectedBindings(prior);
   if (command === 'freeze') return prepare(origin, work, source, previousSha);
   const {createClient} = await import(pathToFileURL(resolve(arg['mcp-client'])).href);
   const client = await createClient();
@@ -345,15 +386,16 @@ async function main() {
     const put = await json(resolve(work, 'worker-upload.json'));
     const frozenBody = await readFile(resolve(work, 'frozen-site-manifest.json'));
     assert.deepEqual(digest(frozenBody), freeze.manifest);
-    return verifyDeployment({config, execute, read, origin, frozen:JSON.parse(frozenBody), work, freeze, put});
+    return verifyDeployment({config, execute, read, origin, frozen:JSON.parse(frozenBody), work, freeze, put, prior});
   }
   const before = await read();
   await checkBefore(before, origin, previous, prior, config);
+  const baseline={deployment:before.deployment.id,version:before.version.id};
   const moduleBefore = (await execute(readModule(config.name))).module;
   assert.deepEqual(digest(moduleBefore), prior.module);
   if (command === 'preflight') {
     console.log(JSON.stringify({entry:previous.currentEntry, deployment:before.deployment.id, version:before.version.id,
-      module:digest(moduleBefore), rules:config.assets.run_worker_first.length, bindings:before.settings.bindings.length}));
+      module:digest(moduleBefore), rules:config.assets.run_worker_first.length, addedRules, addedSecrets, bindings:before.settings.bindings.length}));
     return;
   }
 
@@ -365,14 +407,15 @@ async function main() {
   const worker = normalizePaths(simulation) === normalizePaths(moduleBefore) ? moduleBefore : simulation;
   const freeze = {currentEntry:frozen.currentEntry, files:frozen.files.length,
     legacyFiles:frozen.legacy?.assets.length ?? 0, worker:digest(worker), simulation:digest(simulation),
-    reusedActiveModule:worker === moduleBefore, manifest:digest(frozenBody), runtimeSha256:snapshotHash(runtimeSnapshot(before))};
+    reusedActiveModule:worker === moduleBefore, manifest:digest(frozenBody),
+    runtimeSha256:snapshotHash(expectedRuntimeSnapshot(before,config,prior))};
   await save(resolve(work, 'freeze.json'), freeze);
   const headers = await readFile(resolve(site, '_headers'), 'utf8');
   const metadata = workerMetadata(before, config, undefined, headers);
-  await checkBefore(await read(), origin, previous, prior, config);
+  await checkBefore(await read(), origin, previous, prior, config, baseline);
   const completion = await uploadAssets(execute, config.name, before.account, assets, work);
   const ready = await read();
-  await checkBefore(ready, origin, previous, prior, config);
+  await checkBefore(ready, origin, previous, prior, config, baseline);
   assert.equal(snapshotHash(runtimeSnapshot(ready)), freeze.runtimeSha256, 'Cambió el estado durante la carga de assets');
   metadata.assets.jwt = completion;
   const put = await putWorker(execute, config.name, ready, metadata, worker);
@@ -381,7 +424,7 @@ async function main() {
     `PUT del Worker sin despliegue confirmado: ${JSON.stringify(put)}`);
 
   console.log(JSON.stringify({workerUpload:put}));
-  await verifyDeployment({config, execute, read, origin, frozen, work, freeze, put});
+  await verifyDeployment({config, execute, read, origin, frozen, work, freeze, put, prior});
 }
 
 try {

@@ -20,9 +20,18 @@ Mantener SPEC §W01–W10, USD 0, `T13`/`T16`/`T21`/`T22`/`T23` y privacidad: ce
 ## Matriz de trazabilidad
 | Requisito | Unitaria / Servidor | Chromium | WebKit |
 |---|---|---|---|
-| U-V70-01: Conexiones, URL/ID, sin auto-descarga, botón manual faltantes, Spotify intacto | PENDIENTE | PENDIENTE | PENDIENTE |
-| U-V70-02: `/api/youtube-playlist` 401 anónimo, 429 rate-limit, 503, oversize, deadline, sin fuga de clave | PENDIENTE | PENDIENTE | PENDIENTE |
-| U-V70-03: IDB en lote, reimportación por `youtubePlaylistId` sin pisar manual, sync Neon válido | PENDIENTE | PENDIENTE | PENDIENTE |
-| U-V70-04: `publish-cloudflare.mjs` transición autorizada 15 reglas / 14 bindings y prueba en vivo | PENDIENTE | PENDIENTE | PENDIENTE |
+| U-V70-01: Conexiones, URL/ID, sin auto-descarga, botón manual faltantes, Spotify intacto | PASS (unitarias y servidor) | PASS (12/12 YouTube; Spotify fixture y borrado) | PASS (12/12 YouTube; Spotify fixture y borrado) |
+| U-V70-02: `/api/youtube-playlist` 401 anónimo, 429 rate-limit, 503, oversize, deadline, sin fuga de clave | PASS (83/83 Cloudflare, incluye Miniflare) | N/A | N/A |
+| U-V70-03: IDB en lote, reimportación por `youtubePlaylistId` sin pisar manual, sync Neon válido | PASS (unitarias, incluida `validateAccountLibrary`) | PASS | PASS |
+| U-V70-04: `publish-cloudflare.mjs` transición autorizada 15 reglas / 14 bindings y prueba en vivo | PASS de sintaxis/configuración local; preflight, publicación y verificación HTTPS NO EJECUTADOS | N/A | N/A |
+
+## Validación local · 2026-11-28
+
+- `npm run typecheck`, `npm run typecheck:tests`, `npm run lint`, `npm run build`: PASS.
+- `npm run test:unit`: 1.088/1.088 PASS; `npm run test:cloudflare`: 83/83 PASS, incluido el Worker Miniflare; `npm run test:py`: 10/10 PASS.
+- `check-youtube-import.mjs`: 12/12 PASS en Chromium y WebKit. `check-spotify-import.mjs`: fixture y borrado PASS en ambos motores.
+- `check-settings-design.mjs`: 4/4 PASS en cada motor. `check-v69-album-during-download.mjs`: 2/2 PASS en cada motor.
+- `wrangler.jsonc`: 15 reglas, incluida una sola `/api/youtube-playlist`; validación sintáctica de `publish-cloudflare.mjs`: PASS.
+- No se hizo despliegue Cloudflare ni comprobación HTTPS en vivo en esta ronda. La aceptación física del propietario sigue pendiente.
 
 Aceptación física iPhone: las 16 pruebas de `docs/IPHONE-ACEPTACION.md` siguen **NO EJECUTADAS** hasta informe del propietario.
