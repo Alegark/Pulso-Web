@@ -101,6 +101,34 @@ test('pagination returns bounded titles only and sends no client headers or cred
  assertSafe(response);
 });
 
+test('30 páginas devuelve los 1500 ítems y limita Google a 31 llamadas más auth dentro de Workers Free',async()=>{
+ const calls=[];let authCalls=0;
+ const response=await youtubePlaylist(request(),env,{
+  auth:async()=>{authCalls++;return authOk();},
+  fetcher:async url=>{
+   calls.push(new URL(url));
+   const endpoint=new URL(url);
+   if(endpoint.pathname.endsWith('/playlists'))return googleJson({items:[{snippet:{title:'Lista de 30 páginas'}}]});
+   const pageToken=endpoint.searchParams.get('pageToken');
+   const pageNumber=pageToken?Number(pageToken.replace('synthetic-page-','')):1;
+   return googleJson({pageInfo:{totalResults:2000},nextPageToken:`synthetic-page-${pageNumber+1}`,
+    items:Array.from({length:50},(_,index)=>({snippet:{title:`Página ${pageNumber} pista ${index+1}`,videoOwnerChannelTitle:'Canal sintético'}}))});
+  },
+ });
+ const out=await result(response);
+ assert.equal(out.status,200);assert.equal(out.body.name,'Lista de 30 páginas');assert.equal(out.body.total,2000);
+ assert.equal(out.body.truncated,true);assert.equal(out.body.items.length,1500);
+ assert.equal(new Set(out.body.items.map(item=>item.title)).size,1500);
+ assert.equal(calls.filter(url=>url.pathname.endsWith('/playlistItems')).length,30);
+ assert.equal(calls.filter(url=>url.pathname.endsWith('/playlists')).length,1);
+ assert.equal(calls.length,31);
+ assert.equal(authCalls,1);
+ assert.ok(calls.length+authCalls<=32);
+ assert.ok(calls.length+authCalls<=50,'El relay permanece por debajo del límite de 50 subrequests de Workers Free');
+ assert.ok(out.body.items.every(item=>item.title.startsWith('Página ')&&item.channel==='Canal sintético'));
+ assertSafe(response);
+});
+
 test('upstream status and quota reasons map to fixed user-facing errors',async()=>{
  const denied=(status,reason)=>youtubePlaylist(request(),env,{auth:async()=>authOk(),fetcher:async()=>googleJson({error:{errors:[{reason}],message:'synthetic raw body'}} ,status)});
  for(const [status,reason,expected,body] of [

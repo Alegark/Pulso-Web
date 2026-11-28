@@ -7,7 +7,11 @@ import {build} from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import {chromium,webkit} from 'playwright-core';
 
-const root=resolve('.local/tmp',`v70-youtube-it-${process.pid}`);
+const defaultTempRoot=resolve('.local/tmp');
+const tempRoot=resolve(process.env.PULSO_TEST_TMP_DIR??defaultTempRoot);
+if(tempRoot!==defaultTempRoot&&!tempRoot.startsWith(defaultTempRoot+sep))throw new Error('PULSO_TEST_TMP_DIR debe estar dentro de .local/tmp');
+const diagnosticsRoot=process.env.PULSO_TEST_TMP_DIR?tempRoot:resolve('.local/tmp/v70-impl');
+const root=resolve(tempRoot,`v70-youtube-it-${process.pid}`);
 const report={status:'FAIL',engines:[],failedCases:[]};
 const account='11111111-1111-4111-8111-111111111111';
 const user={id:account,name:'Persona TESTONLY',email:'fixture@example.test',emailVerified:true};
@@ -211,14 +215,14 @@ try{
    assert.deepEqual(entry.failedCases,[]);
   }catch(error){
    const detail=error instanceof Error?error.stack??error.message:String(error);
-   await mkdir(resolve('.local/tmp/v70-impl'),{recursive:true});
-   await writeFile(resolve('.local/tmp/v70-impl',`youtube-${engine}-failure.log`),detail);
+   await mkdir(diagnosticsRoot,{recursive:true});
+   await writeFile(resolve(diagnosticsRoot,`youtube-${engine}-failure.log`),detail);
    entry.failedCases.push(activeCase);
    if(engine==='webkit'&&page){
     const diagnostic={youtubeCalls,importerCount:await page.locator('.spotify-import').count().catch(()=>-1),
      status:await page.locator('.spotify-import [role="status"]').innerText().catch(()=>''),
      resultCount:await page.locator('.spotify-import__result').count().catch(()=>-1),bodyTail:(await page.locator('body').innerText().catch(()=>'' )).slice(-700)};
-    await writeFile(resolve('.local/tmp/v70-impl/webkit-ui-diagnostic.txt'),JSON.stringify(diagnostic,null,2));
+    await writeFile(resolve(diagnosticsRoot,'webkit-ui-diagnostic.txt'),JSON.stringify(diagnostic,null,2));
    }
    report.failedCases.push(`${engine}: ${activeCase}`);
   }finally{

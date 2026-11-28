@@ -4,32 +4,11 @@ import {readFile, readdir, writeFile} from 'node:fs/promises';
 import {get} from 'node:https';
 import {extname, resolve} from 'node:path';
 import {Readable} from 'node:stream';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {parseArgs} from 'node:util';
 import {hash as blake3} from 'blake3-wasm';
 import {sha256, verifyFile} from './cloudflare-retention.mjs';
 
-const {positionals: [command], values: arg} = parseArgs({
-  allowPositionals: true,
-  options: Object.fromEntries([
-    'source', 'work', 'previous-manifest', 'previous-sha256', 'previous-receipt', 'origin',
-    'worker-module', 'mcp-client', 'deployment', 'version', 'as-of', 'expected-added-rules', 'expected-added-secrets',
-  ].map(name => [name, {type: 'string'}])),
-});
-function csv(name,pattern){
-  if (!Object.hasOwn(arg,name)) return [];
-  const rows=arg[name].split(',').map(value=>value.trim());
-  assert.ok(rows.length&&rows.every(value=>value&&pattern.test(value))&&new Set(rows).size===rows.length,
-    `--${name} debe ser una lista explícita, válida y sin duplicados`);
-  return rows;
-}
-const addedRules=csv('expected-added-rules',/^\/[A-Za-z0-9_./*-]+$/);
-const addedSecrets=csv('expected-added-secrets',/^[A-Z][A-Z0-9_]{0,127}$/);
-function assertExpectedRules(actual,prior){
-  const expected=[...prior,...addedRules];
-  assert.equal(new Set(expected).size,expected.length,'Una regla añadida ya existe en prior.rules');
-  assert.deepEqual(actual,expected,'Reglas distintas de prior.rules más las añadidas declaradas');
-}
 const json = (path) => readFile(path, 'utf8').then(JSON.parse);
 const save = (path, value) => writeFile(path, JSON.stringify(value, null, 2) + '\n', {mode: 0o600, flag: 'wx'});
 async function saveVerified(path, value) {
@@ -44,6 +23,128 @@ const digest = bytes => ({bytes: Buffer.byteLength(bytes), sha256: sha256(bytes)
 const ordered = rows => rows.toSorted((a, b) => a.name.localeCompare(b.name));
 const names = rows => rows.map(({name, type}) => ({name, type}));
 const timeout = 30_000;
+
+export function parseAddedCsv(value, pattern, name) {
+  if (value === undefined) return [];
+  assert.equal(typeof value, 'string', `--${name} debe ser una lista explícita`);
+  const rows = value.split(',').map(item => item.trim());
+  const validator = new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, ''));
+  assert.ok(rows.length && rows.every(item => item && validator.test(item)) && new Set(rows).size === rows.length,
+    `--${name} debe ser una lista explícita, válida y sin duplicados`);
+  return rows;
+}
+
+export function expectedRulesList(priorRules, addedRules = []) {
+  assert.ok(Array.isArray(priorRules) && Array.isArray(addedRules), 'Las reglas deben ser listas');
+  const expected = [...priorRules, ...addedRules];
+  assert.equal(new Set(expected).size, expected.length, 'Una regla añadida ya existe en prior.rules');
+  return expected;
+}
+
+export function expectedBindingsList(priorBindings, addedSecrets = []) {
+  assert.ok(Array.isArray(priorBindings) && Array.isArray(addedSecrets),
+    'La transición explícita requiere prior.bindings con nombres y tipos');
+  const rows = ordered([...priorBindings, ...addedSecrets.map(name => ({name, type: 'secret_text'}))]);
+  assert.equal(new Set(rows.map(row => row.name)).size, rows.length,
+    'Un secreto añadido ya existe en prior.bindings');
+  return rows;
+}
+
+export function assertTransitionInputs({prior, deployment, version, addedSecrets = []}) {
+  if (addedSecrets.length === 0) {
+    assert.equal(prior.deployment, deployment);
+    assert.equal(prior.version, version);
+    return;
+  }
+  assert.ok(deployment && version, 'La transición de secretos requiere deployment y version');
+  assert.notEqual(deployment, prior.deployment, 'La transición requiere el deployment intermedio actual');
+  assert.notEqual(version, prior.version, 'La transición requiere la version intermedia actual');
+}
+
+export function expectedRuntimeSnapshot(before, config, prior, addedRules = [], addedSecrets = []) {
+  assert.deepEqual(config.assets.run_worker_first, expectedRulesList(prior.rules, addedRules),
+    'Reglas distintas de prior.rules más las añadidas declaradas');
+  if (Array.isArray(prior.bindings)) {
+    const expected = expectedBindingsList(prior.bindings, addedSecrets);
+    assert.deepEqual(ordered(names(before.settings.bindings)), expected,
+      'Bindings intermedios distintos de prior.bindings más secretos declarados');
+    assert.deepEqual(ordered(names(before.secrets)), expected.filter(binding => binding.type === 'secret_text'),
+      'Secretos intermedios distintos de los declarados');
+  } else {
+    assert.equal(addedSecrets.length, 0, 'Los secretos nuevos requieren prior.bindings con nombres y tipos');
+    assert.equal(before.settings.bindings.length, prior.bindings, 'Cambió el número de bindings');
+  }
+  const snapshot = structuredClone(runtimeSnapshot(before));
+  snapshot.runtime.assets.raw_run_worker_first = config.assets.run_worker_first;
+  snapshot.runtime.assets.static_routing.user_worker = config.assets.run_worker_first;
+  return snapshot;
+}
+
+export function runtimeSnapshot({settings, scriptSettings, version, subdomain, domain, secrets}) {
+  const {annotations, ...execution} = settings;
+  return {
+    settings: {...execution, bindings: ordered(execution.bindings)},
+    scriptSettings, subdomain, domain, secretNames: ordered(names(secrets)), runtime: version.resources.script_runtime,
+  };
+}
+
+export function snapshotHash(snapshot) {
+  const sorted = (key, value) => value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value;
+  return sha256(JSON.stringify(snapshot, sorted));
+}
+
+export function verifyBeforeState({
+  state, pointerState, module, previous, prior, config, origin, deployment, version, addedRules = [], addedSecrets = [],
+}) {
+  assertTransitionInputs({prior, deployment, version, addedSecrets});
+  assert.equal(state.deployment.id, deployment, 'Cambió el despliegue activo');
+  assert.equal(state.version.id, version, 'Cambió la versión activa');
+  assert.deepEqual(pointerState, {version: 1, entry: previous.currentEntry});
+  assert.deepEqual(config.assets.run_worker_first, expectedRulesList(prior.rules, addedRules),
+    'Reglas distintas de prior.rules más las añadidas declaradas');
+  assert.deepEqual(digest(module), prior.module, 'El módulo remoto difiere del recibo previo');
+  if (Array.isArray(prior.bindings)) {
+    const expected = expectedBindingsList(prior.bindings, addedSecrets);
+    assert.deepEqual(ordered(names(state.settings.bindings)), expected,
+      'Bindings intermedios distintos de prior.bindings más secretos declarados');
+    assert.deepEqual(ordered(names(state.secrets)), expected.filter(binding => binding.type === 'secret_text'),
+      'Secretos intermedios distintos de los declarados');
+  } else {
+    assert.equal(addedSecrets.length, 0, 'Los secretos nuevos requieren prior.bindings con nombres y tipos');
+    assert.equal(state.settings.bindings.length, prior.bindings, 'Cambió el número de bindings');
+  }
+  checkLive(state, config, origin, prior.rules);
+  return true;
+}
+
+export function verifyReadyState(ready, freeze) {
+  assert.equal(snapshotHash(runtimeSnapshot(ready)), freeze.beforeRuntimeSha256,
+    'Cambió el estado previo durante la carga de assets');
+  return true;
+}
+
+export function verifyAfterState({
+  after, config, origin, prior, deployment, addedSecrets = [], freeze, versionReference,
+}) {
+  checkLive(after, config, origin);
+  if (Array.isArray(prior.bindings)) {
+    const expected = expectedBindingsList(prior.bindings, addedSecrets);
+    assert.deepEqual(ordered(names(after.settings.bindings)), expected,
+      'Bindings finales distintos de prior más secretos declarados');
+    assert.deepEqual(ordered(names(after.secrets)), expected.filter(binding => binding.type === 'secret_text'),
+      'Secretos finales distintos de los declarados');
+  } else {
+    assert.equal(addedSecrets.length, 0, 'Los secretos nuevos requieren prior.bindings con nombres y tipos');
+    assert.equal(after.settings.bindings.length, prior.bindings, 'Cambió el número final de bindings');
+  }
+  assert.notEqual(after.deployment.id, deployment, 'El despliegue de la petición sigue activo');
+  assert.notEqual(after.deployment.id, prior.deployment, 'El despliegue anterior sigue activo');
+  assert.equal(after.version.id.replaceAll('-', ''), versionReference.replaceAll('-', ''));
+  assert.equal(snapshotHash(runtimeSnapshot(after)), freeze.runtimeSha256, 'Cambió el estado de ejecución');
+  return true;
+}
+
 const publicFetch = (origin, path, headers) => fetch(new URL(path, origin), {
   headers, redirect: 'manual', signal: AbortSignal.timeout(timeout),
 });
@@ -53,7 +154,7 @@ const pointer = async origin => {
   return res.json();
 };
 
-async function prepare(origin, work, source, previousSha) {
+async function prepare(origin, work, source, previousSha, arg) {
   const time = arg['as-of'] ?? new Date().toISOString();
   const script = resolve(source, 'scripts/prepare-cloudflare.mjs');
   const flags = ['--previous-manifest', resolve(arg['previous-manifest']), '--previous-sha256', previousSha, '--as-of', time];
@@ -109,35 +210,14 @@ function checkLive(state, config, origin, rules=config.assets.run_worker_first) 
   assert.deepEqual(ordered(version.resources.bindings), ordered(settings.bindings));
 }
 
-async function checkBefore(state, origin, previous, prior, config, baseline=null) {
-  const expected=baseline??{deployment:arg.deployment,version:arg.version};
-  assert.equal(state.deployment.id, expected.deployment, 'Cambió el despliegue activo');
-  assert.equal(state.version.id, expected.version, 'Cambió la versión activa');
-  assert.deepEqual(await pointer(origin), {version:1, entry:previous.currentEntry});
-  assertExpectedRules(config.assets.run_worker_first,prior.rules);
-  const allowedBindings=Array.isArray(prior.bindings)?ordered([...prior.bindings,...addedSecrets.map(name=>({name,type:'secret_text'}))]):null;
-  const count = allowedBindings?.length ?? prior.bindings+addedSecrets.length;
-  assert.equal(state.settings.bindings.length, count, 'Cambió el número de bindings');
-  if (allowedBindings)assert.deepEqual(ordered(names(state.settings.bindings)),allowedBindings);
-  else assert.equal(addedSecrets.length,0,'Los secretos nuevos requieren prior.bindings con nombres y tipos');
-  checkLive(state, config, origin, prior.rules);
-}
-
-function expectedBindings(prior){
-  assert.ok(Array.isArray(prior.bindings), 'La transición explícita requiere prior.bindings con nombres y tipos');
-  const extra=addedSecrets.map(name=>({name,type:'secret_text'}));
-  const rows=ordered([...prior.bindings,...extra]);
-  assert.equal(new Set(rows.map(row=>row.name)).size,rows.length,'Un secreto añadido ya existe en prior.bindings');
-  return rows;
-}
-
-function expectedRuntimeSnapshot(before,config,prior){
-  const snapshot=structuredClone(runtimeSnapshot(before));
-  snapshot.runtime.assets.raw_run_worker_first=config.assets.run_worker_first;
-  snapshot.runtime.assets.static_routing.user_worker=config.assets.run_worker_first;
-  if(Array.isArray(prior.bindings))assert.deepEqual(ordered(names(before.settings.bindings)),ordered([...prior.bindings,...addedSecrets.map(name=>({name,type:'secret_text'}))]));
-  else assert.equal(before.settings.bindings.length,prior.bindings+addedSecrets.length);
-  return snapshot;
+async function checkBefore({
+  state, origin, previous, prior, config, deployment, version, addedRules, addedSecrets, readRemoteModule,
+}) {
+  const [pointerState, remote] = await Promise.all([pointer(origin), readRemoteModule()]);
+  verifyBeforeState({
+    state, pointerState, module: remote.module, previous, prior, config, origin, deployment, version, addedRules, addedSecrets,
+  });
+  return remote.module;
 }
 
 async function assetsFor(site, frozen) {
@@ -244,20 +324,6 @@ function putWorker(execute, name, state, metadata, worker) {
   }`);
 }
 
-function runtimeSnapshot({settings, scriptSettings, version, subdomain, domain, secrets}) {
-  const {annotations, ...execution} = settings;
-  return {
-    settings:{...execution, bindings:ordered(execution.bindings)},
-    scriptSettings, subdomain, domain, secretNames:ordered(names(secrets)), runtime:version.resources.script_runtime,
-  };
-}
-
-function snapshotHash(snapshot) {
-  const sorted = (key, value) => value && typeof value === 'object' && !Array.isArray(value)
-    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value;
-  return sha256(JSON.stringify(snapshot, sorted));
-}
-
 async function publicVerify(origin, frozen, turnstileKey) {
   assert.deepEqual(await pointer(origin), {version:1,entry:frozen.currentEntry});
   const entry = frozen.currentEntry;
@@ -330,18 +396,11 @@ async function publicVerify(origin, frozen, turnstileKey) {
     currentNavigation:'PASS', turnstile:{csp:true, siteKeyMatches:true}, anonymous};
 }
 
-async function verifyDeployment({config, execute, read, origin, frozen, work, freeze, put, prior}) {
+async function verifyDeployment({config, execute, read, origin, frozen, work, freeze, put, prior, deployment, addedSecrets}) {
   const after = await read();
-  checkLive(after, config, origin);
-  if(Array.isArray(prior.bindings)){
-    const expected=expectedBindings(prior);
-    assert.deepEqual(ordered(names(after.settings.bindings)),expected,'Bindings finales distintos de prior más secretos declarados');
-    assert.deepEqual(ordered(names(after.secrets)),expected.filter(binding=>binding.type==='secret_text'),'Secretos finales distintos de los declarados');
-  }
-  assert.notEqual(after.deployment.id, arg.deployment, 'El despliegue anterior sigue activo');
-  // El PUT devuelve el ID de la versión sin guiones en el campo deployment_id.
-  assert.equal(after.version.id.replaceAll('-', ''), put.versionReference.replaceAll('-', ''));
-  assert.equal(snapshotHash(runtimeSnapshot(after)), freeze.runtimeSha256, 'Cambió el estado de ejecución');
+  verifyAfterState({
+    after, config, origin, prior, deployment, addedSecrets, freeze, versionReference: put.versionReference,
+  });
   assert.deepEqual(digest((await execute(readModule(config.name))).module), freeze.worker);
   const readback = {deployment:after.deployment.id, version:after.version.id, versionNumber:after.version.number,
     createdAt:after.deployment.created_on, percentage:100, module:freeze.worker, rules:config.assets.run_worker_first,
@@ -358,7 +417,16 @@ async function verifyDeployment({config, execute, read, origin, frozen, work, fr
   console.log(JSON.stringify({https, deployment:readback.deployment, version:readback.version, module:readback.module}));
 }
 
-async function main() {
+async function main(argv) {
+  const {positionals: [command], values: arg} = parseArgs({
+    allowPositionals: true,
+    options: Object.fromEntries([
+      'source', 'work', 'previous-manifest', 'previous-sha256', 'previous-receipt', 'origin',
+      'worker-module', 'mcp-client', 'deployment', 'version', 'as-of', 'expected-added-rules', 'expected-added-secrets',
+    ].map(name => [name, {type: 'string'}])),
+  }, argv);
+  const addedRules = parseAddedCsv(arg['expected-added-rules'], /^\/[A-Za-z0-9_./*-]+$/, 'expected-added-rules');
+  const addedSecrets = parseAddedCsv(arg['expected-added-secrets'], /^[A-Z][A-Z0-9_]{0,127}$/, 'expected-added-secrets');
   assert.ok(['preflight','freeze','publish','verify'].includes(command), 'Usa preflight, freeze, publish o verify');
   const work = resolve(arg.work);
   const source = resolve(arg.source);
@@ -372,27 +440,31 @@ async function main() {
   const prior = await json(arg['previous-receipt']);
   const previousSha = sha256(previousBody);
   assert.equal(previousSha, arg['previous-sha256'], 'SHA-256 del manifiesto anterior distinto del recibo');
-  assert.equal(prior.deployment, arg.deployment);
-  assert.equal(prior.version, arg.version);
-  assertExpectedRules(config.assets.run_worker_first,prior.rules);
-  if(addedSecrets.length)expectedBindings(prior);
-  if (command === 'freeze') return prepare(origin, work, source, previousSha);
+  assertTransitionInputs({prior, deployment: arg.deployment, version: arg.version, addedSecrets});
+  assert.deepEqual(config.assets.run_worker_first, expectedRulesList(prior.rules, addedRules),
+    'Reglas distintas de prior.rules más las añadidas declaradas');
+  if (addedSecrets.length) expectedBindingsList(prior.bindings, addedSecrets);
+  if (command === 'freeze') return prepare(origin, work, source, previousSha, arg);
   const {createClient} = await import(pathToFileURL(resolve(arg['mcp-client'])).href);
   const client = await createClient();
   const execute = code => client.tool('execute', {code, truncate:false});
   const read = () => execute(mcpReader(config.name));
+  const readRemoteModule = () => execute(readModule(config.name));
   if (command === 'verify') {
     const freeze = await json(resolve(work, 'freeze.json'));
     const put = await json(resolve(work, 'worker-upload.json'));
     const frozenBody = await readFile(resolve(work, 'frozen-site-manifest.json'));
     assert.deepEqual(digest(frozenBody), freeze.manifest);
-    return verifyDeployment({config, execute, read, origin, frozen:JSON.parse(frozenBody), work, freeze, put, prior});
+    return verifyDeployment({
+      config, execute, read, origin, frozen:JSON.parse(frozenBody), work, freeze, put, prior,
+      deployment: arg.deployment, addedSecrets,
+    });
   }
   const before = await read();
-  await checkBefore(before, origin, previous, prior, config);
-  const baseline={deployment:before.deployment.id,version:before.version.id};
-  const moduleBefore = (await execute(readModule(config.name))).module;
-  assert.deepEqual(digest(moduleBefore), prior.module);
+  const moduleBefore = await checkBefore({
+    state: before, origin, previous, prior, config, deployment: arg.deployment, version: arg.version,
+    addedRules, addedSecrets, readRemoteModule,
+  });
   if (command === 'preflight') {
     console.log(JSON.stringify({entry:previous.currentEntry, deployment:before.deployment.id, version:before.version.id,
       module:digest(moduleBefore), rules:config.assets.run_worker_first.length, addedRules, addedSecrets, bindings:before.settings.bindings.length}));
@@ -408,15 +480,22 @@ async function main() {
   const freeze = {currentEntry:frozen.currentEntry, files:frozen.files.length,
     legacyFiles:frozen.legacy?.assets.length ?? 0, worker:digest(worker), simulation:digest(simulation),
     reusedActiveModule:worker === moduleBefore, manifest:digest(frozenBody),
-    runtimeSha256:snapshotHash(expectedRuntimeSnapshot(before,config,prior))};
+    beforeRuntimeSha256:snapshotHash(runtimeSnapshot(before)),
+    runtimeSha256:snapshotHash(expectedRuntimeSnapshot(before,config,prior,addedRules,addedSecrets))};
   await save(resolve(work, 'freeze.json'), freeze);
   const headers = await readFile(resolve(site, '_headers'), 'utf8');
   const metadata = workerMetadata(before, config, undefined, headers);
-  await checkBefore(await read(), origin, previous, prior, config, baseline);
+  await checkBefore({
+    state: await read(), origin, previous, prior, config, deployment: arg.deployment, version: arg.version,
+    addedRules, addedSecrets, readRemoteModule,
+  });
   const completion = await uploadAssets(execute, config.name, before.account, assets, work);
   const ready = await read();
-  await checkBefore(ready, origin, previous, prior, config, baseline);
-  assert.equal(snapshotHash(runtimeSnapshot(ready)), freeze.runtimeSha256, 'Cambió el estado durante la carga de assets');
+  await checkBefore({
+    state: ready, origin, previous, prior, config, deployment: arg.deployment, version: arg.version,
+    addedRules, addedSecrets, readRemoteModule,
+  });
+  verifyReadyState(ready, freeze);
   metadata.assets.jwt = completion;
   const put = await putWorker(execute, config.name, ready, metadata, worker);
   await save(resolve(work, 'worker-upload.json'), put);
@@ -424,14 +503,17 @@ async function main() {
     `PUT del Worker sin despliegue confirmado: ${JSON.stringify(put)}`);
 
   console.log(JSON.stringify({workerUpload:put}));
-  await verifyDeployment({config, execute, read, origin, frozen, work, freeze, put, prior});
+  await verifyDeployment({config, execute, read, origin, frozen, work, freeze, put, prior,
+    deployment: arg.deployment, addedSecrets});
 }
 
-try {
-  await main();
-} catch (error) {
-  // Los detalles de una excepción pueden incluir el cuerpo de una petición MCP o JWT.
-  const safe = String(error.message).replace(/[\w-]{20,}\.[\w-]{20,}\.[\w-]{15,}/g, '[REDACTADO]');
-  console.error(safe.slice(0, 500));
-  process.exitCode = 1;
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    await main(process.argv.slice(2));
+  } catch (error) {
+    // Los detalles de una excepción pueden incluir el cuerpo de una petición MCP o JWT.
+    const safe = String(error.message).replace(/[\w-]{20,}\.[\w-]{20,}\.[\w-]{15,}/g, '[REDACTADO]');
+    console.error(safe.slice(0, 500));
+    process.exitCode = 1;
+  }
 }
