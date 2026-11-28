@@ -1,6 +1,6 @@
-# Pendientes abiertos · 2026-11-27
+# Pendientes abiertos · 2026-11-28
 
-Pulso sirve [v69](https://pulso-web.pruebassoftware.workers.dev/releases/0cf30b686e707151.html) desde `release/v69`. El registro de publicación está en [P0-W](../odd/tasks/P0-W.md#2026-11-27--publicación-de-v69) y [T34](../odd/tasks/T34-v69-album-estado-durante-descarga.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
+Pulso sirve [v70](https://pulso-web.pruebassoftware.workers.dev/releases/8343797dc7910080.html) desde `release/v70`. El registro de publicación está en [P0-W](../odd/tasks/P0-W.md#2026-11-28--publicación-de-v70) y [T35](../odd/tasks/T35-v70-youtube-playlist-import.md). La [PR 20 de v60](https://github.com/Alegark/Pulso-Web/pull/20) queda abierta.
 
 ## Pendientes de v64 / v63
 
@@ -54,11 +54,14 @@ Al registrar v61 se sincronizó la base local compartida `.local/engram` con los
 
 WebKit WPE emite `style-src-attr` con `blockedURI: inline` para el selector de Apariencia de [src/main.tsx:1547](../src/main.tsx#L1547). El mapa de fuentes sitúa el evento en `node_modules/react-dom/cjs/react-dom-client.production.js:8514`, en la llamada que crea el elemento `select`. La política aplicada procede de [index.html:1](../index.html#L1). La reproducción se confirmó en v60 (`086aaac`) y v61 (`d718b9d`). El arnés de velocidad registra esa infracción y la compara con la ejecución de referencia del mismo perfil.
 
-## 8. Estado actualizado tras v69 · 2026-11-27
+## 8. Estado actualizado tras v70 · 2026-11-28
 
-La publicación vigente es **v69** (`/releases/0cf30b686e707151.html`), rama `release/v69`, despliegue `80451b5b-d780-493f-aae5-bacfbe5e88a4` (versión 72).
+La publicación vigente es **v70** (`/releases/8343797dc7910080.html`), rama `release/v70`, despliegue `17c2ecbe-3256-466d-953e-cb1fa79324d8` (versión 74).
 
-### 8.0 Resuelto en v69 (`T34`)
+### 8.0 Resuelto en v70 (`T35`)
+- **Importación de playlists de YouTube en Conexiones (`U-V70-01`..`04`):** integración endurecida de la colaboración PR #30 (`luisjose1010`, commit `3eac66e` preservado) en `ffe00c8`/`f97bd6f`. El importador unificado (Spotify y YouTube/YouTube Music, URL o ID suelto con `type="text" inputMode="url"`) pasó a **Configuración → Conexiones** (ausente en General, sin sincronización automática al iniciar sesión y sin nuevos permisos OAuth en Google). Al importar desde YouTube crea o actualiza la playlist en Biblioteca sin iniciar descargas automáticas, ofreciendo «Abrir en Biblioteca» y un botón manual opcional «Descargar faltantes (N)». En Cloudflare Workers (`deployment/cloudflare/youtube-playlist.mjs`), `GET /api/youtube-playlist` exige origen mismo sitio, sesión Pulso autenticada (`401` anónimo, propagación `Set-Cookie`), doble rate limit en `PULSO_SPOTIFY_LIMIT` (usuario + IP, `429`), secreto `YOUTUBE_API_KEY` (`USD 0`, `15` reglas `run_worker_first`, `14` bindings), lectura acotada `readBoundedJson`, deadline y tope de 30 páginas / 1.500 ítems sin fugar clave ni `videoId`. En cliente/IDB precarga alias en lote (`IDBKeyRange.bound`), vincula playlists por `youtubePlaylistId` para reimportar sin sobrescribir playlists manuales por nombre y mantiene `duration: 0` válido en `validateAccountLibrary` (sync Neon). Además endurece `scripts/publish-cloudflare.mjs` para transiciones autorizadas de reglas y secretos.
+
+### 8.0b Resuelto en v69 (`T34`)
 - **Álbumes visibles y reproducibles durante descarga de playlist (`U-V69-01`):** `AlbumPageController` resuelve el estado local verificado (`effectiveAlbumCopy` en `src/library/album-effective-copy.ts`) desde `localTracks` + `songAliases` + `localAvailability === 'available'` + `libraryTrackIds` cuando una descarga global de otra playlist suspende la inspección profunda (preservando la prioridad de `copies[id]` en reposo y sin falsos positivos en copias corruptas o huérfanas). Así los álbumes ya descargados muestran todas sus canciones descargadas (y `✓` completado en `CollectionDownloadButton`) y permiten pulsar `▶ Reproducir`, `⇄ Aleatorio` o cualquier pista descargada vía `trackMenuHost.onPlayTracks` (ampliado con `startIndex` y `collectionSlots`) sin interrumpir ni competir con la descarga de la playlist.
 
 ### 8.1 Resuelto en v68 (`T33`)

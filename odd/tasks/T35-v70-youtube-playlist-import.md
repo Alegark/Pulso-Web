@@ -21,9 +21,9 @@ Mantener SPEC §W01–W10, USD 0, `T13`/`T16`/`T21`/`T22`/`T23` y privacidad: ce
 | Requisito | Unitaria / Servidor | Chromium | WebKit |
 |---|---|---|---|
 | U-V70-01: Conexiones, URL/ID, sin auto-descarga, botón manual faltantes, Spotify intacto | PASS (unitarias y servidor) | PASS (12/12 YouTube; Spotify fixture y borrado) | PASS (12/12 YouTube; Spotify fixture y borrado) |
-| U-V70-02: `/api/youtube-playlist` 401 anónimo, 429 rate-limit, 503, oversize, deadline, sin fuga de clave | PASS (83/83 Cloudflare, incluye Miniflare) | N/A | N/A |
+| U-V70-02: `/api/youtube-playlist` 401 anónimo, 429 rate-limit, 503, oversize, deadline, sin fuga de clave | PASS (88/88 Cloudflare, incluye Miniflare y tope de 30 páginas) | N/A | N/A |
 | U-V70-03: IDB en lote, reimportación por `youtubePlaylistId` sin pisar manual, sync Neon válido | PASS (unitarias, incluida `validateAccountLibrary`) | PASS | PASS |
-| U-V70-04: `publish-cloudflare.mjs` transición autorizada 15 reglas / 14 bindings y prueba en vivo | PASS: 4/4 grupos de regresión sintética tras el arreglo; preflight, publicación y verificación HTTPS NO EJECUTADAS | N/A | N/A |
+| U-V70-04: `publish-cloudflare.mjs` transición autorizada 15 reglas / 14 bindings y prueba en vivo | PASS: 4/4 grupos sintéticos + publicación Cloudflare (versión 74), HTTPS y verificación en vivo PASS | PASS (en vivo 1280×800 y 390×844) | PASS (matriz pre-publicación) |
 
 ## Validación inicial del commit `ffe00c8` · 2026-11-28
 
@@ -68,4 +68,12 @@ Las 11 suites de navegador se ejecutaron en serie (concurrencia máxima 1): 148 
 
 Como comprobación adicional separada, `check-persistent-cache-main.mjs --measure --wait-load` registró cuatro mediciones (Chromium 1,43; WebKit 1,30 de carga antes de cada motor) y terminó con un timeout de `locator.waitFor` en WebKit antes de registrar casos funcionales. Esa variante de medición no forma parte de la matriz funcional listada arriba; queda anotada como resultado adicional, sin convertirla en PASS.
 
-**Pendiente explícito:** publicación/preflight y verificación HTTPS en vivo de Cloudflare **NO EJECUTADAS**; las 16 pruebas físicas en iPhone de `docs/IPHONE-ACEPTACION.md` **NO EJECUTADAS**; revisión independiente previa a publicación **NO EJECUTADA**. Ninguna prueba local ni de navegador acredita esos gates.
+**Pendiente abierto tras publicación:** las 16 pruebas físicas en iPhone de `docs/IPHONE-ACEPTACION.md` siguen **NO EJECUTADAS** por el propietario. Ninguna prueba local ni de navegador acredita ese gate.
+
+## Revisión independiente, publicación y verificación en vivo · 2026-11-28
+
+- **Revisión independiente inicial (`gemini-4-neon` medio sobre `release/v69..ffe00c8`):** `0` Bloqueantes, `0` Altos y `0` Medios en el código de producto (Worker, cliente, IDB, UI y pruebas); `2` `[Bloqueante]` en `scripts/publish-cloudflare.mjs` (pre/post `runtimeSha256` y despliegue intermedio al subir secreto), corregidos y cubiertos con regresión en `f97bd6f`.
+- **Revisión delta independiente (`gemini-4-neon` medio sobre `ffe00c8..09ec2d2`):** `14/14` pruebas servidor PASS, `0` Bloqueantes, `0` Altos, `0` Medios y `2` Bajos menores no bloqueantes — veredicto **`Seguro publicar v70`**.
+- **Publicación en Cloudflare Workers Free (`pulso-web`):** entrada `/releases/8343797dc7910080.html` (`307` → `/releases/8343797dc7910080` `200`, meta `8343797dc7910080`), despliegue `17c2ecbe-3256-466d-953e-cb1fa79324d8`, versión `c1f200be-530d-4cec-aca8-8ec548db5840` (**versionNumber 74**, 100 %, `createdAt: 2026-11-28T08:04:00.490411Z`). Worker limpio `340.080` bytes (SHA-256 `1b7db4b24a78e86b1efbe37b66a8e4144cf4aabd6447f619813a9d91f9589ba8`), manifiesto promovido `.local/test-evidence/publish-v70/site-manifest.json` `9.577` bytes (SHA-256 `8edbc333f7859d14d89934b8dae35a097143772decff3b183a33141b8447eae6`), **50** rutas estáticas, `copiedFiles: 0`, `retainedPublications: 0`, `legacyRetained: false` (entrada v69 `/releases/0cf30b686e707151.html`: `404` directo y `200` navegación sirviendo v70), **15** reglas `run_worker_first` (+`/api/youtube-playlist`), **14** bindings (+`YOUTUBE_API_KEY` `secret_text`), `observability: null`, `logpush: false`, sin `X-Pulso-Diag`. Recibos en `.local/test-evidence/publish-v70/`.
+- **Verificación en vivo con navegador autenticado (`.local/test-evidence/publish-v70/live-verification.json`, Chromium escritorio `1280×800` y móvil `390×844`):** PASS (`meta 8343797dc7910080`, `GET /api/account-library` HTTP `200`, importador ausente en **General** y presente en **Conexiones** con `<input type="text" inputMode="url">`, `/api/youtube-playlist` HTTP `200` `Cache-Control: no-store` autenticado con nombre válido y `2` ítems reales sin `videoId` ni fuga `AIza`, `400` con ID inválido y `401` anónimo; `0` `consoleErrors`/`pageErrors`/`diagResponses`, `0` canciones del usuario borradas).
+- **Aceptación física iPhone (`docs/IPHONE-ACEPTACION.md`):** las 16 pruebas siguen **NO EJECUTADAS** por el propietario.
